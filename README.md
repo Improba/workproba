@@ -37,7 +37,6 @@ workproba/
 - Rust ≥ 1.77, Node.js ≥ 22.22 (24 recommandé pour vitest 4 / build Quasar), Yarn
 - Python 3.12 + uvicorn
 - Dépendances OS Tauri : voir [desktop/README.md](./desktop/README.md)
-- Symlink `.knowledge-base` vers l'IKB Improba
 
 ### Développement
 
@@ -56,7 +55,3 @@ Ou : `bash scripts/dev.sh` puis `cd desktop && yarn dev`
 ```bash
 cd desktop && yarn build
 ```
-
-## Agent IA (Cursor)
-
-`AGENTS.md` → `.knowledge-base/projects/workproba/AGENTS.md`
