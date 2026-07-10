@@ -37,6 +37,17 @@ class Settings(BaseSettings):
         ),
         validation_alias="CORS_ORIGINS",
     )
+    # Regex d'origines autorisées en complément de la liste explicite `cors_origins`.
+    # Sidecar bureau loopback-only : on accepte tout origin loopback (IPv4/IPv6/tauri)
+    # sur n'importe quel port pour couvrir les dev servers Vite/Quasar, Tauri dev/prod,
+    # et le flag Private Network Access de Chrome. Vide = désactivé.
+    cors_origin_regex: str | None = Field(
+        default=(
+            r"^(https?://(localhost|127\.0\.0\.1|\[::1\]|tauri\.localhost)(:\d+)?"
+            r"|tauri://localhost)$"
+        ),
+        validation_alias="CORS_ORIGIN_REGEX",
+    )
 
     internal_secret: str = Field(
         default="desktop-dev-secret",
@@ -150,6 +161,11 @@ class Settings(BaseSettings):
                 return [str(origin) for origin in parsed]
 
         return [origin.strip() for origin in value.split(",") if origin.strip()]
+
+    @property
+    def compiled_cors_origin_regex(self) -> str | None:
+        value = (self.cors_origin_regex or "").strip()
+        return value or None
 
     @property
     def limits(self) -> Limits:
