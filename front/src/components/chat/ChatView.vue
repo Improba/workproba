@@ -49,7 +49,6 @@
             class="chat-view__input"
             placeholder="Écrivez votre message…"
             :maxlength="COMPOSER_MAX_LENGTH"
-            counter
             @keydown.enter.ctrl.prevent="handleSubmit"
             @keydown.enter.meta.prevent="handleSubmit"
           />
@@ -130,7 +129,7 @@ const emit = defineEmits<{
   'update:reasoningModel': [model: string];
 }>();
 
-const COMPOSER_MAX_LENGTH = 8000;
+const COMPOSER_MAX_LENGTH = 32_000;
 
 const showModelControl = computed(() => {
   const provider = props.reasoningProvider;
@@ -423,10 +422,12 @@ onUnmounted(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  justify-content: center;
 }
 
 .chat-view__composer--expanded .chat-view__composer-field {
   width: 100%;
+  justify-content: flex-start;
 }
 
 .chat-view__composer-actions {
