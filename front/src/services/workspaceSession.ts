@@ -1,4 +1,5 @@
 import type { ChatMessage, ReasoningEffort } from '#types';
+import { normalizeChatMessages } from '@utils/chatMessageNormalize';
 import {
   createConversation as createConversationCommand,
   deleteConversation as deleteConversationCommand,
@@ -15,6 +16,8 @@ export interface LocalSession {
   title: string;
   messages: ChatMessage[];
   reasoningEffort?: ReasoningEffort | null;
+  model?: string | null;
+  summary?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,8 +42,9 @@ function readLegacyStore(projectPath: string): LocalSession[] {
         workspaceId: String(session.workspaceId ?? ''),
         projectPath: String(session.projectPath),
         title: String(session.title ?? 'Conversation'),
-        messages: Array.isArray(session.messages) ? session.messages : [],
+        messages: normalizeChatMessages(session.messages),
         reasoningEffort: (session.reasoningEffort as ReasoningEffort | null | undefined) ?? null,
+        model: (session.model as string | null | undefined) ?? null,
         createdAt: String(session.createdAt ?? new Date().toISOString()),
         updatedAt: String(session.updatedAt ?? new Date().toISOString()),
       }));
@@ -67,8 +71,9 @@ async function migrateLegacySessions(
       workspaceId,
       folderPath: projectPath,
       title: session.title,
-      messages: session.messages,
+      messages: normalizeChatMessages(session.messages),
       reasoningEffort: session.reasoningEffort ?? null,
+      model: session.model ?? null,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     });
@@ -100,8 +105,10 @@ export async function createSession(
     workspaceId: session.workspaceId,
     projectPath: session.folderPath,
     title: session.title,
-    messages: session.messages,
+    messages: normalizeChatMessages(session.messages),
     reasoningEffort: session.reasoningEffort ?? null,
+    model: session.model ?? null,
+    summary: session.summary ?? null,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   };
@@ -118,8 +125,10 @@ export async function getSession(sessionId: string): Promise<LocalSession | null
     workspaceId: session.workspaceId,
     projectPath: session.folderPath,
     title: session.title,
-    messages: session.messages,
+    messages: normalizeChatMessages(session.messages),
     reasoningEffort: session.reasoningEffort ?? null,
+    model: session.model ?? null,
+    summary: session.summary ?? null,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   };
@@ -138,8 +147,10 @@ export async function listSessions(
     workspaceId: session.workspaceId,
     projectPath: session.folderPath,
     title: session.title,
-    messages: session.messages,
+    messages: normalizeChatMessages(session.messages),
     reasoningEffort: session.reasoningEffort ?? null,
+    model: session.model ?? null,
+    summary: session.summary ?? null,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   }));
@@ -155,6 +166,8 @@ export async function saveSession(session: LocalSession): Promise<void> {
     title: session.title,
     messages: session.messages.filter((message) => !message.streaming),
     reasoningEffort: session.reasoningEffort ?? null,
+    model: session.model ?? null,
+    summary: session.summary ?? null,
     createdAt: session.createdAt,
     updatedAt: new Date().toISOString(),
   });

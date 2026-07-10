@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from pydantic_ai.models.test import TestModel
 
 import app.auth as authmod
+import app.llm.utility as utilitymod
 import app.main as mainmod
 
 
@@ -24,6 +25,28 @@ def _sse_event_types(resp: Any) -> list[str]:
         if line.startswith("event:"):
             types.append(line[len("event:"):].strip())
     return types
+
+
+class _FakeUsage:
+    input_tokens = 12
+    output_tokens = 4
+    total_tokens = 16
+
+
+class _FakeRunResult:
+    def __init__(self, output: str) -> None:
+        self.output = output
+        self.usage = _FakeUsage()
+
+
+class _FakeUtilityAgent:
+    def __init__(self, *_args: Any, **_kwargs: Any) -> None:
+        pass
+
+    async def run(self, prompt: str) -> _FakeRunResult:
+        if "Titre :" in prompt:
+            return _FakeRunResult('"Analyser les ventes Q2."')
+        return _FakeRunResult("Décisions\n- Garder le plan Q2")
 
 
 def test_agent_turn_sse_stream(tmp_path) -> None:
@@ -50,6 +73,65 @@ def test_agent_turn_sse_stream(tmp_path) -> None:
     assert "tool_call_start" in types
     assert "tool_call_result" in types
     assert types[-1] in {"done", "error"}
+
+
+def test_util_title_and_summarize_routes(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(utilitymod, "Agent", _FakeUtilityAgent)
+    monkeypatch.setattr(utilitymod, "build_model", lambda _config: object())
+    monkeypatch.setattr(utilitymod, "build_model_settings", lambda _config: {})
+
+    headers = {"X-Internal-Secret": "desktop-dev-secret"}
+    llm_config = {"provider": "mistral", "model": "mistral-small-latest"}
+    with TestClient(mainmod.app) as client:
+        title_resp = client.post(
+            "/util/title",
+            json={
+                "first_user_message": "Analyse les ventes Q2",
+                "first_assistant_reply": "Je vais comparer les chiffres.",
+                "llm_provider_config": llm_config,
+            },
+            headers=headers,
+        )
+        summarize_resp = client.post(
+            "/util/summarize",
+            json={
+                "messages": [
+                    {"role": "user", "content": "Analyse les ventes Q2"},
+                    {"role": "assistant", "content": "Le CA progresse."},
+                ],
+                "llm_provider_config": llm_config,
+                "focus": "décisions",
+            },
+            headers=headers,
+        )
+
+    assert title_resp.status_code == 200
+    assert title_resp.json()["title"] == "Analyser les ventes Q2"
+    assert summarize_resp.status_code == 200
+    assert summarize_resp.json()["summary"]
+    assert summarize_resp.json()["input_tokens"] == 12
+    assert summarize_resp.json()["output_tokens"] == 4
+
+
+def test_util_routes_require_internal_secret(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(utilitymod, "Agent", _FakeUtilityAgent)
+    monkeypatch.setattr(utilitymod, "build_model", lambda _config: object())
+    monkeypatch.setattr(utilitymod, "build_model_settings", lambda _config: {})
+
+    with TestClient(mainmod.app) as client:
+        resp = client.post(
+            "/util/title",
+            json={
+                "first_user_message": "Analyse les ventes Q2",
+                "first_assistant_reply": "Je vais comparer les chiffres.",
+                "llm_provider_config": {
+                    "provider": "mistral",
+                    "model": "mistral-small-latest",
+                },
+            },
+        )
+
+    assert resp.status_code == 401
 
 
 def test_health_endpoint() -> None:

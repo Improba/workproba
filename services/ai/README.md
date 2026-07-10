@@ -6,6 +6,17 @@ Sidecar Python de l'application bureau Workproba : loop agent, providers LLM, ex
 
 - `GET /health` : santé du sidecar (loopback uniquement).
 - `POST /agent/turn` : tour agent, flux SSE.
+- `POST /agent/index-workspace` : indexation RAG bulk du dossier de travail (voir ci-dessous).
+
+## Indexation RAG du workspace
+
+`POST /agent/index-workspace` parcourt le dossier projet, extrait le texte des
+fichiers éligibles (texte + Office : PDF/DOCX/XLSX/PPTX) et les indexe dans le
+`RagStore` du workspace (`memory.db`). Dossiers sensibles (`.git`,
+`node_modules`, ...) et chemins interdits (`.env`, ...) ignorés. Passe bornée
+par `INDEX_MAX_FILES` / `INDEX_MAX_FILE_BYTES` / `INDEX_MAX_TOTAL_CHARS`. Si le
+RAG est désactivé (pas de modèle d'embedding), renvoie un rapport
+`enabled=false` sans erreur.
 
 ## Développement
 

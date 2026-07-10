@@ -5,6 +5,7 @@
       :active-path="activePath"
       :files-open="filesOpen"
       :sidebar-rail="sidebarRail"
+      :sidecar-state="sidecarState"
       @toggle-files="filesOpen = !filesOpen"
       @toggle-sidebar="sidebarRail = !sidebarRail"
       @open-shortcuts="shortcutsHelpOpen = true"
@@ -16,7 +17,6 @@
       <WorkspaceSidebar
         :rail="sidebarRail"
         :streaming="streaming"
-        :sidecar-state="sidecarState"
         @expand="sidebarRail = false"
       />
 

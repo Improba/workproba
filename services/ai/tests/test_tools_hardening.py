@@ -142,6 +142,41 @@ def test_search_kb_limit_clamped(tmp_path: Path) -> None:
     assert len(response.results) <= 5
 
 
+def test_search_kb_matches_filename_for_literal_query(tmp_path: Path) -> None:
+    """Une requête littérale correspondant à un nom de fichier doit le remonter."""
+    (tmp_path / "mémoire collective.md").write_text("notes de séance", encoding="utf-8")
+    (tmp_path / "autre.txt").write_text("sans rapport", encoding="utf-8")
+    client = LocalProjectClient(project_root=tmp_path, limits=Limits(search_file_max_bytes=1_000_000))
+
+    response = asyncio.run(
+        client.search_kb(tenant_id="t", project_id="p", query="mémoire collective", limit=10)
+    )
+
+    paths = {r.document_id for r in response.results}
+    assert "mémoire collective.md" in paths
+    assert "autre.txt" not in paths
+
+
+def test_search_kb_tokenizes_or_query(tmp_path: Path) -> None:
+    """Une requête avec opérateurs OR injectés par le modèle doit matcher par mot-clé."""
+    (tmp_path / "mémoire collective.md").write_text(
+        "dynamique de groupe et collaboration", encoding="utf-8"
+    )
+    client = LocalProjectClient(project_root=tmp_path, limits=Limits(search_file_max_bytes=1_000_000))
+
+    response = asyncio.run(
+        client.search_kb(
+            tenant_id="t",
+            project_id="p",
+            query="dynamiques collectives OR groupe OR collaboration",
+            limit=10,
+        )
+    )
+
+    paths = {r.document_id for r in response.results}
+    assert "mémoire collective.md" in paths
+
+
 # --- generate_document -----------------------------------------------------
 
 

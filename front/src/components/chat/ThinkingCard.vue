@@ -1,23 +1,31 @@
 <template>
   <div class="thinking-card" data-testid="thinking-card">
-    <div class="thinking-card__header">
-      <q-icon name="psychology" size="16px" class="thinking-card__icon" aria-hidden="true" />
-      <span class="thinking-card__label">Raisonnement</span>
+    <button
+      type="button"
+      class="thinking-card__header"
+      :aria-expanded="expanded"
+      :aria-label="expanded ? 'Masquer le raisonnement' : 'Voir le raisonnement'"
+      @click="toggle"
+    >
       <span
         v-if="streaming && !thinking.done"
-        class="thinking-card__dot"
+        class="thinking-card__spinner"
         aria-hidden="true"
       />
-      <button
-        type="button"
-        class="thinking-card__toggle"
-        :aria-expanded="expanded"
-        :aria-label="expanded ? 'Masquer le raisonnement' : 'Voir le raisonnement'"
-        @click="expanded = !expanded"
-      >
-        {{ expanded ? 'Masquer le raisonnement' : 'Voir le raisonnement' }}
-      </button>
-    </div>
+      <q-icon v-else name="psychology" size="16px" class="thinking-card__icon" aria-hidden="true" />
+      <span class="thinking-card__label">
+        {{ streaming && !thinking.done ? 'Le modèle réfléchit…' : 'Raisonnement' }}
+      </span>
+      <span class="thinking-card__hint">
+        {{ expanded ? 'Masquer' : 'Voir le détail' }}
+      </span>
+      <Lucide
+        name="chevron-down"
+        size="xs"
+        color="wp-text-muted"
+        :class="expanded ? 'thinking-card__chevron thinking-card__chevron--up' : 'thinking-card__chevron'"
+      />
+    </button>
 
     <div
       v-if="expanded"
@@ -25,7 +33,7 @@
       role="region"
       aria-label="Raisonnement"
     >
-      <span class="thinking-card__text">{{ thinking.content }}</span>
+      <span class="thinking-card__text">{{ thinking.content || 'Le détail du raisonnement apparaîtra ici dès qu’il sera disponible.' }}</span>
       <span
         v-if="streaming && !thinking.done"
         class="thinking-card__cursor"
@@ -36,15 +44,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+import { useThinkingExpansion } from '@composables/useToolCallExpansion';
 import type { ChatThinkingPart } from '#types';
 
-defineProps<{
+const props = defineProps<{
   thinking: ChatThinkingPart;
   streaming: boolean;
 }>();
 
-const expanded = ref(false);
+// État déplié porté hors du composant pour survivre au recyclage du
+// `DynamicScroller` (sinon le bloc se replie immédiatement au re-mesurage).
+const { expanded, toggle } = useThinkingExpansion(() => props.thinking.id);
 </script>
 
 <style scoped lang="scss">
@@ -61,8 +72,23 @@ const expanded = ref(false);
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
+  width: 100%;
   padding: 0.65rem 0.85rem;
+  border: none;
+  background: transparent;
   color: var(--wp-text);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--wp-dur) var(--wp-ease);
+
+  &:hover {
+    background: var(--wp-surface-2);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--wp-focus-ring);
+  }
 }
 
 .thinking-card__icon {
@@ -78,16 +104,7 @@ const expanded = ref(false);
   font-weight: 600;
 }
 
-.thinking-card__dot {
-  flex: 0 0 auto;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: var(--wp-r-pill);
-  background: var(--wp-accent);
-  animation: wp-breathe 1.6s ease-in-out infinite;
-}
-
-.thinking-card__toggle {
+.thinking-card__hint {
   flex: 0 0 auto;
   padding: 0.2rem 0.55rem;
   border: 1px solid var(--wp-border);
@@ -96,19 +113,30 @@ const expanded = ref(false);
   color: var(--wp-text-muted);
   font-size: var(--wp-fs-xs);
   font-weight: 600;
-  cursor: pointer;
-  transition: background var(--wp-dur) var(--wp-ease),
-    color var(--wp-dur) var(--wp-ease),
-    border-color var(--wp-dur) var(--wp-ease);
+}
 
-  &:hover {
-    border-color: var(--wp-border-strong);
-    color: var(--wp-text);
+.thinking-card__chevron {
+  flex: 0 0 auto;
+  transition: transform var(--wp-dur) var(--wp-ease);
+
+  &--up {
+    transform: rotate(180deg);
   }
+}
 
-  &:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px var(--wp-focus-ring);
+.thinking-card__spinner {
+  flex: 0 0 auto;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  border: 2px solid var(--wp-accent-soft);
+  border-top-color: var(--wp-accent);
+  animation: thinking-spin 0.7s linear infinite;
+}
+
+@keyframes thinking-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
 

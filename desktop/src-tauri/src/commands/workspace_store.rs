@@ -35,6 +35,10 @@ pub struct ConversationSession {
     pub messages: serde_json::Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reasoning_effort: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub model: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub summary: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -343,6 +347,8 @@ pub fn create_conversation(
             .unwrap_or_else(|| "Nouvelle conversation".to_string()),
         messages: serde_json::Value::Array(Vec::new()),
         reasoning_effort: None,
+        model: None,
+        summary: None,
         created_at: now.clone(),
         updated_at: now,
     };

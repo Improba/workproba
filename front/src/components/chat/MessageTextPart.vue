@@ -9,6 +9,7 @@
 
 <script lang="ts">
 import MarkdownIt from 'markdown-it';
+import DOMPurify from 'dompurify';
 import katex from 'katex';
 import { createHighlighter, type Highlighter } from 'shiki';
 
@@ -19,6 +20,49 @@ const md = new MarkdownIt({
   linkify: true,
   breaks: true,
 });
+
+let linkSanitizeHookInstalled = false;
+
+function installLinkSanitizeHook(): void {
+  if (linkSanitizeHookInstalled) return;
+  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+    if (node.tagName !== 'A' || !node.hasAttribute('href')) return;
+    const href = node.getAttribute('href') ?? '';
+    if (/^(?:https?:|mailto:)/i.test(href)) {
+      node.setAttribute('target', '_blank');
+      node.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  linkSanitizeHookInstalled = true;
+}
+
+/** Sanitize le HTML markdown avant injection dans le DOM. */
+export function sanitizeMarkdownHtml(html: string): string {
+  installLinkSanitizeHook();
+  const sanitized = DOMPurify.sanitize(html, {
+    USE_PROFILES: { html: true },
+    ALLOWED_URI_REGEXP: /^(?:https?:|mailto:)/i,
+    ADD_ATTR: ['target', 'rel'],
+  });
+  return hardenExternalLinks(sanitized);
+}
+
+function hardenExternalLinks(html: string): string {
+  if (typeof DOMParser === 'undefined') return html;
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('a[href]').forEach((anchor) => {
+    const href = anchor.getAttribute('href') ?? '';
+    if (/^(?:https?:|mailto:)/i.test(href)) {
+      anchor.setAttribute('target', '_blank');
+      anchor.setAttribute('rel', 'noopener noreferrer');
+    }
+  });
+  return doc.body.innerHTML;
+}
+
+function escapeHtmlAttr(value: string): string {
+  return md.utils.escapeHtml(value);
+}
 
 let highlighter: Highlighter | null = null;
 let highlighterPromise: Promise<Highlighter> | null = null;
@@ -45,9 +89,9 @@ function renderKatex(source: string): string {
   return output;
 }
 
-function defaultCodeHtml(code: string, lang: string): string {
+export function defaultCodeHtml(code: string, lang: string): string {
   const escaped = md.utils.escapeHtml(code);
-  const language = lang || 'text';
+  const language = escapeHtmlAttr(lang || 'text');
   return `<div class="code-block" data-lang="${language}">
     <div class="code-block__toolbar">
       <span class="code-block__lang">${language}</span>
@@ -161,9 +205,10 @@ async function updateRender(): Promise<void> {
   // Pendant le streaming : markdown seul (on skip KaTeX, coûteux et qui
   // clignote sur du math incomplet). Le rendu final applique KaTeX, puis
   // le watch renderedHtml pose boutons + highlighting.
-  renderedHtml.value = props.streaming
+  const rawHtml = props.streaming
     ? md.render(props.content)
     : md.render(renderKatex(props.content));
+  renderedHtml.value = sanitizeMarkdownHtml(rawHtml);
 }
 
 const throttledUpdate = useThrottleFn(updateRender, 80);

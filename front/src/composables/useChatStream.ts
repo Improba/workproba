@@ -1,15 +1,18 @@
 import { ref, type Ref } from 'vue';
 import type {
+  ChatCompactionInfo,
   ChatConfirmation,
   ChatError,
-  ChatErrorCode,
   ChatMessage,
   ChatMessagePart,
   ChatStreamEvent,
   ChatToolCall,
+  ChatUsage,
+  RawChatStreamEvent,
   ReasoningEffort,
   SendMessagePayload,
 } from '#types';
+import { normalizeChatErrorCode } from '#types';
 import type { LocalDocumentEntry } from '@composables/useDesktop.types';
 import {
   buildAgentTurnPayload,
@@ -19,7 +22,8 @@ import {
 } from '@services/aiSidecar';
 import { buildActiveLlmConfigs, type LlmConfigPayload } from '@composables/useAppSettings';
 import type { LlmProviderName } from '@composables/useDesktop.types';
-import { supportsReasoning } from '@utils/reasoningSupport';
+import { clampReasoningEffort, supportsReasoning } from '@utils/reasoningSupport';
+import { contextWindowFor } from '@utils/modelCatalog';
 
 /** Délai sans aucune donnée SSE avant de déclarer le stream mort (ms). */
 const IDLE_TIMEOUT_MS = 30_000;
@@ -34,8 +38,8 @@ class StreamIdleTimeoutError extends Error {
   }
 }
 
-function parseSseChunk(buffer: string): { events: ChatStreamEvent[]; rest: string } {
-  const events: ChatStreamEvent[] = [];
+function parseSseChunk(buffer: string): { events: RawChatStreamEvent[]; rest: string } {
+  const events: RawChatStreamEvent[] = [];
   const normalized = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const blocks = normalized.split('\n\n');
   const rest = blocks.pop() ?? '';
@@ -58,7 +62,7 @@ function parseSseChunk(buffer: string): { events: ChatStreamEvent[]; rest: strin
     try {
       const data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
       events.push({
-        type: eventType as ChatStreamEvent['type'],
+        type: eventType,
         data,
       });
     } catch {
@@ -76,11 +80,22 @@ function extractHumanSummary(data: Record<string, unknown>): string {
   return String(data.human_summary ?? data.humanSummary ?? '');
 }
 
+function parseOptionalInt(value: unknown): number | null {
+  if (value == null) return null;
+  const n = typeof value === 'number' ? value : parseInt(String(value), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
 /** Mappe un event SSE Python vers le format interne du front (testable). */
-export function mapPythonSseEvent(event: ChatStreamEvent): ChatStreamEvent {
+export function mapPythonSseEvent(event: RawChatStreamEvent): ChatStreamEvent | null {
   const data = event.data;
 
   switch (event.type) {
+    case 'turn_start':
+      return {
+        type: 'turn_start',
+        data: { turnId: String(data.turn_id ?? '') },
+      };
     case 'token':
       return {
         type: 'token',
@@ -126,6 +141,7 @@ export function mapPythonSseEvent(event: ChatStreamEvent): ChatStreamEvent {
           action: data.action === 'modify' ? 'modify' : 'create',
           proposedPath: String(data.proposed_path ?? ''),
           humanSummary: extractHumanSummary(data),
+          turnId: data.turn_id != null ? String(data.turn_id) : null,
         },
       };
     case 'thinking_start':
@@ -153,13 +169,28 @@ export function mapPythonSseEvent(event: ChatStreamEvent): ChatStreamEvent {
     case 'done':
       return {
         type: 'done',
-        data: { content: String(data.content ?? '') },
+        data: {
+          content: String(data.content ?? ''),
+          input_tokens: parseOptionalInt(data.input_tokens ?? data.inputTokens),
+          output_tokens: parseOptionalInt(data.output_tokens ?? data.outputTokens),
+          total_tokens: parseOptionalInt(data.total_tokens ?? data.totalTokens),
+        },
+      };
+    case 'compaction':
+      return {
+        type: 'compaction',
+        data: {
+          dropped_count: Number(data.dropped_count ?? 0) || 0,
+          kept_count: Number(data.kept_count ?? 0) || 0,
+          summary_tokens: parseOptionalInt(data.summary_tokens ?? data.summaryTokens),
+          truncated: Boolean(data.truncated ?? false),
+        },
       };
     case 'error':
       return {
         type: 'error',
         data: {
-          code: String(data.code ?? 'agent_error'),
+          code: normalizeChatErrorCode(String(data.code ?? 'agent_error')),
           message: localizeAgentError(
             String(data.code ?? 'agent_error'),
             String(data.message ?? 'Erreur agent'),
@@ -167,7 +198,7 @@ export function mapPythonSseEvent(event: ChatStreamEvent): ChatStreamEvent {
         },
       };
     default:
-      return event;
+      return null;
   }
 }
 
@@ -208,6 +239,10 @@ function buildLegacyParts(message: ChatMessage): ChatMessagePart[] {
   return parts;
 }
 
+function bumpContentRev(message: ChatMessage): void {
+  message._contentRev = (message._contentRev ?? 0) + 1;
+}
+
 function appendTextToParts(assistant: ChatMessage, text: string): void {
   if (!text) return;
   const parts = assistant.parts ?? (assistant.parts = []);
@@ -219,6 +254,7 @@ function appendTextToParts(assistant: ChatMessage, text: string): void {
     // segment texte pour la suite du flux.
     parts.push({ type: 'text', id: createPartId(), content: text });
   }
+  if (assistant.streaming) bumpContentRev(assistant);
 }
 
 function syncContent(assistant: ChatMessage): void {
@@ -236,7 +272,21 @@ function localizeAgentError(code: string, fallback: string): string {
     case 'max_iterations_reached':
       return "L'agent a atteint sa limite d'itérations sans réponse finale. Reformulez ou réessayez.";
     case 'agent_model_error':
+    case 'unexpected_model_behavior':
       return 'Le modèle a renvoyé une réponse inattendue. Réessayez.';
+    case 'turn_timeout':
+      return 'Le tour a dépassé le délai imparti. Réessayez.';
+    case 'confirmation_timeout':
+      return 'La confirmation a expiré. Relancez l’action si nécessaire.';
+    case 'usage_limit_exceeded':
+      return 'La limite d’utilisation a été atteinte.';
+    case 'turn_in_progress':
+      return 'Un tour est déjà en cours pour cette conversation.';
+    case 'input_too_large':
+      return 'Le message est trop volumineux pour le contexte disponible.';
+    case 'internal_error':
+    case 'parse_error':
+      return 'Une erreur interne est survenue pendant la génération.';
     default:
       return fallback || 'Une erreur est survenue pendant la génération.';
   }
@@ -275,15 +325,14 @@ export function applyStreamEvent(
 
   switch (event.type) {
     case 'tool_call_start': {
-      const startSummary = String(event.data.humanSummary ?? '').trim();
+      const startSummary = event.data.humanSummary?.trim() ?? '';
       const toolCall: ChatToolCall = {
-        id: String(event.data.id ?? createMessageId()),
-        name: String(event.data.name ?? 'tool'),
+        id: event.data.id || createMessageId(),
+        name: event.data.name || 'tool',
         status: 'running',
-        args: (event.data.args as Record<string, unknown>) ?? {},
+        args: event.data.args ?? {},
         startedAt: Date.now(),
-        filePath:
-          typeof event.data.filePath === 'string' ? event.data.filePath : undefined,
+        filePath: event.data.filePath,
         humanSummary: startSummary || undefined,
       };
       assistant.toolCalls = [...(assistant.toolCalls ?? []), toolCall];
@@ -294,34 +343,35 @@ export function applyStreamEvent(
       break;
     }
     case 'confirmation_request': {
-      const toolId = String(event.data.toolCallId ?? '');
+      const toolId = event.data.toolCallId;
       const tool = assistant.toolCalls?.find((t) => t.id === toolId);
       if (tool) {
         tool.status = 'awaiting_confirmation';
       }
       const confirmation: ChatConfirmation = {
-        confirmationId: String(event.data.confirmationId ?? ''),
+        confirmationId: event.data.confirmationId,
         toolCallId: toolId,
-        toolName: String(event.data.toolName ?? ''),
-        action: event.data.action === 'modify' ? 'modify' : 'create',
-        proposedPath: String(event.data.proposedPath ?? ''),
-        humanSummary: String(event.data.humanSummary ?? '').trim(),
+        toolName: event.data.toolName,
+        action: event.data.action,
+        proposedPath: event.data.proposedPath,
+        humanSummary: event.data.humanSummary.trim(),
+        turnId: event.data.turnId ?? null,
       };
       assistant.pendingConfirmation = confirmation;
       onConfirmationRequest?.();
       break;
     }
     case 'tool_call_result': {
-      const toolId = String(event.data.id ?? '');
+      const toolId = event.data.id;
       const tool = assistant.toolCalls?.find((t) => t.id === toolId);
       if (tool) {
         tool.result = event.data.result;
         tool.status =
           event.data.error != null
             ? 'error'
-            : ((event.data.status as ChatToolCall['status']) ?? 'success');
+            : (event.data.status ?? 'success');
         tool.endedAt = Date.now();
-        if (typeof event.data.filePath === 'string') {
+        if (event.data.filePath) {
           tool.filePath = event.data.filePath;
         } else if (!tool.filePath) {
           const fromResult = extractFilePathFromResult(event.data.result);
@@ -331,7 +381,7 @@ export function applyStreamEvent(
         if (snapshotPath) {
           tool.snapshotPath = snapshotPath;
         }
-        const resultSummary = String(event.data.humanSummary ?? '').trim();
+        const resultSummary = event.data.humanSummary?.trim() ?? '';
         if (resultSummary) {
           tool.humanSummary = resultSummary;
         }
@@ -342,7 +392,7 @@ export function applyStreamEvent(
       break;
     }
     case 'thinking_start': {
-      const thinkingId = String(event.data.thinkingId ?? '');
+      const thinkingId = event.data.thinkingId;
       if (!thinkingId) break;
       const parts = assistant.parts ?? (assistant.parts = []);
       parts.push({
@@ -358,8 +408,8 @@ export function applyStreamEvent(
       break;
     }
     case 'thinking_delta': {
-      const thinkingId = String(event.data.thinkingId ?? '');
-      const delta = String(event.data.content ?? '');
+      const thinkingId = event.data.thinkingId;
+      const delta = event.data.content;
       if (!thinkingId || !delta) break;
       const parts = assistant.parts ?? [];
       const part = [...parts]
@@ -375,7 +425,7 @@ export function applyStreamEvent(
       break;
     }
     case 'thinking_end': {
-      const thinkingId = String(event.data.thinkingId ?? '');
+      const thinkingId = event.data.thinkingId;
       if (!thinkingId) break;
       const parts = assistant.parts ?? [];
       const part = [...parts]
@@ -391,8 +441,7 @@ export function applyStreamEvent(
     }
     case 'done': {
       assistant.streaming = false;
-      const finalContent =
-        typeof event.data.content === 'string' ? event.data.content : '';
+      const finalContent = event.data.content;
       // On ne remplace JAMAIS le contenu streamé : ce serait écraser le texte
       // produit avant les appels d'outil et casser le rendu interleaved. On
       // n'utilise done.content qu'en fallback quand rien n'a été streamé
@@ -414,8 +463,8 @@ export function applyStreamEvent(
     case 'error': {
       assistant.streaming = false;
       assistant.error = {
-        code: String(event.data.code ?? 'agent_error') as ChatErrorCode,
-        message: String(event.data.message ?? 'stream interrompu'),
+        code: event.data.code,
+        message: event.data.message,
         retryable: true,
       };
       break;
@@ -469,7 +518,9 @@ async function consumeSseStream(
       buffer = rest;
 
       for (const rawEvent of events) {
-        applyEvent(mapPythonSseEvent(rawEvent));
+        const mapped = mapPythonSseEvent(rawEvent);
+        if (!mapped) continue;
+        applyEvent(mapped);
         if (idleControl.isPaused()) {
           if (idleTimer) clearTimeout(idleTimer);
           idleTimer = null;
@@ -497,11 +548,14 @@ export interface UseChatStreamOptions {
   uiMode?: Ref<UiMode | undefined>;
   /** Override du niveau de raisonnement pour la conversation active. */
   reasoningEffort?: Ref<ReasoningEffort | null | undefined>;
+  /** Override du modèle pour la conversation active (persisté par session). */
+  sessionModel?: Ref<string | null | undefined>;
 }
 
-function mergeLlmConfigsWithSessionReasoning(
+export function mergeLlmConfigsWithSessionReasoning(
   configs: ReturnType<typeof buildActiveLlmConfigs> | null | undefined,
   sessionReasoningEffort?: ReasoningEffort | null,
+  sessionModel?: string | null,
 ): { chat: LlmConfigPayload | null; embedding: LlmConfigPayload | null } {
   if (!configs) {
     return { chat: null, embedding: null };
@@ -509,16 +563,35 @@ function mergeLlmConfigsWithSessionReasoning(
   if (!configs.chat) return configs;
 
   const chat: LlmConfigPayload = { ...configs.chat };
+  // Override du modèle par conversation : on substitue avant d'évaluer le
+  // raisonnement, car les niveaux supportés dépendent du modèle.
+  const sessionModelTrimmed = sessionModel?.trim();
+  if (sessionModelTrimmed) {
+    chat.model = sessionModelTrimmed;
+  }
+
   const provider = chat.provider as LlmProviderName;
   if (!supportsReasoning(provider, chat.model)) {
+    delete chat.reasoning_effort;
     return { ...configs, chat };
   }
 
-  if (sessionReasoningEffort != null) {
-    if (sessionReasoningEffort === 'none') {
+  // L'override de session prime sur la config globale ; à défaut on repart
+  // de l'effort global (qu'on re-clampe contre le modèle de session au besoin).
+  const effectiveEffort = sessionReasoningEffort ?? chat.reasoning_effort ?? null;
+  if (effectiveEffort != null) {
+    if (effectiveEffort === 'none') {
       delete chat.reasoning_effort;
     } else {
-      chat.reasoning_effort = sessionReasoningEffort;
+      // L'override peut venir d'un modèle précédent qui acceptait `low`/`medium` ;
+      // on clampe à ce que le modèle courant supporte pour éviter une 400
+      // (ex. mistral-small-latest n'accepte que none/high).
+      const clamped = clampReasoningEffort(provider, chat.model, effectiveEffort);
+      if (clamped === 'none') {
+        delete chat.reasoning_effort;
+      } else {
+        chat.reasoning_effort = clamped;
+      }
     }
   }
 
@@ -530,6 +603,9 @@ export interface UseChatStreamReturn {
   streaming: Ref<boolean>;
   error: Ref<ChatError | null>;
   confirming: Ref<boolean>;
+  lastUsage: Ref<ChatUsage>;
+  completedTurns: Ref<number>;
+  lastCompaction: Ref<ChatCompactionInfo | null>;
   send: (text: string, options?: Partial<SendMessagePayload>) => Promise<void>;
   confirm: (decision: 'approve' | 'deny') => Promise<void>;
   retry: () => Promise<void>;
@@ -546,6 +622,13 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   const streaming = ref(false);
   const error = ref<ChatError | null>(null);
   const confirming = ref(false);
+  const lastUsage = ref<ChatUsage>({
+    inputTokens: null,
+    outputTokens: null,
+    totalTokens: null,
+  });
+  const completedTurns = ref(0);
+  const lastCompaction = ref<ChatCompactionInfo | null>(null);
 
   let abortController: AbortController | null = null;
   let currentAssistantId: string | null = null;
@@ -554,6 +637,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   let lastUserText = '';
   let lastPayload: Partial<SendMessagePayload> = {};
   let idlePaused = false;
+  // Identifiant de tour fourni par le backend (event turn_start). Utilisé pour
+  // isoler la résolution d'une confirmation parmi plusieurs tours concurrents.
+  let currentTurnId: string | null = null;
 
   function setIdlePaused(paused: boolean): void {
     idlePaused = paused;
@@ -579,9 +665,22 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   }
 
   function applyEvent(event: ChatStreamEvent): void {
+    if (event.type === 'compaction') {
+      lastCompaction.value = {
+        droppedCount: Number(event.data.dropped_count ?? 0) || 0,
+        keptCount: Number(event.data.kept_count ?? 0) || 0,
+        summaryTokens: parseOptionalInt(event.data.summary_tokens),
+        truncated: Boolean(event.data.truncated ?? false),
+      };
+      return;
+    }
+    if (event.type === 'turn_start') {
+      if (event.data.turnId) currentTurnId = event.data.turnId;
+      return;
+    }
     if (!currentAssistantId) return;
     if (event.type === 'token') {
-      pendingTokens += String(event.data.token ?? '');
+      pendingTokens += event.data.token;
       scheduleFlush();
       return;
     }
@@ -589,10 +688,18 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     flushPendingTokens();
     if (event.type === 'error') {
       error.value = {
-        code: String(event.data.code ?? 'agent_error') as ChatErrorCode,
-        message: String(event.data.message ?? 'stream interrompu'),
+        code: event.data.code,
+        message: event.data.message,
         retryable: true,
       };
+    }
+    if (event.type === 'done') {
+      lastUsage.value = {
+        inputTokens: parseOptionalInt(event.data.input_tokens),
+        outputTokens: parseOptionalInt(event.data.output_tokens),
+        totalTokens: parseOptionalInt(event.data.total_tokens),
+      };
+      completedTurns.value += 1;
     }
     applyStreamEvent(messages.value, currentAssistantId, event, () => {
       setIdlePaused(true);
@@ -605,6 +712,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   function loadMessages(items: ChatMessage[]): void {
     flushPendingTokens();
     currentAssistantId = null;
+    currentTurnId = null;
+    error.value = null;
     if (flushTimer) {
       clearTimeout(flushTimer);
       flushTimer = null;
@@ -616,6 +725,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     messages.value = items.map((m) =>
       m.parts?.length ? m : { ...m, parts: buildLegacyParts(m) },
     );
+    lastUsage.value = { inputTokens: null, outputTokens: null, totalTokens: null };
+    completedTurns.value = 0;
+    lastCompaction.value = null;
   }
 
   function resetStreamingFlag(): void {
@@ -631,6 +743,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     flushPendingTokens();
     resetStreamingFlag();
     currentAssistantId = null;
+    currentTurnId = null;
     streaming.value = false;
   }
 
@@ -679,6 +792,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
 
     abortController = new AbortController();
     currentAssistantId = assistantMessage.id;
+    currentTurnId = null;
     pendingTokens = '';
     if (flushTimer) {
       clearTimeout(flushTimer);
@@ -694,7 +808,15 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       const llmConfigs = mergeLlmConfigsWithSessionReasoning(
         buildActiveLlmConfigs(),
         options.reasoningEffort?.value ?? null,
+        options.sessionModel?.value ?? null,
       );
+      const chatConfig = llmConfigs.chat;
+      const contextWindow = chatConfig
+        ? contextWindowFor(
+            chatConfig.provider as LlmProviderName,
+            chatConfig.model,
+          )
+        : null;
       const body = buildAgentTurnPayload(
         options.sessionId.value,
         projectPath,
@@ -704,6 +826,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         options.workspaceDataDir?.value,
         llmConfigs,
         options.uiMode?.value,
+        contextWindow,
       );
 
       const response = await fetch(`${getAiSidecarUrl()}/agent/turn`, {
@@ -799,6 +922,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     confirming.value = true;
     error.value = null;
 
+    // turn_id (préférence : celui attaché à la confirmation, sinon le tour
+    // courant) pour une résolution isolée côté backend.
+    const turnId = pending.turnId ?? currentTurnId ?? null;
+
     try {
       const response = await fetch(`${getAiSidecarUrl()}/agent/confirm`, {
         method: 'POST',
@@ -810,6 +937,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
           session_id: options.sessionId.value,
           confirmation_id: pending.confirmationId,
           decision,
+          ...(turnId ? { turn_id: turnId } : {}),
         }),
       });
       if (!response.ok) {
@@ -832,6 +960,9 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     streaming,
     error,
     confirming,
+    lastUsage,
+    completedTurns,
+    lastCompaction,
     send,
     confirm,
     retry,

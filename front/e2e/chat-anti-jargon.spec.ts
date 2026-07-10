@@ -69,13 +69,21 @@ test.describe('T-D1c anti-jargon (vue humaine tool call)', () => {
       expect(humanText).not.toContain(toolName);
     }
 
-    await card.getByRole('button', { name: 'Vue technique' }).click();
+    await card.getByRole('button', { name: /Détails/ }).click();
 
     const tech = card.locator('.tool-call-card__tech');
     await expect(tech).toBeVisible();
     await expect(tech).toContainText('read_documents');
+
+    // La vue détaillée lisible ne dévoile pas le brut technique par défaut.
+    await expect(tech.locator('.tool-call-card__json')).toHaveCount(0);
+
+    await card
+      .getByRole('button', { name: /Afficher les détails techniques/ })
+      .click();
+
     await expect(tech.getByText('Arguments')).toBeVisible();
-    await expect(tech.getByText('Résultat')).toBeVisible();
+    await expect(tech.locator('.tool-call-card__section-title', { hasText: 'Résultat' })).toBeVisible();
     await expect(tech.locator('.tool-call-card__json').first()).toContainText('{');
   });
 });

@@ -60,8 +60,8 @@ def _event_types(events: list[Any]) -> list[str]:
     return [type(e).__name__ for e in events]
 
 
-async def _run(loop: AgentLoop, request: AgentTurnRequest) -> list[Any]:
-    return [event async for event in loop.run_turn(request)]
+async def _run(loop: AgentLoop, request: AgentTurnRequest, *, turn_id: str = "turn-test") -> list[Any]:
+    return [event async for event in loop.run_turn(request, turn_id=turn_id)]
 
 
 def _new_loop(client: FakeProjectClient, *, max_iterations: int = 6) -> AgentLoop:
@@ -134,6 +134,23 @@ def test_to_model_messages_assistant_with_thinking() -> None:
     assert msgs[0].parts[1].content == "answer"
 
 
+def test_done_event_serializes_usage_tokens() -> None:
+    event = DoneEvent(
+        content="réponse",
+        input_tokens=42,
+        output_tokens=7,
+        total_tokens=49,
+    )
+
+    assert event.model_dump() == {
+        "type": "done",
+        "content": "réponse",
+        "input_tokens": 42,
+        "output_tokens": 7,
+        "total_tokens": 49,
+    }
+
+
 # --- map_model_stream_events -----------------------------------------------
 
 
@@ -163,6 +180,34 @@ async def test_map_model_stream_events_thinking_and_text() -> None:
         ThinkingEndEvent(thinking_id="think-0"),
         TokenEvent(content="Answer"),
     ]
+
+
+async def test_map_model_stream_events_first_chunk_embedded_in_part_start() -> None:
+    """Régression : le premier chunk texte/thinking vit dans le PartStartEvent.
+
+    pydantic-ai embarque le contenu du premier delta dans le `PartStartEvent`
+    (cf. `ModelResponsePartsManager.handle_text_delta` / `handle_thinking_delta`).
+    Sans relayage, le début de la réponse et du raisonnement disparaissaient du
+    flux SSE (ex. "4" manquant à "2+2 = ?", "Je " manquant à "Je vais bien").
+    """
+    events = [
+        PartStartEvent(index=0, part=ThinkingPart(content="je calcule ")),
+        PartDeltaEvent(index=0, delta=ThinkingPartDelta(content_delta="2+2")),
+        PartEndEvent(index=0, part=ThinkingPart(content="je calcule 2+2")),
+        PartStartEvent(index=1, part=TextPart(content="4")),
+        PartDeltaEvent(index=1, delta=TextPartDelta(content_delta="! 😄")),
+    ]
+    mapped = await _collect_stream_events(events)
+
+    assert mapped == [
+        ThinkingStartEvent(thinking_id="think-0"),
+        ThinkingDeltaEvent(thinking_id="think-0", content="je calcule "),
+        ThinkingDeltaEvent(thinking_id="think-0", content="2+2"),
+        ThinkingEndEvent(thinking_id="think-0"),
+        TokenEvent(content="4"),
+        TokenEvent(content="! 😄"),
+    ]
+
 
 
 # --- coerce_tool_result ----------------------------------------------------

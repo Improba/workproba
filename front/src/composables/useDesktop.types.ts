@@ -42,6 +42,7 @@ export interface LlmProviderEntry {
   extraHeaders?: Record<string, string>;
   embeddingModel?: string | null;
   embeddingBaseUrl?: string | null;
+  utilityModel?: string | null;
   reasoningEffort?: ReasoningEffort | null;
 }
 

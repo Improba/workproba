@@ -113,7 +113,7 @@ export function useProject(): UseProjectReturn {
       await activateWorkspace(workspace);
     } catch (err) {
       error.value =
-        err instanceof Error ? err.message : 'Impossible de basculer de workspace';
+        err instanceof Error ? err.message : 'Impossible de basculer de projet';
     } finally {
       loading.value = false;
     }

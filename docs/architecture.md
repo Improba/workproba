@@ -1,6 +1,6 @@
 # Architecture Workproba
 
-> **Dernière mise à jour :** 09/07/2026
+> **Dernière mise à jour :** 10/07/2026
 
 ## Vue d'ensemble
 
@@ -77,3 +77,40 @@ l'app : écran **« Modèles IA »** (icône réglages en pied de sidebar, route
   `/agent/turn`. Le sidecar n'utilise les variables d'environnement `LLM_DEFAULT_*`
   / `LLM_EMBEDDING_*` que comme **repli de dev** si l'app n'envoie rien.
 - La clé peut être changée à tout moment depuis l'app, sans toucher au `.env`.
+
+## Modèle et raisonnement par conversation
+
+L'écran « Modèles IA » choisit un **fournisseur/préréglage** (provider, base URL,
+clé, modèle par défaut). Le **modèle précis** et le **niveau de raisonnement** se
+choisissent **par conversation**, directement dans le compositeur du chat, pas dans
+les réglages.
+
+- **Compositeur** (`ChatView` + `ChatModelControl`) : un contrôle compact affiche
+  le modèle courant et le niveau de raisonnement. Le menu propose les modèles
+  suggérés du provider (`utils/modelCatalog.ts`) et les niveaux de raisonnement
+  supportés par le modèle (`utils/reasoningSupport.ts`), avec une aide verbose par
+  option pour les utilisateurs non techniques.
+- **Persistance par session** : le modèle et l'effort de raisonnement sont
+  sauvegardés **avec** la conversation côté Tauri (`ConversationSession.model` et
+  `reasoningEffort`). Au chargement d'une session, le modèle sauvegardé est
+  restauré s'il reste applicable au provider actif ; sinon il retombe sur le modèle
+  par défaut du provider (logique `isModelApplicable` + watch du provider actif).
+- **Transit du tour** : `mergeLlmConfigsWithSessionReasoning` (dans
+  `useChatStream`) substitue le modèle de session à `llm_provider_config.model`
+  puis **clampe** l'effort de raisonnement contre ce modèle, pour éviter une 400
+  (ex. `mistral-small-latest` n'accepte que `none`/`high`).
+- **Étiquettes FR** : `Aucun` · `Faible` · `Moyen` · `Élevé`.
+
+## UX du chat (compositeur & raisonnement)
+
+- **Compositeur en pilule** : à vide, le champ et les actions (modèle/raisonnement,
+  envoyer) tiennent sur une ligne. Dès la saisie, le champ s'étend en multi-lignes
+  et les actions passent en barre dessous, le champ prenant toute la largeur.
+- **Envoi** : le champ se vide, le message utilisateur apparaît immédiatement
+  (poussé synchrone dans `useChatStream.send`) et la vue défile vers le bas.
+  `MessageList.getScrollTarget` détecte le conteneur réellement scrollable
+  (double conteneur `q-scroll-area` + `DynamicScroller`) pour cibler le bon.
+- **Raisonnement en cours** : un **spinner** rotatif + libellé « Raisonnement en
+  cours… » s'affiche dans la zone raisonnement (`ThinkingCard`) pendant le
+  streaming. Un placeholder « Le modèle réfléchit… » couvre le délai d'amorçage
+  entre l'envoi et le premier event (`thinking_start` ou token).

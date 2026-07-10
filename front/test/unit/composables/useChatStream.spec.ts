@@ -12,7 +12,7 @@ vi.mock('@composables/useAppSettings', () => ({
   buildActiveLlmConfigs: () => ({ chat: null, embedding: null }),
 }));
 
-import { useChatStream, mapPythonSseEvent, applyStreamEvent, type UseChatStreamReturn } from '@composables/useChatStream';
+import { useChatStream, mapPythonSseEvent, applyStreamEvent, mergeLlmConfigsWithSessionReasoning, type UseChatStreamReturn } from '@composables/useChatStream';
 import type { ChatMessage } from '#types';
 
 /** Construit une Response SSE dont le body émet `events` puis ferme le flux. */
@@ -331,6 +331,54 @@ describe('useChatStream — feedbacks', () => {
     expect(mapped.data.humanSummary).toBe('Je vais créer contrat_dupont.docx');
   });
 
+  it('mappe turn_start et propage turn_id jusqu\'au confirm', async () => {
+    const mapped = mapPythonSseEvent({
+      type: 'turn_start',
+      data: { turn_id: 'turn_abc' },
+    });
+    expect(mapped.type).toBe('turn_start');
+    expect(mapped.data.turnId).toBe('turn_abc');
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      sseResponse([
+        { event: 'turn_start', data: { turn_id: 'turn_abc' } },
+        {
+          event: 'tool_call_start',
+          data: { tool_call_id: 'tc_1', tool_name: 'generate_document' },
+        },
+        {
+          event: 'confirmation_request',
+          data: {
+            confirmation_id: 'cf_1',
+            tool_call_id: 'tc_1',
+            tool_name: 'generate_document',
+            action: 'create',
+            proposed_path: 'contrat.docx',
+            human_summary: 'Je vais créer contrat.docx',
+            turn_id: 'turn_abc',
+          },
+        },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('hi');
+
+    const assistant = lastAssistant(api.messages.value);
+    expect(assistant?.pendingConfirmation?.turnId).toBe('turn_abc');
+
+    // Second appel fetch = POST /agent/confirm.
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await api.confirm('approve');
+
+    const confirmBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(confirmBody.confirmation_id).toBe('cf_1');
+    expect(confirmBody.decision).toBe('approve');
+    expect(confirmBody.turn_id).toBe('turn_abc');
+    unmount();
+  });
+
   it('pose awaiting_confirmation puis efface pendingConfirmation au result', async () => {
     (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
       sseResponse([
@@ -456,6 +504,27 @@ describe('useChatStream — feedbacks', () => {
     unmount();
   });
 
+  it('reset error au loadMessages après une erreur précédente', () => {
+    const { api, unmount } = mountStream();
+    api.error.value = {
+      code: 'sidecar_unreachable',
+      message: 'Erreur',
+      retryable: true,
+    };
+
+    api.loadMessages([
+      {
+        id: 'm1',
+        role: 'user',
+        content: 'hello',
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    expect(api.error.value).toBeNull();
+    unmount();
+  });
+
   it('applyStreamEvent crée un ChatThinkingPart via les events unitaires', () => {
     const messages: ChatMessage[] = [
       {
@@ -489,5 +558,66 @@ describe('useChatStream — feedbacks', () => {
       done: true,
     });
     expect(messages[0].thinking).toBe('Analyse');
+  });
+});
+
+describe('mergeLlmConfigsWithSessionReasoning', () => {
+  it('clampe un override `low` vers none pour mistral-small-latest', () => {
+    const merged = mergeLlmConfigsWithSessionReasoning(
+      {
+        chat: {
+          provider: 'mistral',
+          model: 'mistral-small-latest',
+          reasoning_effort: 'high',
+        },
+        embedding: null,
+      },
+      'low',
+    );
+    expect(merged.chat?.reasoning_effort).toBeUndefined();
+  });
+
+  it('clampe un override `medium` vers none pour mistral-small-latest', () => {
+    const merged = mergeLlmConfigsWithSessionReasoning(
+      {
+        chat: { provider: 'mistral', model: 'mistral-small-latest' },
+        embedding: null,
+      },
+      'medium',
+    );
+    expect(merged.chat?.reasoning_effort).toBeUndefined();
+  });
+
+  it('supprime reasoning_effort quand l override clampé vaut none', () => {
+    const merged = mergeLlmConfigsWithSessionReasoning(
+      {
+        chat: { provider: 'mistral', model: 'mistral-small-latest' },
+        embedding: null,
+      },
+      'none',
+    );
+    expect(merged.chat?.reasoning_effort).toBeUndefined();
+  });
+
+  it('garde low pour un modèle qui le supporte', () => {
+    const merged = mergeLlmConfigsWithSessionReasoning(
+      {
+        chat: { provider: 'mistral', model: 'mistral-medium-latest' },
+        embedding: null,
+      },
+      'low',
+    );
+    expect(merged.chat?.reasoning_effort).toBe('low');
+  });
+
+  it('ignore l override si le modèle ne supporte pas le raisonnement', () => {
+    const merged = mergeLlmConfigsWithSessionReasoning(
+      {
+        chat: { provider: 'ollama', model: 'llama3' },
+        embedding: null,
+      },
+      'low',
+    );
+    expect(merged.chat?.reasoning_effort).toBeUndefined();
   });
 });

@@ -13,6 +13,7 @@ et le modèle est informé pour s'adapter, comme le faisait l'ancien
 from __future__ import annotations
 
 import base64
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
@@ -42,11 +43,13 @@ WORKPROBA_SYSTEM_PROMPT = (
 
 @dataclass(frozen=True)
 class ToolContext:
+    # Réservé multi-tenant futur ; ignoré par local_client.
     tenant_id: str
     project_id: str
     session_id: str
     documents: list[DocumentReference]
     project_root: Path | None = None
+    workspace_data_dir: Path | None = None
 
 
 @dataclass
@@ -115,6 +118,98 @@ def build_inventory_prompt(documents: list[DocumentReference], cap: int) -> str:
     return text
 
 
+def _truncate_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[:limit].rstrip() + "..."
+
+
+def _session_extract(messages: Any) -> str:
+    if not isinstance(messages, list):
+        return ""
+
+    first_user = ""
+    last_assistant = ""
+    for message in messages:
+        if not isinstance(message, dict):
+            continue
+        role = message.get("role")
+        content = message.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        if role == "user" and not first_user:
+            first_user = _truncate_text(content.strip(), 200)
+        elif role == "assistant":
+            last_assistant = _truncate_text(content.strip(), 300)
+
+    parts: list[str] = []
+    if first_user:
+        parts.append(f"Première demande : {first_user}")
+    if last_assistant:
+        parts.append(f"Dernière réponse : {last_assistant}")
+    return "\n".join(parts)
+
+
+def build_session_digests(
+    data_dir: Path,
+    current_session_id: str,
+    query: str = "",
+) -> dict[str, Any]:
+    conv_dir = data_dir / "conversations"
+    if not conv_dir.is_dir():
+        return {"sessions": [], "count": 0}
+
+    sessions: list[dict[str, Any]] = []
+    for session_path in conv_dir.glob("*.json"):
+        try:
+            with session_path.open("r", encoding="utf-8") as handle:
+                data = json.load(handle)
+        except Exception:
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        session_id = data.get("id")
+        if session_id == current_session_id:
+            continue
+
+        title = data.get("title") or "Conversation"
+        summary_value = data.get("summary")
+        summary = summary_value.strip() if isinstance(summary_value, str) else ""
+        extract = "" if summary else _session_extract(data.get("messages"))
+        sessions.append(
+            {
+                "id": session_id,
+                "title": title,
+                "summary": summary or extract,
+                "createdAt": data.get("createdAt"),
+                "updatedAt": data.get("updatedAt"),
+            }
+        )
+
+    sessions.sort(key=lambda session: session.get("updatedAt") or "", reverse=True)
+    total_available = len(sessions)
+
+    keywords = [keyword.lower() for keyword in query.split() if keyword.strip()]
+    if keywords:
+        sessions = [
+            session
+            for session in sessions
+            if any(
+                keyword
+                in f"{session.get('title') or ''} {session.get('summary') or ''}".lower()
+                for keyword in keywords
+            )
+        ]
+
+    returned = sessions[:20]
+    return {
+        "sessions": returned,
+        "count": len(returned),
+        "total_available": total_available,
+    }
+
+
 def build_agent(
     model: Any,
     *,
@@ -134,6 +229,31 @@ def build_agent(
         """Injecte l'inventaire des fichiers projet reçus dans le payload."""
         return build_inventory_prompt(
             ctx.deps.context.documents, ctx.deps.limits.inventory_max_entries
+        )
+
+    @agent.system_prompt
+    def project_sessions_prompt(ctx: RunContext[ToolDeps]) -> str:
+        data_dir = ctx.deps.context.workspace_data_dir
+        if data_dir is None:
+            return ""
+        conv_dir = data_dir / "conversations"
+        if not conv_dir.is_dir():
+            return ""
+        try:
+            others = sum(
+                1
+                for p in conv_dir.glob("*.json")
+                if p.stem != ctx.deps.context.session_id
+            )
+        except Exception:
+            return ""
+        if others == 0:
+            return ""
+        return (
+            f"Ce projet contient {others} autre(s) conversation(s) antérieure(s). "
+            "Utilise l'outil recall_project_sessions pour obtenir un résumé de ces "
+            "sessions si l'utilisateur fait référence à un échange précédent ou si "
+            "le contexte le justifie."
         )
 
     @agent.tool
@@ -164,6 +284,40 @@ def build_agent(
             raise _retry(exc) from exc
 
     @agent.tool
+    async def recall_project_sessions(
+        ctx: RunContext[ToolDeps],
+        query: str = "",
+    ) -> dict[str, Any]:
+        """List other conversations in this project with a short summary of each.
+
+        Returns the prior conversations of the current project (excluding the
+        active one), most recent first, with for each: id, title, createdAt,
+        updatedAt, and a `summary` (the persisted summary if available, otherwise
+        an extract of the first user message and the last assistant reply). Use
+        this to recall what was discussed or produced in earlier sessions on the
+        same dossier before re-asking the user. Pass `query` to filter by keywords
+        (matched against title + summary, case-insensitive).
+
+        Args:
+            query: Optional keywords to filter sessions (title + summary match).
+        """
+        data_dir = ctx.deps.context.workspace_data_dir
+        if data_dir is None:
+            return {
+                "sessions": [],
+                "count": 0,
+                "note": "Aucun dossier projet associé.",
+            }
+        try:
+            return build_session_digests(
+                data_dir=data_dir,
+                current_session_id=ctx.deps.context.session_id,
+                query=query,
+            )
+        except Exception as exc:  # noqa: BLE001 - surfaced to the model
+            raise _retry(exc) from exc
+
+    @agent.tool
     async def search_kb(
         ctx: RunContext[ToolDeps],
         query: str,
@@ -171,6 +325,15 @@ def build_agent(
         filters: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Search the current project knowledge base or local files.
+
+        Recherche par mot-clé dans le contenu ET dans les noms de fichiers du
+        projet. Transmets tels quels les termes littéraux de l'utilisateur,
+        y compris un nom de fichier s'il en cite un (ex. « mémoire collective »
+        ou « rapport-q3.md »). N'utilise PAS d'opérateurs booléens (OR, AND,
+        |) : le serveur découpe la requête en mots-clés et matche chacun
+        indépendamment. Si la première requête ne donne rien, reformule avec
+        les mots-clés exacts présents dans le fichier recherché plutôt qu'avec
+        des synonymes.
 
         Args:
             query: The search query (natural language or keywords).
@@ -317,5 +480,6 @@ __all__ = [
     "ToolDeps",
     "build_agent",
     "build_inventory_prompt",
+    "build_session_digests",
     "WORKPROBA_SYSTEM_PROMPT",
 ]

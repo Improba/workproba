@@ -27,6 +27,8 @@ export interface AgentTurnPayload {
   message: string;
   llm_provider_config?: LlmConfigPayload | null;
   embedding_config?: LlmConfigPayload | null;
+  context_window?: number | null;
+  auto_compact?: boolean;
   documents: Array<{
     id: string;
     name: string;
@@ -81,6 +83,39 @@ function guessMimeType(filename: string): string | undefined {
   return ext ? map[ext] : undefined;
 }
 
+function parseOptionalInt(value: unknown): number | null {
+  if (value == null) return null;
+  const n = typeof value === 'number' ? value : parseInt(String(value), 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+function toSummaryMessages(messages: ChatMessage[]): Array<{
+  role: 'user' | 'assistant';
+  content: string | null;
+  thinking?: string | null;
+  tool_calls?: Array<{ id: string; name: string; arguments: Record<string, unknown> }>;
+}> {
+  return messages
+    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .map((m) => {
+      const entry: ReturnType<typeof toSummaryMessages>[number] = {
+        role: m.role,
+        content: m.content || null,
+      };
+      if (m.role === 'assistant') {
+        if (m.thinking) entry.thinking = m.thinking;
+        if (m.toolCalls?.length) {
+          entry.tool_calls = m.toolCalls.map((tc) => ({
+            id: tc.id,
+            name: tc.name,
+            arguments: tc.args ?? {},
+          }));
+        }
+      }
+      return entry;
+    });
+}
+
 function toPythonHistory(messages: ChatMessage[]): AgentTurnPayload['history'] {
   return messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -105,6 +140,8 @@ export function buildAgentTurnPayload(
   workspaceDataDir?: string | null,
   llmConfigs?: { chat: LlmConfigPayload | null; embedding: LlmConfigPayload | null } | null,
   uiMode?: UiMode | null,
+  contextWindow?: number | null,
+  autoCompact: boolean = true,
 ): AgentTurnPayload {
   return {
     tenant_id: 'desktop',
@@ -117,6 +154,8 @@ export function buildAgentTurnPayload(
     message,
     llm_provider_config: llmConfigs?.chat ?? undefined,
     embedding_config: llmConfigs?.embedding ?? undefined,
+    context_window: contextWindow ?? undefined,
+    auto_compact: autoCompact,
     documents: documents.map((doc) => ({
       id: doc.relativePath,
       name: doc.name,
@@ -128,3 +167,154 @@ export function buildAgentTurnPayload(
     })),
   };
 }
+
+export interface WorkspaceIndexReport {
+  project_root: string;
+  db_path: string | null;
+  enabled: boolean;
+  scanned: number;
+  indexed: number;
+  unchanged: number;
+  skipped: number;
+  errors: number;
+  total_chars: number;
+  truncated: boolean;
+  truncation_reason: string | null;
+  indexed_paths: string[];
+  skipped_paths: string[];
+  error_paths: string[];
+  metadata: Record<string, unknown>;
+}
+
+export interface IndexWorkspaceOptions {
+  projectPath: string;
+  workspaceDataDir?: string | null;
+  embeddingConfig?: LlmConfigPayload | null;
+  maxFiles?: number | null;
+  /** Restreint l'indexation à ces chemins relatifs (re-index incrémental). */
+  paths?: string[] | null;
+}
+
+export async function indexWorkspace(opts: IndexWorkspaceOptions): Promise<WorkspaceIndexReport> {
+  const response = await fetch(`${getAiSidecarUrl()}/agent/index-workspace`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Secret': getDesktopSecret(),
+    },
+    body: JSON.stringify({
+      project_path: opts.projectPath,
+      workspace_data_dir: opts.workspaceDataDir ?? null,
+      embedding_config: opts.embeddingConfig ?? null,
+      max_files: opts.maxFiles ?? null,
+      paths: opts.paths ?? null,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`Indexation impossible (HTTP ${response.status}) ${body}`.trim());
+  }
+
+  return (await response.json()) as WorkspaceIndexReport;
+}
+
+export type RagStatus = 'idle' | 'indexing' | 'done' | 'error' | 'disabled';
+
+/** Vrai quand l'analyse n'a rien eu de nouveau à indexer : tout était déjà à jour. */
+export function ragIsUpToDate(report: WorkspaceIndexReport | null): boolean {
+  return !!report && report.indexed === 0 && report.errors === 0;
+}
+
+export async function requestTitle(opts: {
+  firstUserMessage: string;
+  firstAssistantReply: string;
+  chatConfig?: LlmConfigPayload | null;
+  utilityConfig?: LlmConfigPayload | null;
+}): Promise<string> {
+  const response = await fetch(`${getAiSidecarUrl()}/util/title`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Secret': getDesktopSecret(),
+    },
+    body: JSON.stringify({
+      first_user_message: opts.firstUserMessage,
+      first_assistant_reply: opts.firstAssistantReply,
+      llm_provider_config: opts.chatConfig ?? null,
+      utility_llm_config: opts.utilityConfig ?? null,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(body || `HTTP ${response.status}`);
+  }
+
+  const data = (await response.json()) as { title?: string };
+  return String(data.title ?? '');
+}
+
+export async function requestSummary(opts: {
+  messages: ChatMessage[];
+  chatConfig?: LlmConfigPayload | null;
+  utilityConfig?: LlmConfigPayload | null;
+  focus?: string | null;
+}): Promise<{ summary: string; inputTokens?: number; outputTokens?: number }> {
+  const response = await fetch(`${getAiSidecarUrl()}/util/summarize`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Secret': getDesktopSecret(),
+    },
+    body: JSON.stringify({
+      messages: toSummaryMessages(opts.messages),
+      llm_provider_config: opts.chatConfig ?? null,
+      utility_llm_config: opts.utilityConfig ?? null,
+      focus: opts.focus ?? null,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(body || `HTTP ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    summary?: string;
+    input_tokens?: number;
+    output_tokens?: number;
+  };
+  return {
+    summary: String(data.summary ?? ''),
+    inputTokens: parseOptionalInt(data.input_tokens) ?? undefined,
+    outputTokens: parseOptionalInt(data.output_tokens) ?? undefined,
+  };
+}
+
+/** Libellé court, lisible par un humain (pas de jargon technique). */
+export function ragStatusLabel(status: RagStatus, report: WorkspaceIndexReport | null): string {
+  switch (status) {
+    case 'indexing':
+      return 'Analyse des documents…';
+    case 'error':
+      return "Mémoire : analyse en échec";
+    case 'disabled':
+      return 'Mémoire désactivée';
+    case 'done': {
+      if (!report) return 'Mémoire prête';
+      if (ragIsUpToDate(report) && report.unchanged > 0) return 'Mémoire à jour';
+      if (ragIsUpToDate(report) && report.unchanged === 0) return 'Mémoire prête';
+      const added = report.indexed;
+      let label: string;
+      if (added > 0) label = `Mémoire à jour · ${added} ajouté${added > 1 ? 's' : ''}`;
+      else if (report.errors > 0) label = `Mémoire · ${report.errors} erreur${report.errors > 1 ? 's' : ''}`;
+      else label = 'Mémoire à jour';
+      if (report.truncated) label += ' · limite atteinte';
+      return label;
+    }
+    default:
+      return 'Mémoire inactive';
+  }
+}
+

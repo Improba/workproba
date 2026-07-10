@@ -1,8 +1,8 @@
 <template>
   <section class="guided-setup">
-    <h2 class="guided-setup__section-title">Choisir un modèle</h2>
+    <h2 class="guided-setup__section-title">Choisir un fournisseur</h2>
 
-    <div class="guided-setup__cards" role="radiogroup" aria-label="Choisir un modèle">
+    <div class="guided-setup__cards" role="radiogroup" aria-label="Choisir un fournisseur">
       <button
         v-for="card in cards"
         :key="card.id"
@@ -37,17 +37,9 @@
           </button>
         </template>
       </q-input>
-      <q-select
-        v-model="model"
-        :options="mistralModelOptions"
-        label="Modèle"
-        outlined
-        dense
-        emit-value
-        map-options
-        class="guided-setup__field"
-        @update:model-value="onFieldChange"
-      />
+      <p class="guided-setup__hint">
+        Le modèle (Small, Medium, Large) se choisit ensuite dans chaque conversation.
+      </p>
     </div>
 
     <div v-else-if="selectedCard === 'ollama'" class="guided-setup__fields">
@@ -119,17 +111,9 @@
           </button>
         </template>
       </q-input>
-      <q-select
-        v-model="model"
-        :options="cloudModelOptions"
-        label="Modèle"
-        outlined
-        dense
-        emit-value
-        map-options
-        class="guided-setup__field"
-        @update:model-value="onFieldChange"
-      />
+      <p class="guided-setup__hint">
+        Le modèle se choisit ensuite dans chaque conversation.
+      </p>
     </div>
 
     <div class="guided-setup__actions">
@@ -175,9 +159,6 @@ import {
 import type { AppSettings, LlmProviderEntry } from '@composables/useDesktop.types';
 import { fetchOllamaModels } from '@services/ollamaModels';
 import {
-  ANTHROPIC_MODEL_OPTIONS,
-  MISTRAL_MODEL_OPTIONS,
-  OPENAI_MODEL_OPTIONS,
   applyGuidedCard,
   inferCloudProvider,
   inferGuidedCard,
@@ -195,21 +176,21 @@ const cards = [
   {
     id: 'mistral' as const,
     title: 'Mistral',
-    subtitle: 'Équilibré, rapide, bon rapport qualité/prix. Requiert une clé API.',
+    subtitle: 'Service cloud Mistral AI. Requiert une clé API.',
     badge: 'Recommandé',
     badgeTone: 'recommended',
   },
   {
     id: 'ollama' as const,
     title: 'Local (Ollama)',
-    subtitle: 'Vos documents ne quittent jamais votre machine. Nécessite Ollama installé.',
-    badge: 'Souverain',
-    badgeTone: 'sovereign',
+    subtitle: 'Modèle exécuté sur votre machine via Ollama. Aucune donnée transmise. Requiert Ollama installé.',
+    badge: 'Local',
+    badgeTone: 'local',
   },
   {
     id: 'cloud' as const,
     title: 'Cloud tiers (OpenAI / Anthropic)',
-    subtitle: 'Le plus puissant. Données envoyées au fournisseur.',
+    subtitle: 'Services cloud OpenAI ou Anthropic. Requiert une clé API. Données transmises au fournisseur.',
     badge: 'Cloud',
     badgeTone: 'cloud',
   },
@@ -226,15 +207,10 @@ const refreshingOllama = ref(false);
 const ollamaModels = ref<string[]>([]);
 const testStatus = ref<{ ok: boolean; label: string } | null>(null);
 
-const mistralModelOptions = MISTRAL_MODEL_OPTIONS;
 const cloudProviderOptions = [
   { label: 'OpenAI', value: 'openai' },
   { label: 'Anthropic', value: 'anthropic' },
 ];
-
-const cloudModelOptions = computed(() =>
-  cloudProvider.value === 'anthropic' ? ANTHROPIC_MODEL_OPTIONS : OPENAI_MODEL_OPTIONS,
-);
 
 const cloudApiKeyLabel = computed(() =>
   cloudProvider.value === 'anthropic' ? 'Clé API Anthropic' : 'Clé API OpenAI',
@@ -265,11 +241,18 @@ function hydrateFromEntry(entry: LlmProviderEntry | null): void {
 
 function buildEntryFromForm(existing: LlmProviderEntry | null): LlmProviderEntry {
   const preset = applyGuidedCard(selectedCard.value, cloudProvider.value);
+  // Les réglages définissent un provider/preset, pas un modèle spécifique :
+  // pour les providers catalogués (Mistral, OpenAI, Anthropic), on utilise le
+  // modèle par défaut du preset. Le choix fin du modèle se fait par
+  // conversation dans le compositeur. Ollama (pas de catalogue) garde la
+  // saisie libre, car il n'y a pas d'autre endroit pour la définir.
+  const resolvedModel =
+    selectedCard.value === 'ollama' ? model.value.trim() || preset.model : preset.model;
   return {
     id: existing?.id ?? newId(),
     label: preset.label,
     provider: preset.provider,
-    model: model.value.trim() || preset.model,
+    model: resolvedModel,
     baseUrl:
       selectedCard.value === 'ollama'
         ? baseUrl.value.trim() || 'http://localhost:11434'
@@ -455,7 +438,7 @@ watch(activeChatProvider, (entry) => {
   color: var(--wp-accent-strong, var(--wp-accent));
 }
 
-.guided-card__badge--sovereign {
+.guided-card__badge--local {
   background: var(--wp-success-soft, var(--wp-accent-soft));
   color: var(--wp-success);
 }
@@ -494,6 +477,13 @@ watch(activeChatProvider, (entry) => {
 .guided-setup__field {
   flex: 1;
   min-width: 200px;
+}
+
+.guided-setup__hint {
+  margin: 0;
+  font-size: var(--wp-fs-xs);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-text-muted);
 }
 
 .guided-setup__refresh {

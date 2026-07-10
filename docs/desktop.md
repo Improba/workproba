@@ -1,7 +1,7 @@
 # Workproba Desktop
 
 > **Statut :** Décision produit — pivot bureau
-> **Dernière mise à jour :** 09/07/2026
+> **Dernière mise à jour :** 10/07/2026
 
 ## Décision
 
@@ -85,9 +85,12 @@ Les métadonnées Workproba vivent dans le **dossier applicatif**, pas dans le d
 1. L'utilisateur sélectionne un dossier projet (dialogue Tauri).
 2. Tauri enregistre le workspace (ID stable + chemin) ; le front garde le chemin et `workspace_id`.
 3. L'utilisateur envoie un message dans le chat.
-4. Quasar appelle `POST http://127.0.0.1:8765/agent/turn` (SSE direct).
+4. Quasar appelle `POST http://127.0.0.1:8765/agent/turn` (SSE direct). Le payload
+   embarque la surcharge **modèle + niveau de raisonnement** de la conversation
+   (persistée en session), clampée contre les capacités du modèle.
 5. Python exécute la loop agent : LLM, tools fichier, recherche locale, sandbox subprocess.
-6. Les événements SSE sont affichés dans le chat ; les sessions sont persistées dans `{app_data}/workspaces/{id}/.workproba/conversations/`.
+6. Les événements SSE sont affichés dans le chat (tokens, raisonnement avec spinner,
+   appels d'outil) ; les sessions sont persistées dans `{app_data}/workspaces/{id}/.workproba/conversations/`.
 
 **Pas de serveur web** dans le chemin produit. L'ancien stack NestJS est dans `legacy/`.
 

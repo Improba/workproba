@@ -112,6 +112,24 @@ def test_build_model_settings_reasoning_effort_mistral_high() -> None:
     assert settings["openai_reasoning_effort"] == "high"
 
 
+def test_build_model_settings_reasoning_effort_mistral_small_clamps_low_to_high() -> None:
+    # mistral-small-latest n'accepte que none/high : un effort `low` arrive
+    # parfois depuis une session précédente ; le backend doit clamper.
+    cfg = LLMProviderConfig(
+        provider="mistral", model="mistral-small-latest", reasoning_effort="low"
+    )
+    settings = build_model_settings(cfg)
+    assert settings["openai_reasoning_effort"] == "high"
+
+
+def test_build_model_settings_reasoning_effort_mistral_small_clamps_medium_to_high() -> None:
+    cfg = LLMProviderConfig(
+        provider="mistral", model="mistral-small-latest", reasoning_effort="medium"
+    )
+    settings = build_model_settings(cfg)
+    assert settings["openai_reasoning_effort"] == "high"
+
+
 def test_build_model_settings_reasoning_effort_openai_low() -> None:
     cfg = LLMProviderConfig(provider="openai", model="gpt-4o", reasoning_effort="low")
     settings = build_model_settings(cfg)

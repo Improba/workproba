@@ -1,6 +1,6 @@
 # Stockage par workspace
 
-> **Dernière mise à jour :** 09/07/2026
+> **Dernière mise à jour :** 10/07/2026
 
 ## Principe
 
@@ -56,6 +56,30 @@ Ce modèle suit **Claude Cowork** (métadonnées dans Application Support, fichi
 | Registre projets | `registry.json` | Tauri |
 
 Le sidecar Python reçoit `workspace_data_dir` dans le payload `/agent/turn` pour écrire versions et (plus tard) mémoire au bon endroit.
+
+## Schéma d'une session (`conversations/sess_….json`)
+
+Une session = un fichier JSON, lu/écrit via les commandes Tauri
+(`list_conversations`, `get_conversation`, `save_conversation`).
+
+| Champ | Rôle |
+|---|---|
+| `id` | Identifiant de session (`sess_…`) |
+| `title` | Titre affiché (auto, première question) |
+| `messages` | Liste des messages (rôles `user`/`assistant`, `parts` ordonnés texte/raisonnement/outil) |
+| `reasoningEffort` | Niveau de raisonnement choisi pour la conversation (`none`/`low`/`medium`/`high`) |
+| `model` | Modèle LLM choisi pour la conversation (surcharge du modèle par défaut du provider) |
+| `createdAt` / `updatedAt` | Horodatages |
+
+`reasoningEffort` et `model` sont **persistés par session** : restaurés à
+l'ouverture s'ils restent applicables au provider actif, sinon repli sur le modèle
+par défaut du provider. La persistance est **debouncée** et atomique
+(`persistSession` sauve `messages` + `reasoningEffort` + `model` en une seule
+écriture) pour éviter les courses lors du streaming. `model` est optionnel
+(`#[serde(default, skip_serializing_if)]`) pour rester lisible par les versions
+antérieures.
+
+Voir aussi [architecture.md § Modèle et raisonnement par conversation](./architecture.md#modèle-et-raisonnement-par-conversation).
 
 ## Migration V1
 

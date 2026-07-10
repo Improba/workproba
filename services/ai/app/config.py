@@ -1,16 +1,21 @@
 import json
+import logging
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, Self
 
 from pydantic import Field
-from pydantic import field_validator
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.limits import Limits
 
 
+logger = logging.getLogger(__name__)
+
 ProviderName = Literal["openai_compat", "openai", "mistral", "ollama", "vllm", "anthropic"]
+EnvName = Literal["development", "production"]
+DEFAULT_DEV_SECRET = "desktop-dev-secret"
 
 
 class Settings(BaseSettings):
@@ -49,9 +54,61 @@ class Settings(BaseSettings):
         validation_alias="CORS_ORIGIN_REGEX",
     )
 
+    env: EnvName = Field(default="development", validation_alias="ENV")
+
     internal_secret: str = Field(
-        default="desktop-dev-secret",
+        default=DEFAULT_DEV_SECRET,
         validation_alias="INTERNAL_SECRET",
+    )
+
+    # Timeout global d'un tour agent (LLM + outils + attente de confirmation).
+    turn_timeout_seconds: int = Field(
+        default=180,
+        ge=30,
+        le=3600,
+        validation_alias="TURN_TIMEOUT_SECONDS",
+    )
+
+    # Compaction automatique de l'historique.
+    compaction_usage_threshold: float = Field(
+        default=0.7,
+        gt=0.0,
+        lt=1.0,
+        validation_alias="COMPACTION_USAGE_THRESHOLD",
+    )
+    compaction_keep_messages: int = Field(
+        default=6,
+        ge=2,
+        validation_alias="COMPACTION_KEEP_MESSAGES",
+    )
+    compaction_min_history: int = Field(
+        default=8,
+        ge=4,
+        validation_alias="COMPACTION_MIN_HISTORY",
+    )
+    compaction_min_old: int = Field(
+        default=2,
+        ge=1,
+        validation_alias="COMPACTION_MIN_OLD",
+    )
+    compaction_fallback_keep_messages: int = Field(
+        default=4,
+        ge=0,
+        validation_alias="COMPACTION_FALLBACK_KEEP_MESSAGES",
+    )
+
+    # Bornes d'entrée sur /agent/turn.
+    max_history_messages: int = Field(
+        default=200,
+        ge=1,
+        le=1000,
+        validation_alias="MAX_HISTORY_MESSAGES",
+    )
+    max_user_message_length: int = Field(
+        default=32_000,
+        ge=1,
+        le=500_000,
+        validation_alias="MAX_USER_MESSAGE_LENGTH",
     )
 
     llm_default_provider: ProviderName = Field(
@@ -69,6 +126,23 @@ class Settings(BaseSettings):
     llm_default_model: str = Field(
         default="mistral",
         validation_alias="LLM_DEFAULT_MODEL",
+    )
+
+    llm_utility_provider: str | None = Field(
+        default=None,
+        validation_alias="LLM_UTILITY_PROVIDER",
+    )
+    llm_utility_model: str | None = Field(
+        default=None,
+        validation_alias="LLM_UTILITY_MODEL",
+    )
+    llm_utility_base_url: str | None = Field(
+        default=None,
+        validation_alias="LLM_UTILITY_BASE_URL",
+    )
+    llm_utility_api_key: str | None = Field(
+        default=None,
+        validation_alias="LLM_UTILITY_API_KEY",
     )
 
     llm_embedding_provider: str | None = Field(
@@ -136,6 +210,15 @@ class Settings(BaseSettings):
     generate_max_bytes: int = Field(
         default=5_242_880, ge=1024, validation_alias="GENERATE_MAX_BYTES"
     )
+    index_max_files: int = Field(
+        default=500, ge=1, validation_alias="INDEX_MAX_FILES"
+    )
+    index_max_file_bytes: int = Field(
+        default=524_288, ge=1024, validation_alias="INDEX_MAX_FILE_BYTES"
+    )
+    index_max_total_chars: int = Field(
+        default=1_000_000, ge=1024, validation_alias="INDEX_MAX_TOTAL_CHARS"
+    )
 
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
@@ -145,6 +228,24 @@ class Settings(BaseSettings):
         if value == "":
             return None
         return value
+
+    @model_validator(mode="after")
+    def validate_production_secret(self) -> Self:
+        if self.env == "production":
+            if not self.internal_secret or self.internal_secret == DEFAULT_DEV_SECRET:
+                raise ValueError(
+                    "INTERNAL_SECRET must be set to a non-default value when ENV=production"
+                )
+        elif self.internal_secret == DEFAULT_DEV_SECRET:
+            logger.warning(
+                "Using default INTERNAL_SECRET (%s); set a custom secret for non-dev use.",
+                DEFAULT_DEV_SECRET,
+            )
+        return self
+
+    @property
+    def is_dev(self) -> bool:
+        return self.env == "development"
 
     @property
     def cors_origin_list(self) -> list[str]:
@@ -183,6 +284,9 @@ class Settings(BaseSettings):
             sandbox_file_size_mb=self.sandbox_file_size_mb,
             sandbox_block_network=self.sandbox_block_network,
             generate_max_bytes=self.generate_max_bytes,
+            index_max_files=self.index_max_files,
+            index_max_file_bytes=self.index_max_file_bytes,
+            index_max_total_chars=self.index_max_total_chars,
         )
 
 

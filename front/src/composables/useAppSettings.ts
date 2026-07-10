@@ -101,6 +101,20 @@ export function toChatLlmConfig(entry: LlmProviderEntry | null): LlmConfigPayloa
   return payload;
 }
 
+export function toUtilityLlmConfig(entry: LlmProviderEntry | null): LlmConfigPayload | null {
+  if (!entry) return null;
+  const utilityModel = entry.utilityModel?.trim();
+  return {
+    provider: entry.provider,
+    model: utilityModel || entry.model,
+    base_url: entry.baseUrl ?? null,
+    api_key: entry.apiKey ?? null,
+    temperature: entry.temperature ?? null,
+    max_tokens: entry.maxTokens ?? null,
+    extra_headers: entry.extraHeaders ?? {},
+  };
+}
+
 export function toEmbeddingLlmConfig(
   entry: LlmProviderEntry | null,
 ): LlmConfigPayload | null {

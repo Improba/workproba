@@ -10,12 +10,47 @@ from __future__ import annotations
 import json
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 import litellm
 import sqlite_vec
 
 _EMBEDDING_DIM_UNKNOWN = -1
+
+
+class RagStoreProtocol(Protocol):
+    """Contrat structural attendu par `LocalProjectClient` pour le RAG.
+
+    Permet d'injecter un faux store dans les tests sans dépendre de la classe
+    concrète `RagStore` (pas d'appel réseau / embedding).
+    """
+
+    @property
+    def db_path(self) -> Path: ...
+
+    async def index_document(
+        self,
+        *,
+        document_id: str,
+        title: str,
+        mime_type: str | None,
+        text: str,
+        source: str = ...,
+        metadata: dict[str, Any] | None = ...,
+        mtime: float | None = ...,
+        size: int | None = ...,
+    ) -> int: ...
+
+    async def search(
+        self,
+        *,
+        query: str,
+        limit: int = ...,
+    ) -> list[dict[str, Any]]: ...
+
+    def document_fingerprint(self, document_id: str) -> tuple[float, int] | None: ...
+
+    def close(self) -> None: ...
 
 
 def chunk_text(text: str, *, chunk_size: int = 1_200, overlap: int = 120) -> list[str]:
@@ -53,6 +88,10 @@ class RagStore:
         self._conn: sqlite3.Connection | None = None
         self._dim: int = _EMBEDDING_DIM_UNKNOWN
 
+    @property
+    def db_path(self) -> Path:
+        return self._db_path
+
     def _connect(self) -> sqlite3.Connection:
         if self._conn is not None:
             return self._conn
@@ -68,10 +107,13 @@ class RagStore:
                 title TEXT,
                 mime_type TEXT,
                 source TEXT,
-                indexed_at TEXT
+                indexed_at TEXT,
+                mtime REAL,
+                size INTEGER
             )
             """
         )
+        self._migrate_documents_columns(conn)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS chunks (
@@ -89,6 +131,15 @@ class RagStore:
         conn.commit()
         self._conn = conn
         return conn
+
+    @staticmethod
+    def _migrate_documents_columns(conn: sqlite3.Connection) -> None:
+        """Ajoute `mtime`/`size` aux bases existantes (idempotent)."""
+        cols = {row[1] for row in conn.execute("PRAGMA table_info(documents)")}
+        if "mtime" not in cols:
+            conn.execute("ALTER TABLE documents ADD COLUMN mtime REAL")
+        if "size" not in cols:
+            conn.execute("ALTER TABLE documents ADD COLUMN size INTEGER")
 
     def _ensure_vec_table(self, dim: int) -> None:
         conn = self._connect()
@@ -137,6 +188,8 @@ class RagStore:
         text: str,
         source: str = "local",
         metadata: dict[str, Any] | None = None,
+        mtime: float | None = None,
+        size: int | None = None,
     ) -> int:
         if not text.strip():
             return 0
@@ -150,9 +203,9 @@ class RagStore:
 
         conn.execute("DELETE FROM chunks WHERE document_id = ?", (document_id,))
         conn.execute(
-            "INSERT OR REPLACE INTO documents(document_id, title, mime_type, source, indexed_at) "
-            "VALUES (?, ?, ?, ?, datetime('now'))",
-            (document_id, title, mime_type, source),
+            "INSERT OR REPLACE INTO documents(document_id, title, mime_type, source, indexed_at, mtime, size) "
+            "VALUES (?, ?, ?, ?, datetime('now'), ?, ?)",
+            (document_id, title, mime_type, source, mtime, size),
         )
         meta_json = json.dumps(metadata or {}, ensure_ascii=False)
         for chunk_index, (content, vector) in enumerate(zip(chunks, vectors, strict=True)):
@@ -167,6 +220,25 @@ class RagStore:
         conn.commit()
         return len(chunks)
 
+    def document_fingerprint(self, document_id: str) -> tuple[float, int] | None:
+        """Retourne (mtime, size) du document indexé, ou None s'il n'existe pas.
+
+        Utilisé pour l'indexation incrémentale : si un fichier a la même
+        empreinte que la version indexée, on évite de le ré-extraire et
+        ré-embarquer.
+        """
+        conn = self._connect()
+        row = conn.execute(
+            "SELECT mtime, size FROM documents WHERE document_id = ?",
+            (document_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        mtime, size = row
+        if mtime is None or size is None:
+            return None
+        return float(mtime), int(size)
+
     async def search(
         self,
         *,
@@ -174,7 +246,6 @@ class RagStore:
         limit: int = 8,
     ) -> list[dict[str, Any]]:
         if self._dim == _EMBEDDING_DIM_UNKNOWN:
-            # Pas encore indexé -> rien à chercher.
             return []
         vectors = await self._embed([query])
         if not vectors:

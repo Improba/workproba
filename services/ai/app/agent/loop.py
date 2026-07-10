@@ -16,6 +16,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -40,6 +41,7 @@ from app.agent.human import build_human_summary
 from app.agent.tools import ToolContext, ToolDeps
 from app.limits import DEFAULT_LIMITS, Limits
 from app.llm.provider import parse_tool_arguments
+from app.llm.utility import extract_usage_tokens
 from app.project_client import ProjectClient
 from app.sandbox.runner import SandboxRunner
 from app.schemas import (
@@ -57,7 +59,10 @@ from app.schemas import (
 )
 from pydantic_ai.messages import ModelMessage as _ModelMessage  # noqa: E402
 
+logger = logging.getLogger(__name__)
+
 _SENTINEL = object()
+_INTERNAL_ERROR_MESSAGE = "Une erreur interne est survenue. Veuillez réessayer."
 
 
 class AgentLoop:
@@ -80,21 +85,49 @@ class AgentLoop:
         self._project_root = project_root
         self._limits = limits
 
-    async def run_turn(self, request: AgentTurnRequest) -> AsyncIterator[AgentEvent]:
-        gate = ConfirmationGate(session_id=request.session_id)
+    async def run_turn(
+        self,
+        request: AgentTurnRequest,
+        *,
+        turn_id: str,
+        cancel_event: asyncio.Event | None = None,
+    ) -> AsyncIterator[AgentEvent]:
+        gate = ConfirmationGate(session_id=request.session_id, turn_id=turn_id)
         await confirmation_registry.register(gate)
         output_queue: asyncio.Queue[AgentEvent | object] = asyncio.Queue()
+        cancel = cancel_event or asyncio.Event()
 
         async def producer() -> None:
             try:
                 async for event in self._run_turn_internal(request, gate):
+                    if cancel.is_set():
+                        break
                     await output_queue.put(event)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    "Unhandled agent turn error (session=%s turn=%s)",
+                    request.session_id,
+                    turn_id,
+                )
+                await output_queue.put(
+                    ErrorEvent(
+                        code="internal_error",
+                        message=_INTERNAL_ERROR_MESSAGE,
+                    )
+                )
             finally:
                 await output_queue.put(_SENTINEL)
 
         async def confirmation_drainer() -> None:
-            while True:
-                event = await gate.event_queue.get()
+            while not cancel.is_set():
+                try:
+                    event = await asyncio.wait_for(gate.event_queue.get(), timeout=0.5)
+                except TimeoutError:
+                    continue
+                if cancel.is_set():
+                    break
                 await output_queue.put(event)
 
         producer_task = asyncio.create_task(producer())
@@ -102,13 +135,19 @@ class AgentLoop:
 
         try:
             while True:
-                event = await output_queue.get()
+                if cancel.is_set():
+                    break
+                try:
+                    event = await asyncio.wait_for(output_queue.get(), timeout=0.5)
+                except TimeoutError:
+                    continue
                 if event is _SENTINEL:
                     break
                 yield event  # type: ignore[misc]
         finally:
+            cancel.set()
             gate.cancel_all()
-            await confirmation_registry.unregister(request.session_id)
+            await confirmation_registry.unregister(request.session_id, turn_id)
             producer_task.cancel()
             drainer_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -121,12 +160,18 @@ class AgentLoop:
         request: AgentTurnRequest,
         gate: ConfirmationGate,
     ) -> AsyncIterator[AgentEvent]:
+        workspace_data_dir = (
+            Path(request.workspace_data_dir).expanduser().resolve()
+            if request.workspace_data_dir
+            else None
+        )
         context = ToolContext(
-            tenant_id=request.tenant_id,
+            tenant_id=request.tenant_id or "",
             project_id=request.project_id,
             session_id=request.session_id,
             documents=request.documents,
             project_root=self._project_root,
+            workspace_data_dir=workspace_data_dir,
         )
         deps = ToolDeps(
             context=context,
@@ -154,18 +199,33 @@ class AgentLoop:
                             yield event
                     elif Agent.is_end_node(node):
                         output = run.result.output if run.result else ""
+                        input_tokens, output_tokens, total_tokens = extract_usage_tokens(
+                            run.result or run
+                        )
                         yield DoneEvent(
                             content=output if isinstance(output, str) else str(output),
+                            input_tokens=input_tokens,
+                            output_tokens=output_tokens,
+                            total_tokens=total_tokens,
                         )
         except UsageLimitExceeded:
             yield ErrorEvent(
-                code="max_iterations_reached",
+                code="usage_limit_exceeded",
                 message="Maximum agent iterations reached before final answer.",
             )
         except UnexpectedModelBehavior as exc:
             yield ErrorEvent(
-                code="agent_model_error",
+                code="unexpected_model_behavior",
                 message=f"Comportement modèle inattendu : {exc}",
+            )
+        except Exception:
+            logger.exception(
+                "Agent iteration failed (session=%s)",
+                request.session_id,
+            )
+            yield ErrorEvent(
+                code="internal_error",
+                message=_INTERNAL_ERROR_MESSAGE,
             )
 
     async def _iter_model_stream(self, node: Any, ctx: Any) -> AsyncIterator[AgentEvent]:
@@ -235,7 +295,27 @@ async def map_model_stream_events(stream: Any) -> AsyncIterator[AgentEvent]:
         if isinstance(event, PartStartEvent):
             if isinstance(event.part, ThinkingPart):
                 yield ThinkingStartEvent(thinking_id=_thinking_id(event.index))
-        elif isinstance(event, PartDeltaEvent):
+                # pydantic-ai embarque le premier chunk de raisonnement dans le
+                # PartStartEvent (pas de PartDeltaEvent séparé) : il faut le
+                # relayer comme ThinkingDeltaEvent, sinon le début du thinking
+                # est perdu du flux SSE.
+                start_text = event.part.content or ""
+                if start_text:
+                    yield ThinkingDeltaEvent(
+                        thinking_id=_thinking_id(event.index),
+                        content=start_text,
+                    )
+            elif isinstance(event.part, TextPart):
+                # Idem pour la réponse : le premier token texte vit dans le
+                # PartStartEvent. Sans ce relais, le début de la réponse
+                # disparaît du stream (ex. "4" manquant à "2+2 = ?"). Le
+                # fallback `done` côté front ne rattrape que les réponses
+                # tenant en un seul chunk.
+                start_text = event.part.content or ""
+                if start_text:
+                    yield TokenEvent(content=start_text)
+            continue
+        if isinstance(event, PartDeltaEvent):
             if isinstance(event.delta, ThinkingPartDelta):
                 delta_text = event.delta.content_delta or ""
                 if delta_text:

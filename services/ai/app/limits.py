@@ -30,6 +30,20 @@ DEFAULT_GENERATE_DENY_NAMES: tuple[str, ...] = (".git", ".workproba")
 DEFAULT_GENERATE_DENY_PREFIXES: tuple[str, ...] = (".env",)
 
 
+# Extensions de fichiers texte indexables par la passe RAG bulk. Tout fichier
+# non binaire (PDF/DOCX/XLSX/PPTX) et dont l'extension n'est pas dans cet
+# ensemble est ignoré (on évite d'indexer des binaires opaques : zip, images,
+# exécutables...).
+DEFAULT_INDEX_TEXT_EXTS: tuple[str, ...] = (
+    "md", "txt", "csv", "tsv", "json", "jsonl", "yaml", "yml", "toml",
+    "ini", "cfg", "conf", "properties", "html", "htm", "xml", "svg",
+    "py", "ts", "tsx", "js", "jsx", "mjs", "cjs", "vue", "svelte",
+    "rs", "go", "java", "kt", "c", "h", "cpp", "hpp", "cs", "rb",
+    "php", "pl", "lua", "sh", "bash", "zsh", "ps1", "bat",
+    "sql", "graphql", "gql", "lock", "log", "rst", "tex", "org",
+)
+
+
 @dataclass(frozen=True)
 class Limits:
     # --- read_document (fichiers texte) ---
@@ -65,6 +79,15 @@ class Limits:
     generate_max_bytes: int = _mb(5)
     generate_deny_names: tuple[str, ...] = DEFAULT_GENERATE_DENY_NAMES
     generate_deny_prefixes: tuple[str, ...] = DEFAULT_GENERATE_DENY_PREFIXES
+
+    # --- index_workspace (indexation RAG bulk du dossier) ---
+    # Bornes pour éviter l'explosion du coût d'embedding et la saturation du
+    # sidecar. Le budget global `index_max_total_chars` plafonne la quantité de
+    # texte envoyée au modèle d'embedding sur une passe.
+    index_max_files: int = 500
+    index_max_file_bytes: int = _kb(512)  # taille max d'un fichier texte indexé
+    index_max_total_chars: int = 1_000_000  # budget global caractères indexés
+    index_text_exts: tuple[str, ...] = DEFAULT_INDEX_TEXT_EXTS
 
 
 DEFAULT_LIMITS = Limits()

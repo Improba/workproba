@@ -100,8 +100,10 @@ def test_startup_without_docker_succeeds(monkeypatch: pytest.MonkeyPatch) -> Non
 async def _run_loop(
     loop: AgentLoop,
     request: AgentTurnRequest,
+    *,
+    turn_id: str = "turn-test",
 ) -> list[Any]:
-    return [event async for event in loop.run_turn(request)]
+    return [event async for event in loop.run_turn(request, turn_id=turn_id)]
 
 
 def _make_generate_loop(
@@ -122,28 +124,31 @@ def _make_generate_loop(
 async def test_confirmation_request_emitted_before_write() -> None:
     client = FakeProjectClient()
     loop = _make_generate_loop(client)
+    turn_id = "turn-confirm-1"
     request = AgentTurnRequest(
         tenant_id="t",
         project_id="p",
         session_id="sess-confirm-1",
+        turn_id=turn_id,
         message="écrire",
         documents=[],
     )
 
     async def approve_after_delay() -> None:
         await asyncio.sleep(0.15)
-        gate = mainmod.confirmation_registry._gates.get("sess-confirm-1")
+        gate = mainmod.confirmation_registry.get_gate("sess-confirm-1", turn_id)
         assert gate is not None
         confirmation_id = next(iter(gate._pending))
         gate.resolve(confirmation_id, "approve")
 
     approve_task = asyncio.create_task(approve_after_delay())
-    events = await _run_loop(loop, request)
+    events = await _run_loop(loop, request, turn_id=turn_id)
     await approve_task
 
     confirm_events = [e for e in events if isinstance(e, ConfirmationRequestEvent)]
     assert len(confirm_events) == 1
     confirm = confirm_events[0]
+    assert confirm.turn_id == turn_id
     assert confirm.tool_name == "generate_document"
     assert confirm.action == "create"
     assert confirm.confirmation_id.startswith("cf_")
@@ -154,23 +159,25 @@ async def test_confirmation_request_emitted_before_write() -> None:
 async def test_confirmation_approve_writes_and_succeeds(tmp_path: Path) -> None:
     client = LocalProjectClient(project_root=tmp_path)
     loop = _make_generate_loop(client, project_root=tmp_path)
+    turn_id = "turn-approve"
     request = AgentTurnRequest(
         tenant_id="t",
         project_id=str(tmp_path),
         session_id="sess-approve",
+        turn_id=turn_id,
         message="écrire",
         documents=[],
     )
 
     async def approve() -> None:
         await asyncio.sleep(0.15)
-        gate = mainmod.confirmation_registry._gates.get("sess-approve")
+        gate = mainmod.confirmation_registry.get_gate("sess-approve", turn_id)
         assert gate is not None
         confirmation_id = next(iter(gate._pending))
         gate.resolve(confirmation_id, "approve")
 
     approve_task = asyncio.create_task(approve())
-    events = await _run_loop(loop, request)
+    events = await _run_loop(loop, request, turn_id=turn_id)
     await approve_task
 
     target = tmp_path / "a"
@@ -195,23 +202,25 @@ async def test_confirmation_deny_cancels_without_write(tmp_path: Path) -> None:
 
     client = LocalProjectClient(project_root=tmp_path)
     loop = _make_generate_loop(client, project_root=tmp_path)
+    turn_id = "turn-deny"
     request = AgentTurnRequest(
         tenant_id="t",
         project_id=str(tmp_path),
         session_id="sess-deny",
+        turn_id=turn_id,
         message="modifier",
         documents=[],
     )
 
     async def deny() -> None:
         await asyncio.sleep(0.15)
-        gate = mainmod.confirmation_registry._gates.get("sess-deny")
+        gate = mainmod.confirmation_registry.get_gate("sess-deny", turn_id)
         assert gate is not None
         confirmation_id = next(iter(gate._pending))
         gate.resolve(confirmation_id, "deny")
 
     deny_task = asyncio.create_task(deny())
-    events = await _run_loop(loop, request)
+    events = await _run_loop(loop, request, turn_id=turn_id)
     await deny_task
 
     assert existing.read_text(encoding="utf-8") == "ancien contenu"
@@ -237,23 +246,25 @@ async def test_confirmation_modify_action_for_existing_file(tmp_path: Path) -> N
     (tmp_path / "a").write_text("v1", encoding="utf-8")
     client = LocalProjectClient(project_root=tmp_path)
     loop = _make_generate_loop(client, project_root=tmp_path)
+    turn_id = "turn-modify"
     request = AgentTurnRequest(
         tenant_id="t",
         project_id=str(tmp_path),
         session_id="sess-modify",
+        turn_id=turn_id,
         message="modifier",
         documents=[],
     )
 
     async def approve() -> None:
         await asyncio.sleep(0.15)
-        gate = mainmod.confirmation_registry._gates.get("sess-modify")
+        gate = mainmod.confirmation_registry.get_gate("sess-modify", turn_id)
         assert gate is not None
         confirmation_id = next(iter(gate._pending))
         gate.resolve(confirmation_id, "approve")
 
     approve_task = asyncio.create_task(approve())
-    events = await _run_loop(loop, request)
+    events = await _run_loop(loop, request, turn_id=turn_id)
     await approve_task
 
     confirm = next(e for e in events if isinstance(e, ConfirmationRequestEvent))
@@ -283,7 +294,8 @@ def test_agent_confirm_unknown_returns_404(monkeypatch: pytest.MonkeyPatch) -> N
 async def test_agent_confirm_resolves_pending_gate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(authmod, "is_loopback_host", lambda host: True)
 
-    gate = ConfirmationGate(session_id="sess-resolve")
+    turn_id = "turn-resolve"
+    gate = ConfirmationGate(session_id="sess-resolve", turn_id=turn_id)
     await confirmation_registry.register(gate)
 
     wait_event = asyncio.Event()
@@ -292,6 +304,7 @@ async def test_agent_confirm_resolves_pending_gate(monkeypatch: pytest.MonkeyPat
 
     pending = confirmation_mod._PendingConfirmation(
         session_id="sess-resolve",
+        turn_id=turn_id,
         tool_call_id="tc_1",
     )
     pending.event = wait_event
@@ -303,6 +316,7 @@ async def test_agent_confirm_resolves_pending_gate(monkeypatch: pytest.MonkeyPat
                 "/agent/confirm",
                 json={
                     "session_id": "sess-resolve",
+                    "turn_id": turn_id,
                     "confirmation_id": confirmation_id,
                     "decision": "approve",
                 },
@@ -313,7 +327,7 @@ async def test_agent_confirm_resolves_pending_gate(monkeypatch: pytest.MonkeyPat
         assert wait_event.is_set()
         assert pending.decision == "approve"
     finally:
-        await confirmation_registry.unregister("sess-resolve")
+        await confirmation_registry.unregister("sess-resolve", turn_id)
 
 
 async def test_run_code_unavailable_in_advanced_without_docker() -> None:

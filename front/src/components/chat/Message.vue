@@ -8,6 +8,7 @@
     }"
   >
     <div class="chat-message__avatar" aria-hidden="true">
+      <span class="sr-only">{{ roleLabel }}</span>
       <Lucide
         :name="message.role === 'user' ? 'user' : 'sparkles'"
         size="14"
@@ -16,7 +17,45 @@
     </div>
 
     <div class="chat-message__bubble">
-      <template v-for="part in renderParts" :key="part.id">
+      <div
+        v-if="showThinkingPlaceholder"
+        class="chat-message__thinking-placeholder"
+        aria-live="polite"
+      >
+        <button
+          type="button"
+          class="chat-message__thinking-toggle"
+          :aria-expanded="thinkingPlaceholderExpanded"
+          :aria-label="thinkingPlaceholderExpanded ? 'Masquer' : 'Voir ce que fait le modèle'"
+          @click="thinkingPlaceholderExpanded = !thinkingPlaceholderExpanded"
+        >
+          <span class="chat-message__thinking-spinner" aria-hidden="true" />
+          <span class="chat-message__thinking-text">Le modèle réfléchit…</span>
+          <span class="chat-message__thinking-hint">
+            {{ thinkingPlaceholderExpanded ? 'Masquer' : 'Voir le détail' }}
+          </span>
+          <Lucide
+            name="chevron-down"
+            size="xs"
+            color="wp-text-muted"
+            :class="thinkingPlaceholderExpanded ? 'chat-message__thinking-chevron chat-message__thinking-chevron--up' : 'chat-message__thinking-chevron'"
+          />
+        </button>
+        <div
+          v-if="thinkingPlaceholderExpanded"
+          class="chat-message__thinking-body"
+          role="region"
+          aria-label="Détail du raisonnement"
+        >
+          <p class="chat-message__thinking-empty">
+            Le modèle prépare sa réponse. Le détail du raisonnement apparaîtra ici
+            dès qu’il sera disponible.
+          </p>
+        </div>
+      </div>
+
+      <template v-else>
+        <template v-for="part in renderParts" :key="part.id">
         <MessageTextPart
           v-if="part.type === 'text'"
           :content="part.content"
@@ -29,13 +68,19 @@
           :streaming="!!message.streaming"
         />
         <ToolCallCard
-          v-else-if="toolCallById(part.toolCallId)"
-          :tool-call="toolCallById(part.toolCallId) as ChatToolCall"
+          v-else-if="part.type === 'tool_call' && toolCallById(part.toolCallId)"
+          :tool-call="toolCallById(part.toolCallId)!"
           :project-path="projectPath"
           :session-id="sessionId"
           @open-file="(path) => emit('open-file', path)"
           @restored="(path) => emit('restored', path)"
         />
+        <p
+          v-else-if="part.type === 'tool_call'"
+          class="chat-message__unknown-tool"
+        >
+          Appel d'outil indisponible
+        </p>
         <ConfirmationCard
           v-if="
             part.type === 'tool_call' &&
@@ -46,6 +91,7 @@
           @approve="emit('confirm-approve')"
           @cancel="emit('confirm-deny')"
         />
+        </template>
       </template>
 
       <div v-if="message.error" class="chat-message__error" role="alert">
@@ -62,7 +108,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import MessageTextPart from '@components/chat/MessageTextPart.vue';
 import ThinkingCard from '@components/chat/ThinkingCard.vue';
@@ -83,6 +129,12 @@ const emit = defineEmits<{
   'confirm-approve': [];
   'confirm-deny': [];
 }>();
+
+const thinkingPlaceholderExpanded = ref(false);
+
+const roleLabel = computed(() =>
+  props.message.role === 'user' ? 'Vous' : 'Assistant',
+);
 
 /**
  * Segments ordonnés à rendre. Si le message dispose de `parts` (messages
@@ -117,6 +169,25 @@ const lastTextPartId = computed<string | null>(() => {
     if (parts[i].type === 'text') return parts[i].id;
   }
   return null;
+});
+
+/**
+ * Indicateur « Le modèle réfléchit… » affiché dans la bulle assistant tant
+ * qu'aucun contenu n'est encore arrivé (délai d'amorçage avant le premier
+ * token ou le premier event `thinking_start`). Couvre le trou perçu entre
+ * l'envoi et l'apparition du raisonnement/texte.
+ */
+const showThinkingPlaceholder = computed(() => {
+  if (props.message.role !== 'assistant') return false;
+  if (!props.message.streaming) return false;
+  if (props.message.error) return false;
+  const parts = props.message.parts ?? [];
+  const hasText = parts.some(
+    (p) => p.type === 'text' && (p as { content?: string }).content?.trim().length,
+  );
+  const hasThinking = parts.some((p) => p.type === 'thinking');
+  const hasToolCall = parts.some((p) => p.type === 'tool_call');
+  return !hasText && !hasThinking && !hasToolCall;
 });
 
 function toolCallById(id: string): ChatToolCall | undefined {
@@ -209,5 +280,111 @@ function toolCallById(id: string): ChatToolCall | undefined {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.8;
+}
+
+.chat-message__thinking-placeholder {
+  display: flex;
+  flex-direction: column;
+  padding: 0.15rem 0;
+  color: var(--wp-text-muted);
+  font-size: var(--wp-fs-sm);
+}
+
+.chat-message__thinking-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: var(--wp-r-sm);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--wp-dur) var(--wp-ease),
+    border-color var(--wp-dur) var(--wp-ease);
+
+  &:hover {
+    background: var(--wp-surface-2);
+    border-color: var(--wp-border);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--wp-focus-ring);
+  }
+}
+
+.chat-message__thinking-spinner {
+  flex: 0 0 auto;
+  width: 0.9rem;
+  height: 0.9rem;
+  border-radius: 999px;
+  border: 2px solid var(--wp-accent-soft);
+  border-top-color: var(--wp-accent);
+  animation: chat-thinking-spin 0.7s linear infinite;
+}
+
+.chat-message__thinking-text {
+  font-weight: 500;
+}
+
+.chat-message__thinking-hint {
+  flex: 0 0 auto;
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-surface-2);
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+}
+
+.chat-message__thinking-chevron {
+  flex: 0 0 auto;
+  transition: transform var(--wp-dur) var(--wp-ease);
+
+  &--up {
+    transform: rotate(180deg);
+  }
+}
+
+.chat-message__thinking-body {
+  margin-top: 0.4rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-surface-2);
+}
+
+.chat-message__thinking-empty {
+  margin: 0;
+  font-size: var(--wp-fs-sm);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-text-muted);
+}
+
+.chat-message__unknown-tool {
+  margin: 0;
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-text-muted);
+  font-style: italic;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes chat-thinking-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>

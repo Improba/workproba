@@ -1,6 +1,12 @@
 <template>
   <div class="message-list">
-    <q-scroll-area ref="scrollAreaRef" class="message-list__scroller">
+    <q-scroll-area
+      ref="scrollAreaRef"
+      class="message-list__scroller"
+      role="log"
+      aria-live="polite"
+      aria-relevant="additions"
+    >
       <DynamicScroller
         v-if="messages.length"
         class="message-list__virtual"
@@ -14,12 +20,13 @@
             :active="active"
             :data-index="index"
             :size-dependencies="[
-              item.content,
+              item.streaming ? (item._contentRev ?? 0) : item.content,
               item.toolCalls?.length,
               item.parts?.length,
               item.streaming,
               item.error?.code,
               item.pendingConfirmation?.confirmationId,
+              expansionEpoch,
             ]"
           >
             <Message
@@ -54,6 +61,7 @@ import {
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import Message from '@components/chat/Message.vue';
+import { expansionEpoch } from '@composables/useToolCallExpansion';
 import type { ChatMessage } from '#types';
 import type { QScrollArea } from 'quasar';
 
@@ -73,18 +81,38 @@ const emit = defineEmits<{
 
 const scrollAreaRef = ref<QScrollArea | null>(null);
 
+// Pendant le streaming, `_contentRev` remplace `item.content` dans size-dependencies
+// pour limiter les re-mesures du virtual scroller à chaque flush de tokens.
+
+/**
+ * Renvoie l'élément réellement scrollable. On a deux candidats empilés
+ * (le conteneur `q-scroll-area` et le `DynamicScroller` interne) ; selon le
+ * layout, l'un ou l'autre porte réellement le débordement. On détecte celui
+ * dont le contenu déborde pour cibler le bon, sinon on retombe sur le
+ * recycle-scroller (qui possède sa propre hauteur bornée).
+ */
 function getScrollTarget(): HTMLElement | null {
-  return (
-    scrollAreaRef.value?.$el?.querySelector('.q-scrollarea__container') ?? null
-  );
+  const root = scrollAreaRef.value?.$el as HTMLElement | null;
+  if (!root) return null;
+  const recycle = root.querySelector<HTMLElement>('.vue-recycle-scroller');
+  const qContainer = root.querySelector<HTMLElement>('.q-scrollarea__container');
+  if (recycle && recycle.scrollHeight > recycle.clientHeight) return recycle;
+  if (qContainer && qContainer.scrollHeight > qContainer.clientHeight) return qContainer;
+  return recycle ?? qContainer ?? null;
+}
+
+function scrollToBottom(smooth = false): void {
+  const target = getScrollTarget();
+  if (!target) return;
+  if (smooth && 'scrollTo' in target) {
+    target.scrollTo({ top: target.scrollHeight, behavior: 'smooth' });
+  } else {
+    target.scrollTop = target.scrollHeight;
+  }
 }
 
 defineExpose({
-  scrollToBottom: () => {
-    const target = getScrollTarget();
-    if (!target) return;
-    target.scrollTop = target.scrollHeight;
-  },
+  scrollToBottom: (smooth = false) => scrollToBottom(smooth),
   getScrollTarget,
 });
 </script>

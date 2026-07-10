@@ -1,4 +1,5 @@
 import type { ChatMessage, ReasoningEffort } from '#types';
+import { normalizeChatMessages } from '@utils/chatMessageNormalize';
 import { isDesktopApp } from '@composables/useDesktop';
 
 export interface StoredConversation {
@@ -8,6 +9,8 @@ export interface StoredConversation {
   title: string;
   messages: ChatMessage[];
   reasoningEffort?: ReasoningEffort | null;
+  model?: string | null;
+  summary?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +27,8 @@ function mapConversation(raw: {
   title: string;
   messages: ChatMessage[];
   reasoningEffort?: ReasoningEffort | null;
+  model?: string | null;
+  summary?: string | null;
   createdAt: string;
   updatedAt: string;
 }): StoredConversation {
@@ -32,8 +37,10 @@ function mapConversation(raw: {
     workspaceId: raw.workspaceId,
     folderPath: raw.folderPath,
     title: raw.title,
-    messages: Array.isArray(raw.messages) ? raw.messages : [],
+    messages: normalizeChatMessages(raw.messages),
     reasoningEffort: raw.reasoningEffort ?? null,
+    model: raw.model ?? null,
+    summary: raw.summary ?? null,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   };
@@ -85,6 +92,8 @@ export async function saveConversation(session: StoredConversation): Promise<voi
       title: session.title,
       messages: session.messages,
       reasoningEffort: session.reasoningEffort ?? null,
+      model: session.model ?? null,
+      summary: session.summary ?? null,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     },

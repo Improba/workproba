@@ -8,13 +8,14 @@ from typing import Any
 from app.documents.extractor import LocalExtractor, is_binary_document
 from app.limits import DEFAULT_LIMITS, Limits
 from app.project_client import ProjectClient
-from app.rag.store import RagStore
+from app.rag.store import RagStoreProtocol
 from app.schemas import (
     DocumentContent,
     FileEntry,
     FileListResponse,
     KnowledgeSearchResponse,
     KnowledgeSearchResult,
+    WorkspaceIndexReport,
 )
 from app.versions import snapshot_before_overwrite
 
@@ -23,6 +24,16 @@ logger = logging.getLogger(__name__)
 
 # Dossiers ignorés lors du scan de recherche (substring fallback).
 IGNORED_DIRS = {".git", ".workproba", ".venv", "__pycache__", "node_modules"}
+
+# Fichiers texte sans extension courants à indexer (match sur le nom, case-insensitive).
+_INDEXABLE_TEXT_NAMES = {"makefile", "dockerfile", "rakefile", "gemfile", ".gitignore"}
+
+# Mots-opérateurs que le modèle peut injecter dans une requête search_kb
+# (ex. « dynamiques collectives OR groupe OR collaboration »). La recherche
+# substring est un fallback de rappel : on éclate la requête en tokens et on
+# retire ces opérateurs pour matcher chaque mot-clé indépendamment, au lieu
+# d'exiger la chaîne entière comme sous-chaîne (qui ne matche jamais).
+_SUBSEARCH_OPERATORS = {"or", "and", "not", "|", "&", "&&", "||"}
 
 
 class LocalProjectClient(ProjectClient):
@@ -39,7 +50,7 @@ class LocalProjectClient(ProjectClient):
         project_root: Path | str,
         workspace_data_dir: Path | str | None = None,
         extractor: LocalExtractor | None = None,
-        rag_store: RagStore | None = None,
+        rag_store: RagStoreProtocol | None = None,
         limits: Limits = DEFAULT_LIMITS,
     ) -> None:
         self._project_root = Path(project_root).expanduser().resolve()
@@ -293,6 +304,229 @@ class LocalProjectClient(ProjectClient):
         except Exception as exc:
             logger.warning("RAG indexing failed for %s: %s", document_id, exc)
 
+    # --- indexation RAG bulk du workspace ----------------------------------
+
+    async def index_workspace(
+        self,
+        *,
+        max_files: int | None = None,
+        paths: list[str] | None = None,
+    ) -> WorkspaceIndexReport:
+        """Indexe le dossier de travail dans le store RAG (passe bulk, bornée).
+
+        Parcourt la racine projet en respectant les dossiers ignorés
+        (`.git`, `node_modules`, ...) et les chemins sensibles (`.env`, ...),
+        extrait le texte de chaque fichier éligible (texte ou document Office)
+        et l'envoie au `RagStore`. Si aucun store n'est configuré, renvoie un
+        rapport `enabled=False` sans rien faire.
+
+        Indexation incrémentale : un fichier dont l'empreinte (mtime + size)
+        correspond à la version indexée est sauté (compté `unchanged`), sans
+        ré-extraction ni ré-embedding. Si `paths` est fourni, seuls ces chemins
+        relatifs sont traités (re-index ciblé suite à un évènement FS).
+        """
+        report = WorkspaceIndexReport(project_root=self._project_root.as_posix())
+
+        if self._rag_store is None:
+            report.metadata["reason"] = "rag_disabled"
+            return report
+
+        report.enabled = True
+        report.db_path = str(self._rag_store.db_path)
+
+        cap = self._resolve_index_cap(max_files)
+        if paths is not None:
+            candidates = await asyncio.to_thread(self._collect_indexable_paths, paths, cap)
+            overflow = False
+        else:
+            candidates, overflow = await asyncio.to_thread(self._collect_indexable_files, cap)
+        report.scanned = len(candidates)
+
+        total_chars = 0
+        budget = self._limits.index_max_total_chars
+        budget_reached = False
+
+        for path, relative_path, size_bytes, mtime, mime_type, is_binary in candidates:
+            try:
+                fingerprint = self._rag_store.document_fingerprint(relative_path)
+                if fingerprint is not None and mtime is not None and fingerprint == (mtime, size_bytes):
+                    report.unchanged += 1
+                    continue
+
+                if is_binary:
+                    if size_bytes > self._limits.extract_max_input_bytes:
+                        report.skipped += 1
+                        report.skipped_paths.append(relative_path)
+                        continue
+                    extracted = await self._extractor.extract(
+                        content=path.read_bytes(),
+                        filename=path.name,
+                        mime_type=mime_type,
+                    )
+                    text = extracted.text
+                else:
+                    if size_bytes > self._limits.index_max_file_bytes:
+                        report.skipped += 1
+                        report.skipped_paths.append(relative_path)
+                        continue
+                    text = await asyncio.to_thread(
+                        self._read_index_text, path, self._limits.index_max_file_bytes
+                    )
+
+                if not text or not text.strip():
+                    report.skipped += 1
+                    report.skipped_paths.append(relative_path)
+                    continue
+
+                if total_chars + len(text) > budget:
+                    budget_reached = True
+                    break
+
+                await self._rag_store.index_document(
+                    document_id=relative_path,
+                    title=path.name,
+                    mime_type=mime_type,
+                    text=text,
+                    mtime=mtime,
+                    size=size_bytes,
+                )
+                report.indexed += 1
+                report.indexed_paths.append(relative_path)
+                total_chars += len(text)
+            except Exception as exc:
+                logger.warning("RAG bulk index failed for %s: %s", relative_path, exc)
+                report.errors += 1
+                report.error_paths.append(relative_path)
+
+        if budget_reached:
+            report.truncated = True
+            report.truncation_reason = "max_total_chars"
+        elif overflow:
+            report.truncated = True
+            report.truncation_reason = "max_files"
+
+        report.total_chars = total_chars
+        report.metadata = {
+            "max_files": cap,
+            "max_file_bytes": self._limits.index_max_file_bytes,
+            "max_total_chars": budget,
+            "ignored_dirs": sorted(IGNORED_DIRS),
+            "incremental": paths is not None,
+        }
+        return report
+
+    def _resolve_index_cap(self, max_files: int | None) -> int:
+        hard_cap = self._limits.index_max_files
+        if max_files and max_files > 0:
+            return min(max_files, hard_cap)
+        return hard_cap
+
+    def _collect_indexable_files(
+        self,
+        cap: int,
+    ) -> tuple[list[tuple[Path, str, int, float | None, str | None, bool]], bool]:
+        """Parcours synchrone borné de la racine projet pour l'indexation.
+
+        Retourne (candidats, overflow). `candidats` est une liste de tuples
+        (chemin absolu, chemin relatif, taille octets, mtime, mime_type, est_binaire)
+        limitée à `cap`. `overflow` indique qu'il existe d'autres fichiers
+        éligibles au-delà du cap (→ troncature `max_files`).
+
+        Ignore dossiers sensibles, chemins interdits (`.env`, ...) et fichiers
+        non éligibles (binaires opaques hors Office).
+        """
+
+        collected: list[tuple[Path, str, int, float | None, str | None, bool]] = []
+        max_depth = self._limits.list_max_depth
+        overflow = False
+
+        def walk(dir_path: Path, depth: int) -> None:
+            nonlocal overflow
+            if depth > max_depth:
+                return
+            try:
+                children = sorted(
+                    dir_path.iterdir(), key=lambda p: (not p.is_dir(), p.name.lower())
+                )
+            except OSError:
+                return
+            for child in children:
+                if self._is_ignored(child):
+                    continue
+                try:
+                    rel = child.relative_to(self._project_root).as_posix()
+                except ValueError:
+                    continue
+                if child.is_dir():
+                    walk(child, depth + 1)
+                    continue
+                if not child.is_file() or self._is_denied_path(rel):
+                    continue
+                mime_type, _encoding = mimetypes.guess_type(child.name)
+                is_binary = is_binary_document(child.name, mime_type)
+                if not is_binary and not self._is_indexable_text_ext(child):
+                    continue
+
+                if len(collected) >= cap:
+                    overflow = True
+                    continue
+                try:
+                    stat = child.stat()
+                except OSError:
+                    continue
+                collected.append((child, rel, stat.st_size, stat.st_mtime, mime_type, is_binary))
+
+        walk(self._project_root, 0)
+        return collected, overflow
+
+    def _collect_indexable_paths(
+        self,
+        paths: list[str],
+        cap: int,
+    ) -> list[tuple[Path, str, int, float | None, str | None, bool]]:
+        """Résout une liste de chemins relatifs en candidats indexables (re-index ciblé).
+
+        Les chemins hors racine, ignorés, interdits ou non éligibles sont
+        silencieusement écartés. Borné par `cap`.
+        """
+        out: list[tuple[Path, str, int, float | None, str | None, bool]] = []
+        for raw in paths:
+            if len(out) >= cap:
+                break
+            relative = raw.strip()
+            if not relative:
+                continue
+            try:
+                path = self._resolve_relative_path(relative)
+            except (ValueError, FileNotFoundError):
+                continue
+            if not path.is_file() or self._is_denied_path(relative):
+                continue
+            mime_type, _encoding = mimetypes.guess_type(path.name)
+            is_binary = is_binary_document(path.name, mime_type)
+            if not is_binary and not self._is_indexable_text_ext(path):
+                continue
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            out.append((path, relative, stat.st_size, stat.st_mtime, mime_type, is_binary))
+        return out
+
+    def _is_indexable_text_ext(self, path: Path) -> bool:
+        ext = path.suffix.lower().lstrip(".")
+        if ext in self._limits.index_text_exts:
+            return True
+        # Fichiers texte sans extension courants (Makefile, Dockerfile, ...).
+        return path.name.lower() in _INDEXABLE_TEXT_NAMES
+
+    def _read_index_text(self, path: Path, max_bytes: int) -> str:
+        """Lit un fichier texte en bornant à `max_bytes` octets (décodage UTF-8 permissif)."""
+        with path.open("rb") as handle:
+            data = handle.read(max_bytes + 1)
+        return data[:max_bytes].decode("utf-8", errors="replace")
+
+
     # --- recherche substring (en thread, budget borné) ---------------------
 
     def _clamp_search_limit(self, limit: int) -> int:
@@ -303,7 +537,8 @@ class LocalProjectClient(ProjectClient):
         return max(1, min(value, self._limits.search_max_limit))
 
     def _substring_search(self, *, query: str, limit: int) -> KnowledgeSearchResponse:
-        query_normalized = query.casefold()
+        raw_query = query.casefold().strip()
+        tokens = [t for t in raw_query.split() if t and t not in _SUBSEARCH_OPERATORS]
         results: list[KnowledgeSearchResult] = []
 
         if not self._project_root.exists():
@@ -325,13 +560,23 @@ class LocalProjectClient(ProjectClient):
             scanned += 1
 
             relative_path = path.relative_to(self._project_root).as_posix()
-            filename_matches = (
-                not query_normalized or query_normalized in relative_path.casefold()
-            )
+            path_casefolded = relative_path.casefold()
             content = self._read_search_text(path)
-            content_index = (
-                content.casefold().find(query_normalized) if query_normalized else -1
-            )
+            content_casefolded = content.casefold()
+
+            # Requête vide : on matche tout (score faible), comme avant.
+            if not tokens:
+                filename_matches = True
+                content_index = -1
+            else:
+                filename_matches = any(t in path_casefolded for t in tokens)
+                content_index = -1
+                if not filename_matches:
+                    for token in tokens:
+                        idx = content_casefolded.find(token)
+                        if idx >= 0:
+                            content_index = idx
+                            break
 
             if not filename_matches and content_index < 0:
                 continue

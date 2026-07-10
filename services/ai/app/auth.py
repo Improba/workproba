@@ -20,7 +20,7 @@ async def internal_secret_middleware(
     request: Request,
     call_next: Callable[[Request], Awaitable[Response]],
 ) -> Response:
-    """Sidecar desktop : loopback uniquement, secret optionnel."""
+    """Sidecar desktop : loopback uniquement, secret interne requis si configuré."""
 
     if request.method == "GET" and request.url.path in {"/", "/health"}:
         return await call_next(request)
@@ -42,16 +42,20 @@ async def internal_secret_middleware(
 
     expected_secret = settings.internal_secret
     provided_secret = request.headers.get(INTERNAL_SECRET_HEADER)
-    secret_matches = bool(
-        expected_secret
-        and provided_secret
-        and compare_digest(provided_secret, expected_secret)
-    )
 
-    if not provided_secret or secret_matches:
-        return await call_next(request)
+    # Mode permissif uniquement si le secret est explicitement vide ET env dev.
+    if not expected_secret:
+        if settings.is_dev:
+            return await call_next(request)
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"detail": "Internal service secret is not configured."},
+        )
 
-    return JSONResponse(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        content={"detail": "Invalid internal service secret."},
-    )
+    if not provided_secret or not compare_digest(provided_secret, expected_secret):
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "Invalid internal service secret."},
+        )
+
+    return await call_next(request)

@@ -74,7 +74,7 @@
     <section v-else class="home-page__workspace">
       <header class="home-page__header">
         <div class="home-page__header-text">
-          <h1 class="home-page__title">Espace de travail</h1>
+          <h1 class="home-page__title">Projet</h1>
           <p class="home-page__path" :title="activePath ?? undefined">{{ activePath }}</p>
         </div>
         <div class="home-page__actions">

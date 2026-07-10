@@ -37,7 +37,7 @@
         v-else
         class="wp-files__tree"
         role="tree"
-        aria-label="Arborescence des fichiers du workspace"
+        aria-label="Arborescence des fichiers du projet"
         :items="flatList"
         :item-size="rowHeight"
         key-field="relativePath"
@@ -109,6 +109,18 @@
         <span class="wp-files__indexing-bar" />
         <span>Indexation…</span>
       </div>
+
+      <!-- Mémoire RAG (power user) -->
+      <button
+        type="button"
+        class="wp-files__rag"
+        :class="`wp-files__rag--${ragStatus}`"
+        :title="ragLabel"
+        @click="onShowRagDetail"
+      >
+        <span class="wp-files__rag-dot" />
+        <span class="wp-files__rag-text">{{ ragLabel }}</span>
+      </button>
     </div>
   </aside>
 </template>
@@ -120,6 +132,8 @@ import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useFileTree, type FileNode } from '@composables/useFileTree';
+import { useRagIndex } from '@composables/useRagIndex';
+import { ragStatusLabel, type RagStatus } from '@services/aiSidecar';
 import { openLocalFile, revealInOs } from '@composables/useDesktop';
 
 const props = defineProps<{
@@ -133,6 +147,85 @@ defineEmits<{
 
 const tree = useFileTree(() => props.activePath);
 const filterInputEl = ref<HTMLInputElement | null>(null);
+
+const { status: ragStatus, report: ragReport, lastRunAt } = useRagIndex();
+const ragLabel = computed(() => ragStatusLabel(ragStatus.value as RagStatus, ragReport.value));
+
+function formatRelativeRun(): string {
+  const t = lastRunAt.value;
+  if (!t) return '';
+  const diff = Date.now() - t;
+  if (diff < 60000) return 'à l’instant';
+  if (diff < 3600000) return `il y a ${Math.floor(diff / 60000)} min`;
+  if (diff < 86400000) return `il y a ${Math.floor(diff / 3600000)} h`;
+  return new Date(t).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+}
+
+function onShowRagDetail(): void {
+  const r = ragReport.value;
+
+  if (ragStatus.value === 'disabled' || (r && !r.enabled)) {
+    Notify.create({
+      message: 'Mémoire désactivée : aucun modèle d’embedding configuré.',
+      caption: 'Ajoutez un modèle d’embedding dans les paramètres pour activer la mémoire.',
+      color: 'dark',
+      timeout: 5000,
+      multiLine: true,
+    });
+    return;
+  }
+
+  if (ragStatus.value === 'error') {
+    Notify.create({
+      message: "L’analyse des documents a échoué.",
+      caption: 'Réessayez en modifiant un fichier, ou vérifiez le service IA dans les paramètres.',
+      color: 'negative',
+      timeout: 5000,
+      multiLine: true,
+    });
+    return;
+  }
+
+  if (!r) {
+    Notify.create({ message: 'Analyse des documents en attente.', color: 'dark' });
+    return;
+  }
+
+  const added = r.indexed;
+  const upToDate = r.unchanged;
+  const lines: string[] = [];
+
+  if (added > 0) {
+    lines.push(`${added} fichier${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''} à la mémoire.`);
+  }
+  if (upToDate > 0) {
+    lines.push(
+      added > 0
+        ? `${upToDate} déjà connus, laissés tels quels.`
+        : `${upToDate} fichier${upToDate > 1 ? 's' : ''} déjà en mémoire, rien de neuf à analyser.`,
+    );
+  }
+  if (added === 0 && upToDate === 0) {
+    lines.push('Aucun document à analyser pour le moment.');
+  }
+  if (r.skipped > 0) {
+    lines.push(`${r.skipped} ignoré${r.skipped > 1 ? 's' : ''} (format non pris en charge).`);
+  }
+  if (r.errors > 0) {
+    lines.push(`${r.errors} fichier${r.errors > 1 ? 's' : ''} en erreur.`);
+  }
+  if (r.truncated) {
+    lines.push('Analyse limitée par le plafond de taille configuré.');
+  }
+
+  Notify.create({
+    message: `Mémoire des documents${formatRelativeRun() ? ` · ${formatRelativeRun()}` : ''}`,
+    caption: lines.join(' '),
+    color: 'dark',
+    timeout: 6000,
+    multiLine: true,
+  });
+}
 
 const contextMenu = ref<{ open: boolean; x: number; y: number; node: FileNode | null }>({
   open: false,
@@ -529,6 +622,58 @@ defineExpose({
   border-radius: var(--wp-r-pill);
   background: linear-gradient(90deg, var(--wp-accent) 0%, var(--wp-accent-soft) 100%);
   animation: wp-breathe 1.4s ease-in-out infinite;
+}
+
+/* Mémoire RAG (power user) */
+.wp-files__rag {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  width: 100%;
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: none;
+  border-top: 1px solid var(--wp-border);
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
+  text-align: left;
+  transition: background 120ms var(--wp-ease);
+
+  &:hover {
+    background: var(--wp-surface-2);
+  }
+}
+
+.wp-files__rag-text {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wp-files__rag-dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-text-faint);
+
+  .wp-files__rag--indexing & {
+    background: var(--wp-accent);
+    animation: wp-breathe 1.4s ease-in-out infinite;
+  }
+  .wp-files__rag--done & {
+    background: var(--wp-success);
+  }
+  .wp-files__rag--error & {
+    background: var(--wp-danger);
+  }
+  .wp-files__rag--disabled & {
+    background: var(--wp-text-faint);
+  }
 }
 
 /* Menu contextuel (téléporté au body) */

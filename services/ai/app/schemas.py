@@ -1,6 +1,6 @@
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from app.config import ProviderName
 
@@ -45,19 +45,74 @@ class LLMProviderConfig(BaseModel):
 
 
 class AgentTurnRequest(BaseModel):
-    tenant_id: str
+    # Réservé pour une future isolation multi-tenant ; non appliqué côté local_client.
+    tenant_id: str | None = None
     project_id: str
     project_path: str | None = None
     workspace_data_dir: str | None = None
     session_id: str
+    # Identifiant de tour optionnel ; généré côté serveur si absent (event turn_start).
+    turn_id: str | None = None
     history: list[ChatMessage] = Field(default_factory=list)
     message: str
     llm_provider_config: LLMProviderConfig | None = None
+    context_window: int | None = None
+    auto_compact: bool = True
     # Config embeddings RAG par tour (gérée depuis l'app). Si absente, repli
     # sur les variables d'environnement LLM_EMBEDDING_* du sidecar.
     embedding_config: LLMProviderConfig | None = None
     documents: list[DocumentReference] = Field(default_factory=list)
     ui_mode: UiMode = "guided"
+
+    @field_validator("history")
+    @classmethod
+    def validate_history_size(cls, history: list[ChatMessage]) -> list[ChatMessage]:
+        from app.config import get_settings
+
+        max_messages = get_settings().max_history_messages
+        if len(history) > max_messages:
+            raise ValueError(
+                f"history exceeds maximum of {max_messages} messages "
+                f"(got {len(history)})"
+            )
+        return history
+
+    @field_validator("message")
+    @classmethod
+    def validate_message_size(cls, message: str) -> str:
+        from app.config import get_settings
+
+        max_length = get_settings().max_user_message_length
+        if len(message) > max_length:
+            raise ValueError(
+                f"message exceeds maximum length of {max_length} characters "
+                f"(got {len(message)})"
+            )
+        return message
+
+
+class UtilityTitleRequest(BaseModel):
+    first_user_message: str
+    first_assistant_reply: str
+    llm_provider_config: LLMProviderConfig | None = None
+    utility_llm_config: LLMProviderConfig | None = None
+
+
+class UtilityTitleResponse(BaseModel):
+    title: str
+
+
+class UtilitySummarizeRequest(BaseModel):
+    messages: list[ChatMessage]
+    llm_provider_config: LLMProviderConfig | None = None
+    utility_llm_config: LLMProviderConfig | None = None
+    focus: str | None = None
+
+
+class UtilitySummarizeResponse(BaseModel):
+    summary: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
 
 
 class TokenEvent(BaseModel):
@@ -100,6 +155,7 @@ class ToolCallResultEvent(BaseModel):
 
 class ConfirmationRequestEvent(BaseModel):
     type: Literal["confirmation_request"] = "confirmation_request"
+    turn_id: str
     confirmation_id: str
     tool_call_id: str
     tool_name: str
@@ -112,6 +168,8 @@ class AgentConfirmRequest(BaseModel):
     session_id: str
     confirmation_id: str
     decision: Literal["approve", "deny"]
+    # Rétrocompat : si absent, résolution sur la gate la plus récente de la session.
+    turn_id: str | None = None
 
 
 class CapabilitiesResponse(BaseModel):
@@ -119,12 +177,42 @@ class CapabilitiesResponse(BaseModel):
     sandbox_available: bool
 
 
+class CompactionEvent(BaseModel):
+    type: Literal["compaction"] = "compaction"
+    dropped_count: int
+    kept_count: int
+    summary_tokens: int | None = None
+    truncated: bool = False
+    summary_failed: bool = False
+
+
+class TurnStartEvent(BaseModel):
+    type: Literal["turn_start"] = "turn_start"
+    turn_id: str
+
+
 class DoneEvent(BaseModel):
     type: Literal["done"] = "done"
     content: str
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
 
 
 class ErrorEvent(BaseModel):
+    """Erreur SSE stable pour le front.
+
+    Codes documentés :
+    - internal_error : exception serveur non prévue (LLM, réseau, bug outil).
+    - turn_timeout : dépassement du délai global du tour (LLM + outils + confirmation).
+    - confirmation_timeout : l'utilisateur n'a pas répondu à temps à une confirmation.
+    - usage_limit_exceeded : plafond d'itérations agent atteint.
+    - unexpected_model_behavior : réponse modèle invalide (Pydantic AI).
+    - turn_in_progress : un autre tour est déjà actif pour cette session (HTTP 409).
+    - input_too_large : historique ou message utilisateur trop volumineux (HTTP 422).
+    - agent_error : code générique historique (éviter pour les nouveaux cas).
+    """
+
     type: Literal["error"] = "error"
     message: str
     code: str = "agent_error"
@@ -138,6 +226,8 @@ AgentEvent = Annotated[
     | ToolCallStartEvent
     | ToolCallResultEvent
     | ConfirmationRequestEvent
+    | CompactionEvent
+    | TurnStartEvent
     | DoneEvent
     | ErrorEvent,
     Field(discriminator="type"),
@@ -229,3 +319,41 @@ class VersionRestoreResponse(BaseModel):
     restored_path: str
     snapshot_path: str
     session_id: str
+
+
+class WorkspaceIndexRequest(BaseModel):
+    """Demande d'indexation RAG bulk du dossier de travail.
+
+    `project_path` / `project_id` suivent la même résolution que `/agent/turn`.
+    `embedding_config` prioritaire sur les env `LLM_EMBEDDING_*` du sidecar.
+    `max_files` plafonne le nombre de fichiers indexés (borné par les limites).
+    """
+
+    project_path: str | None = None
+    project_id: str = ""
+    workspace_data_dir: str | None = None
+    embedding_config: LLMProviderConfig | None = None
+    max_files: int | None = None
+    # Restreint l'indexation à une liste de chemins relatifs (re-index
+    # incrémental déclenché par le watcher FS). None = passe complète.
+    paths: list[str] | None = None
+
+
+class WorkspaceIndexReport(BaseModel):
+    """Rapport d'une passe d'indexation RAG du workspace."""
+
+    project_root: str
+    db_path: str | None = None
+    enabled: bool = False
+    scanned: int = 0
+    indexed: int = 0
+    unchanged: int = 0
+    skipped: int = 0
+    errors: int = 0
+    total_chars: int = 0
+    truncated: bool = False
+    truncation_reason: str | None = None
+    indexed_paths: list[str] = Field(default_factory=list)
+    skipped_paths: list[str] = Field(default_factory=list)
+    error_paths: list[str] = Field(default_factory=list)
+    metadata: JsonDict = Field(default_factory=dict)
