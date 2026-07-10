@@ -7,7 +7,12 @@ from pydantic import SecretStr
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
 
-from app.llm.config import build_model, build_model_settings, resolve_llm_config
+from app.llm.config import (
+    build_model,
+    build_model_settings,
+    reasoning_effort_for,
+    resolve_llm_config,
+)
 from app.llm.provider import parse_tool_arguments, resolve_litellm_model
 from app.schemas import LLMProviderConfig
 
@@ -59,6 +64,22 @@ def test_build_model_mistral_default_base_url() -> None:
     assert provider.base_url.rstrip("/") == "https://api.mistral.ai/v1"
 
 
+def test_build_model_mistral_enables_tags_replay_profile() -> None:
+    from app.llm.mistral import MistralChatModel
+
+    cfg = LLMProviderConfig(provider="mistral", model="mistral-small-latest", api_key=SecretStr("k"))
+    model = build_model(cfg)
+    assert isinstance(model, MistralChatModel)
+    # Le replay multi-turn du thinking est activé en mode tags via le profile.
+    assert model.profile.get("openai_chat_send_back_thinking_parts") == "tags"
+
+
+def test_build_model_non_mistral_does_not_set_replay_profile() -> None:
+    cfg = LLMProviderConfig(provider="openai", model="gpt-4o", api_key=SecretStr("k"))
+    model = build_model(cfg)
+    assert model.profile.get("openai_chat_send_back_thinking_parts") != "tags"
+
+
 def test_build_model_anthropic_constructs_when_dep_present() -> None:
     # anthropic est une dép optionnelle ; si elle est installée, build_model doit
     # construire un AnthropicModel, sinon lever une RuntimeError claire.
@@ -83,6 +104,57 @@ def test_build_model_settings_mapping(mistral_config: LLMProviderConfig) -> None
 def test_build_model_settings_empty_when_unset() -> None:
     settings = build_model_settings(LLMProviderConfig(provider="mistral", model="m"))
     assert settings == {}
+
+
+def test_build_model_settings_reasoning_effort_mistral_high() -> None:
+    cfg = LLMProviderConfig(provider="mistral", model="m", reasoning_effort="high")
+    settings = build_model_settings(cfg)
+    assert settings["openai_reasoning_effort"] == "high"
+
+
+def test_build_model_settings_reasoning_effort_openai_low() -> None:
+    cfg = LLMProviderConfig(provider="openai", model="gpt-4o", reasoning_effort="low")
+    settings = build_model_settings(cfg)
+    assert settings["openai_reasoning_effort"] == "low"
+
+
+def test_build_model_settings_reasoning_effort_none_skips_openai_key() -> None:
+    cfg = LLMProviderConfig(provider="mistral", model="m", reasoning_effort="none")
+    settings = build_model_settings(cfg)
+    assert "openai_reasoning_effort" not in settings
+
+
+def test_build_model_settings_reasoning_effort_anthropic_medium() -> None:
+    cfg = LLMProviderConfig(
+        provider="anthropic",
+        model="claude-3-5-sonnet-latest",
+        reasoning_effort="medium",
+    )
+    settings = build_model_settings(cfg)
+    assert settings["thinking"] == "medium"
+    assert "openai_reasoning_effort" not in settings
+
+
+def test_build_model_settings_reasoning_effort_unset_mistral() -> None:
+    cfg = LLMProviderConfig(provider="mistral", model="m")
+    settings = build_model_settings(cfg)
+    assert "openai_reasoning_effort" not in settings
+
+
+def test_reasoning_effort_for() -> None:
+    assert reasoning_effort_for(LLMProviderConfig(provider="mistral", model="m")) is None
+    assert (
+        reasoning_effort_for(
+            LLMProviderConfig(provider="mistral", model="m", reasoning_effort="none")
+        )
+        is None
+    )
+    assert (
+        reasoning_effort_for(
+            LLMProviderConfig(provider="mistral", model="m", reasoning_effort="high")
+        )
+        == "high"
+    )
 
 
 def test_resolve_llm_config_prefers_request_config(mistral_config: LLMProviderConfig) -> None:

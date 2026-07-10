@@ -22,6 +22,7 @@ export interface AgentTurnPayload {
   history: Array<{
     role: 'user' | 'assistant' | 'system' | 'tool';
     content: string | null;
+    thinking?: string | null;
   }>;
   message: string;
   llm_provider_config?: LlmConfigPayload | null;
@@ -83,10 +84,16 @@ function guessMimeType(filename: string): string | undefined {
 function toPythonHistory(messages: ChatMessage[]): AgentTurnPayload['history'] {
   return messages
     .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => ({
-      role: m.role,
-      content: m.content || null,
-    }));
+    .map((m) => {
+      const entry: AgentTurnPayload['history'][number] = {
+        role: m.role,
+        content: m.content || null,
+      };
+      if (m.role === 'assistant' && m.thinking) {
+        entry.thinking = m.thinking;
+      }
+      return entry;
+    });
 }
 
 export function buildAgentTurnPayload(

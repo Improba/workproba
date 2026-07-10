@@ -3,6 +3,7 @@
 `AgentLoop.run_turn` pilote `agent.iter(...)` (streaming bas-niveau du graphe)
 et mappe les events Pydantic AI vers les SSE Workproba :
   - TextPart / TextPartDelta -> TokenEvent
+  - ThinkingPart / ThinkingPartDelta -> ThinkingStartEvent / ThinkingDeltaEvent / ThinkingEndEvent
   - FunctionToolCallEvent   -> ToolCallStartEvent
   - FunctionToolResultEvent -> ToolCallResultEvent
   - End node                -> DoneEvent
@@ -27,6 +28,7 @@ from pydantic_ai.messages import (
     RetryPromptPart,
     SystemPromptPart,
     TextPart,
+    ThinkingPart,
     ToolCallPart,
     ToolReturnPart,
     UserPromptPart,
@@ -46,6 +48,9 @@ from app.schemas import (
     ChatMessage,
     DoneEvent,
     ErrorEvent,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingStartEvent,
     TokenEvent,
     ToolCallResultEvent,
     ToolCallStartEvent,
@@ -164,17 +169,10 @@ class AgentLoop:
             )
 
     async def _iter_model_stream(self, node: Any, ctx: Any) -> AsyncIterator[AgentEvent]:
-        """Émet les deltas de texte du modèle comme TokenEvent.
-
-        `AgentStream.stream_response()` yield des snapshots accumulés (ModelResponse
-        entiers), ce qui dupliquerait le texte si on l'émettait brut. On utilise
-        `stream_text(delta=True)` qui fournit les deltas incrémentaux. Les tool calls
-        sont émis séparément via `_iter_tool_stream` (nœud CallToolsNode).
-        """
+        """Émet les deltas de texte et de raisonnement du modèle."""
         async with node.stream(ctx) as stream:
-            async for delta in stream.stream_text(delta=True, debounce_by=None):
-                if delta:
-                    yield TokenEvent(content=delta)
+            async for event in map_model_stream_events(stream):
+                yield event
 
     async def _iter_tool_stream(self, node: Any, ctx: Any) -> AsyncIterator[AgentEvent]:
         from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
@@ -221,6 +219,43 @@ class AgentLoop:
                     )
 
 
+async def map_model_stream_events(stream: Any) -> AsyncIterator[AgentEvent]:
+    """Mappe les ModelResponseStreamEvent Pydantic AI vers les events SSE Workproba."""
+    from pydantic_ai.messages import (
+        PartDeltaEvent,
+        PartEndEvent,
+        PartStartEvent,
+        TextPart,
+        TextPartDelta,
+        ThinkingPart,
+        ThinkingPartDelta,
+    )
+
+    async for event in stream:
+        if isinstance(event, PartStartEvent):
+            if isinstance(event.part, ThinkingPart):
+                yield ThinkingStartEvent(thinking_id=_thinking_id(event.index))
+        elif isinstance(event, PartDeltaEvent):
+            if isinstance(event.delta, ThinkingPartDelta):
+                delta_text = event.delta.content_delta or ""
+                if delta_text:
+                    yield ThinkingDeltaEvent(
+                        thinking_id=_thinking_id(event.index),
+                        content=delta_text,
+                    )
+            elif isinstance(event.delta, TextPartDelta):
+                delta_text = event.delta.content_delta or ""
+                if delta_text:
+                    yield TokenEvent(content=delta_text)
+        elif isinstance(event, PartEndEvent):
+            if isinstance(event.part, ThinkingPart):
+                yield ThinkingEndEvent(thinking_id=_thinking_id(event.index))
+
+
+def _thinking_id(index: int) -> str:
+    return f"think-{index}"
+
+
 def to_model_messages(history: list[ChatMessage]) -> list[_ModelMessage]:
     """Convertit l'historique Workproba en messages Pydantic AI."""
     messages: list[_ModelMessage] = []
@@ -235,6 +270,8 @@ def to_model_messages(history: list[ChatMessage]) -> list[_ModelMessage]:
             )
         elif message.role == "assistant":
             parts: list[Any] = []
+            if message.thinking:
+                parts.append(ThinkingPart(content=message.thinking))
             if message.content:
                 parts.append(TextPart(content=message.content))
             for tool_call in message.tool_calls:

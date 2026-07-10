@@ -176,6 +176,17 @@
             min="1"
             class="advanced-setup__field"
           />
+          <q-select
+            v-if="formSupportsReasoning"
+            v-model="form.reasoningEffort"
+            :options="reasoningEffortOptions"
+            label="Raisonnement"
+            outlined
+            dense
+            emit-value
+            map-options
+            class="advanced-setup__field"
+          />
         </div>
         <div class="advanced-setup__row">
           <q-input
@@ -259,6 +270,12 @@ import {
   type LlmTestResult,
 } from '@composables/useAppSettings';
 import type { AppSettings, LlmProviderEntry, LlmProviderName } from '@composables/useDesktop.types';
+import type { ReasoningEffort } from '#types';
+import {
+  defaultReasoningEffort,
+  REASONING_EFFORT_OPTIONS,
+  supportsReasoning,
+} from '@utils/reasoningSupport';
 
 const emit = defineEmits<{
   'switch-to-guided': [];
@@ -296,6 +313,7 @@ interface ProviderForm {
   apiKey: string;
   temperature: number | null;
   maxTokens: number | null;
+  reasoningEffort: ReasoningEffort | null;
   embeddingModel: string;
   embeddingBaseUrl: string;
 }
@@ -315,6 +333,12 @@ const PRESETS: Record<LlmProviderName, Partial<ProviderForm>> = {
 
 const form = reactive<ProviderForm>(emptyForm());
 
+const reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
+
+const formSupportsReasoning = computed(() =>
+  supportsReasoning(form.provider, form.model),
+);
+
 function emptyForm(): ProviderForm {
   return {
     id: '',
@@ -325,6 +349,7 @@ function emptyForm(): ProviderForm {
     apiKey: '',
     temperature: null,
     maxTokens: null,
+    reasoningEffort: null,
     embeddingModel: '',
     embeddingBaseUrl: '',
   };
@@ -371,6 +396,9 @@ function onEdit(entry: LlmProviderEntry): void {
     apiKey: entry.apiKey ?? '',
     temperature: entry.temperature ?? null,
     maxTokens: entry.maxTokens ?? null,
+    reasoningEffort:
+      entry.reasoningEffort ??
+      defaultReasoningEffort(entry.provider, entry.model),
     embeddingModel: entry.embeddingModel ?? '',
     embeddingBaseUrl: entry.embeddingBaseUrl ?? '',
   });
@@ -388,6 +416,9 @@ function onCancelForm(): void {
 }
 
 function formToEntry(): LlmProviderEntry {
+  const reasoningEffort =
+    form.reasoningEffort ??
+    defaultReasoningEffort(form.provider, form.model);
   return {
     id: form.id || newId(),
     label: form.label.trim(),
@@ -397,6 +428,9 @@ function formToEntry(): LlmProviderEntry {
     apiKey: form.apiKey.trim() || null,
     temperature: form.temperature ?? null,
     maxTokens: form.maxTokens ?? null,
+    reasoningEffort: supportsReasoning(form.provider, form.model)
+      ? reasoningEffort
+      : null,
     extraHeaders: {},
     embeddingModel: form.embeddingModel.trim() || null,
     embeddingBaseUrl: form.embeddingBaseUrl.trim() || null,

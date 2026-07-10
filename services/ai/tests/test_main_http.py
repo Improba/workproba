@@ -59,6 +59,17 @@ def test_health_endpoint() -> None:
         assert resp.json()["status"] == "ok"
 
 
+def test_to_sse_event_thinking_start() -> None:
+    from app.main import to_sse_event
+    from app.schemas import ThinkingStartEvent
+
+    payload = to_sse_event(ThinkingStartEvent(thinking_id="think-0"))
+    assert payload == {
+        "event": "thinking_start",
+        "data": '{"type":"thinking_start","thinking_id":"think-0"}',
+    }
+
+
 def test_agent_turn_construction_error_surfaces_as_sse_error(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     # Force une erreur de construction du modèle -> doit remonter en event SSE error,
     # pas en HTTP 500.

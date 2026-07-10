@@ -9,10 +9,10 @@ vi.mock('@services/aiSidecar', () => ({
   buildAgentTurnPayload: vi.fn(() => ({ message: 'fake' })),
 }));
 vi.mock('@composables/useAppSettings', () => ({
-  buildActiveLlmConfigs: () => null,
+  buildActiveLlmConfigs: () => ({ chat: null, embedding: null }),
 }));
 
-import { useChatStream, mapPythonSseEvent, type UseChatStreamReturn } from '@composables/useChatStream';
+import { useChatStream, mapPythonSseEvent, applyStreamEvent, type UseChatStreamReturn } from '@composables/useChatStream';
 import type { ChatMessage } from '#types';
 
 /** Construit une Response SSE dont le body émet `events` puis ferme le flux. */
@@ -401,5 +401,93 @@ describe('useChatStream — feedbacks', () => {
     expect(lastAssistant(api.messages.value)?.content).toBe('ok');
     expect(lastAssistant(api.messages.value)?.error).toBeUndefined();
     unmount();
+  });
+
+  it('mappe et applique thinking_start/delta/end en bloc raisonnement', async () => {
+    const start = mapPythonSseEvent({
+      type: 'thinking_start',
+      data: { type: 'thinking_start', thinking_id: 'think-0' },
+    });
+    expect(start.type).toBe('thinking_start');
+    expect(start.data.thinkingId).toBe('think-0');
+
+    const delta = mapPythonSseEvent({
+      type: 'thinking_delta',
+      data: { type: 'thinking_delta', thinking_id: 'think-0', content: 'Je réfléchis' },
+    });
+    expect(delta.data.content).toBe('Je réfléchis');
+
+    const end = mapPythonSseEvent({
+      type: 'thinking_end',
+      data: { type: 'thinking_end', thinking_id: 'think-0' },
+    });
+    expect(end.type).toBe('thinking_end');
+
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sseResponse([
+        { event: 'thinking_start', data: { type: 'thinking_start', thinking_id: 'think-0' } },
+        {
+          event: 'thinking_delta',
+          data: { type: 'thinking_delta', thinking_id: 'think-0', content: 'Étape 1' },
+        },
+        {
+          event: 'thinking_delta',
+          data: { type: 'thinking_delta', thinking_id: 'think-0', content: ' puis 2' },
+        },
+        { event: 'thinking_end', data: { type: 'thinking_end', thinking_id: 'think-0' } },
+        { event: 'token', data: { content: 'Réponse' } },
+        { event: 'done', data: { content: '' } },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('hi');
+
+    const assistant = lastAssistant(api.messages.value);
+    const thinkingPart = assistant?.parts?.find((p) => p.type === 'thinking');
+    expect(thinkingPart).toMatchObject({
+      type: 'thinking',
+      thinkingId: 'think-0',
+      content: 'Étape 1 puis 2',
+      done: true,
+    });
+    expect(assistant?.thinking).toBe('Étape 1 puis 2');
+    expect(assistant?.parts?.map((p) => p.type)).toEqual(['text', 'thinking', 'text']);
+    unmount();
+  });
+
+  it('applyStreamEvent crée un ChatThinkingPart via les events unitaires', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        parts: [{ type: 'text', id: 't1', content: '' }],
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_start',
+      data: { thinkingId: 'think-0' },
+    });
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_delta',
+      data: { thinkingId: 'think-0', content: 'Analyse' },
+    });
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_end',
+      data: { thinkingId: 'think-0' },
+    });
+
+    const part = messages[0].parts?.find((p) => p.type === 'thinking');
+    expect(part).toMatchObject({
+      type: 'thinking',
+      thinkingId: 'think-0',
+      content: 'Analyse',
+      done: true,
+    });
+    expect(messages[0].thinking).toBe('Analyse');
   });
 });

@@ -2,7 +2,14 @@
   <div class="chat-page">
     <header class="chat-page__header">
       <h1 class="chat-page__title">{{ sessionTitle }}</h1>
-      <div v-if="streamError" class="chat-page__error" role="alert">
+      <div class="chat-page__header-actions">
+        <ChatReasoningControl
+          v-if="activeChatProvider"
+          v-model="displayReasoningEffort"
+          :provider="activeChatProvider.provider"
+          :model="activeChatProvider.model"
+        />
+        <div v-if="streamError" class="chat-page__error" role="alert">
         <Lucide name="alert-circle" size="sm" color="danger" />
         <span class="chat-page__error-msg">{{ streamError.message }}</span>
         <button
@@ -14,6 +21,7 @@
           <Lucide name="rotate-ccw" size="xs" color="primary" />
           Réessayer
         </button>
+        </div>
       </div>
     </header>
 
@@ -41,6 +49,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { Notify } from 'quasar';
 import { useDebounceFn } from '@vueuse/core';
 import ChatView from '@components/chat/ChatView.vue';
+import ChatReasoningControl from '@components/chat/ChatReasoningControl.vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useChatActivity } from '@composables/useChatActivity';
 import { useChatStream } from '@composables/useChatStream';
@@ -49,7 +58,8 @@ import { openLocalFile } from '@composables/useDesktop';
 import { useProject } from '@composables/useProject';
 import { resolveUiMode } from '@services/aiSidecar';
 import { getSession, saveSession } from '@services/workspaceSession';
-import type { ChatMessage } from '#types';
+import { defaultReasoningEffort } from '@utils/reasoningSupport';
+import type { ChatMessage, ReasoningEffort } from '#types';
 
 const route = useRoute();
 const router = useRouter();
@@ -59,8 +69,27 @@ const sessionTitle = ref('Conversation');
 const chatViewRef = ref<InstanceType<typeof ChatView> | null>(null);
 
 const { activePath, activeDataDir, documents } = useProject();
-const { settingsMode, settingsLocked } = useAppSettings();
+const { settingsMode, settingsLocked, activeChatProvider } = useAppSettings();
 const { setStreaming, setSidecarState } = useChatActivity();
+
+const sessionReasoningOverride = ref<ReasoningEffort | null>(null);
+
+const displayReasoningEffort = computed<ReasoningEffort>({
+  get() {
+    if (sessionReasoningOverride.value != null) {
+      return sessionReasoningOverride.value;
+    }
+    const provider = activeChatProvider.value;
+    if (!provider) return 'none';
+    return (
+      provider.reasoningEffort ??
+      defaultReasoningEffort(provider.provider, provider.model)
+    );
+  },
+  set(effort: ReasoningEffort) {
+    void onReasoningEffortChange(effort);
+  },
+});
 
 const uiMode = computed(() =>
   resolveUiMode(settingsLocked.value, settingsMode.value),
@@ -82,6 +111,7 @@ const {
   workspaceDataDir: activeDataDir,
   documents,
   uiMode,
+  reasoningEffort: sessionReasoningOverride,
 });
 
 watch(
@@ -118,6 +148,7 @@ watch(
       return;
     }
     sessionTitle.value = session.title || 'Conversation';
+    sessionReasoningOverride.value = session.reasoningEffort ?? null;
     loadMessages(session.messages ?? []);
     await applyInitialPrompt();
   },
@@ -146,6 +177,16 @@ const persistSession = useDebounceFn(async (items: ChatMessage[]) => {
     messages: items.filter((m) => !m.streaming),
   });
 }, 500);
+
+async function onReasoningEffortChange(effort: ReasoningEffort): Promise<void> {
+  sessionReasoningOverride.value = effort;
+  const session = await getSession(sessionId.value);
+  if (!session) return;
+  await saveSession({
+    ...session,
+    reasoningEffort: effort,
+  });
+}
 
 watch(
   messages,
@@ -196,6 +237,14 @@ onUnmounted(() => {
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--wp-border);
   margin-bottom: 0.75rem;
+}
+
+.chat-page__header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  min-width: 0;
 }
 
 .chat-page__title {

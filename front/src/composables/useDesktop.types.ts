@@ -28,6 +28,8 @@ export type LlmProviderName =
   | 'vllm'
   | 'anthropic';
 
+import type { ReasoningEffort } from '#types';
+
 export interface LlmProviderEntry {
   id: string;
   label: string;
@@ -40,6 +42,7 @@ export interface LlmProviderEntry {
   extraHeaders?: Record<string, string>;
   embeddingModel?: string | null;
   embeddingBaseUrl?: string | null;
+  reasoningEffort?: ReasoningEffort | null;
 }
 
 export type ToolCallViewMode = 'human' | 'tech';

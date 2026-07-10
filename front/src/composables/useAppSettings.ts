@@ -6,8 +6,10 @@ import {
   type LlmProviderEntry,
 } from '@composables/useDesktop';
 import type { DensityMode, SettingsMode, ToolCallViewMode } from '@composables/useDesktop.types';
+import type { ReasoningEffort } from '#types';
 import { getAiSidecarUrl, getDesktopSecret } from '@services/aiSidecar';
 import { isLocalLlmProvider } from '@utils/isLocalLlmProvider';
+import { supportsReasoning } from '@utils/reasoningSupport';
 
 /** Payload de config LLM attendu par le sidecar (snake_case, cf. app/schemas.py). */
 export interface LlmConfigPayload {
@@ -18,6 +20,7 @@ export interface LlmConfigPayload {
   temperature?: number | null;
   max_tokens?: number | null;
   extra_headers?: Record<string, string>;
+  reasoning_effort?: ReasoningEffort | null;
 }
 
 export interface LlmTestResult {
@@ -79,7 +82,7 @@ const isLocalChatProvider = computed(() =>
 
 export function toChatLlmConfig(entry: LlmProviderEntry | null): LlmConfigPayload | null {
   if (!entry) return null;
-  return {
+  const payload: LlmConfigPayload = {
     provider: entry.provider,
     model: entry.model,
     base_url: entry.baseUrl ?? null,
@@ -88,6 +91,14 @@ export function toChatLlmConfig(entry: LlmProviderEntry | null): LlmConfigPayloa
     max_tokens: entry.maxTokens ?? null,
     extra_headers: entry.extraHeaders ?? {},
   };
+  if (
+    entry.reasoningEffort &&
+    entry.reasoningEffort !== 'none' &&
+    supportsReasoning(entry.provider, entry.model)
+  ) {
+    payload.reasoning_effort = entry.reasoningEffort;
+  }
+  return payload;
 }
 
 export function toEmbeddingLlmConfig(

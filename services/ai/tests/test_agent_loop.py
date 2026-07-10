@@ -11,14 +11,32 @@ from typing import Any
 
 import pytest
 from pydantic_ai.models.test import TestModel
+from pydantic_ai.messages import (
+    PartDeltaEvent,
+    PartEndEvent,
+    PartStartEvent,
+    TextPart,
+    TextPartDelta,
+    ThinkingPart,
+    ThinkingPartDelta,
+)
 
-from app.agent.loop import AgentLoop, coerce_tool_result, to_model_messages
+from app.agent.loop import (
+    AgentLoop,
+    coerce_tool_result,
+    map_model_stream_events,
+    to_model_messages,
+)
 from app.agent.tools import ToolContext, build_agent
 from app.schemas import (
     AgentTurnRequest,
     ChatMessage,
     DoneEvent,
     ErrorEvent,
+    ThinkingDeltaEvent,
+    ThinkingEndEvent,
+    ThinkingStartEvent,
+    TokenEvent,
     ToolCall,
     ToolCallResultEvent,
     ToolCallStartEvent,
@@ -95,6 +113,56 @@ def test_to_model_messages_assistant_only_tool_calls() -> None:
     assert len(msgs) == 1
     assert msgs[0].kind == "response"
     assert len(msgs[0].parts) == 1  # only the ToolCallPart (no empty TextPart)
+
+
+def test_to_model_messages_assistant_with_thinking() -> None:
+    msgs = to_model_messages(
+        [
+            ChatMessage(
+                role="assistant",
+                thinking="some reasoning",
+                content="answer",
+            )
+        ]
+    )
+    assert len(msgs) == 1
+    assert msgs[0].kind == "response"
+    assert len(msgs[0].parts) == 2
+    assert isinstance(msgs[0].parts[0], ThinkingPart)
+    assert msgs[0].parts[0].content == "some reasoning"
+    assert isinstance(msgs[0].parts[1], TextPart)
+    assert msgs[0].parts[1].content == "answer"
+
+
+# --- map_model_stream_events -----------------------------------------------
+
+
+async def _collect_stream_events(events: list[Any]) -> list[Any]:
+    async def _fake_stream() -> Any:
+        for event in events:
+            yield event
+
+    return [event async for event in map_model_stream_events(_fake_stream())]
+
+
+async def test_map_model_stream_events_thinking_and_text() -> None:
+    events = [
+        PartStartEvent(index=0, part=ThinkingPart(content="")),
+        PartDeltaEvent(index=0, delta=ThinkingPartDelta(content_delta="Hello ")),
+        PartDeltaEvent(index=0, delta=ThinkingPartDelta(content_delta="world")),
+        PartEndEvent(index=0, part=ThinkingPart(content="Hello world")),
+        PartStartEvent(index=1, part=TextPart(content="")),
+        PartDeltaEvent(index=1, delta=TextPartDelta(content_delta="Answer")),
+    ]
+    mapped = await _collect_stream_events(events)
+
+    assert mapped == [
+        ThinkingStartEvent(thinking_id="think-0"),
+        ThinkingDeltaEvent(thinking_id="think-0", content="Hello "),
+        ThinkingDeltaEvent(thinking_id="think-0", content="world"),
+        ThinkingEndEvent(thinking_id="think-0"),
+        TokenEvent(content="Answer"),
+    ]
 
 
 # --- coerce_tool_result ----------------------------------------------------

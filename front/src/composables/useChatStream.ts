@@ -7,6 +7,7 @@ import type {
   ChatMessagePart,
   ChatStreamEvent,
   ChatToolCall,
+  ReasoningEffort,
   SendMessagePayload,
 } from '#types';
 import type { LocalDocumentEntry } from '@composables/useDesktop.types';
@@ -16,7 +17,9 @@ import {
   getDesktopSecret,
   type UiMode,
 } from '@services/aiSidecar';
-import { buildActiveLlmConfigs } from '@composables/useAppSettings';
+import { buildActiveLlmConfigs, type LlmConfigPayload } from '@composables/useAppSettings';
+import type { LlmProviderName } from '@composables/useDesktop.types';
+import { supportsReasoning } from '@utils/reasoningSupport';
 
 /** Délai sans aucune donnée SSE avant de déclarer le stream mort (ms). */
 const IDLE_TIMEOUT_MS = 30_000;
@@ -125,6 +128,28 @@ export function mapPythonSseEvent(event: ChatStreamEvent): ChatStreamEvent {
           humanSummary: extractHumanSummary(data),
         },
       };
+    case 'thinking_start':
+      return {
+        type: 'thinking_start',
+        data: {
+          thinkingId: String(data.thinking_id ?? ''),
+        },
+      };
+    case 'thinking_delta':
+      return {
+        type: 'thinking_delta',
+        data: {
+          thinkingId: String(data.thinking_id ?? ''),
+          content: String(data.content ?? ''),
+        },
+      };
+    case 'thinking_end':
+      return {
+        type: 'thinking_end',
+        data: {
+          thinkingId: String(data.thinking_id ?? ''),
+        },
+      };
     case 'done':
       return {
         type: 'done',
@@ -157,6 +182,15 @@ function createPartId(): string {
 /** Reconstruit des `parts` ordonnées pour un message legacy sans parts. */
 function buildLegacyParts(message: ChatMessage): ChatMessagePart[] {
   const parts: ChatMessagePart[] = [];
+  if (message.thinking) {
+    parts.push({
+      type: 'thinking',
+      id: `${message.id}__thinking`,
+      thinkingId: 'think-0',
+      content: message.thinking,
+      done: true,
+    });
+  }
   if (message.content || message.streaming) {
     parts.push({
       type: 'text',
@@ -230,7 +264,7 @@ function extractSnapshotPathFromResult(result: unknown): string | undefined {
   return typeof versionPath === 'string' && versionPath ? versionPath : undefined;
 }
 
-function applyStreamEvent(
+export function applyStreamEvent(
   messages: ChatMessage[],
   assistantMessageId: string,
   event: ChatStreamEvent,
@@ -304,6 +338,54 @@ function applyStreamEvent(
         if (assistant.pendingConfirmation?.toolCallId === toolId) {
           assistant.pendingConfirmation = null;
         }
+      }
+      break;
+    }
+    case 'thinking_start': {
+      const thinkingId = String(event.data.thinkingId ?? '');
+      if (!thinkingId) break;
+      const parts = assistant.parts ?? (assistant.parts = []);
+      parts.push({
+        type: 'thinking',
+        id: createPartId(),
+        thinkingId,
+        content: '',
+        done: false,
+      });
+      if (assistant.thinking == null) {
+        assistant.thinking = '';
+      }
+      break;
+    }
+    case 'thinking_delta': {
+      const thinkingId = String(event.data.thinkingId ?? '');
+      const delta = String(event.data.content ?? '');
+      if (!thinkingId || !delta) break;
+      const parts = assistant.parts ?? [];
+      const part = [...parts]
+        .reverse()
+        .find(
+          (p): p is Extract<ChatMessagePart, { type: 'thinking' }> =>
+            p.type === 'thinking' && p.thinkingId === thinkingId,
+        );
+      if (part) {
+        part.content += delta;
+      }
+      assistant.thinking = (assistant.thinking ?? '') + delta;
+      break;
+    }
+    case 'thinking_end': {
+      const thinkingId = String(event.data.thinkingId ?? '');
+      if (!thinkingId) break;
+      const parts = assistant.parts ?? [];
+      const part = [...parts]
+        .reverse()
+        .find(
+          (p): p is Extract<ChatMessagePart, { type: 'thinking' }> =>
+            p.type === 'thinking' && p.thinkingId === thinkingId,
+        );
+      if (part) {
+        part.done = true;
       }
       break;
     }
@@ -413,6 +495,34 @@ export interface UseChatStreamOptions {
   workspaceDataDir?: Ref<string | null>;
   documents?: Ref<LocalDocumentEntry[]>;
   uiMode?: Ref<UiMode | undefined>;
+  /** Override du niveau de raisonnement pour la conversation active. */
+  reasoningEffort?: Ref<ReasoningEffort | null | undefined>;
+}
+
+function mergeLlmConfigsWithSessionReasoning(
+  configs: ReturnType<typeof buildActiveLlmConfigs> | null | undefined,
+  sessionReasoningEffort?: ReasoningEffort | null,
+): { chat: LlmConfigPayload | null; embedding: LlmConfigPayload | null } {
+  if (!configs) {
+    return { chat: null, embedding: null };
+  }
+  if (!configs.chat) return configs;
+
+  const chat: LlmConfigPayload = { ...configs.chat };
+  const provider = chat.provider as LlmProviderName;
+  if (!supportsReasoning(provider, chat.model)) {
+    return { ...configs, chat };
+  }
+
+  if (sessionReasoningEffort != null) {
+    if (sessionReasoningEffort === 'none') {
+      delete chat.reasoning_effort;
+    } else {
+      chat.reasoning_effort = sessionReasoningEffort;
+    }
+  }
+
+  return { ...configs, chat };
 }
 
 export interface UseChatStreamReturn {
@@ -581,6 +691,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         (m) => m.id !== userMessage.id && m.id !== assistantMessage.id,
       );
       const documents = options.documents?.value ?? [];
+      const llmConfigs = mergeLlmConfigsWithSessionReasoning(
+        buildActiveLlmConfigs(),
+        options.reasoningEffort?.value ?? null,
+      );
       const body = buildAgentTurnPayload(
         options.sessionId.value,
         projectPath,
@@ -588,7 +702,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         history,
         documents,
         options.workspaceDataDir?.value,
-        buildActiveLlmConfigs(),
+        llmConfigs,
         options.uiMode?.value,
       );
 

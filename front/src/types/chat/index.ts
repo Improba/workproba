@@ -62,9 +62,20 @@ export interface ChatToolCallPart {
   toolCallId: string;
 }
 
+/** Segment « raisonnement » (thinking) inséré dans le flux du message assistant. */
+export interface ChatThinkingPart {
+  type: 'thinking';
+  id: string;
+  thinkingId: string;
+  content: string;
+  done: boolean;
+}
+
+export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
+
 /** Liste ordonnée des segments d'un message, pour respecter le flux réel :
  * texte -> outil -> texte -> ... */
-export type ChatMessagePart = ChatTextPart | ChatToolCallPart;
+export type ChatMessagePart = ChatTextPart | ChatToolCallPart | ChatThinkingPart;
 
 export interface ChatMessage {
   id: string;
@@ -78,6 +89,8 @@ export interface ChatMessage {
   error?: ChatError | null;
   /** Demande de confirmation avant écriture fichier (flux de confiance). */
   pendingConfirmation?: ChatConfirmation | null;
+  /** Texte de raisonnement persisté (rejoué au backend lors des tours suivants). */
+  thinking?: string | null;
   streaming?: boolean;
   createdAt: string;
 }
@@ -110,11 +123,34 @@ export interface SendMessagePayload {
 
 export type ChatStreamEventType =
   | 'token'
+  | 'thinking_start'
+  | 'thinking_delta'
+  | 'thinking_end'
   | 'tool_call_start'
   | 'confirmation_request'
   | 'tool_call_result'
   | 'done'
   | 'error';
+
+export interface ChatStreamThinkingStartData {
+  thinkingId: string;
+}
+
+export interface ChatStreamThinkingDeltaData {
+  thinkingId: string;
+  content: string;
+}
+
+export interface ChatStreamThinkingEndData {
+  thinkingId: string;
+}
+
+export type ChatStreamEventData =
+  | { type: 'token'; token: string }
+  | ({ type: 'thinking_start' } & ChatStreamThinkingStartData)
+  | ({ type: 'thinking_delta' } & ChatStreamThinkingDeltaData)
+  | ({ type: 'thinking_end' } & ChatStreamThinkingEndData)
+  | Record<string, unknown>;
 
 export interface ChatStreamEvent {
   type: ChatStreamEventType;

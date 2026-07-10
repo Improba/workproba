@@ -1,4 +1,4 @@
-import type { ChatMessage } from '#types';
+import type { ChatMessage, ReasoningEffort } from '#types';
 import {
   createConversation as createConversationCommand,
   deleteConversation as deleteConversationCommand,
@@ -14,6 +14,7 @@ export interface LocalSession {
   projectPath: string;
   title: string;
   messages: ChatMessage[];
+  reasoningEffort?: ReasoningEffort | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -39,6 +40,7 @@ function readLegacyStore(projectPath: string): LocalSession[] {
         projectPath: String(session.projectPath),
         title: String(session.title ?? 'Conversation'),
         messages: Array.isArray(session.messages) ? session.messages : [],
+        reasoningEffort: (session.reasoningEffort as ReasoningEffort | null | undefined) ?? null,
         createdAt: String(session.createdAt ?? new Date().toISOString()),
         updatedAt: String(session.updatedAt ?? new Date().toISOString()),
       }));
@@ -66,6 +68,7 @@ async function migrateLegacySessions(
       folderPath: projectPath,
       title: session.title,
       messages: session.messages,
+      reasoningEffort: session.reasoningEffort ?? null,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     });
@@ -98,6 +101,7 @@ export async function createSession(
     projectPath: session.folderPath,
     title: session.title,
     messages: session.messages,
+    reasoningEffort: session.reasoningEffort ?? null,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   };
@@ -115,6 +119,7 @@ export async function getSession(sessionId: string): Promise<LocalSession | null
     projectPath: session.folderPath,
     title: session.title,
     messages: session.messages,
+    reasoningEffort: session.reasoningEffort ?? null,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   };
@@ -134,6 +139,7 @@ export async function listSessions(
     projectPath: session.folderPath,
     title: session.title,
     messages: session.messages,
+    reasoningEffort: session.reasoningEffort ?? null,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
   }));
@@ -148,6 +154,7 @@ export async function saveSession(session: LocalSession): Promise<void> {
     folderPath: session.projectPath,
     title: session.title,
     messages: session.messages.filter((message) => !message.streaming),
+    reasoningEffort: session.reasoningEffort ?? null,
     createdAt: session.createdAt,
     updatedAt: new Date().toISOString(),
   });

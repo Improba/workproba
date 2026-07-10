@@ -23,6 +23,11 @@
           :streaming="!!message.streaming"
           :show-cursor="part.id === lastTextPartId && !!message.streaming"
         />
+        <ThinkingCard
+          v-else-if="part.type === 'thinking'"
+          :thinking="part"
+          :streaming="!!message.streaming"
+        />
         <ToolCallCard
           v-else-if="toolCallById(part.toolCallId)"
           :tool-call="toolCallById(part.toolCallId) as ChatToolCall"
@@ -60,6 +65,7 @@
 import { computed } from 'vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import MessageTextPart from '@components/chat/MessageTextPart.vue';
+import ThinkingCard from '@components/chat/ThinkingCard.vue';
 import ToolCallCard from '@components/chat/ToolCallCard.vue';
 import ConfirmationCard from '@components/chat/ConfirmationCard.vue';
 import type { ChatMessage, ChatMessagePart, ChatToolCall } from '#types';
@@ -87,6 +93,15 @@ const emit = defineEmits<{
 const renderParts = computed<ChatMessagePart[]>(() => {
   if (props.message.parts?.length) return props.message.parts;
   const fallback: ChatMessagePart[] = [];
+  if (props.message.thinking) {
+    fallback.push({
+      type: 'thinking',
+      id: `${props.message.id}__thinking`,
+      thinkingId: 'think-0',
+      content: props.message.thinking,
+      done: true,
+    });
+  }
   if (props.message.content || props.message.streaming) {
     fallback.push({ type: 'text', id: `${props.message.id}__text`, content: props.message.content });
   }

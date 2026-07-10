@@ -8,6 +8,7 @@ from app.config import ProviderName
 JsonDict = dict[str, Any]
 
 UiMode = Literal["guided", "advanced", "locked"]
+ReasoningEffort = Literal["none", "low", "medium", "high"]
 
 
 class ToolCall(BaseModel):
@@ -19,6 +20,7 @@ class ToolCall(BaseModel):
 class ChatMessage(BaseModel):
     role: Literal["system", "user", "assistant", "tool"]
     content: str | None = None
+    thinking: str | None = None
     name: str | None = None
     tool_call_id: str | None = None
     tool_calls: list[ToolCall] = Field(default_factory=list)
@@ -38,6 +40,7 @@ class LLMProviderConfig(BaseModel):
     api_key: SecretStr | None = None
     temperature: float | None = Field(default=None, ge=0.0, le=2.0)
     max_tokens: int | None = Field(default=None, ge=1)
+    reasoning_effort: ReasoningEffort | None = None
     extra_headers: dict[str, str] = Field(default_factory=dict)
 
 
@@ -60,6 +63,22 @@ class AgentTurnRequest(BaseModel):
 class TokenEvent(BaseModel):
     type: Literal["token"] = "token"
     content: str
+
+
+class ThinkingStartEvent(BaseModel):
+    type: Literal["thinking_start"] = "thinking_start"
+    thinking_id: str
+
+
+class ThinkingDeltaEvent(BaseModel):
+    type: Literal["thinking_delta"] = "thinking_delta"
+    thinking_id: str
+    content: str
+
+
+class ThinkingEndEvent(BaseModel):
+    type: Literal["thinking_end"] = "thinking_end"
+    thinking_id: str
 
 
 class ToolCallStartEvent(BaseModel):
@@ -113,6 +132,9 @@ class ErrorEvent(BaseModel):
 
 AgentEvent = Annotated[
     TokenEvent
+    | ThinkingStartEvent
+    | ThinkingDeltaEvent
+    | ThinkingEndEvent
     | ToolCallStartEvent
     | ToolCallResultEvent
     | ConfirmationRequestEvent

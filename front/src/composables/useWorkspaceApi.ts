@@ -1,4 +1,4 @@
-import type { ChatMessage } from '#types';
+import type { ChatMessage, ReasoningEffort } from '#types';
 import { isDesktopApp } from '@composables/useDesktop';
 
 export interface StoredConversation {
@@ -7,6 +7,7 @@ export interface StoredConversation {
   folderPath: string;
   title: string;
   messages: ChatMessage[];
+  reasoningEffort?: ReasoningEffort | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -22,6 +23,7 @@ function mapConversation(raw: {
   folderPath: string;
   title: string;
   messages: ChatMessage[];
+  reasoningEffort?: ReasoningEffort | null;
   createdAt: string;
   updatedAt: string;
 }): StoredConversation {
@@ -31,6 +33,7 @@ function mapConversation(raw: {
     folderPath: raw.folderPath,
     title: raw.title,
     messages: Array.isArray(raw.messages) ? raw.messages : [],
+    reasoningEffort: raw.reasoningEffort ?? null,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
   };
@@ -81,6 +84,7 @@ export async function saveConversation(session: StoredConversation): Promise<voi
       folderPath: session.folderPath,
       title: session.title,
       messages: session.messages,
+      reasoningEffort: session.reasoningEffort ?? null,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
     },
