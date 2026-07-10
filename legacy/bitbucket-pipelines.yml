@@ -1,0 +1,267 @@
+# ============================================================================
+# BITBUCKET PIPELINES - DÉPLOIEMENT AUTOMATIQUE VERS RANCHER
+# ============================================================================
+#
+# FONCTIONNEMENT GÉNÉRAL :
+# -------------------------
+# Ce pipeline Bitbucket automatise le déploiement des applications API et Front
+# vers Rancher. Il s'exécute lors de la création de tags Git et effectue
+# les étapes suivantes :
+#
+# 1. BUILD DES IMAGES DOCKER
+#    - Construit l'image Docker de l'API (depuis api/)
+#    - Construit l'image Docker du Front (depuis front/)
+#    - Tag les images avec la version extraite du tag Git
+#
+# 2. PUBLICATION VERS HARBOR REGISTRY
+#    - Authentification auprès du registre Harbor
+#    - Push des images API et Front vers Harbor avec le tag de version
+#
+# 3. MISE À JOUR DES DÉPLOIEMENTS RANCHER
+#    - Utilise l'API Rancher (nouvelle version) pour récupérer la configuration actuelle
+#    - Met à jour l'image Docker des déploiements API et Front
+#    - Déclenche automatiquement le redéploiement dans Rancher
+#
+# TRIGGERS :
+# ----------
+# - Tags commençant par "v*"     → Déploiement en STAGING
+# - Tags commençant par "prod-v*" → Déploiement en PRODUCTION
+#
+# VARIABLES D'ENVIRONNEMENT À CONFIGURER DANS BITBUCKET :
+# ---------------------------------------------------------
+# (À configurer dans : Repository Settings > Pipelines > Repository variables)
+#
+# RANCHER (API Rancher - nouvelle version) :
+#   - RANCHER_API_TOKEN          : Token Bearer pour l'authentification API Rancher
+#                                   (Généré dans Rancher UI > API & Keys, sans scope)
+#   - RANCHER_API_URL            : URL de base de l'API Rancher
+#                                   (ex: https://rancher.example.com)
+#   - RANCHER_CLUSTER_ID         : ID du cluster Kubernetes dans Rancher
+#                                   (trouvable dans l'URL de l'API ou dans l'interface Rancher)
+#   - RANCHER_NAMESPACE_NAME     : Nom du namespace Kubernetes où se trouvent les déploiements
+#                                   (ex: default, production, staging)
+#   - RANCHER_DEPLOYMENT_NAME_API: Nom du déploiement API dans Rancher
+#                                   (ex: api)
+#   - RANCHER_DEPLOYMENT_NAME_FRONT: Nom du déploiement Front dans Rancher
+#                                     (ex: front)
+#
+# HARBOR REGISTRY (Registre Docker) :
+#   - HARBOR_REGISTRY            : URL du registre Harbor
+#                                   (ex: harbor.example.com ou harbor.example.com/project)
+#   - HARBOR_USERNAME            : Nom d'utilisateur pour Harbor
+#   - HARBOR_PASSWORD            : Mot de passe pour Harbor
+#
+# APPLICATION (Variables pour le Front) :
+#   - API_URL                     : URL de l'API backend utilisée par le Front
+#                                   (ex: https://api.example.com)
+#   - APP_NAME                    : Nom de l'application
+#
+# VARIABLES AUTOMATIQUES (Bitbucket) :
+# -------------------------------------
+#   - BITBUCKET_TAG              : Tag Git qui a déclenché le pipeline
+#                                   (ex: v1.2.3 ou prod-v1.2.3)
+#
+# NOTES IMPORTANTES :
+# -------------------
+# - Le script extrait automatiquement la version du tag en supprimant les préfixes
+#   "v", "prod-v" ou "staging-v"
+# - Les images sont taguées avec cette version : ${HARBOR_REGISTRY}/api:${VERSION}
+# - Le script met à jour TOUS les conteneurs du déploiement (pas seulement container-0)
+# - En cas d'erreur à n'importe quelle étape, le pipeline s'arrête immédiatement
+#
+# ============================================================================
+
+#image: atlassian/default-image:4
+image: docker:26.1.2
+
+options:
+  docker: true
+
+definitions:
+  services:
+    docker:
+      memory: 4096
+  steps:
+    - step: &deploy
+        name: 'deploy'
+        size: 2x
+        #services:
+        #  - docker
+        script:
+          # Env vars to set in bitbucket CI, just to centralize them
+          - |
+            export RANCHER_API_TOKEN=$RANCHER_API_TOKEN
+            export RANCHER_API_URL=$RANCHER_API_URL
+            export RANCHER_CLUSTER_ID=$RANCHER_CLUSTER_ID # ID du cluster Kubernetes dans Rancher
+            export RANCHER_NAMESPACE_NAME=$RANCHER_NAMESPACE_NAME # Nom du namespace Kubernetes
+            export RANCHER_DEPLOYMENT_NAME_API=${RANCHER_DEPLOYMENT_NAME_API} # Nom du déploiement API
+            export RANCHER_DEPLOYMENT_NAME_FRONT=${RANCHER_DEPLOYMENT_NAME_FRONT} # Nom du déploiement Front
+            export HARBOR_REGISTRY=${HARBOR_REGISTRY}
+            export HARBOR_USERNAME=$HARBOR_USERNAME
+            export HARBOR_PASSWORD=$HARBOR_PASSWORD
+            # Front values
+            export API_URL=$API_URL
+            export APP_NAME=$APP_NAME
+            # Compose production mode
+            export COMPOSE_MODE=production
+
+          # Env vars not to be edited
+          - |
+            BITBUCKET_TAG_VERSION=${BITBUCKET_TAG#v} # Remove starting "v" if it exists
+            BITBUCKET_TAG_VERSION=${BITBUCKET_TAG_VERSION#prod-v} # Remove starting "prod-v" if it exists
+            BITBUCKET_TAG_VERSION=${BITBUCKET_TAG_VERSION#staging-v} # Remove starting "staging-v" if it exists
+
+          # Avoid error:
+          # authorization denied by plugin pipelines: --privileged=true is not allowed
+          - export DOCKER_BUILDKIT=0
+          # Install curl
+          - apk add curl
+          # Install jq
+          - apk add jq
+
+          # Fetch all branches and tags from the remote repository
+          - git fetch --all --tags
+
+          # Checkout the code at the tag level
+          - git checkout $BITBUCKET_TAG
+          # Build Docker images using docker-compose, and tag them
+          # Api
+          - cd api
+          #- docker-compose -f ./docker-compose.yml build
+          # Add more venv here: echo VENV="${VENV}" >> .env
+          - echo DUMMY="DUMMY" > .env
+          - sh docker/compose.sh build
+          - docker tag workproba-api:latest ${HARBOR_REGISTRY}/api:${BITBUCKET_TAG_VERSION}
+          - cd ..
+          # Front
+          - cd front
+          # *************************************************************************
+          # It is mandatory to insert here the venv that will be used inside the compose
+          # of the front
+          # *************************************************************************
+          - echo API_URL="${API_URL}" > .env
+          - echo APP_NAME="${APP_NAME}" >> .env
+          # Add more venv here: echo VENV="${VENV}" >> .env
+          #- cat .env
+          # *************************************************************************
+          #- docker-compose -f ./docker/docker-compose.yml build
+          - sh docker/compose.sh build
+          - docker tag workproba-front:latest ${HARBOR_REGISTRY}/front:${BITBUCKET_TAG_VERSION}
+          - cd ..
+
+          # Log in to Harbor Docker registry
+          - docker login $HARBOR_REGISTRY --username $HARBOR_USERNAME --password $HARBOR_PASSWORD
+          # Push the Docker image to Harbor
+          - docker push $HARBOR_REGISTRY/api:${BITBUCKET_TAG_VERSION}
+
+          # Log in to Harbor Docker registry
+          - docker login $HARBOR_REGISTRY --username $HARBOR_USERNAME --password $HARBOR_PASSWORD
+          # Push the Docker image to Harbor
+          - docker push $HARBOR_REGISTRY/front:${BITBUCKET_TAG_VERSION}
+
+          # ********************************************
+          # Use API call to update Rancher deployment for API
+          # Rancher API - nouvelle version avec cluster-id et namespace
+          # ********************************************
+
+          # Get the current deployment configuration
+          - >-
+            curl -X GET
+            -H "Authorization: Bearer $RANCHER_API_TOKEN"
+            -H "Content-Type: application/json"
+            -f
+            "${RANCHER_API_URL}/k8s/clusters/${RANCHER_CLUSTER_ID}/apis/apps/v1/namespaces/${RANCHER_NAMESPACE_NAME}/deployments/${RANCHER_DEPLOYMENT_NAME_API}"
+            -o deployment-api.json
+            -w "\nHTTP Status: %{http_code}\n"
+
+          # Verify the deployment was retrieved successfully
+          - |
+            if [ ! -f deployment-api.json ] || [ ! -s deployment-api.json ]; then
+              echo "Error: Failed to retrieve API deployment configuration"
+              exit 1
+            fi
+
+          # Modify the container's image in the retrieved configuration
+          # Update all containers, not just container-0
+          # Note: Kubernetes API returns Deployment object with containers in .spec.template.spec.containers
+          - >-
+            jq --arg newImage "${HARBOR_REGISTRY}/api:${BITBUCKET_TAG_VERSION}"
+            '.spec.template.spec.containers |= map(.image = $newImage)'
+            deployment-api.json > updated_deployment-api.json
+
+          # Verify the JSON modification was successful
+          - |
+            if [ ! -f updated_deployment-api.json ] || [ ! -s updated_deployment-api.json ]; then
+              echo "Error: Failed to update API deployment JSON"
+              exit 1
+            fi
+
+          # Perform the PUT request with the updated container configuration
+          - >-
+            curl -X PUT
+            -H "Authorization: Bearer $RANCHER_API_TOKEN"
+            -H "Content-Type: application/json"
+            -f
+            -d @updated_deployment-api.json
+            "${RANCHER_API_URL}/k8s/clusters/${RANCHER_CLUSTER_ID}/apis/apps/v1/namespaces/${RANCHER_NAMESPACE_NAME}/deployments/${RANCHER_DEPLOYMENT_NAME_API}"
+            -w "\nHTTP Status: %{http_code}\n"
+
+          # ********************************************
+          # Use API call to update Rancher deployment for FRONT
+          # Rancher API - nouvelle version avec cluster-id et namespace
+          # ********************************************
+
+          # Get the current deployment configuration
+          - >-
+            curl -X GET
+            -H "Authorization: Bearer $RANCHER_API_TOKEN"
+            -H "Content-Type: application/json"
+            -f
+            "${RANCHER_API_URL}/k8s/clusters/${RANCHER_CLUSTER_ID}/apis/apps/v1/namespaces/${RANCHER_NAMESPACE_NAME}/deployments/${RANCHER_DEPLOYMENT_NAME_FRONT}"
+            -o deployment-front.json
+            -w "\nHTTP Status: %{http_code}\n"
+
+          # Verify the deployment was retrieved successfully
+          - |
+            if [ ! -f deployment-front.json ] || [ ! -s deployment-front.json ]; then
+              echo "Error: Failed to retrieve FRONT deployment configuration"
+              exit 1
+            fi
+
+          # Modify the container's image in the retrieved configuration
+          # Update all containers, not just container-0
+          # Note: Kubernetes API returns Deployment object with containers in .spec.template.spec.containers
+          - >-
+            jq --arg newImage "${HARBOR_REGISTRY}/front:${BITBUCKET_TAG_VERSION}"
+            '.spec.template.spec.containers |= map(.image = $newImage)'
+            deployment-front.json > updated_deployment-front.json
+
+          # Verify the JSON modification was successful
+          - |
+            if [ ! -f updated_deployment-front.json ] || [ ! -s updated_deployment-front.json ]; then
+              echo "Error: Failed to update FRONT deployment JSON"
+              exit 1
+            fi
+
+          # Perform the PUT request with the updated container configuration
+          - >-
+            curl -X PUT
+            -H "Authorization: Bearer $RANCHER_API_TOKEN"
+            -H "Content-Type: application/json"
+            -f
+            -d @updated_deployment-front.json
+            "${RANCHER_API_URL}/k8s/clusters/${RANCHER_CLUSTER_ID}/apis/apps/v1/namespaces/${RANCHER_NAMESPACE_NAME}/deployments/${RANCHER_DEPLOYMENT_NAME_FRONT}"
+            -w "\nHTTP Status: %{http_code}\n"
+
+          # ********************************************
+
+pipelines:
+  tags:
+    'v*': # Will trigger only for tags starting with "v"
+      - step:
+          <<: *deploy
+          deployment: staging
+    'prod-v*': # Will trigger only for tag starting with "prod-v"
+      - step:
+          <<: *deploy
+          deployment: production

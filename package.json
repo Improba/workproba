@@ -1,0 +1,12 @@
+{
+  "name": "workproba",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Workproba monorepo — desktop-first local assistant",
+  "scripts": {
+    "dev": "bash scripts/dev.sh",
+    "dev:ai": "make dev-ai",
+    "dev:front": "make dev-front",
+    "dev:desktop": "make dev-desktop"
+  }
+}

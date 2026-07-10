@@ -1,0 +1,277 @@
+/**
+ * Workproba — brand override (Improba)
+ * Surcharge les variables CSS Anubis (--primary, --accent, --neutral-*, etc.)
+ * avec la palette Improba, et ajoute des tokens Workproba dédiés.
+ * Chargé APRÈS _anubis.scss pour gagner la cascade à spécificité égale.
+ *
+ * Identité Improba : bleu canard #203D52, cyan #3ECFD9, or #FFCC49, violet #B077DD.
+ * Le chat se lit en mode clair sobre ; le bleu canard = branding + états actifs,
+ * le cyan = accent d'action / focus / "travaille".
+ */
+
+/* Webfonts. TODO: bundler hors-ligne pour Tauri (local fonts) en production. */
+@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Varela+Round&family=JetBrains+Mono:wght@400;500&display=swap');
+
+:root {
+  /* Radii & shadows (Workproba) */
+  --wp-r-sm: 8px;
+  --wp-r-md: 12px;
+  --wp-r-lg: 16px;
+  --wp-r-pill: 999px;
+  --wp-shadow-1: 0 1px 2px rgba(28, 42, 54, 0.06);
+  --wp-shadow-2: 0 6px 24px rgba(28, 42, 54, 0.10);
+  --wp-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --wp-dur: 180ms;
+
+  /* Typographie */
+  --wp-fs-xs: 12px;
+  --wp-fs-sm: 13px;
+  --wp-fs-base: 15px;
+  --wp-fs-md: 17px;
+  --wp-fs-lg: 20px;
+  --wp-fs-xl: 24px;
+  --wp-fs-display: 32px;
+  --wp-lh-tight: 1.2;
+  --wp-lh-normal: 1.5;
+  --wp-lh-relaxed: 1.65;
+
+  /* Focus clavier */
+  --wp-focus-ring: var(--wp-accent);
+  --wp-focus-offset: 2px;
+
+  /* Espacement (confortable par défaut) */
+  --wp-space-1: 4px;
+  --wp-space-2: 8px;
+  --wp-space-3: 12px;
+  --wp-space-4: 16px;
+  --wp-space-5: 20px;
+  --wp-space-6: 24px;
+
+  /* Typo */
+  --wp-font-ui: 'Varela Round', 'Inter', system-ui, sans-serif;
+  --wp-font-head: 'Quicksand', 'Varela Round', system-ui, sans-serif;
+  --wp-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Accents de marque (stables entre thèmes) */
+  --wp-canard: #203d52;
+  --wp-cyan: #3ecfd9;
+  --wp-gold: #ffcc49;
+  --wp-violet: #b077dd;
+
+  body.body--light {
+    /* Surfaces */
+    --neutral-lowest: #ffffff;
+    --neutral-lower: #f6f7f9;
+    --neutral-low: #f0f2f5;
+    --neutral-medium: #c6cfd8;
+    --neutral-high: #8a99a8;
+    --neutral-higher: #5b6b7b;
+    --neutral-highest: #1c2a36;
+
+    /* Texte */
+    --text: #1c2a36;
+    --text-invert: #ffffff;
+
+    /* Marque & accents : primary = bleu canard (branding/états actifs) */
+    --primary: #203d52;
+    --primary-lowest: #eef2f5;
+    --primary-lower: #dde6ec;
+    --primary-low: #b9c8d4;
+    --primary-medium: #203d52;
+    --primary-high: #1b3346;
+    --primary-higher: #142634;
+    --primary-highest: #0d1a24;
+
+    /* accent = cyan (action / focus / streaming) */
+    --accent: #2bb5c2;
+    --accent-lowest: #dcf6f7;
+    --accent-lower: #c4eaec;
+    --accent-low: #8fdde4;
+    --accent-medium: #2bb5c2;
+    --accent-high: #1f95a1;
+    --accent-higher: #17727b;
+    --accent-highest: #0e484f;
+
+    /* Sémantique (alignées sur la marque) */
+    --success: #2e9e74;
+    --danger: #d64545;
+    --warning: #e0a93a;
+
+    /* Tokens Workproba dédiés */
+    --wp-bg: #f6f7f9;
+    --wp-surface: #ffffff;
+    --wp-surface-2: #f0f2f5;
+    --wp-surface-3: #e6eaee;
+    --wp-border: #e4e8ed;
+    --wp-border-strong: #d2d9e0;
+    --wp-text: #1c2a36;
+    --wp-text-muted: #5b6b7b;
+    --wp-text-faint: #8a99a8;
+    --wp-primary: var(--primary);
+    --wp-primary-soft: #e8eef2;
+    --wp-accent: var(--accent);
+    --wp-accent-strong: #3ecfd9;
+    --wp-accent-soft: #dcf6f7;
+    --wp-gold: #e0a93a;
+    --wp-gold-soft: #fff3d6;
+    --wp-violet: #9a63c7;
+    --wp-violet-soft: #f0e4fa;
+    --wp-success: var(--success);
+    --wp-danger: var(--danger);
+    --wp-danger-soft: #fbe6e6;
+    --wp-focus-ring: #1f95a1;
+  }
+
+  body.body--dark {
+    --neutral-lowest: #131f28;
+    --neutral-lower: #1b2c38;
+    --neutral-low: #23384a;
+    --neutral-medium: #3a5266;
+    --neutral-high: #6e8195;
+    --neutral-higher: #9fb0c0;
+    --neutral-highest: #e8eef2;
+
+    --text: #e8eef2;
+    --text-invert: #131f28;
+
+    /* En sombre, le cyan devient primaire (plus lisible que le canard) */
+    --primary: #3ecfd9;
+    --primary-lowest: #1e3a44;
+    --primary-lower: #234654;
+    --primary-low: #2c6272;
+    --primary-medium: #3ecfd9;
+    --primary-high: #5de2eb;
+    --primary-higher: #8ee9f0;
+    --primary-highest: #dcf6f7;
+
+    --accent: #3ecfd9;
+    --accent-lowest: #1e3a44;
+    --accent-lower: #234654;
+    --accent-low: #2c6272;
+    --accent-medium: #3ecfd9;
+    --accent-high: #5de2eb;
+    --accent-higher: #8ee9f0;
+    --accent-highest: #dcf6f7;
+
+    --success: #25e2b3;
+    --danger: #f17a78;
+    --warning: #ffcc49;
+
+    --wp-bg: #131f28;
+    --wp-surface: #1b2c38;
+    --wp-surface-2: #23384a;
+    --wp-surface-3: #2c4254;
+    --wp-border: #2c4254;
+    --wp-border-strong: #3a5266;
+    --wp-text: #e8eef2;
+    --wp-text-muted: #9fb0c0;
+    --wp-text-faint: #6e8195;
+    --wp-primary: var(--primary);
+    --wp-primary-soft: #1e3a44;
+    --wp-accent: var(--accent);
+    --wp-accent-strong: #5de2eb;
+    --wp-accent-soft: #1e3a44;
+    --wp-gold: #ffcc49;
+    --wp-gold-soft: #3a2f12;
+    --wp-violet: #c99bed;
+    --wp-violet-soft: #2e1f44;
+    --wp-success: var(--success);
+    --wp-danger: var(--danger);
+    --wp-danger-soft: #3a1f20;
+    --wp-focus-ring: #5de2eb;
+  }
+}
+
+/* Densité d'interface */
+[data-density='compact'] {
+  --wp-space-1: 2px;
+  --wp-space-2: 4px;
+  --wp-space-3: 8px;
+  --wp-space-4: 12px;
+  --wp-space-5: 16px;
+  --wp-space-6: 20px;
+}
+
+[data-density='spacious'] {
+  --wp-space-1: 6px;
+  --wp-space-2: 10px;
+  --wp-space-3: 14px;
+  --wp-space-4: 20px;
+  --wp-space-5: 28px;
+  --wp-space-6: 32px;
+}
+
+/* Base typo Workproba */
+body {
+  font-family: var(--wp-font-ui);
+  font-size: var(--wp-fs-base);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-text);
+}
+
+h1, h2, h3, h4, h5, h6,
+.wp-head {
+  font-family: var(--wp-font-head);
+}
+
+code, pre, .wp-mono {
+  font-family: var(--wp-font-mono);
+}
+
+/* Respiration : pulse "travaille" */
+@keyframes wp-breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.wp-breathe {
+  animation: wp-breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes wp-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.wp-fade-in {
+  animation: wp-fade-in 220ms var(--wp-ease) both;
+}
+
+/* Accessibilité : texte masqué visuellement */
+.wp-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Anneau de focus cohérent sur le chrome */
+@mixin wp-focus-visible {
+  &:focus-visible {
+    outline: 2px solid var(--wp-focus-ring);
+    outline-offset: var(--wp-focus-offset);
+  }
+}
+
+.wp-shell {
+  button,
+  a,
+  input,
+  [role='treeitem'],
+  [tabindex]:not([tabindex='-1']) {
+    @include wp-focus-visible;
+  }
+}
+
+.wp-contextmenu__item {
+  @include wp-focus-visible;
+}
+
+/* Corps du chat */
+.wp-center {
+  font-size: var(--wp-fs-base);
+  line-height: var(--wp-lh-normal);
+}

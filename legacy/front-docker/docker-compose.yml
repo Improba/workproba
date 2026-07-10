@@ -1,0 +1,20 @@
+name: workproba
+
+services:
+  workproba-front:
+    container_name: workproba-front
+    image: workproba-front:latest
+    build:
+      context: ./../
+      dockerfile: ./docker/Dockerfile
+    ports:
+      - ${FRONT_DOCKER_PORT_EXPOSED:-8381}:80
+    restart: 'unless-stopped'
+    volumes:
+      - ./../.env:/app/.env
+      - ./../nginx:/app/nginx
+    environment:
+      - API_URL=${API_URL}
+      - APP_NAME=${APP_NAME:-appName}
+    # The command is included in the dockerfile
+    #command: sh -c "cd /app; ./node_modules/.bin/quasar build -m spa && cp -rf /app/dist/spa/* /usr/share/nginx/html/; nginx -g 'pid /tmp/nginx.pid; daemon off;'"

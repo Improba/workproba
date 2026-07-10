@@ -1,0 +1,306 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from sse_starlette.sse import EventSourceResponse
+
+from app.agent.confirmation import confirmation_registry
+from app.agent.loop import AgentLoop
+from app.agent.tools import build_agent
+from app.auth import internal_secret_middleware
+from app.capabilities import Capabilities, detect_capabilities
+from app.config import Settings, get_settings
+from app.local_client import LocalProjectClient
+from app.llm.config import build_model, build_model_settings, resolve_llm_config
+from app.llm.provider import resolve_litellm_model
+from app.rag.store import RagStore
+from app.sandbox.runner import SandboxRunner
+from app.schemas import (
+    AgentConfirmRequest,
+    AgentTurnRequest,
+    CapabilitiesResponse,
+    ErrorEvent,
+    LLMProviderConfig,
+    VersionListResponse,
+    VersionRestoreRequest,
+    VersionRestoreResponse,
+    VersionSnapshotInfo,
+)
+from app.versions import list_snapshots, restore_snapshot
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    app.state.settings = get_settings()
+    app.state.capabilities = detect_capabilities()
+    yield
+
+
+app = FastAPI(
+    title="Workproba AI Core",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origin_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.middleware("http")(internal_secret_middleware)
+
+
+@app.get("/")
+@app.get("/health")
+async def health() -> dict[str, str]:
+    return {"status": "ok", "service": "workproba-ai"}
+
+
+class LlmTestResult(BaseModel):
+    ok: bool
+    detail: str = ""
+    model_count: int | None = None
+
+
+@app.post("/llm/test", response_model=LlmTestResult)
+async def llm_test(payload: LLMProviderConfig) -> LlmTestResult:
+    """Valide une config LLM (clé + endpoint) en listant les modèles disponibles.
+
+    Coût nul (GET /models). Utilisé par l'écran de settings de l'app.
+    """
+    import httpx
+
+    from app.llm.config import _DEFAULT_BASE_URL, _OPENAI_COMPAT_PROVIDERS
+
+    provider = payload.provider
+    api_key = payload.api_key.get_secret_value() if payload.api_key else None
+
+    if provider == "ollama":
+        base_url = payload.base_url or _DEFAULT_BASE_URL.get("ollama", "http://127.0.0.1:11434/v1")
+        headers: dict[str, str] = {}
+    elif provider in _OPENAI_COMPAT_PROVIDERS:
+        base_url = payload.base_url or _DEFAULT_BASE_URL.get(provider)
+        if not base_url:
+            return LlmTestResult(ok=False, detail="URL de base manquante pour ce provider")
+        if not api_key:
+            return LlmTestResult(ok=False, detail="Clé API manquante")
+        headers = {"Authorization": f"Bearer {api_key}"}
+    elif provider == "anthropic":
+        base_url = payload.base_url or "https://api.anthropic.com/v1"
+        if not api_key:
+            return LlmTestResult(ok=False, detail="Clé API manquante")
+        headers = {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+        }
+    else:
+        return LlmTestResult(ok=False, detail=f"Provider non testable : {provider}")
+
+    url = f"{base_url.rstrip('/')}/models"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.get(url, headers=headers)
+    except httpx.HTTPError as exc:
+        return LlmTestResult(ok=False, detail=f"Connexion impossible : {exc}")
+
+    if response.status_code == 401:
+        return LlmTestResult(ok=False, detail="Clé API invalide (401)")
+    if response.status_code == 404:
+        return LlmTestResult(
+            ok=False, detail=f"Endpoint /models introuvable (404) sur {base_url}"
+        )
+    if not response.is_success:
+        return LlmTestResult(
+            ok=False,
+            detail=f"Réponse HTTP {response.status_code} : {response.text[:200]}",
+        )
+
+    try:
+        data = response.json()
+        models = data.get("data") if isinstance(data, dict) else None
+        count = len(models) if isinstance(models, list) else None
+    except ValueError:
+        count = None
+
+    return LlmTestResult(ok=True, detail="Connexion OK", model_count=count)
+
+
+@app.get("/capabilities", response_model=CapabilitiesResponse)
+async def get_capabilities(request: Request) -> CapabilitiesResponse:
+    caps: Capabilities = request.app.state.capabilities
+    return CapabilitiesResponse(
+        docker=caps.docker,
+        sandbox_available=caps.sandbox_available,
+    )
+
+
+@app.post("/agent/confirm")
+async def agent_confirm(payload: AgentConfirmRequest) -> dict[str, bool]:
+    resolved = confirmation_registry.resolve(
+        payload.session_id,
+        payload.confirmation_id,
+        payload.decision,
+    )
+    if not resolved:
+        raise HTTPException(
+            status_code=404,
+            detail="Confirmation introuvable ou expirée.",
+        )
+    return {"ok": True}
+
+
+@app.post("/agent/turn")
+async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSourceResponse:
+    settings: Settings = request.app.state.settings
+    project_root = resolve_project_root(settings, payload)
+    workspace_data_dir = resolve_workspace_data_dir(payload)
+    limits = settings.limits
+    project_client = LocalProjectClient(
+        project_root=project_root,
+        workspace_data_dir=workspace_data_dir,
+        limits=limits,
+        rag_store=build_rag_store(
+            settings,
+            workspace_data_dir,
+            project_root,
+            payload.embedding_config,
+        ),
+    )
+    sandbox_runner = SandboxRunner(timeout_seconds=settings.sandbox_timeout_seconds, limits=limits)
+
+    caps: Capabilities = request.app.state.capabilities
+
+    async def event_stream() -> AsyncIterator[dict[str, Any]]:
+        try:
+            llm_config = resolve_llm_config(payload.llm_provider_config, settings)
+            model = build_model(llm_config)
+            agent = build_agent(
+                model,
+                ui_mode=payload.ui_mode,
+                sandbox_available=caps.sandbox_available,
+            )
+            agent_loop = AgentLoop(
+                agent=agent,
+                project_client=project_client,
+                sandbox_runner=sandbox_runner,
+                max_iterations=settings.max_agent_iterations,
+                model_settings=build_model_settings(llm_config),
+                project_root=project_root,
+                limits=limits,
+            )
+            async for event in agent_loop.run_turn(payload):
+                yield to_sse_event(event)
+        except Exception as exc:
+            yield to_sse_event(ErrorEvent(message=str(exc)))
+
+    return EventSourceResponse(event_stream(), media_type="text/event-stream")
+
+
+def resolve_workspace_data_dir(payload: AgentTurnRequest) -> Path | None:
+    if payload.workspace_data_dir:
+        return Path(payload.workspace_data_dir).expanduser().resolve()
+    return None
+
+
+def build_rag_store(
+    settings: Settings,
+    workspace_data_dir: Path | None,
+    project_root: Path,
+    embedding_config: LLMProviderConfig | None = None,
+) -> RagStore | None:
+    embedding_model, embedding_base_url, embedding_api_key = resolve_embedding_config(
+        settings, embedding_config
+    )
+    if not embedding_model:
+        return None
+
+    if workspace_data_dir is not None:
+        db_path = workspace_data_dir / "memory.db"
+    else:
+        db_path = project_root / ".workproba" / "memory.db"
+
+    return RagStore(
+        db_path=db_path,
+        embedding_model=embedding_model,
+        embedding_base_url=embedding_base_url,
+        embedding_api_key=embedding_api_key,
+    )
+
+
+def resolve_embedding_config(
+    settings: Settings,
+    embedding_config: LLMProviderConfig | None,
+) -> tuple[str | None, str | None, str | None]:
+    """Priorise la config par tour (app), puis les env du sidecar."""
+    if embedding_config is not None and embedding_config.model:
+        model = embedding_config.model
+        if "/" not in model and embedding_config.provider:
+            model = resolve_litellm_model(embedding_config.provider, model)
+        api_key = (
+            embedding_config.api_key.get_secret_value()
+            if embedding_config.api_key
+            else None
+        )
+        return model, embedding_config.base_url, api_key
+
+    if not settings.llm_embedding_model:
+        return None, None, None
+
+    model = settings.llm_embedding_model
+    if "/" not in model and settings.llm_embedding_provider:
+        model = resolve_litellm_model(settings.llm_embedding_provider, model)
+    return model, settings.llm_embedding_base_url, settings.llm_embedding_api_key
+
+
+def resolve_project_root(settings: Settings, payload: AgentTurnRequest) -> Path:
+    if payload.project_path:
+        return Path(payload.project_path)
+
+    project_id_path = Path(payload.project_id).expanduser()
+    if project_id_path.is_absolute():
+        return project_id_path
+
+    if settings.project_root is not None:
+        return settings.project_root
+
+    return Path.cwd()
+
+
+@app.get("/versions", response_model=VersionListResponse)
+async def list_file_versions(
+    project_path: str,
+    session_id: str,
+    file_path: str,
+) -> VersionListResponse:
+    root = Path(project_path).expanduser().resolve()
+    snapshots = list_snapshots(
+        project_root=root,
+        session_id=session_id,
+        file_path=file_path,
+    )
+    return VersionListResponse(
+        snapshots=[VersionSnapshotInfo.model_validate(item) for item in snapshots]
+    )
+
+
+@app.post("/versions/restore", response_model=VersionRestoreResponse)
+async def restore_file_version(payload: VersionRestoreRequest) -> VersionRestoreResponse:
+    root = Path(payload.project_path).expanduser().resolve()
+    result = restore_snapshot(
+        project_root=root,
+        session_id=payload.session_id,
+        snapshot_path=payload.snapshot_path,
+    )
+    return VersionRestoreResponse.model_validate(result)
+
+
+def to_sse_event(event: BaseModel) -> dict[str, str]:
+    return {
+        "event": str(getattr(event, "type", "message")),
+        "data": event.model_dump_json(),
+    }

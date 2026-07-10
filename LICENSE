@@ -1,0 +1,256 @@
+Workproba Personal and Educational License (WPEL) Version 1.0
+
+Copyright (c) 2026 Improba. All rights reserved.
+
+SPDX-License-Identifier: LicenseRef-WPEL-1.0
+
+-------------------------------------------------------------------------------
+
+IMPORTANT — READ CAREFULLY BEFORE USING THIS SOFTWARE
+
+This Workproba Personal and Educational License ("WPEL") is a source-available
+license. It grants limited rights at no charge for Personal Use and
+Educational Use only.
+
+Any other use — including use by or on behalf of any Organization for
+Internal Business Operations, Production Use, or any Commercial Purpose —
+requires a separate written Commercial License from the Licensor.
+
+For commercial licensing: licensing@improba.fr
+(See also LICENSE-COMMERCIAL and LICENSING.md.)
+
+-------------------------------------------------------------------------------
+
+1. Definitions
+
+   1.1 "Commercial License" means a written agreement between You and the
+       Licensor that authorizes use of the Software beyond the scope of this
+       WPEL.
+
+   1.2 "Commercial Purpose" means any use, direct or indirect, that is
+       primarily intended for or directed toward commercial advantage,
+       monetary compensation, or revenue generation, including without
+       limitation: offering the Software or any derivative work as a hosted
+       or managed service; incorporating the Software into a product or
+       service offered to third parties for a fee or other consideration;
+       using the Software to provide paid consulting, support, or
+       professional services; or use in connection with Internal Business
+       Operations.
+
+   1.3 "Derivative Work" means any work based upon or derived from the
+       Software, including modifications, adaptations, translations, or
+       other changes, whether or not recognizable as such.
+
+   1.4 "Educational Institution" means an accredited school, college,
+       university, or other recognized non-profit educational body whose
+       primary purpose is teaching, academic research, or scholarship.
+
+   1.5 "Educational Use" means use of the Software by an individual student,
+       instructor, or academic researcher solely for:
+
+       (a) personal learning or self-study;
+       (b) classroom instruction, coursework, teaching, or academic
+           demonstrations;
+       (c) non-commercial academic research, thesis work, or publication of
+           research results, provided such research is not funded primarily
+           for the commercial benefit of a third party; or
+       (d) participation in a non-commercial student project, hackathon, or
+           competition.
+
+       Educational Use does not include use by an Educational Institution
+       (or any department, lab, or IT unit thereof) for Internal Business
+       Operations, administrative systems, institutional infrastructure,
+       Production Use, or any Commercial Purpose — even if the institution is
+       non-profit.
+
+   1.6 "Internal Business Operations" means the day-to-day operations,
+       administration, management, or production activities of an
+       Organization, including IT operations, employee tooling, customer
+       support systems, back-office workflows, and any use that supports the
+       Organization's mission beyond pure classroom instruction or individual
+       academic research as defined in Educational Use.
+
+   1.7 "Licensor" means Improba, the copyright holder of the Software, and
+       its successors and assigns.
+
+   1.8 "Organization" means any legal entity or identifiable group, including
+       without limitation: corporations, partnerships, sole proprietorships,
+       limited liability companies, government agencies, non-profit entities,
+       foundations, associations, cooperatives, and Educational Institutions
+       acting in their institutional capacity.
+
+   1.9 "Personal Use" means use of the Software by a natural person acting
+       in their individual capacity for private, non-professional purposes,
+       where the use is not performed on behalf of, at the direction of, or
+       for the benefit of any Organization, and is not for any Commercial
+       Purpose.
+
+   1.10 "Production Use" means use of the Software to process real data,
+        support live users, run business-critical workflows, or otherwise
+        operate in an environment intended for ongoing operational reliance,
+        as distinct from evaluation, prototyping, classroom demonstration,
+        or personal experimentation.
+
+   1.11 "Software" means the Workproba software made available by the
+        Licensor under this WPEL, including source code, object code,
+        binaries, documentation, and associated materials, and any official
+        updates or releases thereof provided by the Licensor.
+
+   1.12 "You" (or "Your") means the individual or legal entity exercising
+        permissions granted by this WPEL.
+
+2. Acceptance
+
+   By accessing, copying, modifying, or using the Software, You agree to be
+   bound by this WPEL. If You do not agree, You must not use the Software.
+
+   If You are accepting this WPEL on behalf of an Organization, You represent
+   and warrant that You have authority to bind that Organization. In that
+   case, "You" refers to the Organization.
+
+3. License Grant
+
+   Subject to the terms and conditions of this WPEL, the Licensor grants You
+   a worldwide, royalty-free, non-exclusive, non-transferable, revocable
+   license to:
+
+   (a) use and reproduce the Software;
+   (b) prepare Derivative Works of the Software; and
+   (c) distribute unmodified copies of the Software and Your Derivative
+       Works,
+
+   solely for Personal Use or Educational Use.
+
+4. Commercial License Required
+
+   4.1 The grant in Section 3 does not apply, and You must obtain a
+       Commercial License, if the Software is used or accessed:
+
+       (a) by or on behalf of any Organization for any purpose;
+       (b) for Internal Business Operations of any kind;
+       (c) for Production Use;
+       (d) for any Commercial Purpose; or
+       (e) in any manner not expressly permitted as Personal Use or
+           Educational Use.
+
+   4.2 Without limiting Section 4.1, the following require a Commercial
+       License:
+
+       (a) deployment within a company, government body, hospital, NGO, or
+           Educational Institution for staff, students (beyond individual
+           Educational Use), or institutional systems;
+       (b) use by contractors, consultants, or employees in connection with
+           professional duties;
+       (c) offering the Software (or any service built upon it) to third
+           parties, whether or not for a fee;
+       (d) use in connection with funded research where the funder receives
+           commercial rights or the primary beneficiary is a commercial
+           entity; and
+       (e) bundling, sublicensing, or redistributing the Software as part of
+           a commercial product or service.
+
+   4.3 Evaluation. An Organization may download and evaluate the Software
+       internally for up to thirty (30) days without a Commercial License,
+       solely to determine whether to enter into one. Any use beyond
+       evaluation, or any Production Use during evaluation, requires a
+       Commercial License.
+
+5. Restrictions
+
+   Except as expressly permitted under this WPEL or a Commercial License, You
+   must not:
+
+   (a) use the Software in violation of Section 4;
+   (b) remove or alter any copyright, license, or attribution notices;
+   (c) sublicense the Software except as part of distributing unmodified
+       copies or permitted Derivative Works under Section 3;
+   (d) use the Licensor's trademarks, trade names, or logos without prior
+       written consent; or
+   (e) misrepresent the scope of rights granted under this WPEL.
+
+6. Distribution
+
+   If You distribute the Software or Derivative Works under this WPEL, You
+   must:
+
+   (a) include a copy of this WPEL with each distribution;
+   (b) retain all copyright and license notices in the Software; and
+   (c) ensure recipients are informed that commercial and institutional use
+       requires a separate Commercial License from the Licensor.
+
+7. Contributions
+
+   Unless otherwise agreed in writing, any feedback, bug reports, patches,
+   or other contributions You voluntarily submit to the Licensor may be used
+   by the Licensor without obligation to You, under this WPEL, a Commercial
+   License, or any other terms the Licensor elects.
+
+8. Reservation of Rights
+
+   The Licensor reserves all rights not expressly granted in this WPEL. No
+   patent rights are granted by implication, estoppel, or otherwise, except
+   as may be expressly set forth in a Commercial License.
+
+9. Trademarks
+
+   This WPEL does not grant permission to use the trade names, trademarks,
+   service marks, or product names of the Licensor, except as required for
+   reasonable and customary description of the origin of the Software.
+
+10. Disclaimer of Warranty
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
+    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND
+    NON-INFRINGEMENT. THE LICENSOR DOES NOT WARRANT THAT THE SOFTWARE WILL
+    BE ERROR-FREE, UNINTERRUPTED, OR SECURE, OR THAT DEFECTS WILL BE
+    CORRECTED.
+
+11. Limitation of Liability
+
+    TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, IN NO EVENT SHALL
+    THE LICENSOR BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL,
+    CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR ANY LOSS OF PROFITS, DATA,
+    BUSINESS, OR GOODWILL, ARISING OUT OF OR RELATED TO THIS WPEL OR THE
+    USE OF THE SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.
+
+    THE LICENSOR'S TOTAL AGGREGATE LIABILITY ARISING OUT OF OR RELATED TO
+    THIS WPEL SHALL NOT EXCEED ONE HUNDRED EUROS (EUR 100).
+
+12. Termination
+
+    12.1 This WPEL automatically terminates if You breach any of its terms.
+
+    12.2 Upon termination, You must cease all use and distribution of the
+         Software and destroy all copies in Your possession or control.
+
+    12.3 Sections 4, 8, 9, 10, 11, 13, and 14 survive termination.
+
+13. Governing Law
+
+    This WPEL is governed by the laws of France, without regard to conflict
+    of law principles. The courts of Paris, France shall have exclusive
+    jurisdiction, subject to mandatory consumer protection rules applicable
+    to natural persons acting as consumers.
+
+14. General
+
+    14.1 Entire Agreement. This WPEL constitutes the entire agreement
+         between You and the Licensor regarding free use of the Software and
+         supersedes prior understandings on that subject.
+
+    14.2 Severability. If any provision is held unenforceable, the
+         remaining provisions remain in full force, and the invalid
+         provision shall be replaced with an enforceable provision that most
+         closely reflects the original intent.
+
+    14.3 No Waiver. Failure to enforce any provision is not a waiver of that
+         provision or any other provision.
+
+    14.4 Language. The English version of this WPEL is authoritative. Any
+         translation is provided for convenience only.
+
+-------------------------------------------------------------------------------
+
+For Commercial Licensing: licensing@improba.fr
+See LICENSE-COMMERCIAL and LICENSING.md.

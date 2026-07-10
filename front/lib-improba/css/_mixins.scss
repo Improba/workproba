@@ -1,0 +1,133 @@
+// ******************************
+// Defines used to setup light and dark themes
+// ******************************
+
+@mixin defineColorLight($name, $color) {
+  body.body--light {
+    .text-#{$name} {
+      color: var(#{"--"+$name});
+    }
+
+    .bg-#{$name} {
+      background: var(#{"--"+$name});
+    }
+
+    .border-#{$name} {
+      border-color: var(#{"--"+$name});
+    }
+  }
+
+  :root {
+    body.body--light {
+      #{"--"+$name}: $color;
+    }
+  }
+}
+
+@mixin defineColorDark($name, $color) {
+  body.body--dark {
+    .text-#{$name} {
+      color: var(#{"--"+$name});
+    }
+
+    .bg-#{$name} {
+      background: var(#{"--"+$name});
+    }
+
+    .border-#{$name} {
+      border-color: var(#{"--"+$name});
+    }
+  }
+
+  :root {
+    body.body--dark {
+      #{"--"+$name}: $color;
+    }
+  }
+}
+
+@mixin defineColorDarkAndLight($name, $darkColor, $lightColor) {
+  @include setGlobalClass($name, $lightColor, 'body--light');
+  @include setGlobalClass($name, $darkColor, 'body--dark');
+}
+
+@mixin defineColorLightAndDark($name, $lightColor, $darkColor) {
+  @include setGlobalColors($lightColor, $darkColor, $name);
+}
+
+@mixin defineColor($name, $color) {
+  @include defineColorDarkAndLight($name, $color, $color);
+}
+
+@mixin defineColorForClass($name, $color, $theme) {
+  @include setGlobalClass($name, $color, $theme);
+}
+
+@mixin defineColorVariationsLightAndDark($name, $lightColor, $darkColor) {
+  // Base/medium color
+  @include defineColorLightAndDark($name, $lightColor, $darkColor);
+
+  // Variations from lowest to highest
+  @include defineColorLightAndDark(
+    '#{$name}-lowest',
+    lighten($lightColor, 90),
+    darken($darkColor, 50)
+  );
+  @include defineColorLightAndDark(
+    '#{$name}-lower',
+    lighten($lightColor, 30),
+    darken($darkColor, 30)
+  );
+  @include defineColorLightAndDark(
+    '#{$name}-low',
+    lighten($lightColor, 20),
+    darken($darkColor, 10)
+  );
+  @include defineColorLightAndDark('#{$name}-medium', $lightColor, $darkColor);
+  @include defineColorLightAndDark(
+    '#{$name}-high',
+    darken($lightColor, 20),
+    lighten($darkColor, 20)
+  );
+  @include defineColorLightAndDark(
+    '#{$name}-higher',
+    darken($lightColor, 40),
+    lighten($darkColor, 30)
+  );
+  @include defineColorLightAndDark(
+    '#{$name}-highest',
+    darken($lightColor, 50),
+    lighten($darkColor, 90)
+  );
+}
+
+@mixin setGlobalColors($light, $dark, $name) {
+  @include setGlobalClass($name, $light, 'body--light');
+  @include setGlobalClass($name, $dark, 'body--dark');
+}
+
+@mixin setGlobalClass($name, $color, $theme) {
+  :root {
+    body.#{$theme} {
+      #{"--"+$name}: $color;
+
+      @if $color != transparent {
+        @each $opacity, $hex in $background-opacity {
+          #{"--"+$name+"-"+$opacity}: #{rgba(red($color), green($color), blue($color), $hex)};
+        }
+      }
+    }
+  }
+}
+
+$background-opacity: (
+  10: 0.1,
+  20: 0.2,
+  30: 0.3,
+  40: 0.4,
+  50: 0.5,
+  60: 0.6,
+  70: 0.7,
+  80: 0.8,
+  90: 0.9
+);

@@ -1,0 +1,42 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Workproba",
+  "version": "0.1.0",
+  "identifier": "fr.improba.workproba",
+  "build": {
+    "frontendDist": "../../front/dist/spa",
+    "devUrl": "http://localhost:5053",
+    "beforeDevCommand": "cd ../front && DESKTOP_MODE=true yarn dev",
+    "beforeBuildCommand": "cd ../front && DESKTOP_MODE=true yarn build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Workproba",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 960,
+        "minHeight": 640,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["deb", "rpm", "appimage", "msi", "nsis", "dmg", "app"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "android": {
+      "debugApplicationIdSuffix": ".debug"
+    }
+  }
+}

@@ -1,0 +1,15 @@
+# Html2pdf is a service that allows you to convert html to pdf.
+# It is used to convert the html to pdf.
+
+# To use:
+# In your main docker-compose.yml file, add in the include section:
+# - ./additionals/html2pdf.yml
+# Then, you may redeclare the service in the compose to override some parameters: venv, version whatever.
+# You should add the network for example.
+
+services:
+  html2pdf:
+    image: ccjmne/puppeteer-html2pdf:2.1.0
+    restart: unless-stopped
+    ports:
+      - "${HTML2PDF_PORT:-3311}:3000"

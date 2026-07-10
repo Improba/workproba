@@ -1,0 +1,17 @@
+# This is an example Starter pipeline configuration
+# Use a skeleton to build, test and deploy using manual and parallel steps
+# -----
+# You can specify a custom docker image from Docker Hub as your build environment.
+image: atlassian/default-image:2
+
+pipelines:
+  tags: # custom: defines that this can only be triggered manually or by a schedule, tags: when a tag with condition is push
+    '*':
+      - step:
+          script:
+            - pipe: atlassian/ssh-run:0.3.0
+              variables:
+                SSH_USER: 'docker'
+                SERVER: '222'
+                PORT: '22'
+                COMMAND: '/home/docker/project-name/deploy.sh ${BITBUCKET_TAG}'

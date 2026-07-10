@@ -1,0 +1,36 @@
+name: workproba
+
+services:
+  workproba-ai:
+    container_name: workproba-ai
+    build:
+      context: ./services/ai
+    env_file:
+      - ./services/ai/.env
+    environment:
+      DESKTOP_MODE: "false"
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      NESTJS_INTERNAL_URL: "http://workproba-api-dev:3000"
+    expose:
+      - "8000"
+    networks:
+      - workproba-api-dev-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import os, urllib.request; req = urllib.request.Request('http://127.0.0.1:8000/', headers={'X-Internal-Secret': os.environ['INTERNAL_SECRET']}); urllib.request.urlopen(req, timeout=2).read()\"",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+# Réseau partagé avec l'API (défini/possédé par api/docker/docker-compose.dev.yml).
+# Permet à NestJS (workproba-api-dev) de résoudre workproba-ai:8000 et au service
+# Python d'atteindre NestJS via NESTJS_INTERNAL_URL=http://workproba-api-dev:3000.
+networks:
+  workproba-api-dev-network:
+    name: workproba-api-dev-network
+    external: true

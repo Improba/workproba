@@ -1,0 +1,399 @@
+{
+  "files": {
+    "targets": ["**/*.vue", "**/*use-mastok.ts"],
+    "ignore": []
+  },
+  "utilities": [
+    {
+      "prefix": "bg",
+      "declaration": "background: ${color}",
+      "export": "all"
+    },
+    {
+      "prefix": "text",
+      "declaration": "color: ${color}",
+      "export": "all"
+    },
+    {
+      "prefix": "border",
+      "declaration": "border-width: ${value} !important; border-color: ${color} !important; border-style: solid;",
+      "variations": {
+        "default": "1px",
+        "xs": "1px",
+        "sm": "2px",
+        "md": "3px",
+        "lg": "6px",
+        "xl": "8px",
+        "xxl": "10px",
+        "node": "0.2rem"
+      }
+    },
+    {
+      "prefix": "inner-border",
+      "declaration": "box-shadow: inset 0px 0px 0px ${value} ${color}",
+      "variations": {
+        "default": "1px",
+        "xs": "1px",
+        "sm": "2px",
+        "md": "3px",
+        "lg": "6px",
+        "xl": "8px",
+        "xxl": "10px",
+        "node": "0.2rem"
+      }
+    },
+    {
+      "prefix": "shadow",
+      "declaration": "box-shadow: ${value} ${color}",
+      "variations": {
+        "default": "0px 0px 7px 1px",
+        "xs": "0px 0px 3px 1px",
+        "sm": "0px 0px 5px 1px",
+        "md": "0px 0px 5px 1px",
+        "lg": "0px 0px 10px 1px",
+        "xl": "0px 0px 15px 1px"
+      }
+    },
+    {
+      "prefix": "blur",
+      "declaration": "backdrop-filter: blur(${value})",
+      "variations": {
+        "default": "3px"
+      }
+    },
+    {
+      "prefix": "smooth",
+      "declaration": "transition-duration: ${value}",
+      "variations": {
+        "default": "0.1s",
+        "slowest": "0.5s",
+        "slower": "0.3s",
+        "slow": "0.2s",
+        "quick": "0.07s",
+        "quicker": "0.05s",
+        "quickest": "0.03s"
+      }
+    },
+    {
+      "prefix": "rounded",
+      "declaration": "border-radius: ${value}",
+      "variations": {
+        "default": "4px",
+        "square": "0px",
+        "xs": "2px",
+        "sm": "4px",
+        "md": "8px",
+        "lg": "12px",
+        "xl": "16px",
+        "very": "9999px",
+        "full": "50%",
+        "half": "100%"
+      }
+    },
+    {
+      "prefix": "border",
+      "declaration": "border-style: ${value}",
+      "variations": {
+        "solid": "solid",
+        "dashed": "dashed",
+        "dotted": "dotted"
+      }
+    },
+    {
+      "prefix": "text",
+      "declaration": "text-decoration: ${value}",
+      "variations": {
+        "underline": "underline",
+        "dashed": "dashed",
+        "dotted": "dotted"
+      }
+    },
+    {
+      "prefix": "position",
+      "declaration": "position: ${value}",
+      "variations": {
+        "relative": "relative",
+        "absolute": "absolute"
+      }
+    },
+    {
+      "prefix": "size",
+      "declaration": "font-size: ${value} !important",
+      "export": "variations",
+      "variations": {
+        "2xs": "10px",
+        "xs": "12px",
+        "sm": "14px",
+        "md": "16px",
+        "lg": "18px",
+        "xl": "20px",
+        "2xl": "24px",
+        "3xl": "30px",
+        "4xl": "36px",
+        "5xl": "48px",
+        "6xl": "60px",
+        "7xl": "72px",
+        "8xl": "96px",
+        "9xl": "128px"
+      }
+    },
+    {
+      "prefix": "weight",
+      "declaration": "font-weight: ${value} !important",
+      "export": "variations",
+      "variations": {
+        "thin": "100",
+        "extra-light": "200",
+        "light": "300",
+        "normal": "400",
+        "medium": "500",
+        "semi-bold": "600",
+        "bold": "700",
+        "extra-bold": "800",
+        "black": "900"
+      }
+    }
+  ],
+  "colors": {
+    "none": {
+      "light": "transparent",
+      "dark": "transparent"
+    },
+    "text": {
+      "light": "#000",
+      "dark": "#fff"
+    },
+    "text-invert": {
+      "light": "#fff",
+      "dark": "#000"
+    },
+    "text-link": {
+      "light": "#0a5a8a",
+      "dark": "#0f84cb"
+    },
+    "accent": {
+      "light": "#0f84cb",
+      "dark": "#1a94db"
+    },
+    "accent-lowest": {
+      "light": "#f0f8ff",
+      "dark": "#082a3f"
+    },
+    "accent-lower": {
+      "light": "#e1f2ff",
+      "dark": "#0a5a8a"
+    },
+    "accent-low": {
+      "light": "#b3d9ff",
+      "dark": "#0e6b9a"
+    },
+    "accent-medium": {
+      "light": "#0f84cb",
+      "dark": "#1a94db"
+    },
+    "accent-high": {
+      "light": "#0c6ba3",
+      "dark": "#b3d9ff"
+    },
+    "accent-higher": {
+      "light": "#094a7a",
+      "dark": "#e1f2ff"
+    },
+    "accent-highest": {
+      "light": "#082a3f",
+      "dark": "#f0f8ff"
+    },
+    "primary": {
+      "light": "#0f84cb",
+      "dark": "#1a94db"
+    },
+    "primary-lowest": {
+      "light": "#f0f8ff",
+      "dark": "#082a3f"
+    },
+    "primary-lower": {
+      "light": "#e1f2ff",
+      "dark": "#0a5a8a"
+    },
+    "primary-low": {
+      "light": "#b3d9ff",
+      "dark": "#0e6b9a"
+    },
+    "primary-medium": {
+      "light": "#0f84cb",
+      "dark": "#1a94db"
+    },
+    "primary-high": {
+      "light": "#0c6ba3",
+      "dark": "#b3d9ff"
+    },
+    "primary-higher": {
+      "light": "#094a7a",
+      "dark": "#e1f2ff"
+    },
+    "primary-highest": {
+      "light": "#082a3f",
+      "dark": "#f0f8ff"
+    },
+    "secondary": {
+      "light": "#3b5161",
+      "dark": "#4a5f6f"
+    },
+    "secondary-lowest": {
+      "light": "#f5f7f8",
+      "dark": "#1e2a30"
+    },
+    "secondary-lower": {
+      "light": "#e8ecf0",
+      "dark": "#2a3a42"
+    },
+    "secondary-low": {
+      "light": "#b3c2cc",
+      "dark": "#354a55"
+    },
+    "secondary-medium": {
+      "light": "#3b5161",
+      "dark": "#4a5f6f"
+    },
+    "secondary-high": {
+      "light": "#2f404e",
+      "dark": "#b3c2cc"
+    },
+    "secondary-higher": {
+      "light": "#232f3a",
+      "dark": "#e8ecf0"
+    },
+    "secondary-highest": {
+      "light": "#1e2a30",
+      "dark": "#f5f7f8"
+    },
+    "neutral": {
+      "light": "#64748b",
+      "dark": "#64748b"
+    },
+    "neutral-lowest": {
+      "light": "#ffffff",
+      "dark": "#0f172a"
+    },
+    "neutral-lower": {
+      "light": "#f1f5f9",
+      "dark": "#1e293b"
+    },
+    "neutral-low": {
+      "light": "#cbd5e1",
+      "dark": "#475569"
+    },
+    "neutral-medium": {
+      "light": "#64748b",
+      "dark": "#64748b"
+    },
+    "neutral-high": {
+      "light": "#475569",
+      "dark": "#cbd5e1"
+    },
+    "neutral-higher": {
+      "light": "#1e293b",
+      "dark": "#f1f5f9"
+    },
+    "neutral-highest": {
+      "light": "#141e57",
+      "dark": "#ffffff"
+    },
+    "success": {
+      "light": "#00c99e",
+      "dark": "#25e2b3"
+    },
+    "success-lowest": {
+      "light": "#eafff7",
+      "dark": "#00302a"
+    },
+    "success-lower": {
+      "light": "#cdfeeb",
+      "dark": "#006756"
+    },
+    "success-low": {
+      "light": "#63f2ca",
+      "dark": "#00a481"
+    },
+    "success-medium": {
+      "light": "#00c99e",
+      "dark": "#25e2b3"
+    },
+    "success-high": {
+      "light": "#00836b",
+      "dark": "#63f2ca"
+    },
+    "success-higher": {
+      "light": "#005548",
+      "dark": "#cdfeeb"
+    },
+    "success-highest": {
+      "light": "#00302a",
+      "dark": "#eafff7"
+    },
+    "danger": {
+      "light": "#e64d4b",
+      "dark": "#f17a78"
+    },
+    "danger-lowest": {
+      "light": "#fdf3f3",
+      "dark": "#420e0d"
+    },
+    "danger-lower": {
+      "light": "#fde3e3",
+      "dark": "#932221"
+    },
+    "danger-low": {
+      "light": "#f8aaa9",
+      "dark": "#d3312f"
+    },
+    "danger-medium": {
+      "light": "#e64d4b",
+      "dark": "#f17a78"
+    },
+    "danger-high": {
+      "light": "#b12624",
+      "dark": "#f8aaa9"
+    },
+    "danger-higher": {
+      "light": "#7a2322",
+      "dark": "#fde3e3"
+    },
+    "danger-highest": {
+      "light": "#420e0d",
+      "dark": "#fdf3f3"
+    },
+    "warning": {
+      "light": "#ff9a00",
+      "dark": "#ffbd1b"
+    },
+    "warning-lowest": {
+      "light": "#fffbea",
+      "dark": "#481700"
+    },
+    "warning-lower": {
+      "light": "#fff3c5",
+      "dark": "#983c08"
+    },
+    "warning-low": {
+      "light": "#ffd346",
+      "dark": "#e27300"
+    },
+    "warning-medium": {
+      "light": "#ff9a00",
+      "dark": "#ffbd1b"
+    },
+    "warning-high": {
+      "light": "#bb4e02",
+      "dark": "#ffd346"
+    },
+    "warning-higher": {
+      "light": "#7c310b",
+      "dark": "#fff3c5"
+    },
+    "warning-highest": {
+      "light": "#481700",
+      "dark": "#fffbea"
+    }
+  }
+}

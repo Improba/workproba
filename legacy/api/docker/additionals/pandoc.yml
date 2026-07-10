@@ -1,0 +1,17 @@
+# Pandoc is a universal document converter that can convert between different document formats.
+# It is used to convert the documents to pdf.
+
+# You should add the network for example.
+# To use:
+# In your main docker-compose.yml file, add in the include section:
+# - ./additionals/pandoc.yml
+# Then, you may redeclare the service in the compose to override some parameters: venv, version whatever.
+# You should add the network for example.
+
+
+services:
+  pandoc: 
+    image: dwolters/pandoc-http
+    restart: unless-stopped
+    ports:
+      - "${PANDOC_PORT:-3312}:80"

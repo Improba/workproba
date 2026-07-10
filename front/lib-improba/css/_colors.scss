@@ -1,0 +1,186 @@
+
+
+// *****************
+// Colors used in the application
+// *****************
+$white: #fff;
+$black: #000;
+
+$light-100: #ffffff;
+$dark-100: #141e57;
+
+$blue: #0f84cb;
+$blue-grey: #3b5161;
+$purple:  #7356E6;
+$green: #00c99e;
+$cyan: #06B6D4;
+$red: #e64d4b;
+$amber: #e64d4b;
+$slate: #64748b;
+
+$blue-500: #0f84cb;
+$blue-grey-500: #3b5161;
+// $green-500: #00c99e;
+// $purple-500:  #7356E6;
+// $cyan-500: #06B6D4;
+// $red-500: #e64d4b;
+// $amber-500: #e64d4b;
+// $slate-500: #64748b;
+
+
+$blue-950: darken($blue-500, 50);
+$blue-900: darken($blue-500, 40);
+$blue-800: darken($blue-500, 30);
+$blue-700: darken($blue-500, 20);
+$blue-600: darken($blue-500, 10);
+// -500
+$blue-400: lighten($blue-500, 10);
+$blue-300: lighten($blue-500, 20);
+$blue-100: lighten($blue-500, 30);
+$blue-50: lighten($blue-500, 90);
+
+// Decline from 950 to 50
+$blue-grey-950: darken($blue-grey-500, 50);
+$blue-grey-900: darken($blue-grey-500, 40);
+$blue-grey-800: darken($blue-grey-500, 30);
+$blue-grey-700: darken($blue-grey-500, 20);
+$blue-grey-600: darken($blue-grey-500, 10);
+// -500
+$blue-grey-400: lighten($blue-grey-500, 10);
+$blue-grey-300: lighten($blue-grey-500, 20);
+$blue-grey-100: lighten($blue-grey-500, 60);
+$blue-grey-50: lighten($blue-grey-500, 80);
+
+$green-950: #00302a;
+$green-900: #005548;
+$green-800: #006756;
+$green-700: #00836b;
+$green-600: #00a481;
+$green-500: #00c99e;
+$green-400: #25e2b3;
+$green-300: #63f2ca;
+$green-100: #cdfeeb;
+$green-50: #eafff7;
+
+$purple-50: #EBEAFD;
+$purple-100: #EBEAFD;
+$purple-300: #BBB9F9;
+$purple-600: #7356E6;
+$purple-700: #5532CF;
+$purple-900: #3B248E;
+$purple-950: #221560;
+
+$cyan-50: #ECFEFF;
+$cyan-100: #CFFAFE;
+$cyan-300: #67E8F9;
+$cyan-500: #06B6D4;
+$cyan-700: #0E7490;
+$cyan-900: #164E63;
+$cyan-950: #083344;
+
+$red-950: #420e0d;
+$red-900: #7a2322;
+$red-800: #932221;
+$red-700: #b12624;
+$red-600: #d3312f;
+$red-500: #e64d4b;
+$red-400: #f17a78;
+$red-300: #f8aaa9;
+$red-100: #fde3e3;
+$red-50: #fdf3f3;
+
+$amber-950: #481700;
+$amber-900: #7c310b;
+$amber-800: #983c08;
+$amber-700: #bb4e02;
+$amber-600: #e27300;
+$amber-500: #ff9a00;
+$amber-400: #ffbd1b;
+$amber-300: #ffd346;
+$amber-100: #fff3c5;
+$amber-50: #fffbea;
+
+$light-100: #ffffff;
+$dark-100: #141e57;
+$slate-100: #f1f5f9;
+$slate-300: #cbd5e1;
+$slate-500: #64748b;
+$slate-600: #475569;
+$slate-800: #1e293b;
+$slate-900: #0f172a;
+
+@include defineColorLightAndDark('none', transparent, transparent);
+
+@include defineColorLightAndDark('text', $black, $white);
+@include defineColorLightAndDark('text-invert', $white, $black);
+@include defineColorLightAndDark('text-link', $blue-800, $blue-500);
+
+// // Accent and primary are the same here
+@include defineColorLightAndDark('accent', $blue-500, $blue-400);
+@include defineColorLightAndDark('accent-lowest', $blue-50, $blue-950);
+@include defineColorLightAndDark('accent-lower', $blue-100, $blue-800);
+@include defineColorLightAndDark('accent-low', $blue-300, $blue-600);
+@include defineColorLightAndDark('accent-medium', $blue-500, $blue-400);
+@include defineColorLightAndDark('accent-high', $blue-700, $blue-300);
+@include defineColorLightAndDark('accent-higher', $blue-900, $blue-100);
+@include defineColorLightAndDark('accent-highest', $blue-950, $blue-50);
+
+@include defineColorLightAndDark('primary', $blue-500, $blue-400);
+@include defineColorLightAndDark('primary-lowest', $blue-50, $blue-950);
+@include defineColorLightAndDark('primary-lower', $blue-100, $blue-800);
+@include defineColorLightAndDark('primary-low', $blue-300, $blue-600);
+@include defineColorLightAndDark('primary-medium', $blue-500, $blue-400);
+@include defineColorLightAndDark('primary-high', $blue-700, $blue-300);
+@include defineColorLightAndDark('primary-higher', $blue-900, $blue-100);
+@include defineColorLightAndDark('primary-highest', $blue-950, $blue-50);
+
+@include defineColorLightAndDark('secondary', $blue-grey-500, $blue-grey-400);
+@include defineColorLightAndDark('secondary-lowest', $blue-grey-50, $blue-grey-950);
+@include defineColorLightAndDark('secondary-lower', $blue-grey-100, $blue-grey-800);
+@include defineColorLightAndDark('secondary-low', $blue-grey-300, $blue-grey-600);
+@include defineColorLightAndDark('secondary-medium', $blue-grey-500, $blue-grey-400);
+@include defineColorLightAndDark('secondary-high', $blue-grey-700, $blue-grey-300);
+@include defineColorLightAndDark('secondary-higher', $blue-grey-900, $blue-grey-100);
+@include defineColorLightAndDark('secondary-highest', $blue-grey-950, $blue-grey-50);
+
+@include defineColorLightAndDark('neutral', $slate-500, $slate-500);
+@include defineColorLightAndDark('neutral-lowest', $light-100, $slate-900);
+@include defineColorLightAndDark('neutral-lower', $slate-100, $slate-600);
+@include defineColorLightAndDark('neutral-low', $slate-300, $slate-600);
+@include defineColorLightAndDark('neutral-medium', $slate-500, $slate-500);
+@include defineColorLightAndDark('neutral-high', $slate-600, $slate-300);
+@include defineColorLightAndDark('neutral-higher', $slate-800, $slate-100);
+@include defineColorLightAndDark('neutral-highest', $dark-100, $light-100);
+
+@include defineColorLightAndDark('success', $green-500, $green-400);
+@include defineColorLightAndDark('success-lowest', $green-50, $green-950);
+@include defineColorLightAndDark('success-lower', $green-100, $green-800);
+@include defineColorLightAndDark('success-low', $green-300, $green-600);
+@include defineColorLightAndDark('success-medium', $green-500, $green-400);
+@include defineColorLightAndDark('success-high', $green-700, $green-300);
+@include defineColorLightAndDark('success-higher', $green-900, $green-100);
+@include defineColorLightAndDark('success-highest', $green-950, $green-50);
+
+@include defineColorLightAndDark('danger', $red-500, $red-400);
+@include defineColorLightAndDark('danger-lowest', $red-50, $red-950);
+@include defineColorLightAndDark('danger-lower', $red-100, $red-800);
+@include defineColorLightAndDark('danger-low', $red-300, $red-600);
+@include defineColorLightAndDark('danger-medium', $red-500, $red-400);
+@include defineColorLightAndDark('danger-high', $red-700, $red-300);
+@include defineColorLightAndDark('danger-higher', $red-900, $red-100);
+@include defineColorLightAndDark('danger-highest', $red-950, $red-50);
+
+@include defineColorLightAndDark('warning', $amber-500, $amber-400);
+@include defineColorLightAndDark('warning-lowest', $amber-50, $amber-950);
+@include defineColorLightAndDark('warning-lower', $amber-100, $amber-800);
+@include defineColorLightAndDark('warning-low', $amber-300, $amber-600);
+@include defineColorLightAndDark('warning-medium', $amber-500, $amber-400);
+@include defineColorLightAndDark('warning-high', $amber-700, $amber-300);
+@include defineColorLightAndDark('warning-higher', $amber-900, $amber-100);
+@include defineColorLightAndDark('warning-highest', $amber-950, $amber-50);
+
+// @include setGlobalColors($neutral-lowest, $neutral-lowest, 'white');
+// @include setGlobalColors($neutral-higher, $neutral-higher, 'black');
+// @include setGlobalColors(transparent, transparent, 'none');
+
+// @include setGlobalColors($accent, $accent, 'accent');

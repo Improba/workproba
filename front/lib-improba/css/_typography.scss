@@ -1,0 +1,91 @@
+.text-decoration-none,
+.text-hover-underline {
+  text-decoration: none;
+}
+
+.text-hover-underline:hover {
+  text-decoration: underline;
+}
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+
+$title-font: 'Inter', sans-serif;
+$body-font: 'Inter', sans-serif;
+
+// h1,
+// .h1,
+// h2,
+// .h2,
+// h3,
+// .h3,
+// h4,
+// .h4,
+// h5,
+// .h5,
+// h6,
+// .h6,
+// .text-h1,
+// .text-h2,
+// .text-h3,
+// .text-h4,
+// .text-h5,
+// .text-h6 {
+//   font-family: $title-font;
+//   line-height: 1.3;
+// }
+
+// h1,
+// .h1,
+// .text-h1 {
+//   font-size: 1.9rem !important;
+// }
+
+// h2,
+// .h2,
+// .text-h2 {
+//   font-size: 1.5rem;
+// }
+
+// h3,
+// .h3,
+// .text-h3 {
+//   font-size: 1.3rem;
+// }
+
+// h4,
+// .h4,
+// .text-h4 {
+//   font-size: 1.2rem;
+// }
+
+// body {
+//   font-family: $body-font;
+// }
+
+// /* a {
+//   color: inherit !important;
+// } */
+
+// .text-normal {
+//   font-weight: normal !important;
+// }
+
+// .text-underline {
+//   text-decoration: underline;
+// }
+// .text-underline-none {
+//   text-decoration: none !important;
+// }
+
+// .capitalize {
+//   text-transform: capitalize !important;
+// }
+// .lowercase {
+//   text-transform: lowercase !important;
+// }
+// .uppercase {
+//   text-transform: uppercase !important;
+// }
+
+// .break-word {
+//   word-wrap: break-word !important;
+// }

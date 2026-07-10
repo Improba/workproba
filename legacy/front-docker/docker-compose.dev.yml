@@ -1,0 +1,37 @@
+name: workproba
+
+services:
+  workproba-front-dev:
+    container_name: workproba-front-dev
+    image: workproba-front-dev
+    build:
+      context: ./../
+      dockerfile: ./docker/Dockerfile.dev
+    ports:
+      - ${FRONT_DOCKER_PORT_EXPOSED:-5053}:${FRONT_DOCKER_PORT_EXPOSED:-5053}  # port lu par quasar.config.js devServer (FRONT_DOCKER_PORT_EXPOSED)
+    restart: 'unless-stopped'
+    volumes:
+      - ./../:/app/
+    environment:
+      - API_URL=${API_URL}
+      - DOCKER_DEV=${DOCKER_DEV:-false}
+      - FRONT_DOCKER_PORT_EXPOSED=${FRONT_DOCKER_PORT_EXPOSED:-5053}
+      - APP_NAME=${APP_NAME}
+      - QUASAR_DEV_MODE=${QUASAR_DEV_MODE:-ssr}
+      - SITE_URL=${SITE_URL:-http://localhost:3000}
+    # Quasar dev mode used by docker compose:
+    #   "ssr" (default) -> `quasar dev -m ssr` (server-side rendering)
+    #   "csr" or "spa"  -> `quasar dev`        (pure client-side rendering)
+    # Any other non-empty value is forwarded as `-m <value>` so future Quasar
+    # modes (pwa, ...) can be opted into without touching this file.
+    # NB: "csr" is intentionally mapped to no flag because Quasar has no
+    # "csr" mode — its default (no -m) already is client-side rendering.
+    command: >-
+      bash -c "if [[ -z \"${DOCKER_DEV}\" ]]; then
+        cd /app; yarn install;
+        case \"${QUASAR_DEV_MODE}\" in
+          ssr) ./node_modules/.bin/quasar dev -m ssr;;
+          csr|spa|'') ./node_modules/.bin/quasar dev;;
+          *) ./node_modules/.bin/quasar dev -m ${QUASAR_DEV_MODE};;
+        esac;
+      else tail -f /dev/null; fi"

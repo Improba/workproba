@@ -1,0 +1,47 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "workproba-ai"
+version = "0.1.0"
+description = "Internal Python AI core for Workproba"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi",
+  "httpx",
+  "litellm",
+  "openai",
+  "openpyxl",
+  "pdfplumber",
+  "python-docx",
+  "python-pptx",
+  "pydantic",
+  "pydantic-ai",
+  "pydantic-settings",
+  "sqlite-vec",
+  "sse-starlette",
+  "uvicorn[standard]",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8",
+  "pytest-asyncio>=0.23",
+  "httpx",
+]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+filterwarnings = [
+  "ignore::DeprecationWarning",
+]

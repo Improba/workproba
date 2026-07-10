@@ -1,0 +1,14 @@
+.not-selectable {
+  user-select: none !important;
+}
+
+.clickable {
+  cursor: pointer !important;
+}
+
+.shadow-none {
+  &::before {
+    box-shadow: none !important;
+  }
+  box-shadow: none !important;
+}

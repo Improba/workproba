@@ -1,0 +1,44 @@
+# Weaviate is a vector database that allows you to store and query vectors.
+# It is used to store and query the vectors of the documents.
+
+# You should add the network for example.
+# To use:
+# In your main docker-compose.yml file, add in the include section:
+# - ./additionals/weaviate.yml
+# Then, you may redeclare the service in the compose to override some parameters: venv, version whatever.
+# You should add the network for example.
+
+
+services:
+  weaviate:
+    restart: 'unless-stopped'
+    networks:
+      - etreprof-beta-prod-api-network
+    image: semitechnologies/weaviate:1.30.1
+    container_name: etreprof-beta-prod-api-weaviate
+    ports:
+      - '127.0.0.1:${WEAVIATE_PORT_EXPOSED}:${WEAVIATE_PORT_EXPOSED}'
+      - '127.0.0.1:${WEAVIATE_PORT_GRPC_EXPOSED:-50051}:${WEAVIATE_PORT_GRPC_EXPOSED:-50051}'
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      ENABLE_MODULES: 'text2vec-mistral,text2vec-openai'
+      DEFAULT_VECTORIZER_MODULE: 'text2vec-mistral'
+      MISTRAL_APIKEY: ${MISTRAL_API_KEY}
+      #OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      ENABLE_API_BASED_MODULES: 'true'
+      CLUSTER_HOSTNAME: 'node1'
+      RAFT_BOOTSTRAP_EXPECT: 1
+      RAFT_ENABLE_ONE_NODE_RECOVERY: 'true'
+      # Add GRPC_PORT environment variable for consistency
+      GRPC_PORT: '${WEAVIATE_PORT_GRPC_EXPOSED:-50051}'
+    command:
+      - --host
+      - 0.0.0.0
+      - --port
+      - '${WEAVIATE_PORT_EXPOSED}'
+      - --scheme
+      - http
+    volumes:
+      - ./../uploads/weaviate-data:/var/lib/weaviate

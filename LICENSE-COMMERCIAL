@@ -1,0 +1,126 @@
+Workproba Commercial License — Standard Terms (Summary)
+
+Copyright (c) 2026 Improba. All rights reserved.
+
+This document summarizes the standard terms under which Improba ("Licensor")
+grants commercial rights to the Workproba software ("Software"). It is not a
+license by itself. A Commercial License takes effect only when accepted in a
+signed order form, enterprise agreement, or other written instrument executed
+by both parties ("Commercial License Agreement").
+
+Contact: licensing@improba.fr
+
+-------------------------------------------------------------------------------
+
+1. Scope of Commercial License
+
+   Subject to payment of applicable fees and compliance with the Commercial
+   License Agreement, the Licensor grants the customer ("Licensee") a
+   non-exclusive, non-transferable (except as permitted in the agreement)
+   license to:
+
+   (a) install and use the Software within Licensee's Organization;
+   (b) use the Software for Internal Business Operations and Production Use;
+   (c) permit use by Licensee's employees and contractors acting on Licensee's
+       behalf, within licensed seat, site, or deployment limits;
+   (d) create and use Derivative Works internally, unless otherwise
+       restricted in the agreement; and
+   (e) receive updates and support levels as selected in the order.
+
+   Rights not expressly granted are reserved by the Licensor.
+
+2. License Models (indicative)
+
+   The Licensor typically offers one or more of the following models, as
+   specified in the order:
+
+   (a) Per-seat license — annual fee per named or concurrent user;
+   (b) Site license — annual fee for deployment within a defined site or
+       legal entity;
+   (c) Enterprise license — annual fee covering an organization and its
+       affiliates, with negotiated deployment limits;
+   (d) OEM / embedded license — redistribution or incorporation into
+       Licensee products, subject to separate terms.
+
+   Fees, metrics, and limits are defined in the order form only.
+
+3. Restrictions
+
+   Unless expressly authorized in the Commercial License Agreement, Licensee
+   must not:
+
+   (a) sublicense, sell, lease, or distribute the Software to third parties;
+   (b) remove proprietary notices;
+   (c) use the Licensor's trademarks except as permitted in brand guidelines;
+   (d) publish benchmark or performance results without prior written
+       consent;
+   (e) use the Software in violation of applicable law or export controls;
+   (f) exceed licensed seat, deployment, or environment limits; or
+   (g) disclose source code received under commercial terms to third parties,
+       except to contractors bound by equivalent confidentiality obligations.
+
+4. Support and Updates
+
+   Support level, response times, and update entitlements are defined in the
+   order. Unless purchased separately, maintenance includes security fixes
+   and minor updates for the licensed major version during the subscription
+   term.
+
+5. Confidentiality
+
+   If the Commercial License Agreement includes access to source code,
+   documentation, or non-public materials, Licensee shall protect them using
+   at least the same degree of care it uses for its own confidential
+   information, and no less than reasonable care.
+
+6. Warranty and Liability (commercial)
+
+   Commercial warranty and liability terms are negotiated in the Commercial
+   License Agreement. Unless otherwise stated therein:
+
+   (a) the Software is provided with a limited warranty of conformity to
+       documentation for ninety (90) days from delivery;
+   (b) the Licensor's aggregate liability is capped at fees paid by Licensee
+       for the Software in the twelve (12) months preceding the claim; and
+   (c) indirect and consequential damages are excluded to the maximum
+       extent permitted by law.
+
+7. Audit
+
+   The Licensor may audit Licensee's use of the Software no more than once
+   per twelve (12) month period on thirty (30) days' written notice, during
+   normal business hours, to verify compliance with licensed limits. If an
+   audit reveals underpayment exceeding five percent (5%), Licensee shall
+   pay the deficiency plus reasonable audit costs.
+
+8. Term and Termination
+
+   The Commercial License is valid for the subscription term stated in the
+   order. Either party may terminate for material breach not cured within
+   thirty (30) days of notice. Upon termination, Licensee must cease use,
+   destroy or return confidential materials, and certify destruction on
+   request.
+
+9. Relationship to WPEL
+
+   The Workproba Personal and Educational License (WPEL) does not authorize
+   commercial or institutional use. If Licensee qualifies for WPEL for a
+   specific use (e.g., individual academic research by a student), that use
+   remains governed by WPEL and does not consume commercial seats unless
+   deployed on institutional infrastructure covered by the Commercial License.
+
+10. Governing Law
+
+    Commercial License Agreements are governed by the laws of France, unless
+    the signed agreement states otherwise. Exclusive jurisdiction: courts of
+    Paris, France, subject to mandatory local law for consumers where
+    applicable.
+
+-------------------------------------------------------------------------------
+
+To request a quote or execute a Commercial License Agreement:
+
+  licensing@improba.fr
+
+Include: organization name, intended use, number of users, deployment
+environment (on-premise / cloud / SaaS), and required support level.
