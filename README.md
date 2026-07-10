@@ -2,6 +2,8 @@
 
 **Workproba** est un assistant de travail sur dossier local, type Claude Cowork, pour utilisateurs non-codeurs dans le contexte Improba. Application bureau **macOS, Linux, Windows** (Tauri) : l'utilisateur ouvre un dossier projet, l'Imp manipule Word/Excel/PDF en place, avec mémoire locale et sandbox sous le capot.
 
+*Local-first desktop AI cowork assistant — Tauri, RAG, Python sidecar, Vue/Quasar UI.*
+
 ## Licence
 
 Workproba est distribué sous **double licence** : usage personnel et éducatif gratuit ([WPEL](./LICENSE)), usage entreprise et institutionnel sur licence commerciale.
