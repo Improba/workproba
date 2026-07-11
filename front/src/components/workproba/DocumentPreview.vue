@@ -55,7 +55,16 @@
           :src="imageSrc"
           :alt="preview.title"
           class="doc-preview__image"
+          @error="onImageError"
         />
+      </div>
+
+      <div
+        v-else-if="preview.type === 'image' && !imageSrc"
+        class="doc-preview__unsupported"
+      >
+        <Lucide name="image" size="24" color="text-faint" />
+        <p>{{ t('shell.previewUnsupported') }}</p>
       </div>
 
       <div
@@ -72,7 +81,7 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import DOMPurify from 'dompurify';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import { openLocalFile } from '@composables/useDesktop';
+import { isDesktopApp, openLocalFile } from '@composables/useDesktop';
 import {
   fetchDocumentPreview,
   isSafeRelativePath,
@@ -104,7 +113,7 @@ const sanitizedHtml = computed(() => {
 });
 
 async function resolveImageSrc(relativePath: string): Promise<string | null> {
-  if (!props.projectPath) return null;
+  if (!props.projectPath || !isDesktopApp()) return null;
   const root = props.projectPath.replace(/\\/g, '/').replace(/\/$/, '');
   const fullPath = `${root}/${relativePath.replace(/\\/g, '/')}`;
   try {
@@ -150,6 +159,10 @@ async function loadPreview(): Promise<void> {
 
 function reload(): void {
   void loadPreview();
+}
+
+function onImageError(): void {
+  imageSrc.value = null;
 }
 
 async function openInOs(): Promise<void> {

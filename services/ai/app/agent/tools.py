@@ -267,6 +267,83 @@ def build_agent(
     def plan_mode_instruction(ctx: RunContext[ToolDeps]) -> str:
         return t(ctx.deps.context.locale, "tools.plan_mode_prompt")
 
+    @agent.system_prompt
+    def memory_prompt(ctx: RunContext[ToolDeps]) -> str:
+        """Injecte les souvenirs explicites user (global) + project (espace).
+
+        Cohérence : l'agent connaît en permanence les faits mémorisés à chaque
+        niveau, sans outil de lecture explicite. La persistance est assurée par
+        deux bases SQLite distinctes ouvertes sans embeddings (souvenirs only).
+        """
+        from app.memory_stores import open_memory_store_for_scope
+
+        data_dir = ctx.deps.context.workspace_data_dir
+        locale = ctx.deps.context.locale
+        if data_dir is None:
+            return ""
+
+        def _format(scope: str, header_key: str) -> str:
+            try:
+                store = open_memory_store_for_scope(scope, data_dir)
+            except Exception:
+                return ""
+            try:
+                items = store.list_memories()
+            finally:
+                store.close()
+            if not items:
+                return ""
+            lines = [t(locale, header_key)]
+            for item in items[:64]:
+                content = str(item.get("content", "")).strip().replace("\n", " ")
+                if not content:
+                    continue
+                lines.append(f"- {content}")
+            return "\n".join(lines)
+
+        user_block = _format("user", "memory.agent_user_header")
+        project_block = _format("project", "memory.agent_project_header")
+        if not user_block and not project_block:
+            return ""
+        return f"{user_block}\n{project_block}".strip()
+
+    @agent.tool
+    async def remember(
+        ctx: RunContext[ToolDeps],
+        content: str,
+        scope: Literal["user", "project"] = "project",
+    ) -> dict[str, Any]:
+        """Persist a factual memory so it is available in future turns.
+
+        Use this when the user shares a durable fact or preference worth keeping
+        across conversations. Choose `scope`:
+        - "user" for facts about the user that apply to ALL spaces (preferences,
+          identity, recurring context).
+        - "project" for facts specific to the current workspace.
+        Keep entries short, factual and self-contained. Avoid storing transient
+        information already present in files or conversation history.
+
+        Args:
+            content: The memory to store, as a concise factual sentence.
+            scope: "user" (global) or "project" (this space). Defaults to project.
+        """
+        from app.memory_stores import open_memory_store_for_scope
+
+        data_dir = ctx.deps.context.workspace_data_dir
+        if data_dir is None:
+            return {"ok": False, "error": "no_workspace"}
+        try:
+            store = open_memory_store_for_scope(scope, data_dir)
+        except Exception as exc:  # noqa: BLE001 - surfaced to the model
+            raise _retry(exc) from exc
+        try:
+            memory = store.add_memory(content=content, source="agent")
+        except ValueError as exc:
+            raise _retry(exc) from exc
+        finally:
+            store.close()
+        return {"ok": True, "memory": memory, "scope": scope}
+
     @agent.tool
     async def propose_plan(
         ctx: RunContext[ToolDeps],

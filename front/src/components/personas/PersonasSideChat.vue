@@ -82,6 +82,7 @@
                 v-if="msg.role === 'persona'"
                 :name="msg.personaName ?? ''"
                 :color="msg.avatarColor"
+                :icon="msg.avatarIcon"
               />
               <Lucide v-else name="user" size="14" color="primary" />
               <span class="personas-side-chat__role">

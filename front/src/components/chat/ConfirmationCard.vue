@@ -5,7 +5,24 @@
     role="region"
     :aria-label="t('chat.confirmationRegion')"
   >
-    <p class="confirmation-card__summary" v-html="summaryHtml" />
+    <p
+      v-if="customSummaryHtml"
+      class="confirmation-card__summary"
+      v-html="customSummaryHtml"
+    />
+    <i18n-t
+      v-else
+      keypath="chat.confirmationSummary"
+      tag="p"
+      class="confirmation-card__summary"
+    >
+      <template #verb>
+        <strong>{{ confirmationVerb }}</strong>
+      </template>
+      <template #file>
+        <strong class="confirmation-card__file">{{ confirmationFile }}</strong>
+      </template>
+    </i18n-t>
 
     <div class="confirmation-card__actions">
       <button
@@ -97,26 +114,30 @@ function fileLabel(path: string): string {
   return parts[parts.length - 1] || path;
 }
 
-const summaryHtml = computed(() => {
+const confirmationVerb = computed(() =>
+  props.confirmation.action === 'modify'
+    ? t('chat.confirmationModify')
+    : t('chat.confirmationCreate'),
+);
+
+const confirmationFile = computed(() => fileLabel(props.confirmation.proposedPath));
+
+const customSummaryHtml = computed(() => {
   const summary = props.confirmation.humanSummary?.trim();
-  if (summary) {
-    const name = fileLabel(props.confirmation.proposedPath);
-    if (name && summary.includes(name)) {
-      const escaped = escapeHtml(summary);
-      const escapedName = escapeHtml(name);
-      return escaped.replace(
-        escapedName,
-        `<strong class="confirmation-card__file">${escapedName}</strong>`,
-      );
-    }
-    return escapeHtml(summary);
+  if (!summary) {
+    return null;
   }
 
-  const verb = props.confirmation.action === 'modify'
-    ? t('chat.confirmationModify')
-    : t('chat.confirmationCreate');
-  const file = escapeHtml(fileLabel(props.confirmation.proposedPath));
-  return t('chat.confirmationSummary', { verb, file });
+  const name = fileLabel(props.confirmation.proposedPath);
+  if (name && summary.includes(name)) {
+    const escaped = escapeHtml(summary);
+    const escapedName = escapeHtml(name);
+    return escaped.replace(
+      escapedName,
+      `<strong class="confirmation-card__file">${escapedName}</strong>`,
+    );
+  }
+  return escapeHtml(summary);
 });
 </script>
 

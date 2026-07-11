@@ -195,6 +195,7 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
+import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import OpenFolderButton from '@components/workspace/OpenFolderButton.vue';
 import StartPrompts from '@components/chat/StartPrompts.vue';
@@ -302,28 +303,54 @@ function formatDate(iso: string): string {
 }
 
 function startNewConversation(): void {
-  if (!activePath.value || !activeWorkspaceId.value) return;
+  if (!activePath.value || !activeWorkspaceId.value) {
+    Notify.create({
+      message: t('shell.conversationCreateFailed'),
+      classes: 'bg-danger text-white',
+    });
+    return;
+  }
   void (async () => {
-    const session = await createSession(
-      activeWorkspaceId.value!,
-      activePath.value!,
-    );
-    void router.push({ name: 'chat_session', params: { id: session.id } });
+    try {
+      const session = await createSession(
+        activeWorkspaceId.value!,
+        activePath.value!,
+      );
+      void router.push({ name: 'chat_session', params: { id: session.id } });
+    } catch (err) {
+      Notify.create({
+        message: err instanceof Error ? err.message : t('shell.conversationCreateFailed'),
+        classes: 'bg-danger text-white',
+      });
+    }
   })();
 }
 
 function startConversationWithPrompt(prompt: string): void {
-  if (!activePath.value || !activeWorkspaceId.value) return;
-  void (async () => {
-    const session = await createSession(
-      activeWorkspaceId.value!,
-      activePath.value!,
-    );
-    void router.push({
-      name: 'chat_session',
-      params: { id: session.id },
-      state: { initialPrompt: prompt },
+  if (!activePath.value || !activeWorkspaceId.value) {
+    Notify.create({
+      message: t('shell.conversationCreateFailed'),
+      classes: 'bg-danger text-white',
     });
+    return;
+  }
+  void (async () => {
+    try {
+      const session = await createSession(
+        activeWorkspaceId.value!,
+        activePath.value!,
+      );
+      void router.push({
+        name: 'chat_session',
+        params: { id: session.id },
+        state: { initialPrompt: prompt },
+      });
+    } catch (err) {
+      Notify.create({
+        message: err instanceof Error ? err.message : t('shell.conversationCreateFailed'),
+        classes: 'bg-danger text-white',
+      });
+    }
   })();
 }
 

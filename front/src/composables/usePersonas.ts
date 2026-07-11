@@ -48,6 +48,9 @@ export interface StoredDiscussion {
     content: string;
     persona_id?: string;
     persona_name?: string;
+    role_label?: string;
+    avatar_color?: string;
+    avatar_icon?: string;
   }>;
   updated_at: string;
 }
@@ -58,6 +61,7 @@ export interface MeetingTurn {
   personaName: string;
   personaRole: string;
   avatarColor: string;
+  avatarIcon?: string;
   content: string;
   isFacilitator?: boolean;
 }
@@ -82,6 +86,7 @@ export interface DiscussionMessage {
   personaName?: string;
   personaRole?: string;
   avatarColor?: string;
+  avatarIcon?: string;
   streaming?: boolean;
 }
 
@@ -352,6 +357,7 @@ export function toolResultToOpinionCard(
         personaName: String(opinion.persona_name ?? personaId),
         personaRole: String(opinion.role ?? ''),
         avatarColor: String(opinion.avatar_color ?? 'var(--wp-gold)'),
+        avatarIcon: String(opinion.avatar_icon ?? ''),
         content: String(opinion.content ?? ''),
         memoryCited,
         streaming: false,
@@ -492,6 +498,7 @@ export function usePersonas(): UsePersonasReturn {
           personaName: p?.name ?? id,
           personaRole: p?.role ?? '',
           avatarColor: p?.avatar_color ?? 'var(--wp-gold)',
+          avatarIcon: p?.avatar_icon ?? '',
           content: '',
           streaming: true,
         };
@@ -619,6 +626,7 @@ export function usePersonas(): UsePersonasReturn {
               personaName: String(data.persona_name ?? p?.name ?? personaId),
               personaRole: String(data.role ?? p?.role ?? ''),
               avatarColor: String(data.avatar_color ?? p?.avatar_color ?? 'var(--wp-gold)'),
+              avatarIcon: String(data.avatar_icon ?? p?.avatar_icon ?? ''),
               content: String(data.content ?? ''),
               isFacilitator: false,
             };
@@ -713,6 +721,7 @@ export function usePersonas(): UsePersonasReturn {
               personaName: String(data.persona_name ?? p?.name ?? personaId),
               personaRole: String(data.role_label ?? p?.role ?? ''),
               avatarColor: String(data.avatar_color ?? p?.avatar_color ?? 'var(--wp-gold)'),
+              avatarIcon: String(data.avatar_icon ?? p?.avatar_icon ?? ''),
               content: String(data.content ?? ''),
               streaming: false,
             };

@@ -1,43 +1,8 @@
 <template>
   <nav class="wp-sidebar" :class="{ 'wp-sidebar--rail': rail }">
     <div v-if="!rail" class="wp-sidebar__inner">
-      <!-- Onglets sidebar : espaces / mémoire -->
-      <div class="wp-sidebar__tabs" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          class="wp-sidebar__tab"
-          :class="{ 'wp-sidebar__tab--active': sidebarTab === 'spaces' }"
-          :aria-selected="sidebarTab === 'spaces'"
-          @click="sidebarTab = 'spaces'"
-        >
-          {{ t('shell.spaces') }}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="wp-sidebar__tab wp-sidebar__tab--memory"
-          :class="{ 'wp-sidebar__tab--active': sidebarTab === 'memory' }"
-          :aria-selected="sidebarTab === 'memory'"
-          @click="onMemoryTab"
-        >
-          {{ t('memory.title') }}
-        </button>
-        <button
-          v-if="isPersonasPluginActive"
-          type="button"
-          role="tab"
-          class="wp-sidebar__tab wp-sidebar__tab--personas"
-          :class="{ 'wp-sidebar__tab--active': sidebarTab === 'personas' }"
-          :aria-selected="sidebarTab === 'personas'"
-          @click="onPersonasTab"
-        >
-          {{ t('personas.panel.title') }}
-        </button>
-      </div>
-
-      <!-- En-tête : Workspaces + ouvrir un dossier -->
-      <div v-if="sidebarTab === 'spaces'" class="wp-sidebar__topbar">
+      <!-- En-tête : Espaces + ouvrir un dossier -->
+      <div class="wp-sidebar__topbar">
         <span class="wp-sidebar__brand">{{ t('shell.spaces') }}</span>
         <button
           type="button"
@@ -49,8 +14,8 @@
         </button>
       </div>
 
-      <!-- Arbre workspaces / conversations -->
-      <div v-if="sidebarTab === 'spaces'" class="wp-sidebar__tree">
+      <!-- Arbre workspaces / sessions -->
+      <div class="wp-sidebar__tree">
         <div v-if="recentWorkspaces.length === 0" class="wp-sidebar__empty">
           <p>{{ t('shell.noSpaces') }}</p>
           <button type="button" class="wp-sidebar__new-cta" @click="onOpenFolder">
@@ -148,32 +113,7 @@
         </section>
       </div>
 
-      <MemoryPanel
-        v-else-if="sidebarTab === 'memory'"
-        :memories="memories"
-        :search-results="searchResults"
-        :loading="memoryLoading"
-        :searching="memorySearching"
-        :load-error="memoryLoadError"
-        @refresh="refreshMemoryPanel"
-        @search="onMemorySearch"
-        @forget="onMemoryForget"
-        @forget-all="onMemoryForgetAll"
-      />
-
-      <PersonasCentralPanel
-        v-else-if="sidebarTab === 'personas'"
-        :plugin-active="isPersonasPluginActive"
-        :plugin-data-dir="personasDataDir"
-        @ask-opinion="onPersonasAsk"
-        @meeting="onPersonasMeeting"
-        @discuss="onPersonasDiscuss"
-        @view-meeting="onPersonasViewMeeting"
-        @relaunch-meeting="onPersonasRelaunchMeeting"
-        @resume-discussion="onPersonasResumeDiscussion"
-      />
-
-      <!-- Pied : profil (bas gauche) + réglages -->
+      <!-- Pied : profil (bas gauche) + mémoire partagée + réglages -->
       <div class="wp-sidebar__footer">
         <button
           type="button"
@@ -186,6 +126,15 @@
             <span class="wp-sidebar__profile-name">{{ profile.name }}</span>
             <span class="wp-sidebar__profile-org">{{ profile.organisation }}</span>
           </span>
+        </button>
+        <button
+          type="button"
+          class="wp-sidebar__footer-btn"
+          :title="t('memory.title')"
+          :disabled="!activeDataDir"
+          @click="onOpenMemory"
+        >
+          <Lucide name="brain" size="16" color="wp-violet" />
         </button>
         <button
           type="button"
@@ -228,6 +177,23 @@
           </footer>
         </div>
       </q-dialog>
+
+      <q-dialog v-model="memoryDialogOpen">
+        <div class="wp-memory-dialog">
+          <header class="wp-memory-dialog__head">
+            <span class="wp-memory-dialog__title">{{ t('memory.title') }}</span>
+            <button
+              type="button"
+              class="wp-memory-dialog__close"
+              :aria-label="t('common.close')"
+              @click="memoryDialogOpen = false"
+            >
+              <Lucide name="x" size="16" color="text-muted" />
+            </button>
+          </header>
+          <MemoryPanel :key="memoryDialogKey" :workspace-data-dir="activeDataDir" />
+        </div>
+      </q-dialog>
     </div>
 
     <!-- Mode rail replié -->
@@ -251,6 +217,14 @@
         <Lucide name="message-square-plus" size="18" color="text" />
       </button>
       <div class="wp-sidebar__rail-spacer" />
+      <button
+        class="wp-rail-btn"
+        :title="t('memory.title')"
+        :disabled="!activeDataDir"
+        @click="onOpenMemory"
+      >
+        <Lucide name="brain" size="18" color="wp-violet" />
+      </button>
       <button class="wp-rail-btn" :title="t('common.profile')" @click="profileDialogOpen = true">
         <span class="wp-sidebar__avatar wp-sidebar__avatar--sm">{{ initials }}</span>
       </button>
@@ -275,11 +249,6 @@ import { createSession, listSessions, type LocalSession } from '@services/worksp
 import { useSessionSync } from '@composables/useSessionSync';
 import { HOME_ROUTE } from '@router/meta';
 import MemoryPanel from '@components/memory/MemoryPanel.vue';
-import PersonasCentralPanel from '@components/personas/PersonasCentralPanel.vue';
-import { useMemory } from '@composables/useMemory';
-import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
-import { usePersonasNavigation } from '@composables/usePersonasNavigation';
-import type { DiscussionMessage } from '@composables/usePersonas';
 
 const props = defineProps<{
   rail?: boolean;
@@ -311,28 +280,12 @@ const loadingByWs = reactive<Record<string, boolean>>({});
 
 const PREVIEW_COUNT = 4;
 
-const sidebarTab = ref<'spaces' | 'memory' | 'personas'>('spaces');
-
-const { isPersonasPluginActive, getPluginDataDir } = usePlugins();
-const { requestAction } = usePersonasNavigation();
-const personasDataDir = ref<string | null>(null);
-
-const {
-  memories,
-  searchResults,
-  loading: memoryLoading,
-  searching: memorySearching,
-  loadError: memoryLoadError,
-  refresh: refreshMemory,
-  searchMemory: searchMemoryQuery,
-  forgetMemory,
-  forgetAll: forgetAllMemory,
-} = useMemory();
-
 const currentSessionId = computed(() => String(route.params.id ?? ''));
 
 const { profile, initials, save: saveProfile } = useUserProfile();
 const profileDialogOpen = ref(false);
+const memoryDialogOpen = ref(false);
+const memoryDialogKey = ref(0);
 const profileNameDraft = ref(profile.value.name);
 const profileOrgDraft = ref(profile.value.organisation);
 
@@ -386,7 +339,6 @@ function visibleSessions(id: string): LocalSession[] {
   const preview = sorted.slice(0, PREVIEW_COUNT);
   const activeId = currentSessionId.value;
   if (!activeId || preview.some((s) => s.id === activeId)) return preview;
-  // Garantit que la conversation active reste visible même hors fenêtre.
   const visibleIds = new Set(preview.map((s) => s.id));
   visibleIds.add(activeId);
   return sorted.filter((s) => visibleIds.has(s.id));
@@ -408,8 +360,8 @@ function convoStatusLabel(session: LocalSession): string {
 }
 
 function formatRelative(iso: string): string {
-  const t = new Date(iso).getTime();
-  const diff = Date.now() - t;
+  const ts = new Date(iso).getTime();
+  const diff = Date.now() - ts;
   if (diff < 60000) return t('common.justNow');
   if (diff < 3600000) return t('common.minutesAgo', { count: Math.floor(diff / 60000) });
   if (diff < 86400000) return t('common.hoursAgo', { count: Math.floor(diff / 3600000) });
@@ -474,7 +426,13 @@ async function onOpenFolder(): Promise<void> {
 }
 
 async function onNewConversation(): Promise<void> {
-  if (!activeWorkspaceId.value || !activePath.value) return;
+  if (!activeWorkspaceId.value || !activePath.value) {
+    Notify.create({
+      message: t('shell.conversationCreateFailed'),
+      classes: 'bg-danger text-white',
+    });
+    return;
+  }
   try {
     const session = await createSession(activeWorkspaceId.value, activePath.value);
     await refreshActiveSessions();
@@ -508,108 +466,10 @@ function onOpenSettings(): void {
   void router.push({ name: 'settings_models' });
 }
 
-function onMemoryTab(): void {
-  sidebarTab.value = 'memory';
-  void refreshMemoryPanel();
-}
-
-async function ensurePersonasDataDir(): Promise<void> {
-  if (personasDataDir.value) return;
-  try {
-    personasDataDir.value = await getPluginDataDir(PERSONAS_PLUGIN_ID);
-  } catch {
-    personasDataDir.value = null;
-  }
-}
-
-function onPersonasTab(): void {
-  sidebarTab.value = 'personas';
-  void ensurePersonasDataDir();
-}
-
-function navigateToChatForPersonas(): void {
-  if (route.name !== 'chat_session' && activeWorkspaceId.value) {
-    const sessions = sessionsFor(activeWorkspaceId.value);
-    const target = sessions[0];
-    if (target) {
-      void router.push({ name: 'chat_session', params: { id: target.id } });
-    }
-  }
-}
-
-function onPersonasAsk(): void {
-  navigateToChatForPersonas();
-  requestAction('opinion');
-}
-
-function onPersonasMeeting(): void {
-  navigateToChatForPersonas();
-  requestAction('meeting');
-}
-
-function onPersonasViewMeeting(meeting: {
-  persona_ids: string[];
-  topic: string;
-  rounds?: number;
-}): void {
-  onPersonasRelaunchMeeting({
-    personaIds: meeting.persona_ids,
-    topic: meeting.topic,
-    rounds: meeting.rounds ?? 3,
-  });
-}
-
-function onPersonasRelaunchMeeting(config: {
-  personaIds: string[];
-  topic: string;
-  rounds: number;
-}): void {
-  navigateToChatForPersonas();
-  sessionStorage.setItem('workproba.personas.relaunchMeeting', JSON.stringify(config));
-  requestAction('meeting');
-}
-
-function onPersonasDiscuss(): void {
-  navigateToChatForPersonas();
-  requestAction('discuss');
-}
-
-function onPersonasResumeDiscussion(payload: {
-  discussionId: string;
-  personaIds: string[];
-  messages: DiscussionMessage[];
-}): void {
-  navigateToChatForPersonas();
-  requestAction('discuss');
-  sessionStorage.setItem(
-    'workproba.personas.resume',
-    JSON.stringify(payload),
-  );
-}
-
-async function refreshMemoryPanel(): Promise<void> {
+function onOpenMemory(): void {
   if (!activeDataDir.value) return;
-  await refreshMemory(activeDataDir.value);
-}
-
-async function onMemorySearch(query: string): Promise<void> {
-  if (!activeDataDir.value) return;
-  await searchMemoryQuery(activeDataDir.value, query);
-}
-
-async function onMemoryForget(id: string): Promise<void> {
-  if (!activeDataDir.value) return;
-  await forgetMemory(activeDataDir.value, id);
-}
-
-async function onMemoryForgetAll(): Promise<void> {
-  if (!activeDataDir.value) return;
-  const ok = await forgetAllMemory(activeDataDir.value, 'all');
-  Notify.create({
-    message: ok ? t('memory.forgetAllDone') : t('memory.loadFailed'),
-    color: ok ? 'positive' : 'negative',
-    timeout: 2500,
-  });
+  memoryDialogKey.value += 1;
+  memoryDialogOpen.value = true;
 }
 
 watch(
@@ -668,48 +528,6 @@ onMounted(async () => {
   flex-direction: column;
   min-height: 0;
   width: 268px;
-}
-
-.wp-sidebar__tabs {
-  flex: none;
-  display: flex;
-  gap: 2px;
-  padding: var(--wp-space-2) var(--wp-space-2) 0;
-}
-
-.wp-sidebar__tab {
-  flex: 1;
-  padding: var(--wp-space-2) var(--wp-space-2);
-  border: none;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  font-family: var(--wp-font-head);
-  font-size: var(--wp-fs-xs);
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--wp-text-faint);
-  cursor: pointer;
-  transition: color var(--wp-dur) var(--wp-ease), border-color var(--wp-dur) var(--wp-ease);
-
-  &:hover {
-    color: var(--wp-text);
-  }
-
-  &--active {
-    color: var(--wp-text);
-    border-bottom-color: var(--wp-accent);
-  }
-
-  &--memory.wp-sidebar__tab--active {
-    color: var(--wp-violet);
-    border-bottom-color: var(--wp-violet);
-  }
-
-  &--personas.wp-sidebar__tab--active {
-    color: var(--wp-gold);
-    border-bottom-color: var(--wp-gold);
-  }
 }
 
 .wp-sidebar__topbar {
@@ -869,7 +687,7 @@ onMounted(async () => {
   }
 }
 
-/* Conversations imbriquées */
+/* Sessions imbriquées */
 .wp-ws__children {
   padding: var(--wp-space-1) 0 var(--wp-space-2) 24px;
 }
@@ -983,12 +801,11 @@ onMounted(async () => {
   }
 }
 
-/* Pied : profil (bas gauche) + réglages */
+/* Pied : profil (bas gauche) + mémoire + réglages */
 .wp-sidebar__footer {
   flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--wp-space-2);
   padding: var(--wp-space-2) var(--wp-space-3);
   border-top: 1px solid var(--wp-border);
@@ -1074,9 +891,13 @@ onMounted(async () => {
   color: var(--wp-text-muted);
   transition: background 120ms var(--wp-ease), color 120ms var(--wp-ease);
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--wp-surface-2);
     color: var(--wp-text);
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 }
 
@@ -1179,6 +1000,57 @@ onMounted(async () => {
       background: var(--wp-accent-strong);
     }
   }
+}
+
+/* Dialogue mémoire */
+.wp-memory-dialog {
+  width: min(34rem, 92vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--wp-surface);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-md);
+  box-shadow: var(--wp-shadow-2);
+  overflow: hidden;
+}
+
+.wp-memory-dialog__head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--wp-space-3) var(--wp-space-4);
+  border-bottom: 1px solid var(--wp-border);
+}
+
+.wp-memory-dialog__title {
+  font-family: var(--wp-font-head);
+  font-weight: 700;
+  font-size: var(--wp-fs-base);
+  color: var(--wp-text);
+}
+
+.wp-memory-dialog__close {
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: var(--wp-r-sm);
+  cursor: pointer;
+
+  &:hover {
+    background: var(--wp-surface-2);
+  }
+}
+
+.wp-memory-dialog :deep(.memory-panel) {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* Rail replié */

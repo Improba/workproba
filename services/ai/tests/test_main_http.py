@@ -141,6 +141,22 @@ def test_health_endpoint() -> None:
         assert resp.json()["status"] == "ok"
 
 
+def test_cors_preflight_options_passes_without_secret() -> None:
+    """Le pré-vol CORS (OPTIONS) ne doit pas être bloqué par le secret interne :
+    le navigateur n'envoie pas l'en-tête X-Internal-Secret sur un preflight."""
+    with TestClient(mainmod.app) as client:
+        resp = client.options(
+            "/health",
+            headers={
+                "Origin": "http://localhost:5053",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "x-internal-secret",
+            },
+        )
+        assert resp.status_code == 200
+        assert resp.headers.get("access-control-allow-origin") is not None
+
+
 def test_to_sse_event_thinking_start() -> None:
     from app.main import to_sse_event
     from app.schemas import ThinkingStartEvent

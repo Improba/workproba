@@ -340,6 +340,7 @@ export interface PersonasOpinionBlock {
   personaName: string;
   personaRole: string;
   avatarColor: string;
+  avatarIcon?: string;
   content: string;
   memoryCitations?: string[];
   memoryCited?: boolean;

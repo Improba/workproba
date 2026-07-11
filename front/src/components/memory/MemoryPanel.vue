@@ -5,6 +5,55 @@
       <h2 class="memory-panel__title">{{ t('memory.title') }}</h2>
     </header>
 
+    <!-- Onglets de scope : User (global) / Project (espace) -->
+    <div class="memory-panel__scopes" role="tablist">
+      <button
+        type="button"
+        role="tab"
+        class="memory-panel__scope"
+        :class="{ 'memory-panel__scope--active': activeScope === 'user' }"
+        :aria-selected="activeScope === 'user'"
+        @click="onSwitchScope('user')"
+      >
+        <Lucide name="user" size="14" :color="activeScope === 'user' ? 'wp-violet' : 'text-muted'" />
+        <span class="memory-panel__scope-label">{{ t('memory.scopeUser') }}</span>
+        <span class="memory-panel__scope-hint">{{ t('memory.scopeUserHint') }}</span>
+      </button>
+      <button
+        type="button"
+        role="tab"
+        class="memory-panel__scope"
+        :class="{ 'memory-panel__scope--active': activeScope === 'project' }"
+        :aria-selected="activeScope === 'project'"
+        @click="onSwitchScope('project')"
+      >
+        <Lucide name="folder" size="14" :color="activeScope === 'project' ? 'wp-violet' : 'text-muted'" />
+        <span class="memory-panel__scope-label">{{ t('memory.scopeProject') }}</span>
+        <span class="memory-panel__scope-hint">{{ t('memory.scopeProjectHint') }}</span>
+      </button>
+    </div>
+
+    <!-- Ajout d'un souvenir -->
+    <form class="memory-panel__add" @submit.prevent="onAdd">
+      <input
+        v-model="newContent"
+        type="text"
+        class="memory-panel__add-input"
+        :placeholder="t('memory.addPlaceholder')"
+        :aria-label="t('memory.addPlaceholder')"
+        :disabled="adding"
+      />
+      <button
+        type="submit"
+        class="memory-panel__add-btn"
+        :disabled="adding || !newContent.trim()"
+      >
+        <Lucide name="plus" size="14" color="wp-violet" />
+        <span>{{ t('memory.add') }}</span>
+      </button>
+    </form>
+
+    <!-- Recherche -->
     <div class="memory-panel__search">
       <input
         v-model="searchQuery"
@@ -22,20 +71,28 @@
       >
         <Lucide name="search" size="14" color="wp-violet" />
       </button>
+      <button
+        v-if="isSearchMode"
+        type="button"
+        class="memory-panel__search-clear"
+        @click="onClearSearch"
+      >
+        {{ t('common.cancel') }}
+      </button>
     </div>
 
     <div v-if="loading" class="memory-panel__empty">{{ t('common.loading') }}</div>
 
     <div v-else-if="loadError" class="memory-panel__empty memory-panel__empty--error">
       <p>{{ t('memory.loadFailed') }}</p>
-      <button type="button" class="memory-panel__retry" @click="emit('refresh')">
+      <button type="button" class="memory-panel__retry" @click="reload">
         {{ t('common.retry') }}
       </button>
     </div>
 
     <div v-else-if="displayItems.length === 0" class="memory-panel__empty">
       <Lucide name="brain" size="24" color="text-faint" />
-      <p>{{ t('memory.empty') }}</p>
+      <p>{{ activeScope === 'user' ? t('memory.emptyUser') : t('memory.empty') }}</p>
     </div>
 
     <ul v-else class="memory-panel__list" role="list">
@@ -46,6 +103,7 @@
           <span v-if="item.created_at" class="memory-panel__date">{{ formatDate(item.created_at) }}</span>
         </div>
         <button
+          v-if="isForgettingble(item)"
           type="button"
           class="memory-panel__forget"
           :disabled="forgettingId === item.id"
@@ -106,46 +164,62 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import type { MemoryItem, MemorySearchResult } from '@services/aiSidecar';
+import { useMemory } from '@composables/useMemory';
+import type { MemoryItem, MemoryScope } from '@services/aiSidecar';
 
 const props = defineProps<{
-  memories: MemoryItem[];
-  searchResults: MemorySearchResult[];
-  loading?: boolean;
-  searching?: boolean;
-  loadError?: string | null;
-}>();
-
-const emit = defineEmits<{
-  refresh: [];
-  search: [query: string];
-  forget: [id: string];
-  forgetAll: [];
+  workspaceDataDir: string | null;
 }>();
 
 const { t, locale } = useI18n();
+const {
+  memories,
+  searchResults,
+  loading,
+  searching,
+  loadError,
+  refresh,
+  searchMemory,
+  addMemory,
+  forgetMemory,
+  forgetAll,
+} = useMemory();
 
+const activeScope = ref<MemoryScope>('project');
 const searchQuery = ref('');
+const newContent = ref('');
 const forgettingId = ref<string | null>(null);
 const forgettingAll = ref(false);
+const adding = ref(false);
 const forgetAllStep = ref(0);
 const isSearchMode = ref(false);
 
-const displayItems = computed(() => {
+const displayItems = computed<MemoryItem[]>(() => {
   if (isSearchMode.value && searchQuery.value.trim()) {
-    return props.searchResults.map((r) => ({
-      id: r.id,
+    return searchResults.value.map((r) => ({
+      id: r.memory_id ?? r.id ?? r.document_id ?? '',
       content: r.content,
       source: r.source ?? '',
       created_at: r.created_at ?? '',
       tags: [] as string[],
     }));
   }
-  return props.memories;
+  return memories.value;
 });
+
+function isForgettingble(item: MemoryItem): boolean {
+  // En mode recherche, seuls les souvenirs explicites (kind=memory, avec id
+  // memory_*) sont oubliables ; les chunks RAG (document_id) ne le sont pas.
+  if (!isSearchMode.value) return true;
+  const hit = searchResults.value.find(
+    (r) => (r.memory_id ?? r.id) === item.id,
+  );
+  return hit?.kind === 'memory';
+}
 
 function formatDate(iso: string): string {
   try {
@@ -158,23 +232,80 @@ function formatDate(iso: string): string {
   }
 }
 
-function onSearch(): void {
+function reload(): void {
+  isSearchMode.value = false;
+  searchQuery.value = '';
+  void refresh(props.workspaceDataDir, activeScope.value);
+}
+
+function onSwitchScope(scope: MemoryScope): void {
+  if (scope === activeScope.value) return;
+  activeScope.value = scope;
+}
+
+async function onSearch(): Promise<void> {
+  if (!searchQuery.value.trim()) return;
   isSearchMode.value = true;
-  emit('search', searchQuery.value);
+  await searchMemory(props.workspaceDataDir, searchQuery.value, activeScope.value);
+}
+
+function onClearSearch(): void {
+  isSearchMode.value = false;
+  searchQuery.value = '';
+}
+
+async function onAdd(): Promise<void> {
+  const content = newContent.value.trim();
+  if (!content) {
+    Notify.create({ message: t('memory.addEmpty'), classes: 'bg-warning text-white' });
+    return;
+  }
+  adding.value = true;
+  try {
+    const entry = await addMemory(props.workspaceDataDir, content, activeScope.value);
+    if (entry) {
+      newContent.value = '';
+      Notify.create({ message: t('memory.addDone'), color: 'positive' });
+    } else {
+      Notify.create({ message: t('memory.addFailed'), classes: 'bg-danger text-white' });
+    }
+  } finally {
+    adding.value = false;
+  }
 }
 
 async function onForget(id: string): Promise<void> {
   forgettingId.value = id;
-  emit('forget', id);
-  forgettingId.value = null;
+  try {
+    await forgetMemory(props.workspaceDataDir, id, activeScope.value);
+  } finally {
+    forgettingId.value = null;
+  }
 }
 
 async function onForgetAll(): Promise<void> {
   forgettingAll.value = true;
-  emit('forgetAll');
-  forgettingAll.value = false;
-  forgetAllStep.value = 0;
+  try {
+    const ok = await forgetAll(props.workspaceDataDir, 'all', activeScope.value);
+    if (ok) {
+      Notify.create({ message: t('memory.forgetAllDone'), color: 'positive' });
+    }
+  } finally {
+    forgettingAll.value = false;
+    forgetAllStep.value = 0;
+  }
 }
+
+watch(
+  () => props.workspaceDataDir,
+  () => reload(),
+);
+
+watch(activeScope, () => reload());
+
+onMounted(() => {
+  void refresh(props.workspaceDataDir, activeScope.value);
+});
 </script>
 
 <style scoped lang="scss">
@@ -183,6 +314,7 @@ async function onForgetAll(): Promise<void> {
   flex-direction: column;
   gap: var(--wp-space-3);
   padding: var(--wp-space-3);
+  flex: 1;
   min-height: 0;
 }
 
@@ -202,9 +334,85 @@ async function onForgetAll(): Promise<void> {
   color: var(--wp-violet);
 }
 
+.memory-panel__scopes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--wp-space-2);
+}
+
+.memory-panel__scope {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-surface);
+  cursor: pointer;
+  text-align: left;
+
+  &--active {
+    border-color: var(--wp-violet);
+    background: var(--wp-violet-soft);
+  }
+}
+
+.memory-panel__scope-label {
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  color: var(--wp-text);
+}
+
+.memory-panel__scope-hint {
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
+}
+
+.memory-panel__add {
+  display: flex;
+  gap: var(--wp-space-2);
+}
+
+.memory-panel__add-input {
+  flex: 1;
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-surface);
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-text);
+
+  &:focus {
+    outline: none;
+    border-color: var(--wp-violet);
+  }
+}
+
+.memory-panel__add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-1);
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: 1px solid color-mix(in srgb, var(--wp-violet) 40%, var(--wp-border));
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-violet-soft);
+  color: var(--wp-violet);
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
 .memory-panel__search {
   display: flex;
   gap: var(--wp-space-2);
+  align-items: center;
 }
 
 .memory-panel__search-input {
@@ -237,6 +445,16 @@ async function onForgetAll(): Promise<void> {
     opacity: 0.5;
     cursor: not-allowed;
   }
+}
+
+.memory-panel__search-clear {
+  padding: var(--wp-space-1) var(--wp-space-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: transparent;
+  color: var(--wp-text-muted);
+  font-size: var(--wp-fs-xs);
+  cursor: pointer;
 }
 
 .memory-panel__empty {

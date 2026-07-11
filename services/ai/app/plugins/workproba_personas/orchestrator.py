@@ -141,6 +141,7 @@ async def generate_opinions(
                 "persona_name": name,
                 "role": persona.get("role"),
                 "avatar_color": persona.get("avatar_color"),
+                "avatar_icon": persona.get("avatar_icon"),
                 "content": content,
                 "memory_citations": bool(memory_text),
             }
@@ -194,6 +195,7 @@ async def stream_ask(
             "persona_name": name,
             "role": persona.get("role"),
             "avatar_color": persona.get("avatar_color"),
+            "avatar_icon": persona.get("avatar_icon"),
             "content": content,
             "memory_citations": bool(memory_text),
         }
@@ -292,22 +294,28 @@ async def stream_meeting(
                 "persona_name": name,
                 "role": persona.get("role"),
                 "avatar_color": persona.get("avatar_color"),
+                "avatar_icon": persona.get("avatar_icon"),
                 "content": content,
             }
             turns.append(turn)
             yield {"type": "meeting_turn", "meeting_id": resolved_meeting_id, **turn}
 
-    nathalie = next((p for p in personas if p.get("id") == "06"), None)
-    if nathalie is None:
-        nathalie = personas[-1]
+    # La synthèse est produite par un facilitateur neutre (pas par un persona
+    # métier) pour ne pas biaiser le résumé vers un domaine. Le dernier persona
+    # de la sélection sert de « rapporteur » côté attribution (cosmétique).
+    synthesizer = personas[-1]
     yield {
         "type": "meeting_facilitator",
         "meeting_id": resolved_meeting_id,
         "round": 0,
         "label": t(locale, "personas.meeting.facilitator.synthesis"),
     }
+    summary_system = (
+        "Tu es un facilitateur de réunion neutre. Tu produis une synthèse "
+        "structurée et factuelle des échanges, sans privilégier un domaine "
+        "métier particulier."
+    )
     summary_prompt = (
-        f"{nathalie.get('system_prompt', '')}\n\n"
         f"Sujet : {topic.strip()}\n\n"
         f"Tour de table :\n{_format_meeting_history(turns)}\n\n"
         "Produis une synthèse structurée : points clés par persona, convergences, "
@@ -316,8 +324,8 @@ async def stream_meeting(
     summary = await _run_persona_prompt(
         settings=settings,
         provider_set=provider_set,
-        system_prompt=str(nathalie.get("system_prompt") or ""),
-        user_prompt=summary_prompt,
+        system_prompt=summary_system,
+        user_prompt=f"{summary_system}\n\n{summary_prompt}",
         locale=locale,
     )
     transcript = {
@@ -328,8 +336,8 @@ async def stream_meeting(
         "created_at": now_iso(),
         "turns": turns,
         "summary": {
-            "persona_id": nathalie.get("id"),
-            "persona_name": nathalie.get("name"),
+            "persona_id": synthesizer.get("id"),
+            "persona_name": synthesizer.get("name"),
             "title": t(locale, "personas.meeting_summary_title"),
             "content": summary,
         },
@@ -339,8 +347,8 @@ async def stream_meeting(
     yield {
         "type": "meeting_summary",
         "meeting_id": resolved_meeting_id,
-        "persona_id": nathalie.get("id"),
-        "persona_name": nathalie.get("name"),
+        "persona_id": synthesizer.get("id"),
+        "persona_name": synthesizer.get("name"),
         "content": summary,
     }
     yield {"type": "done", "meeting_id": resolved_meeting_id}
@@ -415,6 +423,7 @@ async def stream_discuss(
             "persona_name": name,
             "role_label": persona.get("role"),
             "avatar_color": persona.get("avatar_color"),
+            "avatar_icon": persona.get("avatar_icon"),
             "content": content,
             "created_at": now_iso(),
         }

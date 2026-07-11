@@ -51,6 +51,7 @@
           <PersonaAvatar
             :name="personaName(pid)"
             :color="personaColor(pid)"
+            :icon="personaIcon(pid)"
           />
           <span class="personas-meeting__seat-name">{{ personaName(pid) }}</span>
         </div>
@@ -75,6 +76,7 @@
               v-if="!turn.isFacilitator"
               :name="turn.personaName"
               :color="turn.avatarColor"
+              :icon="turn.avatarIcon"
             />
             <Lucide v-else name="sparkles" size="16" color="accent" />
             <div class="personas-meeting__turn-meta">
@@ -207,6 +209,10 @@ function personaName(id: string): string {
 
 function personaColor(id: string): string {
   return props.personas.find((p) => p.id === id)?.avatar_color ?? 'var(--wp-gold)';
+}
+
+function personaIcon(id: string): string | undefined {
+  return props.personas.find((p) => p.id === id)?.avatar_icon;
 }
 
 function onStart(payload: {

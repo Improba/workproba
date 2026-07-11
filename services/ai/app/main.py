@@ -1060,23 +1060,39 @@ class PersonasDiscussionDetailResponse(BaseModel):
 
 class MemoryItemsResponse(BaseModel):
     memories: list[dict[str, Any]]
+    memory_scope: Literal["user", "project"] = "project"
+
+
+class MemoryAddRequest(BaseModel):
+    workspace_data_dir: str
+    memory_scope: Literal["user", "project"] = "project"
+    content: str
+    tags: list[str] = Field(default_factory=list)
+    locale: str = "fr"
+
+
+class MemoryAddResponse(BaseModel):
+    memory: dict[str, Any]
 
 
 class MemoryForgetRequest(BaseModel):
     workspace_data_dir: str
     memory_id: str
+    memory_scope: Literal["user", "project"] = "project"
     locale: str = "fr"
 
 
 class MemoryClearRequest(BaseModel):
     workspace_data_dir: str
     scope: Literal["all", "memories", "conversations"] = "all"
+    memory_scope: Literal["user", "project"] = "project"
     confirmed: bool = False
     locale: str = "fr"
 
 
 class MemorySearchResponse(BaseModel):
     results: list[dict[str, Any]]
+    memory_scope: Literal["user", "project", "all"] = "project"
 
 
 class OkResponse(BaseModel):
@@ -1107,6 +1123,22 @@ def _memory_store_for_workspace(
     if rag is not None:
         return rag
     return open_memory_store(workspace_data_dir / "memory.db")
+
+
+def _memory_store_for_scope(
+    settings: Settings,
+    workspace_data_dir: Path,
+    memory_scope: str,
+    provider_set: ProviderSet | None = None,
+) -> RagStore:
+    """Ouvre le store de mémoire adapté au scope (user global ou project)."""
+    from app.memory_stores import VALID_SCOPES, open_memory_store_for_scope
+
+    if memory_scope not in VALID_SCOPES:
+        raise HTTPException(status_code=400, detail="Invalid memory scope")
+    if memory_scope == "user":
+        return open_memory_store_for_scope("user", workspace_data_dir)
+    return _memory_store_for_workspace(settings, workspace_data_dir, provider_set)
 
 
 @app.get("/plugins/personas/sets", response_model=PersonasSetsResponse)
@@ -1375,19 +1407,20 @@ async def personas_get_discussion(
 async def memory_list_items(
     request: Request,
     workspace_data_dir: str,
+    memory_scope: Literal["user", "project"] = "project",
     locale: str = "fr",
 ) -> MemoryItemsResponse:
-    """Liste les souvenirs explicites d'un espace."""
+    """Liste les souvenirs explicites (user global ou project)."""
     settings: Settings = request.app.state.settings
     require_internal_secret(request, settings)
     _ = normalize_locale(locale)
     ws_dir = _resolve_workspace_data_dir_path(workspace_data_dir)
-    store = _memory_store_for_workspace(settings, ws_dir)
+    store = _memory_store_for_scope(settings, ws_dir, memory_scope)
     try:
         memories = store.list_memories()
     finally:
         store.close()
-    return MemoryItemsResponse(memories=memories)
+    return MemoryItemsResponse(memories=memories, memory_scope=memory_scope)
 
 
 @app.get("/memory/search", response_model=MemorySearchResponse)
@@ -1395,20 +1428,66 @@ async def memory_search(
     request: Request,
     workspace_data_dir: str,
     query: str,
+    memory_scope: Literal["user", "project", "all"] = "project",
     limit: int = 8,
     locale: str = "fr",
 ) -> MemorySearchResponse:
-    """Recherche dans la mémoire (RAG + souvenirs explicites)."""
+    """Recherche dans la mémoire (RAG projet + souvenirs explicites).
+
+    `memory_scope`:
+    - `project`: RAG + souvenirs explicites du workspace.
+    - `user`: souvenirs explicites globaux (pas de RAG).
+    - `all`: fusion cohérente user + project.
+    """
     settings: Settings = request.app.state.settings
     require_internal_secret(request, settings)
     _ = normalize_locale(locale)
     ws_dir = _resolve_workspace_data_dir_path(workspace_data_dir)
-    store = _memory_store_for_workspace(settings, ws_dir)
+
+    async def _search_one(scope: str) -> list[dict[str, Any]]:
+        store = _memory_store_for_scope(settings, ws_dir, scope)
+        try:
+            return await store.search_combined(query=query, limit=limit)
+        finally:
+            store.close()
+
+    if memory_scope == "all":
+        user_hits = await _search_one("user")
+        project_hits = await _search_one("project")
+        results = [
+            {**hit, "memory_scope": "user"}
+            for hit in user_hits
+        ] + [
+            {**hit, "memory_scope": "project"}
+            for hit in project_hits
+        ]
+    else:
+        results = await _search_one(memory_scope)
+    return MemorySearchResponse(results=results, memory_scope=memory_scope)
+
+
+@app.post("/memory/add", response_model=MemoryAddResponse)
+async def memory_add(
+    request: Request,
+    payload: MemoryAddRequest,
+) -> MemoryAddResponse:
+    """Ajoute un souvenir explicite (user global ou project)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(payload.locale)
+    ws_dir = _resolve_workspace_data_dir_path(payload.workspace_data_dir)
+    store = _memory_store_for_scope(settings, ws_dir, payload.memory_scope)
     try:
-        results = await store.search_combined(query=query, limit=limit)
+        memory = store.add_memory(
+            content=payload.content,
+            source="manual",
+            tags=payload.tags,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         store.close()
-    return MemorySearchResponse(results=results)
+    return MemoryAddResponse(memory=memory)
 
 
 @app.post("/memory/forget", response_model=OkResponse)
@@ -1416,12 +1495,12 @@ async def memory_forget(
     request: Request,
     payload: MemoryForgetRequest,
 ) -> OkResponse:
-    """Oublie un souvenir explicite."""
+    """Oublie un souvenir explicite (user global ou project)."""
     settings: Settings = request.app.state.settings
     require_internal_secret(request, settings)
     locale = normalize_locale(payload.locale)
     ws_dir = _resolve_workspace_data_dir_path(payload.workspace_data_dir)
-    store = _memory_store_for_workspace(settings, ws_dir)
+    store = _memory_store_for_scope(settings, ws_dir, payload.memory_scope)
     try:
         removed = store.forget_memory(payload.memory_id)
     finally:
@@ -1439,7 +1518,11 @@ async def memory_clear(
     request: Request,
     payload: MemoryClearRequest,
 ) -> OkResponse:
-    """Efface la mémoire selon le scope (gate confirmation côté back)."""
+    """Efface la mémoire selon le scope (gate confirmation côté back).
+
+    `memory_scope` sélectionne la base (user global ou project) ; `scope` conserve
+    sa sémantique de granularité (all/memories/conversations, project uniquement).
+    """
     settings: Settings = request.app.state.settings
     require_internal_secret(request, settings)
     locale = normalize_locale(payload.locale)
@@ -1455,8 +1538,17 @@ async def memory_clear(
     detail = t(locale, "memory.clear_done_all")
     app_data = resolve_app_data_dir(ws_dir)
 
+    if payload.memory_scope == "user":
+        store = _memory_store_for_scope(settings, ws_dir, "user")
+        try:
+            store.clear_all(actor="user", scope="memories")
+        finally:
+            store.close()
+        detail = t(locale, "memory.clear_done_memories")
+        return OkResponse(ok=True, detail=detail)
+
     if payload.scope in {"all", "memories"}:
-        store = _memory_store_for_workspace(settings, ws_dir)
+        store = _memory_store_for_scope(settings, ws_dir, "project")
         try:
             store.clear_all(actor="user", scope=payload.scope)
         finally:

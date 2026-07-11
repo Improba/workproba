@@ -184,6 +184,9 @@ function onSelectDiscussion(discussion: StoredDiscussion): void {
     content: m.content,
     personaId: m.persona_id,
     personaName: m.persona_name,
+    personaRole: m.role_label,
+    avatarColor: m.avatar_color ?? 'var(--wp-gold)',
+    avatarIcon: m.avatar_icon,
   }));
   emit('resume-discussion', {
     discussionId: discussion.discussion_id,

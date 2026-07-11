@@ -36,9 +36,7 @@ def _mock_persona_llm(monkeypatch: pytest.MonkeyPatch) -> None:
         locale: str,
     ) -> str:
         _ = (settings, provider_set, system_prompt, locale)
-        if "Sylvie" in user_prompt:
-            return "Avis Sylvie simulé."
-        if "Nathalie" in user_prompt or "synthèse" in user_prompt.lower():
+        if "synthèse" in user_prompt.lower():
             return "Synthèse simulée."
         return "Intervention simulée."
 
@@ -50,12 +48,14 @@ def test_builtin_set_has_six_personas() -> None:
     assert persona_set["id"] == "default"
     assert len(persona_set["personas"]) == 6
     names = {persona["name"] for persona in persona_set["personas"]}
-    assert names == {"Sylvie", "Samira", "Marc", "Karim", "Claire", "Nathalie"}
+    assert names == {"RH", "Juriste", "Comptable / DAF", "Ingénieur", "Scientifique", "Designer"}
+    icons = {persona["avatar_icon"] for persona in persona_set["personas"]}
+    assert icons == {"users", "scale", "calculator", "code", "flask-conical", "palette"}
 
 
 def test_resolve_personas_from_builtin(plugin_dir: Path) -> None:
     personas = storage.resolve_personas(plugin_dir, ["01", "06"])
-    assert [persona["name"] for persona in personas] == ["Sylvie", "Nathalie"]
+    assert [persona["name"] for persona in personas] == ["RH", "Designer"]
 
 
 @pytest.mark.asyncio
@@ -71,8 +71,8 @@ async def test_generate_opinions(plugin_dir: Path) -> None:
         rag_store=None,
     )
     assert len(opinions) == 2
-    assert opinions[0]["persona_name"] == "Sylvie"
-    assert "Sylvie" in opinions[0]["content"]
+    assert opinions[0]["persona_name"] == "RH"
+    assert opinions[0]["content"] == "Intervention simulée."
     assert warnings == []
 
 
@@ -381,7 +381,7 @@ async def test_stream_meeting_summary_includes_persona_name(plugin_dir: Path) ->
         )
     ]
     summary = next(event for event in events if event["type"] == "meeting_summary")
-    assert summary["persona_name"] == "Nathalie"
+    assert summary["persona_name"] == "Designer"
     assert summary["content"]
 
 

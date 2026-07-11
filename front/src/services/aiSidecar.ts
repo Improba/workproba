@@ -754,28 +754,13 @@ export interface PersonaInfo {
   description: string;
   system_prompt?: string;
   avatar_color: string;
+  avatar_icon?: string;
 }
 
 export interface PersonaSet {
   id: string;
   name: string;
   personas: PersonaInfo[];
-}
-
-export interface MemoryItem {
-  id: string;
-  content: string;
-  source: string;
-  created_at: string;
-  tags: string[];
-}
-
-export interface MemorySearchResult {
-  id: string;
-  content: string;
-  score?: number;
-  source?: string;
-  created_at?: string;
 }
 
 function parseSseEvents(buffer: string): {
@@ -1103,6 +1088,7 @@ export interface PersonasMeetingTranscriptTurn {
   persona_name?: string;
   role?: string;
   avatar_color?: string;
+  avatar_icon?: string;
   content?: string;
 }
 
@@ -1211,10 +1197,37 @@ export async function fetchPersonasDiscussion(
 
 // --- Mémoire (Vague 9) ---
 
+export type MemoryScope = 'user' | 'project';
+export type MemorySearchScope = MemoryScope | 'all';
+
+export interface MemoryItem {
+  id: string;
+  content: string;
+  source: string;
+  created_at: string;
+  tags: string[];
+}
+
+export interface MemorySearchResult {
+  id?: string;
+  memory_id?: string;
+  document_id?: string;
+  content: string;
+  score?: number;
+  source?: string;
+  created_at?: string;
+  kind?: string;
+  memory_scope?: MemoryScope;
+}
+
 export async function fetchMemoryItems(
   workspaceDataDir: string,
+  scope: MemoryScope = 'project',
 ): Promise<MemoryItem[]> {
-  const params = new URLSearchParams({ workspace_data_dir: workspaceDataDir });
+  const params = new URLSearchParams({
+    workspace_data_dir: workspaceDataDir,
+    memory_scope: scope,
+  });
   try {
     const response = await fetch(
       `${getAiSidecarUrl()}/memory/items?${params.toString()}`,
@@ -1231,10 +1244,12 @@ export async function fetchMemoryItems(
 export async function searchMemory(
   workspaceDataDir: string,
   query: string,
+  scope: MemorySearchScope = 'project',
 ): Promise<MemorySearchResult[]> {
   const params = new URLSearchParams({
     workspace_data_dir: workspaceDataDir,
     query,
+    memory_scope: scope,
   });
   try {
     const response = await fetch(
@@ -1249,9 +1264,35 @@ export async function searchMemory(
   }
 }
 
+export async function addMemoryItem(
+  workspaceDataDir: string,
+  content: string,
+  scope: MemoryScope = 'project',
+  tags: string[] = [],
+): Promise<MemoryItem | null> {
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/memory/add`, {
+      method: 'POST',
+      headers: sidecarHeaders(),
+      body: JSON.stringify({
+        workspace_data_dir: workspaceDataDir,
+        memory_scope: scope,
+        content,
+        tags,
+      }),
+    });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { memory?: MemoryItem };
+    return data.memory ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export async function forgetMemoryItem(
   workspaceDataDir: string,
   memoryId: string,
+  scope: MemoryScope = 'project',
 ): Promise<boolean> {
   try {
     const response = await fetch(`${getAiSidecarUrl()}/memory/forget`, {
@@ -1259,6 +1300,7 @@ export async function forgetMemoryItem(
       headers: sidecarHeaders(),
       body: JSON.stringify({
         workspace_data_dir: workspaceDataDir,
+        memory_scope: scope,
         memory_id: memoryId,
       }),
     });
@@ -1275,6 +1317,7 @@ export type ForgetMemoryScope = 'all' | 'memories' | 'conversations';
 export async function forgetAllMemory(
   workspaceDataDir: string,
   scope: ForgetMemoryScope = 'all',
+  memoryScope: MemoryScope = 'project',
 ): Promise<boolean> {
   try {
     const response = await fetch(`${getAiSidecarUrl()}/memory`, {
@@ -1282,6 +1325,7 @@ export async function forgetAllMemory(
       headers: sidecarHeaders(),
       body: JSON.stringify({
         workspace_data_dir: workspaceDataDir,
+        memory_scope: memoryScope,
         scope,
         confirmed: true,
       }),

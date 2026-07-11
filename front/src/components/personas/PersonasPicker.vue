@@ -34,7 +34,7 @@
             :class="{ 'personas-picker__card--selected': selectedIds.includes(persona.id) }"
             @click="toggle(persona.id)"
           >
-            <PersonaAvatar :name="persona.name" :color="persona.avatar_color" />
+            <PersonaAvatar :name="persona.name" :color="persona.avatar_color" :icon="persona.avatar_icon" />
             <div class="personas-picker__info">
               <span class="personas-picker__name">{{ persona.name }}</span>
               <span class="personas-picker__role">{{ persona.role }}</span>

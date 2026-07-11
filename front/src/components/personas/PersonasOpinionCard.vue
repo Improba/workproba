@@ -34,7 +34,7 @@
         class="personas-opinion-card__block"
       >
         <header class="personas-opinion-card__block-head">
-          <PersonaAvatar :name="opinion.personaName" :color="opinion.avatarColor" />
+          <PersonaAvatar :name="opinion.personaName" :color="opinion.avatarColor" :icon="opinion.avatarIcon" />
           <div class="personas-opinion-card__block-meta">
             <span class="personas-opinion-card__persona-name">{{ opinion.personaName }} :</span>
             <span v-if="opinion.personaRole" class="personas-opinion-card__role">

@@ -23,6 +23,11 @@ async def internal_secret_middleware(
 ) -> Response:
     """Sidecar desktop : loopback uniquement, secret interne requis si configuré."""
 
+    # Pré-vol CORS : le navigateur envoie OPTIONS sans en-tête X-Internal-Secret.
+    # On laisse passer pour que CORSMiddleware puisse répondre (200 + en-têtes CORS).
+    if request.method == "OPTIONS":
+        return await call_next(request)
+
     if request.method == "GET" and request.url.path in {"/", "/health"}:
         return await call_next(request)
 

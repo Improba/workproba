@@ -23,7 +23,7 @@ def resolve_app_data_dir(path: Path) -> Path:
     """Dérive app_data depuis un chemin workspace, plugin ou app_data direct."""
     resolved = path.expanduser().resolve()
     parts = resolved.parts
-    for marker in ("spaces", "plugins", "presets"):
+    for marker in ("spaces", "workspaces", "plugins", "presets"):
         if marker in parts:
             idx = parts.index(marker)
             return Path(*parts[:idx])
@@ -32,6 +32,11 @@ def resolve_app_data_dir(path: Path) -> Path:
     if resolved.name == AUDIT_SUBDIR and resolved.parent.is_dir():
         return resolved.parent
     return resolved
+
+
+def resolve_user_data_dir(app_data_dir: Path) -> Path:
+    """Dossier de données globales utilisateur (mémoire partagée entre espaces)."""
+    return resolve_app_data_dir(app_data_dir) / "user"
 
 
 def audit_dir(app_data_dir: Path) -> Path:

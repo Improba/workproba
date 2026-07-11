@@ -5,20 +5,34 @@
     :title="name"
     :aria-label="name"
   >
-    <span class="persona-avatar__initial">{{ initial }}</span>
+    <Lucide
+      v-if="icon"
+      class="persona-avatar__icon"
+      :name="icon"
+      size="16"
+      color="wp-canard"
+    />
+    <span v-else class="persona-avatar__initial">{{ initial }}</span>
     <span class="persona-avatar__badge" aria-hidden="true" />
   </span>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 
 const props = defineProps<{
   name: string;
   color?: string;
+  icon?: string;
 }>();
 
 const color = computed(() => props.color || 'var(--wp-gold)');
+
+const icon = computed(() => {
+  const trimmed = (props.icon ?? '').trim();
+  return trimmed || null;
+});
 
 const initial = computed(() => {
   const trimmed = props.name.trim();
@@ -41,6 +55,10 @@ const initial = computed(() => {
   font-weight: 700;
   font-size: var(--wp-fs-sm);
   line-height: 1;
+}
+
+.persona-avatar__icon {
+  flex: none;
 }
 
 .persona-avatar__badge {

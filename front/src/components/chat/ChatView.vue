@@ -66,6 +66,11 @@
       class="chat-view__composer"
       :class="{ 'chat-view__composer--expanded': isExpanded }"
     >
+      <ChatComposerAttachments
+        v-if="hasAttachments"
+        :attachments="attachments"
+        @remove="removeAttachment"
+      />
       <form class="chat-view__composer-form" @submit.prevent="handleSubmit">
         <input
           ref="fileInputRef"
@@ -75,11 +80,103 @@
           :accept="ATTACHMENT_ACCEPT"
           @change="onFileInputChange"
         />
-        <ChatComposerAttachments
-          v-if="hasAttachments"
-          :attachments="attachments"
-          @remove="removeAttachment"
-        />
+        <div class="chat-view__composer-input-row">
+        <button
+          type="button"
+          class="chat-view__attach"
+          :aria-label="t('chat.attachFileAria', { current: attachments.length, max: MAX_ATTACHMENTS })"
+          :title="t('chat.addMenuTitle')"
+          aria-haspopup="menu"
+        >
+          <Lucide name="plus" size="18" color="wp-text" />
+          <q-menu
+            anchor="bottom left"
+            self="top left"
+            :offset="[0, 8]"
+            class="chat-view__add-menu"
+            transition-show="jump-down"
+            transition-hide="jump-up"
+          >
+            <div class="chat-view__add-head">{{ t('chat.addMenuTitle') }}</div>
+            <q-list dense>
+              <q-item
+                clickable
+                class="chat-view__add-item"
+                @click="openFilePicker"
+              >
+                <q-item-section avatar class="chat-view__add-icon">
+                  <Lucide name="paperclip" size="16" color="wp-text" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label class="chat-view__add-item-label">
+                    {{ t('chat.attachFile') }}
+                  </q-item-label>
+                  <q-item-label caption class="chat-view__add-item-hint">
+                    {{ t('chat.attachFileHint') }}
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+            </q-list>
+
+            <template v-if="personasEnabled">
+              <q-separator class="chat-view__add-sep" />
+                  <div class="chat-view__add-head">{{ t('chat.addMenuPersonas') }}</div>
+              <q-list dense>
+                <q-item
+                  clickable
+                  class="chat-view__add-item"
+                  @click="emit('personas-ask')"
+                >
+                  <q-item-section avatar class="chat-view__add-icon">
+                    <Lucide name="users" size="16" color="wp-gold" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label class="chat-view__add-item-label">
+                      {{ t('personas.actions.askOpinion') }}
+                    </q-item-label>
+                    <q-item-label caption class="chat-view__add-item-hint">
+                      {{ t('personas.actions.askOpinionHint') }}
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item
+                  clickable
+                  class="chat-view__add-item"
+                  @click="emit('personas-meeting')"
+                >
+                  <q-item-section avatar class="chat-view__add-icon">
+                    <Lucide name="presentation" size="16" color="wp-gold" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label class="chat-view__add-item-label">
+                      {{ t('personas.actions.simulateMeeting') }}
+                    </q-item-label>
+                    <q-item-label caption class="chat-view__add-item-hint">
+                      {{ t('personas.actions.simulateMeetingHint') }}
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
+                <q-item
+                  clickable
+                  class="chat-view__add-item"
+                  @click="emit('personas-discuss')"
+                >
+                  <q-item-section avatar class="chat-view__add-icon">
+                    <Lucide name="message-circle" size="16" color="wp-gold" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label class="chat-view__add-item-label">
+                      {{ t('personas.actions.discuss') }}
+                    </q-item-label>
+                    <q-item-label caption class="chat-view__add-item-hint">
+                      {{ t('personas.actions.discussHint') }}
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
+              </q-list>
+            </template>
+          </q-menu>
+        </button>
 
         <div class="chat-view__composer-field">
           <q-input
@@ -96,58 +193,19 @@
             @paste="onPaste"
           />
         </div>
+        </div>
 
         <div class="chat-view__composer-actions">
-          <div class="chat-view__composer-actions-left">
-            <button
-              type="button"
-              class="chat-view__attach"
-              :aria-label="t('chat.attachFileAria', { current: attachments.length, max: MAX_ATTACHMENTS })"
-              :title="t('chat.attachFile')"
-              @click="openFilePicker"
-            >
-              <Lucide name="plus" size="18" color="wp-text" />
-            </button>
-            <template v-if="personasEnabled">
-              <button
-                type="button"
-                class="chat-view__personas-btn"
-                :title="t('personas.actions.askOpinion')"
-                @click="emit('personas-ask')"
-              >
-                <Lucide name="users" size="16" color="wp-gold" />
-                <span class="chat-view__personas-label">{{ t('personas.actions.askOpinion') }}</span>
-              </button>
-              <button
-                type="button"
-                class="chat-view__personas-btn"
-                :title="t('personas.actions.simulateMeeting')"
-                @click="emit('personas-meeting')"
-              >
-                <Lucide name="presentation" size="16" color="wp-gold" />
-                <span class="chat-view__personas-label">{{ t('personas.actions.simulateMeeting') }}</span>
-              </button>
-              <button
-                type="button"
-                class="chat-view__personas-btn"
-                :title="t('personas.actions.discuss')"
-                @click="emit('personas-discuss')"
-              >
-                <Lucide name="message-circle" size="16" color="wp-gold" />
-                <span class="chat-view__personas-label">{{ t('personas.actions.discuss') }}</span>
-              </button>
-            </template>
-            <ChatModelControl
-              v-if="showModelControl"
-              :model-value="reasoningEffort ?? 'none'"
-              :provider="reasoningProvider"
-              :model="reasoningModel"
-              @update:model-value="
-                (value) => emit('update:reasoningEffort', value)
-              "
-              @update:model="(value) => emit('update:reasoningModel', value)"
-            />
-          </div>
+          <ChatModelControl
+            v-if="showModelControl"
+            :model-value="reasoningEffort ?? 'none'"
+            :provider="reasoningProvider"
+            :model="reasoningModel"
+            @update:model-value="
+              (value) => emit('update:reasoningEffort', value)
+            "
+            @update:model="(value) => emit('update:reasoningModel', value)"
+          />
           <button
             v-if="streaming"
             type="button"
@@ -562,13 +620,14 @@ onUnmounted(() => {
   background: var(--wp-surface);
 }
 
-/* Pilule contenant le champ + les actions. Repliée = une ligne,
-   dépliée (saisie) = le champ au-dessus, les actions en barre dessous. */
+/* Pilule : [+] [champ texte] à gauche, [modèle] [send] à droite.
+   Le + (menu d'actions) reste à gauche du champ dans les deux modes.
+   Déplié (brouillon/pieces jointes) : la barre d'actions passe dessous. */
 .chat-view__composer-form {
   display: flex;
   align-items: center;
   gap: 0.45rem;
-  padding: 4px 6px 4px 12px;
+  padding: 4px 6px 4px 8px;
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-pill);
   background: var(--wp-surface-2);
@@ -590,6 +649,18 @@ onUnmounted(() => {
   padding: 10px 10px 8px;
 }
 
+.chat-view__composer-input-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-view__composer--expanded .chat-view__composer-input-row {
+  width: 100%;
+}
+
 .chat-view__composer-field {
   flex: 1;
   min-width: 0;
@@ -599,7 +670,6 @@ onUnmounted(() => {
 }
 
 .chat-view__composer--expanded .chat-view__composer-field {
-  width: 100%;
   justify-content: flex-start;
 }
 
@@ -614,13 +684,6 @@ onUnmounted(() => {
   width: 100%;
   justify-content: space-between;
   padding-top: 4px;
-}
-
-.chat-view__composer-actions-left {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  min-width: 0;
 }
 
 .chat-view__file-input {
@@ -664,30 +727,59 @@ onUnmounted(() => {
   }
 }
 
-.chat-view__personas-btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.25rem 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--wp-gold) 45%, var(--wp-border));
-  border-radius: var(--wp-r-pill);
-  background: var(--wp-gold-soft);
-  color: var(--wp-text);
-  font-size: 0.72rem;
+/* Menu « + » : regroupe les actions (joindre un fichier, personas)
+   pour désencombrer la barre du composer. Reprise visuelle du menu
+   de ChatModelControl pour la cohérence. */
+.chat-view__add-menu {
+  min-width: 240px;
+  border-radius: var(--wp-r-md);
+  background: var(--wp-surface);
+  border: 1px solid var(--wp-border);
+  box-shadow: var(--wp-shadow-2);
+  padding: 4px;
+}
+
+.chat-view__add-head {
+  font-size: var(--wp-fs-xs);
   font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: background var(--wp-dur) var(--wp-ease);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--wp-text-faint);
+  padding: 6px 8px;
+}
+
+.chat-view__add-sep {
+  margin: 4px 0;
+}
+
+.chat-view__add-item {
+  min-height: 40px;
+  padding: 6px 8px;
+  border-radius: var(--wp-r-sm);
+  color: var(--wp-text);
 
   &:hover {
-    filter: brightness(0.97);
+    background: var(--wp-surface-2);
   }
 }
 
-.chat-view__personas-label {
-  @media (max-width: 900px) {
-    display: none;
-  }
+.chat-view__add-icon {
+  min-width: 28px;
+  padding-right: 4px;
+  justify-content: center;
+}
+
+.chat-view__add-item-label {
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.chat-view__add-item-hint {
+  font-size: 0.72rem;
+  color: var(--wp-text-faint);
+  line-height: 1.25;
+  margin-top: 2px;
 }
 
 .chat-view__drop-overlay {
