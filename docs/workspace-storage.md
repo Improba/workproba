@@ -1,12 +1,12 @@
 # Stockage par workspace
 
-> **Dernière mise à jour :** 10/07/2026
+> **Dernière mise à jour :** 11/07/2026
 
 ## Principe
 
 Un **workspace** = un dossier utilisateur sur le disque (ex. `~/Clients/Dupont_2026/`).
 
-Les **fichiers métier** restent dans ce dossier, intacts. Les **métadonnées Workproba** (conversations, versions, mémoire RAG) vivent dans un répertoire applicatif dédié, **pas** dans le dossier client.
+Les **fichiers métier** restent dans ce dossier, intacts. Les **métadonnées Workproba** (conversations, versions, mémoire RAG et souvenirs projet) vivent dans un répertoire applicatif dédié, **pas** dans le dossier client. Certaines données sont **globales utilisateur** (mémoire user, profil, plugins).
 
 Ce modèle suit **Claude Cowork** (métadonnées dans Application Support, fichiers utilisateur en place) et évite les pièges de **Cursor** (hash du chemin → perte d’historique au renommage).
 
@@ -24,6 +24,14 @@ Ce modèle suit **Claude Cowork** (métadonnées dans Application Support, fichi
 %LOCALAPPDATA%/fr.improba.workproba/          # Windows
 ├── registry.json                           # index des workspaces connus
 ├── last-project.json                       # dernier dossier ouvert
+├── settings.json                           # réglages app (providers LLM, plugins actifs)
+├── user/
+│   └── memory.db                           # souvenirs explicites globaux (scope user)
+├── plugins/
+│   └── workproba.personas/                 # données plugin (sets, réunions, discussions)
+├── audit/
+│   ├── audit.jsonl                         # journal d'audit local
+│   └── config.json                         # rétention, activation
 └── workspaces/
     └── ws_a1b2c3d4.../
         └── .workproba/
@@ -32,7 +40,8 @@ Ce modèle suit **Claude Cowork** (métadonnées dans Application Support, fichi
             ├── conversations/
             │   └── sess_....json           # une session = un fichier JSON
             ├── versions/                   # snapshots avant modification IA
-            └── memory.db                   # index RAG (phase D)
+            ├── attachments/                # pièces jointes chat par session
+            └── memory.db                   # RAG projet + souvenirs explicites (scope project)
 ```
 
 ## Identification stable
@@ -52,10 +61,14 @@ Ce modèle suit **Claude Cowork** (métadonnées dans Application Support, fichi
 | Documents Office/PDF | Dossier utilisateur | Tauri (liste, open) + Python (read/write) |
 | Conversations | `.workproba/conversations/` (système) | Tauri → front Quasar |
 | Versions fichier | `.workproba/versions/` (système) | Python sidecar |
-| Mémoire RAG | `.workproba/memory.db` (système) | Python sidecar (phase D) |
+| Pièces jointes chat | `.workproba/attachments/` (système) | Python sidecar |
+| Mémoire projet (RAG + explicite) | `.workproba/memory.db` (système) | Python sidecar |
+| Mémoire utilisateur (explicite) | `{app_data}/user/memory.db` | Python sidecar |
+| Données plugins | `{app_data}/plugins/{plugin_id}/` | Python sidecar + Tauri settings |
+| Journal d'audit | `{app_data}/audit/` | Python sidecar |
 | Registre projets | `registry.json` | Tauri |
 
-Le sidecar Python reçoit `workspace_data_dir` dans le payload `/agent/turn` pour écrire versions et (plus tard) mémoire au bon endroit.
+Le sidecar Python reçoit `workspace_data_dir` dans les payloads agent et mémoire pour écrire au bon endroit. Voir [memory.md](./memory.md) pour le détail des scopes.
 
 ## Schéma d'une session (`conversations/sess_….json`)
 
@@ -97,3 +110,5 @@ Les sessions stockées en `localStorage` (`workproba:sessions:{path}`) sont **im
 
 - [desktop.md](./desktop.md)
 - [architecture.md](./architecture.md)
+- [memory.md](./memory.md)
+- [plugins.md](./plugins.md)

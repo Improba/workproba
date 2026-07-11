@@ -1,7 +1,7 @@
 # Workproba Desktop
 
 > **Statut :** Décision produit — pivot bureau
-> **Dernière mise à jour :** 10/07/2026
+> **Dernière mise à jour :** 11/07/2026
 
 ## Décision
 
@@ -25,13 +25,14 @@ L'utilisateur ouvre **un dossier projet** sur son disque. L'Imp (agent) travaill
 - exécute du code **sous le capot** dans un sandbox subprocess local ;
 - s'appuie sur une **mémoire** indexée à partir des documents du dossier.
 
-Trois concepts UI uniquement :
+Concepts UI principaux :
 
 | Concept affiché | Signification |
 |---|---|
 | **Dossier** | Le projet client (filesystem local) |
 | **Conversation** | L'échange avec l'Imp |
-| **Mémoire** | Ce que l'outil sait du dossier (RAG local) |
+| **Mémoire** | Ce que l'outil sait du dossier (RAG projet + souvenirs user/projet) |
+| **Personas** | Regards métiers simulés (plugin V2, avis / réunion / discussion) |
 
 ## Architecture bureau
 
@@ -71,7 +72,11 @@ Les métadonnées Workproba vivent dans le **dossier applicatif**, pas dans le d
 ├── manifest.json
 ├── conversations/
 ├── versions/
-└── memory.db          # phase D
+├── attachments/
+└── memory.db          # RAG projet + souvenirs explicites
+
+{app_data}/user/memory.db   # souvenirs utilisateur globaux
+{app_data}/plugins/         # données plugins (personas, …)
 ```
 
 ## Flux d'un message (bureau)
@@ -125,16 +130,17 @@ En développement : `make dev-ai` ou `services/ai/run_dev.sh` (port `8765`).
 | **A** | Fait | Scaffold Tauri, commandes dossier, doc |
 | **B** | Fait | UI open folder, liste fichiers, sessions locales |
 | **C** | Fait | SSE direct Python, `LocalProjectClient`, sandbox subprocess |
-| **D** | Fait | RAG SQLite `.workproba/memory.db`, extraction Office, monitoring sidecar (health + auto-spawn venv-aware) |
+| **D** | Fait | RAG SQLite, extraction Office, monitoring sidecar |
+| **D+** | Fait | Mémoire scopée user/projet, plugins V2 (personas), pièces jointes, aperçu documents, audit |
 | **E** | À faire | Packaging multi-OS + PyInstaller sidecar |
 | **F** | À faire | Sync cloud optionnelle (NestJS) |
 
 ### Phase D — validation
 
-- **Sidecar (Python) — validé en live** : chat streaming incrémental (Mistral `mistral-small-latest`), appels d'outils (`read_document`, `search_kb`), embeddings RAG (`mistral-embed`) via les tests live (`WP_LIVE_LLM=1 pytest`). Suite pytest : 37 tests offline + 2 live.
-- **Coque Rust** : `try_spawn_dev_uvicorn` venv-aware (`.venv/bin/python -m uvicorn` puis repli système) + commande `ai_sidecar_status` (liveness TCP `127.0.0.1:8765`). `cargo check` OK.
-- **Front** : `useSidecarHealth` (poll `/health` 8 s, respecte `working`, transitions `connected`/`error`) branché dans `WorkprobaLayout` ; `ChatPage` ne force plus `idle`. Test unitaire `useSidecarHealth.spec.ts` (4 cas) OK.
-- **Run desktop end-to-end** : nécessite un affichage (webview Tauri). Lancer `make dev-ai` puis `make dev-desktop`, ouvrir un dossier projet, envoyer un message et vérifier : tokens incrémentaux, badge « Sidecar connecté » dans la sidebar, appels d'outils rendus. (Non exécutable en environnement headless.)
+- **Sidecar (Python)** : chat streaming, outils fichier, RAG, mémoire scopée, plugins personas. Suite pytest : voir [testing.md](./testing.md) (`pytest -q` pour le décompte actuel).
+- **Coque Rust** : spawn sidecar venv-aware + `ai_sidecar_status` + `protocol-asset` pour aperçu images. `cargo check` OK.
+- **Front** : `WorkprobaLayout` (sidebar, panneau droit, side chat), `useSidecarHealth`, plugin personas intégré au compositeur.
+- **Run desktop end-to-end** : `make dev`, ouvrir un dossier, tester chat, mémoire, personas, aperçu document.
 
 ## Reste à faire
 
@@ -159,11 +165,10 @@ En développement : `make dev-ai` ou `services/ai/run_dev.sh` (port `8765`).
 ## Développement local
 
 ```bash
-# Terminal 1
-make dev-ai
-
-# Terminal 2
-make dev-desktop
+make dev          # recommandé : sidecar + Tauri/Quasar
+# ou
+make dev-ai       # terminal 1
+make dev-desktop  # terminal 2
 ```
 
 Rebuild et hot reload (front HMR, Rust recompile + redémarre la fenêtre, Python `--reload` via `dev-ai`) : voir [desktop/README.md § Rebuild et hot reload](../desktop/README.md#rebuild-et-hot-reload).
@@ -171,5 +176,7 @@ Rebuild et hot reload (front HMR, Rust recompile + redémarre la fenêtre, Pytho
 ## Voir aussi
 
 - [architecture.md](./architecture.md)
+- [memory.md](./memory.md)
+- [plugins.md](./plugins.md)
 - [desktop/README.md](../desktop/README.md)
 - [intention.md](./intention.md)

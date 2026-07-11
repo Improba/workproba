@@ -4,6 +4,15 @@
 
 *Local-first desktop AI cowork assistant — Tauri, RAG, Python sidecar, Vue/Quasar UI.*
 
+## Fonctionnalités (V2)
+
+- **Chat agent** : streaming SSE, modèle et raisonnement par conversation, pièces jointes, menu compositeur « + »
+- **Mémoire scopée** : souvenirs utilisateur globaux + souvenirs projet, RAG local, outil agent `remember`
+- **Plugin Personas** : avis métiers, réunions simulées, discussions (set Improba builtin)
+- **Workspace** : sidebar workspaces/conversations, panneau droit (fichiers, aperçu, personas), side chat
+- **Documents** : aperçu HTML/texte via sidecar, images via protocol-asset Tauri, versions avant écriture
+- **Plugins** : projet, browser, cloud (extensibles, activables dans les réglages)
+
 ## Licence
 
 Workproba est distribué sous **double licence** : usage personnel et éducatif gratuit ([WPEL](./LICENSE)), usage entreprise et institutionnel sur licence commerciale.
@@ -22,9 +31,12 @@ Guide pas à pas (SmartScreen, Gatekeeper, `.deb`, AppImage, désinstallation) :
 - [docs/intention.md](./docs/intention.md) : cadrage produit
 - [docs/desktop.md](./docs/desktop.md) : architecture bureau
 - [docs/architecture.md](./docs/architecture.md) : vue technique
+- [docs/memory.md](./docs/memory.md) : mémoire user/projet et RAG
+- [docs/plugins.md](./docs/plugins.md) : plugins V2 (personas, projet, …)
 - [docs/workspace-storage.md](./docs/workspace-storage.md) : stockage par workspace
 - [docs/README.md](./docs/README.md) : index complet de la documentation
 - [desktop/README.md](./desktop/README.md) : développement Tauri
+- [services/ai/README.md](./services/ai/README.md) : API sidecar Python
 
 ## Structure
 

@@ -13,9 +13,11 @@ Index de la documentation du projet **Workproba** — assistant de travail sur d
 
 ## Architecture technique
 
-- **[architecture.md](./architecture.md)** — Vue d'ensemble, stack, diagramme, modules actifs
-- **[stack.md](./stack.md)** — Versions des composants, ports, variables d'environnement front & sidecar
-- **[workspace-storage.md](./workspace-storage.md)** — Stockage par workspace (`{app_data}/workspaces/{id}/.workproba/`)
+- **[architecture.md](./architecture.md)** — Vue d'ensemble, stack, shell UI, chat, modèles LLM
+- **[stack.md](./stack.md)** — Versions des composants, ports, variables d'environnement, commandes dev
+- **[workspace-storage.md](./workspace-storage.md)** — Stockage par workspace et données globales utilisateur
+- **[memory.md](./memory.md)** — Mémoire scopée (user / projet), RAG, outil `remember`
+- **[plugins.md](./plugins.md)** — Système de plugins V2, personas, intégration UI
 
 ## Design & UI
 
@@ -29,9 +31,10 @@ Index de la documentation du projet **Workproba** — assistant de travail sur d
 ## Navigation rapide
 
 - **Installer Workproba** : [installateurs.md](./installateurs.md)
-- **Démarrer en dev** : `make dev-ai` puis `make dev-desktop` (voir [README racine](../README.md))
+- **Démarrer en dev** : `make dev` ou `yarn dev` (voir [README racine](../README.md))
 - **Comprendre le produit** : [intention.md](./intention.md)
 - **Architecture** : [architecture.md](./architecture.md) · [desktop.md](./desktop.md)
+- **Mémoire & plugins** : [memory.md](./memory.md) · [plugins.md](./plugins.md)
 - **Stack & variables** : [stack.md](./stack.md)
 - **Sidecar IA** : [services/ai/README.md](../services/ai/README.md)
 - **Coque Tauri** : [desktop/README.md](../desktop/README.md)

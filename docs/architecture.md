@@ -1,6 +1,6 @@
 # Architecture Workproba
 
-> **Dernière mise à jour :** 10/07/2026
+> **Dernière mise à jour :** 11/07/2026
 
 ## Vue d'ensemble
 
@@ -15,11 +15,11 @@ Documentation détaillée : [desktop.md](./desktop.md), [workspace-storage.md](.
 | Coque bureau | Tauri 2 (Rust) | Fenêtre, filesystem natif, stockage workspace, packaging |
 | Frontend | Quasar 2 + Vue 3 | UI en webview (chat, fichiers) |
 | Cœur IA | Python 3.12 + FastAPI (sidecar) | Loop agent, extraction, RAG, sandbox |
-| Données locales | `{app_data}/workspaces/{id}/.workproba/` | Conversations, versions, mémoire |
+| Données locales | `{app_data}/` (workspaces, user, plugins, audit) | Conversations, versions, mémoire, plugins |
 | Agent | Pydantic AI (modèles natifs) | Chat/agent type-safe, outils, streaming |
 | LLM | OpenAIChatModel (OpenAI-compat) + AnthropicModel | Ollama local, Mistral cloud, vLLM, OpenAI, Anthropic |
 | Embeddings RAG | LiteLLM (`aembedding`) | Ollama, Mistral, OpenAI… |
-| RAG | SQLite + sqlite-vec (`memory.db`) | Embeddings + recherche vectorielle par workspace |
+| RAG | SQLite + sqlite-vec (`memory.db`) | Embeddings + recherche vectorielle par projet ; souvenirs explicites user/projet |
 | Extraction | pdfplumber, python-docx, openpyxl, python-pptx | PDF/Office digitaux (OCR hors V1) |
 
 ## Diagramme
@@ -45,6 +45,36 @@ Documentation détaillée : [desktop.md](./desktop.md), [workspace-storage.md](.
 2. Quasar envoie le message en SSE vers `127.0.0.1:8765`.
 3. Python exécute la loop agent (LLM, tools fichier, sandbox subprocess).
 4. Les sessions sont persistées dans `{app_data}/workspaces/{id}/.workproba/`.
+5. Les souvenirs explicites et le RAG projet alimentent le contexte agent (voir [memory.md](./memory.md)).
+
+## Shell UI (layout bureau)
+
+Le layout principal (`WorkprobaLayout.vue`) organise l'écran :
+
+```
+WorkprobaTitleBar
+├── WorkspaceSidebar (gauche, mode rail responsive)
+├── zone centrale (router-view : chat, réglages, onboarding)
+├── RightPanel (droite, Ctrl+B) — fichiers · aperçu · personas · plugins
+└── SideChatPanel (Ctrl+Shift+L) — discussion personas latérale
+```
+
+**Sidebar** (`WorkspaceSidebar.vue`) : arbre workspaces → conversations, indicateur de streaming, profil utilisateur, accès mémoire et réglages modèles.
+
+**Panneau droit** (`RightPanel.vue`) : explorateur de fichiers, aperçu document (`DocumentPreview` + `VersionsPanel`), onglet Personas si plugin actif, onglets plugins dynamiques.
+
+**Chat** (`ChatView.vue`) : compositeur en pilule, menu « + » (pièces jointes + actions personas), contrôle modèle/raisonnement, drag-and-drop de fichiers.
+
+## Pièces jointes et aperçu documents
+
+- **Attachments** : stockés dans `{workspace_data_dir}/attachments/{session_id}/{attachment_id}/`. Reprocess OCR/vision via `POST /agent/reprocess-attachment`.
+- **Aperçu HTML/texte** : sidecar `GET /documents/preview` (contenu rendu côté webview).
+- **Aperçu images** : `convertFileSrc` Tauri avec feature `protocol-asset` (`tauri.conf.json` → `assetProtocol`).
+- **Diff avant écriture** : `POST /documents/preview-change`.
+
+## Plugins V2
+
+Quatre plugins builtin (personas activé par défaut). Voir [plugins.md](./plugins.md).
 
 ## Modules actifs
 
@@ -60,6 +90,8 @@ Documentation détaillée : [desktop.md](./desktop.md), [workspace-storage.md](.
 - [desktop.md](./desktop.md)
 - [intention.md](./intention.md)
 - [stack.md](./stack.md)
+- [memory.md](./memory.md)
+- [plugins.md](./plugins.md)
 
 ## Gestion des modèles LLM depuis l'app
 

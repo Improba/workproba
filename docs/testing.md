@@ -10,12 +10,21 @@ Cadre : **pytest** + `pytest-asyncio`. Les tests hors-ligne sont déterministes 
 
 ### Organisation
 
-- `tests/conftest.py` — fixtures `FakeProjectClient`, `mistral_config`
-- `tests/test_llm_config.py` — `build_model`, `build_model_settings`, `resolve_llm_config`, helpers
-- `tests/test_agent_loop.py` — conversion messages (`to_model_messages`), mapping events SSE, robustesse échecs outils (`ModelRetry`), limite itérations
-- `tests/test_main_http.py` — `/agent/turn` bout-en-bout via `TestClient` FastAPI (SSE + erreurs de construction)
+- `tests/conftest.py` — fixtures partagées
+- `tests/test_llm_config.py` — `build_model`, settings, helpers
+- `tests/test_agent_loop.py` — conversion messages, events SSE, robustesse outils
+- `tests/test_agent_remember.py` — outil `remember`, injection mémoire
+- `tests/test_main_http.py` — `/agent/turn`, CORS preflight, erreurs HTTP
 - `tests/test_rag_store.py` — chunking, `RagStore` sans réseau
-- `tests/test_extractor.py` — `is_binary_document`, extraction `.docx`
+- `tests/test_memory_scope.py`, `test_memory_extended.py` — scopes user/projet
+- `tests/test_plugin_personas.py`, `test_personas_estimate_cost.py` — plugin personas
+- `tests/test_plugin_projet.py`, `test_plugin_projet_http.py` — plugin projet
+- `tests/test_plugin_browser.py`, `test_plugin_cloud.py` — plugins expérimentaux
+- `tests/test_documents_preview.py`, `test_preview_change.py` — aperçu documents
+- `tests/test_attachments.py`, `test_reprocess_attachment.py` — pièces jointes
+- `tests/test_audit.py`, `test_audit_export.py` — journal d'audit
+- `tests/test_versions.py` — versions fichier
+- `tests/test_extractor.py` — extraction `.docx`, binaire
 - `tests/test_live_mistral.py` — **live** (réseau + clé Mistral), ignoré par défaut
 
 ### Commandes
@@ -24,15 +33,15 @@ Cadre : **pytest** + `pytest-asyncio`. Les tests hors-ligne sont déterministes 
 cd services/ai
 
 # Suite hors-ligne (déterministe)
-pytest -q
+.venv/bin/pytest -q
 
 # Tests live contre Mistral (réseau + clé requis)
-WP_LIVE_LLM=1 pytest tests/test_live_mistral.py -q
+WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 ```
 
 ### Couverture actuelle
 
-37 tests offline + 2 live. Couvre : config LLM, loop agent (success/échec outils/limite), HTTP SSE, RAG chunking, extraction.
+Exécuter `pytest -q` pour le décompte à jour (environ **336 tests** offline + quelques skips, plus 2 live). Couvre : agent, mémoire scopée, plugins, documents, audit, attachments, RAG, HTTP SSE.
 
 ## Frontend (`front/`)
 
@@ -43,7 +52,7 @@ Cadre : **Vitest 4** + `@vue/test-utils`, environment `happy-dom`.
 - Unitaires : `front/test/unit/**/*.spec.ts`
 - Setup global : `front/test/setup.ts` (i18n + mocks/stubs Quasar)
 - Config : `front/vitest.config.ts`
-- Composables Workproba : `front/test/unit/composables/useSidecarHealth.spec.ts` (polling santé sidecar)
+- Composables Workproba : `useSidecarHealth.spec.ts`, etc.
 
 ### Commandes
 
@@ -57,8 +66,8 @@ yarn test:e2e                  # Playwright (smoke)
 
 ### État connu
 
-- `useSidecarHealth.spec.ts` : 4 cas (connected / error / pas de poll pendant streaming / idempotence).
-- Échecs **préexistants** non liés au sidecar : `pages-smoke.spec.ts` et `ssr-paths.spec.ts` (imports de pages non présentes `SpaShell.vue`, `ErrorRouteNotAuthorized.vue`), `layouts.spec.ts` (`StandardLayout` lib-improba).
+- `useSidecarHealth.spec.ts` : polling santé sidecar (connected / error / streaming).
+- Échecs **préexistants** non liés au sidecar : `pages-smoke.spec.ts` et `ssr-paths.spec.ts` (imports de pages absentes), `layouts.spec.ts` (`StandardLayout` lib-improba).
 
 ### Sélection des tests par risque
 

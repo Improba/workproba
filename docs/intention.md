@@ -1,7 +1,7 @@
 # Workproba
 
 > **Statut :** Pivot bureau local-first
-> **Date :** 09/07/2026
+> **Date :** 11/07/2026
 > **Décideur :** Syl
 
 ## Intention
@@ -17,7 +17,8 @@ Construire **Workproba**, un équivalent « maison » de **Claude Cowork**, dest
 - Bureau multi-OS : macOS (`.dmg`), Linux (`.AppImage`, `.deb`), Windows (`.msi`).
 - Dossier local = workspace (pas d'upload).
 - Chat agent léché, cartes d'action en langage humain, streaming SSE.
-- Mémoire RAG locale par projet (`.workproba/memory.db`).
+- Mémoire locale : RAG par projet + souvenirs explicites user (global) et project (workspace).
+- Plugin Personas : simulation de regards métiers (avis, réunion, discussion).
 - Versions automatiques avant modification de fichiers.
 - Souveraineté LLM : Ollama, vLLM, Mistral cloud, URLs changeables.
 
@@ -33,7 +34,7 @@ Construire **Workproba**, un équivalent « maison » de **Claude Cowork**, dest
 - **Coque** : Tauri 2 (Rust) — `desktop/`
 - **UI** : Quasar 2 + Vue 3 + Anubis — `front/`
 - **IA** : Python 3.12 + FastAPI sidecar — `services/ai/`
-- **Données** : SQLite + `.workproba/` par dossier projet
+- **Données** : SQLite + `.workproba/` par workspace + `{app_data}/user/` pour la mémoire globale
 - **Cloud (optionnel, archivé)** : voir `legacy/`
 
 ## Phasage
@@ -42,12 +43,14 @@ Construire **Workproba**, un équivalent « maison » de **Claude Cowork**, dest
 2. Front : mode bureau, open folder
 3. Python sidecar local (port 8765)
 4. RAG local, extraction, versions
-5. Packaging multi-OS
-6. RAG SQLite local (phase D)
+5. V2 : mémoire scopée, plugins (personas), pièces jointes, aperçu documents
+6. Packaging multi-OS
+7. Sync cloud optionnelle
 
 ## Voir aussi
 
 - [desktop.md](./desktop.md)
+- [memory.md](./memory.md)
+- [plugins.md](./plugins.md)
 - [architecture.md](./architecture.md)
 - [../desktop/README.md](../desktop/README.md)
-- [../workproba-improba/intention.md](../workproba-improba/intention.md)
