@@ -6,6 +6,7 @@ from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
 from app.config import get_settings
+from app.i18n import DEFAULT_LOCALE, t
 
 
 INTERNAL_SECRET_HEADER = "X-Internal-Secret"
@@ -37,7 +38,7 @@ async def internal_secret_middleware(
     if not is_loopback_host(client_host):
         return JSONResponse(
             status_code=status.HTTP_403_FORBIDDEN,
-            content={"detail": "Sidecar accessible uniquement en local."},
+            content={"detail": t(DEFAULT_LOCALE, "auth.local_only")},
         )
 
     expected_secret = settings.internal_secret

@@ -199,6 +199,20 @@ def test_resolve_llm_config_falls_back_to_settings() -> None:
     assert resolved.model == "llama3"
 
 
+def test_resolve_llm_config_from_provider_set() -> None:
+    from app.llm.provider_sets import MISTRAL_BUILTIN_SET
+
+    class FakeSettings:
+        llm_default_provider = "ollama"
+        llm_default_model = "llama3"
+        llm_default_base_url = None
+        llm_default_api_key = None
+
+    resolved = resolve_llm_config(None, FakeSettings(), provider_set=MISTRAL_BUILTIN_SET)
+    assert resolved.provider == "mistral"
+    assert resolved.model == "mistral-small-latest"
+
+
 def test_resolve_embedding_config_prefers_request_config(mistral_config: LLMProviderConfig) -> None:
     from app.main import resolve_embedding_config
 
@@ -245,6 +259,23 @@ def test_resolve_embedding_config_returns_none_when_no_model() -> None:
 
     model, base_url, api_key = resolve_embedding_config(FakeSettings(), None)
     assert (model, base_url, api_key) == (None, None, None)
+
+
+def test_resolve_embedding_config_from_provider_set() -> None:
+    from app.llm.provider_sets import OLLAMA_BUILTIN_SET
+    from app.main import resolve_embedding_config
+
+    class FakeSettings:
+        llm_embedding_provider = None
+        llm_embedding_model = None
+        llm_embedding_base_url = None
+        llm_embedding_api_key = None
+
+    model, base_url, api_key = resolve_embedding_config(
+        FakeSettings(), None, provider_set=OLLAMA_BUILTIN_SET
+    )
+    assert model == "ollama/nomic-embed-text"
+    assert base_url == "http://127.0.0.1:11434/v1"
 
 
 def test_agent_turn_request_accepts_embedding_config() -> None:

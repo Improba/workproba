@@ -1,5 +1,11 @@
 <template>
-  <aside class="wp-files" :class="{ 'wp-files--collapsed': !open }">
+  <aside
+    class="wp-files"
+    :class="{
+      'wp-files--collapsed': !open,
+      'wp-files--embedded': embedded,
+    }"
+  >
     <div v-if="open" class="wp-files__inner">
       <div class="wp-files__filter">
         <Lucide name="search" size="14" color="text-faint" />
@@ -8,7 +14,7 @@
           v-model="filterModel"
           type="text"
           class="wp-files__filter-input"
-          placeholder="Filtrer les fichiers…"
+          :placeholder="t('shell.filterFiles')"
           @keydown.esc="filterModel = ''"
         />
         <span v-if="filterModel" class="wp-files__count">{{ matchCount }}</span>
@@ -16,7 +22,7 @@
 
       <div v-if="!activePath" class="wp-files__empty">
         <Lucide name="folder-open" size="26" color="text-faint" />
-        <p>Votre arborescence apparaîtra ici.</p>
+        <p>{{ t('shell.fileTreeEmpty') }}</p>
       </div>
 
       <div v-else-if="treeError" class="wp-files__empty wp-files__empty--error">
@@ -24,20 +30,20 @@
         <p class="wp-files__error-msg">{{ errorMessage }}</p>
         <button type="button" class="wp-files__retry" @click="retry">
           <Lucide name="rotate-cw" size="14" color="text" />
-          <span>Réessayer</span>
+          <span>{{ t('common.retry') }}</span>
         </button>
       </div>
 
       <div v-else-if="flatList.length === 0 && !treeIndexing" class="wp-files__empty">
         <Lucide name="folder" size="26" color="text-faint" />
-        <p>Ce dossier est vide.</p>
+        <p>{{ t('shell.folderEmpty') }}</p>
       </div>
 
       <RecycleScroller
         v-else
         class="wp-files__tree"
         role="tree"
-        aria-label="Arborescence des fichiers du projet"
+        :aria-label="t('shell.fileTreeLabel')"
         :items="flatList"
         :item-size="rowHeight"
         key-field="relativePath"
@@ -49,6 +55,7 @@
             'wp-node--dir': item.isDir,
             'wp-node--touched': item.sessionState !== 'idle',
             'wp-node--match': filterModel,
+            'wp-node--selected': !item.isDir && item.relativePath === selectedPath,
           }"
           role="treeitem"
           :aria-expanded="item.isDir ? item.expanded : undefined"
@@ -81,7 +88,7 @@
           <span
             v-if="item.sessionState !== 'idle'"
             class="wp-node__dot"
-            :title="item.sessionState === 'created' ? 'Créé pendant la session' : 'Modifié pendant la session'"
+            :title="item.sessionState === 'created' ? t('shell.fileCreatedInSession') : t('shell.fileModifiedInSession')"
           />
         </div>
       </RecycleScroller>
@@ -96,18 +103,27 @@
         >
           <button type="button" class="wp-contextmenu__item" @click="onContextMenuOpen">
             <Lucide name="external-link" size="15" color="text" />
-            <span>Ouvrir dans l'OS</span>
+            <span>{{ t('common.openInOs') }}</span>
           </button>
           <button type="button" class="wp-contextmenu__item" @click="onContextMenuReveal">
             <Lucide name="folder-search" size="15" color="text" />
-            <span>Révéler dans le gestionnaire</span>
+            <span>{{ t('shell.revealInManager') }}</span>
+          </button>
+          <button
+            v-if="showPublish && contextMenu.node && !contextMenu.node.isDir"
+            type="button"
+            class="wp-contextmenu__item"
+            @click="onContextMenuPublish"
+          >
+            <Lucide name="upload" size="15" color="text" />
+            <span>{{ t('plugin.workproba.projet.publishAction') }}</span>
           </button>
         </div>
       </Teleport>
 
       <div v-if="treeIndexing && !treeError" class="wp-files__indexing">
         <span class="wp-files__indexing-bar" />
-        <span>Indexation…</span>
+        <span>{{ t('shell.fileIndexing') }}</span>
       </div>
 
       <!-- Mémoire RAG (power user) -->
@@ -127,6 +143,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { RecycleScroller } from 'vue-virtual-scroller';
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 import { Notify } from 'quasar';
@@ -139,11 +156,18 @@ import { openLocalFile, revealInOs } from '@composables/useDesktop';
 const props = defineProps<{
   activePath: string | null;
   open: boolean;
+  embedded?: boolean;
+  selectedPath?: string | null;
+  showPublish?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'toggle'): void;
+  (e: 'select-file', relativePath: string): void;
+  (e: 'publish-file', relativePath: string): void;
 }>();
+
+const { t, locale } = useI18n();
 
 const tree = useFileTree(() => props.activePath);
 const filterInputEl = ref<HTMLInputElement | null>(null);
@@ -152,13 +176,13 @@ const { status: ragStatus, report: ragReport, lastRunAt } = useRagIndex();
 const ragLabel = computed(() => ragStatusLabel(ragStatus.value as RagStatus, ragReport.value));
 
 function formatRelativeRun(): string {
-  const t = lastRunAt.value;
-  if (!t) return '';
-  const diff = Date.now() - t;
-  if (diff < 60000) return 'à l’instant';
-  if (diff < 3600000) return `il y a ${Math.floor(diff / 60000)} min`;
-  if (diff < 86400000) return `il y a ${Math.floor(diff / 3600000)} h`;
-  return new Date(t).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  const runAt = lastRunAt.value;
+  if (!runAt) return '';
+  const diff = Date.now() - runAt;
+  if (diff < 60000) return t('common.justNow');
+  if (diff < 3600000) return t('common.agoMinutes', { count: Math.floor(diff / 60000) });
+  if (diff < 86400000) return t('common.agoHours', { count: Math.floor(diff / 3600000) });
+  return new Date(runAt).toLocaleDateString(locale.value, { day: '2-digit', month: 'short' });
 }
 
 function onShowRagDetail(): void {
@@ -166,8 +190,8 @@ function onShowRagDetail(): void {
 
   if (ragStatus.value === 'disabled' || (r && !r.enabled)) {
     Notify.create({
-      message: 'Mémoire désactivée : aucun modèle d’embedding configuré.',
-      caption: 'Ajoutez un modèle d’embedding dans les paramètres pour activer la mémoire.',
+      message: t('shell.memoryDisabled'),
+      caption: t('shell.memoryDisabledCaption'),
       color: 'dark',
       timeout: 5000,
       multiLine: true,
@@ -177,8 +201,8 @@ function onShowRagDetail(): void {
 
   if (ragStatus.value === 'error') {
     Notify.create({
-      message: "L’analyse des documents a échoué.",
-      caption: 'Réessayez en modifiant un fichier, ou vérifiez le service IA dans les paramètres.',
+      message: t('shell.memoryAnalysisFailed'),
+      caption: t('shell.memoryAnalysisFailedCaption'),
       color: 'negative',
       timeout: 5000,
       multiLine: true,
@@ -187,7 +211,7 @@ function onShowRagDetail(): void {
   }
 
   if (!r) {
-    Notify.create({ message: 'Analyse des documents en attente.', color: 'dark' });
+    Notify.create({ message: t('shell.memoryAnalysisPending'), color: 'dark' });
     return;
   }
 
@@ -196,30 +220,31 @@ function onShowRagDetail(): void {
   const lines: string[] = [];
 
   if (added > 0) {
-    lines.push(`${added} fichier${added > 1 ? 's' : ''} ajouté${added > 1 ? 's' : ''} à la mémoire.`);
+    lines.push(t('shell.memoryFilesAdded', added, { count: added }));
   }
   if (upToDate > 0) {
     lines.push(
       added > 0
-        ? `${upToDate} déjà connus, laissés tels quels.`
-        : `${upToDate} fichier${upToDate > 1 ? 's' : ''} déjà en mémoire, rien de neuf à analyser.`,
+        ? t('shell.memoryKnownUnchanged', upToDate, { count: upToDate })
+        : t('shell.memoryFilesUpToDate', upToDate, { count: upToDate }),
     );
   }
   if (added === 0 && upToDate === 0) {
-    lines.push('Aucun document à analyser pour le moment.');
+    lines.push(t('shell.memoryNoDocuments'));
   }
   if (r.skipped > 0) {
-    lines.push(`${r.skipped} ignoré${r.skipped > 1 ? 's' : ''} (format non pris en charge).`);
+    lines.push(t('shell.memoryFilesSkipped', r.skipped, { count: r.skipped }));
   }
   if (r.errors > 0) {
-    lines.push(`${r.errors} fichier${r.errors > 1 ? 's' : ''} en erreur.`);
+    lines.push(t('shell.memoryFilesError', r.errors, { count: r.errors }));
   }
   if (r.truncated) {
-    lines.push('Analyse limitée par le plafond de taille configuré.');
+    lines.push(t('shell.memoryTruncated'));
   }
 
+  const relative = formatRelativeRun();
   Notify.create({
-    message: `Mémoire des documents${formatRelativeRun() ? ` · ${formatRelativeRun()}` : ''}`,
+    message: `${t('shell.ragDetailTitle')}${relative ? ` · ${relative}` : ''}`,
     caption: lines.join(' '),
     color: 'dark',
     timeout: 6000,
@@ -245,7 +270,7 @@ const errorMessage = computed(() => {
   const raw = tree.error.value;
   if (raw === null || raw === undefined) return '';
   const s = String(raw);
-  return s && s.trim() ? s : "Erreur d'indexation sans message (voir console F12)";
+  return s && s.trim() ? s : t('shell.indexErrorFallback');
 });
 
 watch(
@@ -316,7 +341,9 @@ function parentPath(relativePath: string): string {
 async function onActivate(node: FileNode): Promise<void> {
   if (node.isDir) {
     await tree.toggle(node);
+    return;
   }
+  emit('select-file', node.relativePath);
 }
 
 async function onOpen(node: FileNode): Promise<void> {
@@ -324,7 +351,7 @@ async function onOpen(node: FileNode): Promise<void> {
   try {
     await openLocalFile(node.relativePath, props.activePath);
   } catch {
-    Notify.create({ message: `Impossible d'ouvrir ${node.name}`, classes: 'bg-danger text-white' });
+    Notify.create({ message: t('shell.openFileFailed', { name: node.name }), classes: 'bg-danger text-white' });
   }
 }
 
@@ -334,7 +361,7 @@ async function onReveal(node: FileNode): Promise<void> {
   try {
     await revealInOs(full);
   } catch {
-    Notify.create({ message: 'Révélation impossible', classes: 'bg-danger text-white' });
+    Notify.create({ message: t('shell.revealFailed'), classes: 'bg-danger text-white' });
   }
 }
 
@@ -358,6 +385,14 @@ function onContextMenuReveal(): Promise<void> {
   const node = contextMenu.value.node;
   closeContextMenu();
   return node ? onReveal(node) : Promise.resolve();
+}
+
+function onContextMenuPublish(): void {
+  const node = contextMenu.value.node;
+  closeContextMenu();
+  if (node && !node.isDir) {
+    emit('publish-file', node.relativePath);
+  }
 }
 
 async function onKeydown(e: KeyboardEvent, node: FileNode): Promise<void> {
@@ -539,6 +574,21 @@ defineExpose({
     background: var(--wp-accent-soft);
     border-color: var(--wp-accent);
   }
+}
+
+.wp-files--embedded {
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  border-left: none;
+}
+
+.wp-files--embedded .wp-files__inner {
+  width: 100%;
+}
+
+.wp-node--selected {
+  background: var(--wp-accent-soft);
 }
 
 .wp-node {

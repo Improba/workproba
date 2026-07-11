@@ -1,22 +1,36 @@
 <template>
-  <div
+  <article
     class="chat-message"
     :data-message-id="message.id"
     :class="{
       'chat-message--user': message.role === 'user',
       'chat-message--assistant': message.role === 'assistant',
     }"
+    :aria-labelledby="`chat-message-role-${message.id}`"
   >
-    <div class="chat-message__avatar" aria-hidden="true">
-      <span class="sr-only">{{ roleLabel }}</span>
-      <Lucide
-        :name="message.role === 'user' ? 'user' : 'sparkles'"
-        size="14"
-        :color="message.role === 'user' ? 'primary' : 'accent'"
-      />
-    </div>
+    <header class="chat-message__header">
+      <div class="chat-message__avatar" aria-hidden="true">
+        <Lucide
+          :name="message.role === 'user' ? 'user' : 'sparkles'"
+          size="14"
+          :color="message.role === 'user' ? 'primary' : 'accent'"
+        />
+      </div>
+      <span
+        :id="`chat-message-role-${message.id}`"
+        class="chat-message__role"
+      >
+        {{ roleLabel }}
+      </span>
+    </header>
 
-    <div class="chat-message__bubble">
+    <div class="chat-message__body">
+      <MessageAttachments
+        v-if="message.role === 'user' && message.attachments?.length"
+        :attachments="message.attachments"
+        :attachment-statuses="attachmentStatuses"
+        :settings-locked="settingsLocked"
+      />
       <div
         v-if="showThinkingPlaceholder"
         class="chat-message__thinking-placeholder"
@@ -26,13 +40,13 @@
           type="button"
           class="chat-message__thinking-toggle"
           :aria-expanded="thinkingPlaceholderExpanded"
-          :aria-label="thinkingPlaceholderExpanded ? 'Masquer' : 'Voir ce que fait le modèle'"
+          :aria-label="thinkingPlaceholderExpanded ? t('common.hide') : t('chat.thinkingToggleShow')"
           @click="thinkingPlaceholderExpanded = !thinkingPlaceholderExpanded"
         >
           <span class="chat-message__thinking-spinner" aria-hidden="true" />
-          <span class="chat-message__thinking-text">Le modèle réfléchit…</span>
+          <span class="chat-message__thinking-text">{{ t('chat.thinking') }}</span>
           <span class="chat-message__thinking-hint">
-            {{ thinkingPlaceholderExpanded ? 'Masquer' : 'Voir le détail' }}
+            {{ thinkingPlaceholderExpanded ? t('common.hide') : t('common.show') }}
           </span>
           <Lucide
             name="chevron-down"
@@ -45,11 +59,10 @@
           v-if="thinkingPlaceholderExpanded"
           class="chat-message__thinking-body"
           role="region"
-          aria-label="Détail du raisonnement"
+          :aria-label="t('chat.reasoningDetail')"
         >
           <p class="chat-message__thinking-empty">
-            Le modèle prépare sa réponse. Le détail du raisonnement apparaîtra ici
-            dès qu’il sera disponible.
+            {{ t('chat.thinkingEmpty') }}
           </p>
         </div>
       </div>
@@ -79,7 +92,7 @@
           v-else-if="part.type === 'tool_call'"
           class="chat-message__unknown-tool"
         >
-          Appel d'outil indisponible
+          {{ t('chat.unknownTool') }}
         </p>
         <ConfirmationCard
           v-if="
@@ -88,11 +101,39 @@
           "
           :confirmation="message.pendingConfirmation!"
           :busy="confirming"
+          :workspace-data-dir="workspaceDataDir"
+          :project-path="projectPath"
+          :tool-args="toolCallById(part.toolCallId)?.args"
           @approve="emit('confirm-approve')"
           @cancel="emit('confirm-deny')"
         />
         </template>
       </template>
+
+      <PlanCard
+        v-if="message.pendingPlan && message.role === 'assistant'"
+        :plan="message.pendingPlan"
+        :busy="approvingPlan"
+        @approve="emit('plan-approve')"
+        @reject="emit('plan-reject')"
+      />
+
+      <PersonasOpinionCard
+        v-if="message.personasOpinion"
+        :card="message.personasOpinion"
+        :show-publish="isProjetPluginActive"
+        @another="emit('personas-another', message.personasOpinion!)"
+        @to-discussion="emit('personas-to-discussion', message.personasOpinion!)"
+        @publish="openOpinionPublish"
+      />
+
+      <PublishToProjectDialog
+        v-if="message.personasOpinion"
+        v-model:open="opinionPublishOpen"
+        :content="opinionPublishMarkdown"
+        :default-name="opinionPublishName"
+        :workspace-data-dir="workspaceDataDir"
+      />
 
       <div v-if="message.error" class="chat-message__error" role="alert">
         <Lucide name="alert-circle" size="sm" color="danger" />
@@ -104,23 +145,34 @@
         </div>
       </div>
     </div>
-  </div>
+  </article>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import MessageTextPart from '@components/chat/MessageTextPart.vue';
+import MessageAttachments from '@components/chat/MessageAttachments.vue';
 import ThinkingCard from '@components/chat/ThinkingCard.vue';
 import ToolCallCard from '@components/chat/ToolCallCard.vue';
 import ConfirmationCard from '@components/chat/ConfirmationCard.vue';
+import PlanCard from '@components/chat/PlanCard.vue';
+import PersonasOpinionCard from '@components/personas/PersonasOpinionCard.vue';
+import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
+import { usePlugins } from '@composables/usePlugins';
+import { formatOpinionMarkdown } from '@composables/usePersonas';
 import type { ChatMessage, ChatMessagePart, ChatToolCall } from '#types';
 
 const props = defineProps<{
   message: ChatMessage;
   projectPath?: string | null;
   sessionId?: string | null;
+  workspaceDataDir?: string | null;
   confirming?: boolean;
+  approvingPlan?: boolean;
+  attachmentStatuses?: Record<string, import('@composables/useChatStream').AttachmentStatusEntry>;
+  settingsLocked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -128,12 +180,39 @@ const emit = defineEmits<{
   restored: [path: string];
   'confirm-approve': [];
   'confirm-deny': [];
+  'plan-approve': [];
+  'plan-reject': [];
+  'personas-another': [card: import('#types').PersonasOpinionCard];
+  'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
 }>();
 
 const thinkingPlaceholderExpanded = ref(false);
+const opinionPublishOpen = ref(false);
+const { t, locale } = useI18n();
+const { isProjetPluginActive } = usePlugins();
+
+const opinionPublishMarkdown = computed(() =>
+  props.message.personasOpinion
+    ? formatOpinionMarkdown(props.message.personasOpinion)
+    : '',
+);
+
+const opinionPublishName = computed(() => {
+  const topic = props.message.personasOpinion?.question ?? t('personas.opinion.header', { topic: '' });
+  const date = new Date().toLocaleDateString(locale.value, {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+  return t('personas.publishToProjectNameOpinion', { topic, date });
+});
+
+function openOpinionPublish(): void {
+  opinionPublishOpen.value = true;
+}
 
 const roleLabel = computed(() =>
-  props.message.role === 'user' ? 'Vous' : 'Assistant',
+  props.message.role === 'user' ? t('chat.roleYou') : t('chat.roleAssistant'),
 );
 
 /**
@@ -172,7 +251,7 @@ const lastTextPartId = computed<string | null>(() => {
 });
 
 /**
- * Indicateur « Le modèle réfléchit… » affiché dans la bulle assistant tant
+ * Indicateur « Le modèle réfléchit… » affiché dans le bloc assistant tant
  * qu'aucun contenu n'est encore arrivé (délai d'amorçage avant le premier
  * token ou le premier event `thinking_start`). Couvre le trou perçu entre
  * l'envoi et l'apparition du raisonnement/texte.
@@ -197,64 +276,59 @@ function toolCallById(id: string): ChatToolCall | undefined {
 
 <style scoped lang="scss">
 .chat-message {
-  display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  max-width: 100%;
+  width: 100%;
+  padding: var(--wp-space-4) var(--wp-space-5);
+  color: var(--wp-text);
+  font-size: var(--wp-fs-base);
+  line-height: var(--wp-lh-normal);
+  border-bottom: 1px solid var(--wp-border);
+}
 
-  // User à droite : on inverse l'axe pour reporter l'avatar à droite
-  // et aligner la bulle sur le bord droit.
-  &--user {
-    flex-direction: row-reverse;
-  }
+.chat-message--user {
+  background: var(--wp-surface-2);
+}
+
+.chat-message--assistant {
+  background: transparent;
+}
+
+.chat-message__header {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin-bottom: var(--wp-space-2);
 }
 
 .chat-message__avatar {
   flex: 0 0 auto;
-  width: 1.6rem;
-  height: 1.6rem;
-  margin-top: 0.2rem;
-  border-radius: 999px;
+  width: 1.5rem;
+  height: 1.5rem;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--neutral-lower);
 }
 
-.chat-message__bubble {
+.chat-message__role {
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  color: var(--wp-text-muted);
+  line-height: var(--wp-lh-tight, 1.2);
+}
+
+.chat-message__body {
   min-width: 0;
-  // La bulle épouse le contenu, sans dépasser ~85% du conteneur (laisse
-  // de la place pour les blocs de code tout en gardant un rendu "bulle").
-  max-width: min(85%, 44rem);
-  padding: 0.7rem 0.95rem;
-  border-radius: 14px;
-  border: 1px solid var(--wp-border);
-  background: var(--wp-surface);
-  color: var(--wp-text);
-  font-size: 0.875rem;
-  line-height: 1.5;
-  // Queue de bulle côté assistant (bas-gauche).
-  border-bottom-left-radius: 4px;
-  // Les segments d'outil s'intercalent : on aère un peu entre segments.
+  width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-}
-
-.chat-message--user .chat-message__bubble {
-  background: var(--primary-lowest);
-  border-color: var(--primary-low);
-  // Queue de bulle côté user (bas-droite).
-  border-bottom-left-radius: 14px;
-  border-bottom-right-radius: 4px;
+  gap: var(--wp-space-2);
 }
 
 .chat-message__error {
   display: flex;
   align-items: flex-start;
-  gap: 0.5rem;
-  padding: 0.55rem 0.7rem;
-  border-radius: 10px;
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border-radius: var(--wp-r-sm);
   border: 1px solid var(--wp-danger);
   background: var(--wp-danger-soft);
   color: var(--wp-danger);
@@ -267,15 +341,15 @@ function toolCallById(id: string): ChatToolCall | undefined {
 
 .chat-message__error-msg {
   margin: 0;
-  font-size: 0.8125rem;
-  line-height: 1.4;
+  font-size: var(--wp-fs-sm);
+  line-height: var(--wp-lh-normal);
   word-break: break-word;
 }
 
 .chat-message__error-code {
   display: inline-block;
-  margin-top: 0.2rem;
-  font-size: 0.7rem;
+  margin-top: var(--wp-space-1);
+  font-size: var(--wp-fs-xs);
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -285,7 +359,7 @@ function toolCallById(id: string): ChatToolCall | undefined {
 .chat-message__thinking-placeholder {
   display: flex;
   flex-direction: column;
-  padding: 0.15rem 0;
+  padding: var(--wp-space-1) 0;
   color: var(--wp-text-muted);
   font-size: var(--wp-fs-sm);
 }
@@ -293,8 +367,8 @@ function toolCallById(id: string): ChatToolCall | undefined {
 .chat-message__thinking-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.25rem 0.4rem;
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-1) var(--wp-space-2);
   border: 1px solid transparent;
   border-radius: var(--wp-r-sm);
   background: transparent;
@@ -305,7 +379,7 @@ function toolCallById(id: string): ChatToolCall | undefined {
     border-color var(--wp-dur) var(--wp-ease);
 
   &:hover {
-    background: var(--wp-surface-2);
+    background: var(--wp-surface-3);
     border-color: var(--wp-border);
   }
 
@@ -319,7 +393,7 @@ function toolCallById(id: string): ChatToolCall | undefined {
   flex: 0 0 auto;
   width: 0.9rem;
   height: 0.9rem;
-  border-radius: 999px;
+  border-radius: var(--wp-r-pill);
   border: 2px solid var(--wp-accent-soft);
   border-top-color: var(--wp-accent);
   animation: chat-thinking-spin 0.7s linear infinite;
@@ -331,10 +405,10 @@ function toolCallById(id: string): ChatToolCall | undefined {
 
 .chat-message__thinking-hint {
   flex: 0 0 auto;
-  padding: 0.1rem 0.5rem;
+  padding: 0.1rem var(--wp-space-2);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-pill);
-  background: var(--wp-surface-2);
+  background: var(--wp-surface-3);
   font-size: var(--wp-fs-xs);
   font-weight: 600;
 }
@@ -349,11 +423,11 @@ function toolCallById(id: string): ChatToolCall | undefined {
 }
 
 .chat-message__thinking-body {
-  margin-top: 0.4rem;
-  padding: 0.6rem 0.75rem;
+  margin-top: var(--wp-space-2);
+  padding: var(--wp-space-2) var(--wp-space-3);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-sm);
-  background: var(--wp-surface-2);
+  background: var(--wp-surface-3);
 }
 
 .chat-message__thinking-empty {
@@ -368,18 +442,6 @@ function toolCallById(id: string): ChatToolCall | undefined {
   font-size: var(--wp-fs-sm);
   color: var(--wp-text-muted);
   font-style: italic;
-}
-
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
 }
 
 @keyframes chat-thinking-spin {

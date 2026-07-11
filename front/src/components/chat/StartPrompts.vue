@@ -1,7 +1,7 @@
 <template>
   <div class="start-prompts">
     <button
-      v-for="item in START_PROMPTS"
+      v-for="item in prompts"
       :key="item.id"
       type="button"
       class="start-prompts__card"
@@ -19,12 +19,21 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import { START_PROMPTS } from '../../data/startPrompts';
+import { getStartPrompts } from '../../data/startPrompts';
+
+const { locale } = useI18n();
 
 const emit = defineEmits<{
   select: [prompt: string];
 }>();
+
+const prompts = computed(() => {
+  void locale.value;
+  return getStartPrompts();
+});
 </script>
 
 <style scoped lang="scss">

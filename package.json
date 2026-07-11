@@ -4,9 +4,13 @@
   "private": true,
   "description": "Local-first desktop AI cowork assistant (Tauri) — project folders, Word/Excel/PDF, local RAG and sandbox",
   "scripts": {
-    "dev": "bash scripts/dev.sh",
-    "dev:ai": "make dev-ai",
+    "dev": "bash scripts/dev-all.sh",
+    "dev:all": "bash scripts/dev-all.sh",
+    "dev:ai": "bash scripts/dev-all.sh --ai-only",
+    "dev:ai-only": "bash scripts/dev-all.sh --ai-only",
+    "dev:no-ai": "bash scripts/dev-all.sh --no-ai",
     "dev:front": "make dev-front",
-    "dev:desktop": "make dev-desktop"
+    "dev:desktop": "make dev-desktop",
+    "dev:legacy": "bash scripts/dev.sh"
   }
 }

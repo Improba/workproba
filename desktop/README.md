@@ -21,6 +21,20 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev
 
 ## Développement
 
+### Une seule commande (recommandé)
+
+Depuis la racine `workproba/` :
+
+```bash
+make dev      # ou : yarn dev
+```
+
+Démarre le sidecar Python, attend qu'il soit sain (`/health` sur `127.0.0.1:8765`), puis lance `tauri dev` qui démarre lui-même Quasar via `beforeDevCommand`. Un `Ctrl+C` arrête proprement les deux services. Logs sidecar : `tail -f .dev-ai.log` à la racine.
+
+Variantes : `yarn dev:ai-only`, `yarn dev:no-ai`, `make dev-ai`, `make dev-desktop`.
+
+### Deux terminaux (méthode historique)
+
 Depuis la racine `workproba/` :
 
 ```bash

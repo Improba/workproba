@@ -137,8 +137,7 @@ def test_versions_without_secret_returns_401(tmp_path) -> None:
         resp = client.get(
             "/versions",
             params={
-                "project_path": str(tmp_path),
-                "session_id": "sess-v",
+                "workspace_data_dir": str(tmp_path),
                 "file_path": "f.md",
             },
         )

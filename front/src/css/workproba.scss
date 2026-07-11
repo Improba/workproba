@@ -9,8 +9,14 @@
  * le cyan = accent d'action / focus / "travaille".
  */
 
-/* Webfonts. TODO: bundler hors-ligne pour Tauri (local fonts) en production. */
-@import url('https://fonts.googleapis.com/css2?family=Quicksand:wght@500;600;700&family=Varela+Round&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Webfonts embarquées (offline Tauri) via @fontsource */
+@import '@fontsource/varela-round/400.css';
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
 
 :root {
   /* Radii & shadows (Workproba) */
@@ -48,9 +54,10 @@
   --wp-space-6: 24px;
 
   /* Typo */
-  --wp-font-ui: 'Varela Round', 'Inter', system-ui, sans-serif;
-  --wp-font-head: 'Quicksand', 'Varela Round', system-ui, sans-serif;
-  --wp-font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --wp-font-ui: 'Varela Round', system-ui, sans-serif;
+  --wp-font-head: 'Inter', system-ui, sans-serif;
+  --wp-font-chat: 'Inter', system-ui, sans-serif;
+  --wp-font-mono: 'JetBrains Mono', ui-monospace, monospace;
 
   /* Accents de marque (stables entre thèmes) */
   --wp-canard: #203d52;
@@ -272,6 +279,7 @@ code, pre, .wp-mono {
 
 /* Corps du chat */
 .wp-center {
+  font-family: var(--wp-font-chat);
   font-size: var(--wp-fs-base);
   line-height: var(--wp-lh-normal);
 }

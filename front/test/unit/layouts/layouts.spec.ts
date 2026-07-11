@@ -15,12 +15,6 @@ vi.mock('vue-router', () => ({
   }),
 }));
 
-vi.mock('vue-i18n', () => ({
-  useI18n: () => ({
-    t: (key: string) => key,
-  }),
-}));
-
 vi.mock('@lib-improba/components/layouts/theme-toggler/ThemeToggler.vue', () => ({
   default: {
     name: 'ThemeToggler',

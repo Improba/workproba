@@ -5,6 +5,8 @@ import type {
   ChatError,
   ChatMessage,
   ChatMessagePart,
+  ChatPlanStep,
+  ChatProposedPlan,
   ChatStreamEvent,
   ChatToolCall,
   ChatUsage,
@@ -16,14 +18,33 @@ import { normalizeChatErrorCode } from '#types';
 import type { LocalDocumentEntry } from '@composables/useDesktop.types';
 import {
   buildAgentTurnPayload,
+  buildSidecarSecurityContext,
+  chatAttachmentRelativePath,
   getAiSidecarUrl,
   getDesktopSecret,
+  approveAgentPlan,
+  reprocessAttachment as callReprocessAttachment,
   type UiMode,
 } from '@services/aiSidecar';
-import { buildActiveLlmConfigs, type LlmConfigPayload } from '@composables/useAppSettings';
+import {
+  buildActiveLlmConfigs,
+  buildActiveProviderSet,
+  useAppSettings,
+  type LlmConfigPayload,
+} from '@composables/useAppSettings';
+import {
+  BROWSER_PLUGIN_ID,
+  PERSONAS_PLUGIN_ID,
+  PROJET_PLUGIN_ID,
+  usePlugins,
+} from '@composables/usePlugins';
 import type { LlmProviderName } from '@composables/useDesktop.types';
-import { clampReasoningEffort, supportsReasoning } from '@utils/reasoningSupport';
+import {
+  clampReasoningEffort,
+  supportsReasoning,
+} from '@utils/reasoningSupport';
 import { contextWindowFor } from '@utils/modelCatalog';
+import { t } from '@utils/i18nT';
 
 /** Délai sans aucune donnée SSE avant de déclarer le stream mort (ms). */
 const IDLE_TIMEOUT_MS = 30_000;
@@ -38,7 +59,10 @@ class StreamIdleTimeoutError extends Error {
   }
 }
 
-function parseSseChunk(buffer: string): { events: RawChatStreamEvent[]; rest: string } {
+function parseSseChunk(buffer: string): {
+  events: RawChatStreamEvent[];
+  rest: string;
+} {
   const events: RawChatStreamEvent[] = [];
   const normalized = buffer.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   const blocks = normalized.split('\n\n');
@@ -86,8 +110,25 @@ function parseOptionalInt(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function parsePlanSteps(raw: unknown): ChatPlanStep[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((item) => {
+      if (!item || typeof item !== 'object') return null;
+      const step = item as Record<string, unknown>;
+      const tool = String(step.tool ?? '');
+      const summary = String(step.summary ?? '');
+      const target = String(step.target ?? '');
+      if (!tool && !summary) return null;
+      return { tool, summary, target };
+    })
+    .filter((s): s is ChatPlanStep => s !== null);
+}
+
 /** Mappe un event SSE Python vers le format interne du front (testable). */
-export function mapPythonSseEvent(event: RawChatStreamEvent): ChatStreamEvent | null {
+export function mapPythonSseEvent(
+  event: RawChatStreamEvent,
+): ChatStreamEvent | null {
   const data = event.data;
 
   switch (event.type) {
@@ -119,7 +160,7 @@ export function mapPythonSseEvent(event: RawChatStreamEvent): ChatStreamEvent | 
           id: String(data.tool_call_id ?? data.id ?? ''),
           name: String(data.tool_name ?? data.name ?? 'tool'),
           result: data.result,
-          error: isError ? data.result ?? true : null,
+          error: isError ? (data.result ?? true) : null,
           status: isError ? 'error' : 'success',
           humanSummary: extractHumanSummary(data),
           filePath:
@@ -172,7 +213,9 @@ export function mapPythonSseEvent(event: RawChatStreamEvent): ChatStreamEvent | 
         data: {
           content: String(data.content ?? ''),
           input_tokens: parseOptionalInt(data.input_tokens ?? data.inputTokens),
-          output_tokens: parseOptionalInt(data.output_tokens ?? data.outputTokens),
+          output_tokens: parseOptionalInt(
+            data.output_tokens ?? data.outputTokens,
+          ),
           total_tokens: parseOptionalInt(data.total_tokens ?? data.totalTokens),
         },
       };
@@ -182,7 +225,9 @@ export function mapPythonSseEvent(event: RawChatStreamEvent): ChatStreamEvent | 
         data: {
           dropped_count: Number(data.dropped_count ?? 0) || 0,
           kept_count: Number(data.kept_count ?? 0) || 0,
-          summary_tokens: parseOptionalInt(data.summary_tokens ?? data.summaryTokens),
+          summary_tokens: parseOptionalInt(
+            data.summary_tokens ?? data.summaryTokens,
+          ),
           truncated: Boolean(data.truncated ?? false),
         },
       };
@@ -193,8 +238,17 @@ export function mapPythonSseEvent(event: RawChatStreamEvent): ChatStreamEvent | 
           code: normalizeChatErrorCode(String(data.code ?? 'agent_error')),
           message: localizeAgentError(
             String(data.code ?? 'agent_error'),
-            String(data.message ?? 'Erreur agent'),
+            String(data.message ?? ''),
           ),
+        },
+      };
+    case 'plan_proposed':
+      return {
+        type: 'plan_proposed',
+        data: {
+          planId: String(data.plan_id ?? ''),
+          steps: parsePlanSteps(data.steps),
+          rationale: String(data.rationale ?? ''),
         },
       };
     default:
@@ -260,35 +314,36 @@ function appendTextToParts(assistant: ChatMessage, text: string): void {
 function syncContent(assistant: ChatMessage): void {
   assistant.content = (assistant.parts ?? [])
     .filter(
-      (p): p is { type: 'text'; id: string; content: string } => p.type === 'text',
+      (p): p is { type: 'text'; id: string; content: string } =>
+        p.type === 'text',
     )
     .map((p) => p.content)
     .join('');
 }
 
-/** Traduit un code d'erreur agent en message français affichable. */
+/** Traduit un code d'erreur agent en message affichable. */
 function localizeAgentError(code: string, fallback: string): string {
   switch (code) {
     case 'max_iterations_reached':
-      return "L'agent a atteint sa limite d'itérations sans réponse finale. Reformulez ou réessayez.";
+      return t('errors.agentMaxIterations');
     case 'agent_model_error':
     case 'unexpected_model_behavior':
-      return 'Le modèle a renvoyé une réponse inattendue. Réessayez.';
+      return t('errors.agentModelError');
     case 'turn_timeout':
-      return 'Le tour a dépassé le délai imparti. Réessayez.';
+      return t('errors.agentTurnTimeout');
     case 'confirmation_timeout':
-      return 'La confirmation a expiré. Relancez l’action si nécessaire.';
+      return t('errors.agentConfirmationTimeout');
     case 'usage_limit_exceeded':
-      return 'La limite d’utilisation a été atteinte.';
+      return t('errors.agentUsageLimit');
     case 'turn_in_progress':
-      return 'Un tour est déjà en cours pour cette conversation.';
+      return t('errors.agentTurnInProgress');
     case 'input_too_large':
-      return 'Le message est trop volumineux pour le contexte disponible.';
+      return t('errors.agentInputTooLarge');
     case 'internal_error':
     case 'parse_error':
-      return 'Une erreur interne est survenue pendant la génération.';
+      return t('errors.agentInternalError');
     default:
-      return fallback || 'Une erreur est survenue pendant la génération.';
+      return fallback || t('errors.agentGeneric');
   }
 }
 
@@ -311,7 +366,9 @@ function extractSnapshotPathFromResult(result: unknown): string | undefined {
   const metadata = (result as Record<string, unknown>).metadata;
   if (!metadata || typeof metadata !== 'object') return undefined;
   const versionPath = (metadata as Record<string, unknown>).version_path;
-  return typeof versionPath === 'string' && versionPath ? versionPath : undefined;
+  return typeof versionPath === 'string' && versionPath
+    ? versionPath
+    : undefined;
 }
 
 export function applyStreamEvent(
@@ -336,10 +393,12 @@ export function applyStreamEvent(
         humanSummary: startSummary || undefined,
       };
       assistant.toolCalls = [...(assistant.toolCalls ?? []), toolCall];
-      // On insère la carte d'outil dans le flux, à la suite du texte courant,
-      // pour respecter l'ordre réel (texte -> outil -> texte).
       const parts = assistant.parts ?? (assistant.parts = []);
-      parts.push({ type: 'tool_call', id: createPartId(), toolCallId: toolCall.id });
+      parts.push({
+        type: 'tool_call',
+        id: createPartId(),
+        toolCallId: toolCall.id,
+      });
       break;
     }
     case 'confirmation_request': {
@@ -367,9 +426,7 @@ export function applyStreamEvent(
       if (tool) {
         tool.result = event.data.result;
         tool.status =
-          event.data.error != null
-            ? 'error'
-            : (event.data.status ?? 'success');
+          event.data.error != null ? 'error' : (event.data.status ?? 'success');
         tool.endedAt = Date.now();
         if (event.data.filePath) {
           tool.filePath = event.data.filePath;
@@ -449,12 +506,17 @@ export function applyStreamEvent(
       if (finalContent && !assistant.content) {
         const parts = assistant.parts ?? (assistant.parts = []);
         const firstText = parts.find(
-          (p): p is { type: 'text'; id: string; content: string } => p.type === 'text',
+          (p): p is { type: 'text'; id: string; content: string } =>
+            p.type === 'text',
         );
         if (firstText) {
           firstText.content = finalContent;
         } else {
-          parts.unshift({ type: 'text', id: createPartId(), content: finalContent });
+          parts.unshift({
+            type: 'text',
+            id: createPartId(),
+            content: finalContent,
+          });
         }
         syncContent(assistant);
       }
@@ -469,6 +531,17 @@ export function applyStreamEvent(
       };
       break;
     }
+    case 'plan_proposed': {
+      const plan: ChatProposedPlan = {
+        planId: event.data.planId,
+        steps: event.data.steps,
+        rationale: event.data.rationale,
+        status: 'pending',
+      };
+      assistant.pendingPlan = plan;
+      onConfirmationRequest?.();
+      break;
+    }
     default:
       break;
   }
@@ -480,6 +553,7 @@ async function consumeSseStream(
   abortController: AbortController,
   idleState: { timedOut: boolean },
   idleControl: { isPaused: () => boolean },
+  onAttachmentStatus?: (data: Record<string, unknown>) => void,
 ): Promise<void> {
   if (!response.body) {
     throw new Error('Réponse streaming sans corps');
@@ -518,6 +592,10 @@ async function consumeSseStream(
       buffer = rest;
 
       for (const rawEvent of events) {
+        if (rawEvent.type === 'attachment_status') {
+          onAttachmentStatus?.(rawEvent.data);
+          continue;
+        }
         const mapped = mapPythonSseEvent(rawEvent);
         if (!mapped) continue;
         applyEvent(mapped);
@@ -550,6 +628,16 @@ export interface UseChatStreamOptions {
   reasoningEffort?: Ref<ReasoningEffort | null | undefined>;
   /** Override du modèle pour la conversation active (persisté par session). */
   sessionModel?: Ref<string | null | undefined>;
+  /** Callback outils personas (ask_personas, simulate_meeting) après résultat. */
+  onPersonasToolCall?: (
+    toolName: 'ask_personas' | 'simulate_meeting',
+    payload: { args: Record<string, unknown>; result: unknown },
+  ) => void;
+  /** Callback outils browser après résultat. */
+  onBrowserToolCall?: (
+    toolName: 'browser_navigate' | 'browser_click' | 'browser_extract',
+    result: unknown,
+  ) => void;
 }
 
 export function mergeLlmConfigsWithSessionReasoning(
@@ -578,7 +666,8 @@ export function mergeLlmConfigsWithSessionReasoning(
 
   // L'override de session prime sur la config globale ; à défaut on repart
   // de l'effort global (qu'on re-clampe contre le modèle de session au besoin).
-  const effectiveEffort = sessionReasoningEffort ?? chat.reasoning_effort ?? null;
+  const effectiveEffort =
+    sessionReasoningEffort ?? chat.reasoning_effort ?? null;
   if (effectiveEffort != null) {
     if (effectiveEffort === 'none') {
       delete chat.reasoning_effort;
@@ -586,7 +675,11 @@ export function mergeLlmConfigsWithSessionReasoning(
       // L'override peut venir d'un modèle précédent qui acceptait `low`/`medium` ;
       // on clampe à ce que le modèle courant supporte pour éviter une 400
       // (ex. mistral-small-latest n'accepte que none/high).
-      const clamped = clampReasoningEffort(provider, chat.model, effectiveEffort);
+      const clamped = clampReasoningEffort(
+        provider,
+        chat.model,
+        effectiveEffort,
+      );
       if (clamped === 'none') {
         delete chat.reasoning_effort;
       } else {
@@ -598,23 +691,72 @@ export function mergeLlmConfigsWithSessionReasoning(
   return { ...configs, chat };
 }
 
+export interface AttachmentStatusEntry {
+  status_key: string;
+  label_locale: string;
+}
+
 export interface UseChatStreamReturn {
   messages: Ref<ChatMessage[]>;
   streaming: Ref<boolean>;
   error: Ref<ChatError | null>;
   confirming: Ref<boolean>;
+  approvingPlan: Ref<boolean>;
   lastUsage: Ref<ChatUsage>;
   completedTurns: Ref<number>;
   lastCompaction: Ref<ChatCompactionInfo | null>;
+  attachmentStatuses: Ref<Record<string, AttachmentStatusEntry>>;
   send: (text: string, options?: Partial<SendMessagePayload>) => Promise<void>;
   confirm: (decision: 'approve' | 'deny') => Promise<void>;
+  approvePlan: (approved: boolean) => Promise<void>;
   retry: () => Promise<void>;
   abort: () => void;
   loadMessages: (items: ChatMessage[]) => void;
+  reprocessAttachment: (
+    attachmentId: string,
+    meta: {
+      fileName: string;
+      mimeType: string;
+      kind: import('#types').ChatAttachmentKind;
+    },
+  ) => Promise<void>;
+}
+
+/** Applique un event SSE `attachment_status` à la map réactive (testable). */
+export function applyAttachmentStatusEvent(
+  statuses: Record<string, AttachmentStatusEntry>,
+  data: Record<string, unknown>,
+): void {
+  const attachmentId = String(data.attachment_id ?? '');
+  const statusKey = String(data.status_key ?? '');
+  const labelLocale = String(data.label_locale ?? '');
+  if (!attachmentId || !statusKey) return;
+  statuses[attachmentId] = {
+    status_key: statusKey,
+    label_locale: labelLocale || statusKey,
+  };
+}
+
+/** Résout une dir plugin pour le tour agent (projet, personas ou browser). */
+export async function resolveAgentPluginDataDir(
+  activePluginIds: string[],
+  getPluginDataDir: (id: string) => Promise<string | null>,
+): Promise<string | null> {
+  const priority = [PROJET_PLUGIN_ID, PERSONAS_PLUGIN_ID, BROWSER_PLUGIN_ID];
+  for (const pluginId of priority) {
+    if (!activePluginIds.includes(pluginId)) continue;
+    const dir = await getPluginDataDir(pluginId);
+    if (dir) return dir;
+  }
+  return null;
 }
 
 /** SSE via sidecar Python local (application bureau). */
-export function useChatStream(options: UseChatStreamOptions): UseChatStreamReturn {
+export function useChatStream(
+  options: UseChatStreamOptions,
+): UseChatStreamReturn {
+  const { locale, settingsLocked, permissionsNetwork } = useAppSettings();
+  const { activePluginIds, getPluginDataDir } = usePlugins();
   // ref (profond) : les objets messages sont réactifs, donc muter
   // `assistant.content` déclenche directement le rendu. Pas de clonage du
   // tableau à chaque token.
@@ -622,6 +764,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   const streaming = ref(false);
   const error = ref<ChatError | null>(null);
   const confirming = ref(false);
+  const approvingPlan = ref(false);
   const lastUsage = ref<ChatUsage>({
     inputTokens: null,
     outputTokens: null,
@@ -629,6 +772,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
   });
   const completedTurns = ref(0);
   const lastCompaction = ref<ChatCompactionInfo | null>(null);
+  const attachmentStatuses = ref<Record<string, AttachmentStatusEntry>>({});
 
   let abortController: AbortController | null = null;
   let currentAssistantId: string | null = null;
@@ -686,6 +830,25 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     }
     // Non-token : on commit d'abord les tokens en attente, puis on applique.
     flushPendingTokens();
+    if (event.type === 'tool_call_result') {
+      const toolName = event.data.name;
+      if (toolName === 'ask_personas' || toolName === 'simulate_meeting') {
+        const tool = messages.value
+          .find((m) => m.id === currentAssistantId)
+          ?.toolCalls?.find((t) => t.id === event.data.id);
+        options.onPersonasToolCall?.(toolName, {
+          args: tool?.args ?? {},
+          result: event.data.result,
+        });
+      }
+      if (
+        toolName === 'browser_navigate' ||
+        toolName === 'browser_click' ||
+        toolName === 'browser_extract'
+      ) {
+        options.onBrowserToolCall?.(toolName, event.data.result);
+      }
+    }
     if (event.type === 'error') {
       error.value = {
         code: event.data.code,
@@ -725,9 +888,14 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     messages.value = items.map((m) =>
       m.parts?.length ? m : { ...m, parts: buildLegacyParts(m) },
     );
-    lastUsage.value = { inputTokens: null, outputTokens: null, totalTokens: null };
+    lastUsage.value = {
+      inputTokens: null,
+      outputTokens: null,
+      totalTokens: null,
+    };
     completedTurns.value = 0;
     lastCompaction.value = null;
+    attachmentStatuses.value = {};
   }
 
   function resetStreamingFlag(): void {
@@ -758,7 +926,7 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     if (!projectPath) {
       error.value = {
         code: 'no_project',
-        message: "Aucun dossier projet ouvert. Ouvrez un dossier pour discuter avec l'agent.",
+        message: t('errors.noSpaceOpen'),
         retryable: false,
       };
       return;
@@ -769,6 +937,8 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     lastUserText = trimmed;
     lastPayload = payload;
 
+    const sentAttachments = payload.attachments ?? [];
+
     const userMessage: ChatMessage = {
       id: createMessageId(),
       role: 'user',
@@ -776,6 +946,17 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       parentId: payload.parentId ?? null,
       createdAt: new Date().toISOString(),
     };
+    if (sentAttachments.length) {
+      userMessage.attachments = sentAttachments.map((a) => ({
+        id: a.id,
+        fileName: a.fileName,
+        mimeType: a.mimeType,
+        sizeBytes: a.sizeBytes,
+        kind: a.kind,
+        status: a.status,
+        ...(a.error ? { error: a.error } : {}),
+      }));
+    }
 
     const assistantMessage: ChatMessage = {
       id: createMessageId(),
@@ -810,6 +991,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         options.reasoningEffort?.value ?? null,
         options.sessionModel?.value ?? null,
       );
+      const providerSet = buildActiveProviderSet(
+        options.sessionModel?.value ?? null,
+        options.reasoningEffort?.value ?? null,
+      );
       const chatConfig = llmConfigs.chat;
       const contextWindow = chatConfig
         ? contextWindowFor(
@@ -817,6 +1002,10 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
             chatConfig.model,
           )
         : null;
+      const pluginDataDir = await resolveAgentPluginDataDir(
+        activePluginIds.value,
+        getPluginDataDir,
+      );
       const body = buildAgentTurnPayload(
         options.sessionId.value,
         projectPath,
@@ -827,7 +1016,41 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         llmConfigs,
         options.uiMode?.value,
         contextWindow,
+        true,
+        sentAttachments,
+        locale.value,
+        providerSet,
+        activePluginIds.value,
+        pluginDataDir,
+        buildSidecarSecurityContext(
+          settingsLocked.value,
+          permissionsNetwork.value,
+          locale.value,
+        ),
       );
+
+      const workspaceDataDir = options.workspaceDataDir?.value;
+      if (workspaceDataDir) {
+        await Promise.all(
+          sentAttachments
+            .filter((att) => att.contentBase64 && att.status === 'ready')
+            .map((att) =>
+              callReprocessAttachment({
+                workspaceDataDir,
+                projectPath,
+                attachmentId: att.id,
+                filePath: chatAttachmentRelativePath(
+                  options.sessionId.value,
+                  att.id,
+                  att.fileName,
+                ),
+                mimeType: att.mimeType,
+                contentBase64: att.contentBase64,
+                persistOnly: true,
+              }),
+            ),
+        );
+      }
 
       const response = await fetch(`${getAiSidecarUrl()}/agent/turn`, {
         method: 'POST',
@@ -844,20 +1067,31 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         throw new Error(`HTTP ${response.status}`);
       }
 
-      await consumeSseStream(response, applyEvent, abortController, idleState, {
-        isPaused: () => idlePaused,
-      });
+      await consumeSseStream(
+        response,
+        applyEvent,
+        abortController,
+        idleState,
+        {
+          isPaused: () => idlePaused,
+        },
+        (data) => {
+          applyAttachmentStatusEvent(attachmentStatuses.value, data);
+        },
+      );
     } catch (err) {
       const name = (err as Error)?.name;
 
       if (name === 'StreamIdleTimeoutError') {
         const chatError: ChatError = {
           code: 'idle_timeout',
-          message: 'Le modèle a mis trop de temps à répondre. Vous pouvez réessayer.',
+          message: t('errors.idleTimeout'),
           retryable: true,
         };
         error.value = chatError;
-        const assistant = messages.value.find((m) => m.id === assistantMessage.id);
+        const assistant = messages.value.find(
+          (m) => m.id === assistantMessage.id,
+        );
         if (assistant) {
           assistant.streaming = false;
           assistant.error = chatError;
@@ -869,13 +1103,15 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
         const detail = err instanceof Error ? err.message : '';
         const chatError: ChatError = {
           code: 'sidecar_unreachable',
-          message: `Le service IA n'est pas accessible${
-            detail ? ` (${detail})` : ''
-          }. Vérifiez qu'il est démarré depuis les réglages.`,
+          message: t('errors.sidecarUnreachable', {
+            detail: detail ? t('errors.sidecarUnreachableDetail', { detail }) : '',
+          }),
           retryable: true,
         };
         error.value = chatError;
-        const assistant = messages.value.find((m) => m.id === assistantMessage.id);
+        const assistant = messages.value.find(
+          (m) => m.id === assistantMessage.id,
+        );
         if (assistant) {
           assistant.streaming = false;
           assistant.error = chatError;
@@ -947,11 +1183,88 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
       const detail = err instanceof Error ? err.message : '';
       error.value = {
         code: 'confirm_failed',
-        message: `Impossible d'envoyer votre choix${detail ? ` (${detail})` : ''}. Réessayez.`,
+        message: t('errors.confirmFailed', {
+          detail: detail ? t('errors.confirmFailedDetail', { detail }) : '',
+        }),
         retryable: true,
       };
     } finally {
       confirming.value = false;
+    }
+  }
+
+  async function reprocessAttachment(
+    attachmentId: string,
+    meta: {
+      fileName: string;
+      mimeType: string;
+      kind: import('#types').ChatAttachmentKind;
+    },
+  ): Promise<void> {
+    const projectPath = options.projectPath?.value;
+    const workspaceDataDir = options.workspaceDataDir?.value;
+    if (!projectPath || !workspaceDataDir) {
+      throw new Error(t('errors.noSpaceOpen'));
+    }
+
+    const providerSet = buildActiveProviderSet(
+      options.sessionModel?.value ?? null,
+      options.reasoningEffort?.value ?? null,
+    );
+
+    const result = await callReprocessAttachment({
+      workspaceDataDir,
+      projectPath,
+      attachmentId,
+      filePath: chatAttachmentRelativePath(
+        options.sessionId.value,
+        attachmentId,
+        meta.fileName,
+      ),
+      mimeType: meta.mimeType,
+      providerSet,
+      locale: locale.value,
+    });
+
+    applyAttachmentStatusEvent(attachmentStatuses.value, {
+      attachment_id: attachmentId,
+      status_key: result.status_key,
+      label_locale: result.label_locale,
+    });
+  }
+
+  async function approvePlan(approved: boolean): Promise<void> {
+    const assistant = messages.value.find((m) => m.pendingPlan?.status === 'pending');
+    const plan = assistant?.pendingPlan;
+    if (!plan || approvingPlan.value) return;
+
+    approvingPlan.value = true;
+    error.value = null;
+
+    try {
+      const ok = await approveAgentPlan({
+        session_id: options.sessionId.value,
+        plan_id: plan.planId,
+        approved,
+        ...(currentTurnId ? { turn_id: currentTurnId } : {}),
+      });
+      if (!ok) {
+        throw new Error('plan_approve_failed');
+      }
+      plan.status = approved ? 'approved' : 'rejected';
+      assistant!.pendingPlan = null;
+      setIdlePaused(false);
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : '';
+      error.value = {
+        code: 'confirm_failed',
+        message: t('errors.confirmFailed', {
+          detail: detail ? t('errors.confirmFailedDetail', { detail }) : '',
+        }),
+        retryable: true,
+      };
+    } finally {
+      approvingPlan.value = false;
     }
   }
 
@@ -960,13 +1273,17 @@ export function useChatStream(options: UseChatStreamOptions): UseChatStreamRetur
     streaming,
     error,
     confirming,
+    approvingPlan,
     lastUsage,
     completedTurns,
     lastCompaction,
+    attachmentStatuses,
     send,
     confirm,
+    approvePlan,
     retry,
     abort,
     loadMessages,
+    reprocessAttachment,
   };
 }

@@ -1,58 +1,63 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('@services/aiSidecar', () => ({
-  getAiSidecarUrl: () => 'http://127.0.0.1:8765',
-  getDesktopSecret: () => 'desktop-dev-secret',
-}));
+vi.mock('@services/aiSidecar', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@services/aiSidecar')>();
+  return {
+    ...actual,
+    getAiSidecarUrl: () => 'http://127.0.0.1:8765',
+    getDesktopSecret: () => 'desktop-dev-secret',
+  };
+});
 
-import { listVersions, restoreVersion } from '@services/versions';
+import { listFileVersions, restoreFileVersion } from '@services/aiSidecar';
 
-describe('versions service', () => {
+describe('versions API (aiSidecar)', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
   });
 
-  it('listVersions appelle GET /versions avec les bons paramètres', async () => {
+  it('listFileVersions appelle GET /versions avec workspace_data_dir', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock.mockResolvedValue({
       ok: true,
       json: async () => ({
-        snapshots: [
+        versions: [
           {
-            original_path: 'doc.txt',
-            snapshot_path: '.workproba/versions/sess-1/snap.txt',
-            timestamp: '2026-01-01T00:00:00Z',
-            session_id: 'sess-1',
+            version_id: 'v1',
+            created_at: '2026-01-01T00:00:00Z',
+            size: 120,
+            label: 'Avant modification IA',
           },
         ],
       }),
     });
 
-    const snapshots = await listVersions('/proj', 'sess-1', 'doc.txt');
+    const versions = await listFileVersions({
+      workspaceDataDir: '/data/ws',
+      filePath: 'doc.txt',
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'http://127.0.0.1:8765/versions?project_path=%2Fproj&session_id=sess-1&file_path=doc.txt',
+      'http://127.0.0.1:8765/versions?workspace_data_dir=%2Fdata%2Fws&file_path=doc.txt',
       { headers: { 'X-Internal-Secret': 'desktop-dev-secret' } },
     );
-    expect(snapshots).toHaveLength(1);
-    expect(snapshots[0].snapshot_path).toContain('.workproba/versions');
+    expect(versions).toHaveLength(1);
+    expect(versions[0].version_id).toBe('v1');
   });
 
-  it('restoreVersion appelle POST /versions/restore', async () => {
+  it('restoreFileVersion appelle POST /versions/restore', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock.mockResolvedValue({
       ok: true,
-      json: async () => ({
-        restored_path: 'doc.txt',
-        snapshot_path: '.workproba/versions/sess-1/snap.txt',
-      }),
+      json: async () => ({ ok: true }),
     });
 
-    const result = await restoreVersion(
-      '/proj',
-      'sess-1',
-      '.workproba/versions/sess-1/snap.txt',
-    );
+    const ok = await restoreFileVersion({
+      workspaceDataDir: '/data/ws',
+      projectPath: '/data/project',
+      filePath: 'doc.txt',
+      versionId: 'v1',
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://127.0.0.1:8765/versions/restore',
@@ -63,12 +68,13 @@ describe('versions service', () => {
           'X-Internal-Secret': 'desktop-dev-secret',
         }),
         body: JSON.stringify({
-          project_path: '/proj',
-          session_id: 'sess-1',
-          snapshot_path: '.workproba/versions/sess-1/snap.txt',
+          workspace_data_dir: '/data/ws',
+          project_path: '/data/project',
+          file_path: 'doc.txt',
+          version_id: 'v1',
         }),
       }),
     );
-    expect(result.restored_path).toBe('doc.txt');
+    expect(ok).toBe(true);
   });
 });

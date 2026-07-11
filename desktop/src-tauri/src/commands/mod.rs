@@ -1,4 +1,7 @@
+pub mod audit;
 pub mod fs_watch;
+pub mod plugins;
+pub mod preset;
 pub mod project;
 pub mod settings_store;
 pub mod workspace_store;
@@ -11,5 +14,15 @@ pub use project::{
     open_path, pick_project_folder, restore_last_project_path, reveal_in_os, save_conversation,
     set_active_project_path, ProjectState,
 };
+pub use plugins::{
+    activate_plugin, deactivate_plugin, get_plugin_data_dir, install_local_plugin,
+    list_plugins, uninstall_local_plugin, PluginInfo, PluginManifest,
+};
+pub use preset::{
+    get_enterprise_preset, is_preset_active, EnterprisePreset,
+};
+pub use settings_store::{
+    AppSettings, LlmProviderEntry, ProviderSetEntry, builtin_provider_sets, get_app_settings,
+    save_app_settings,
+};
 pub use workspace_store::{ConversationSession, WorkspaceInfo};
-pub use settings_store::{AppSettings, LlmProviderEntry, get_app_settings, save_app_settings};

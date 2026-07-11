@@ -19,6 +19,7 @@ dependencies = [
   "pydantic",
   "pydantic-ai",
   "pydantic-settings",
+  "reportlab",
   "sqlite-vec",
   "sse-starlette",
   "uvicorn[standard]",
@@ -33,6 +34,10 @@ dev = [
   "pytest>=8",
   "pytest-asyncio>=0.23",
   "httpx",
+]
+# optional, browser plugin — installed lazily on browser activation
+browser = [
+  "playwright>=1.49",
 ]
 
 [tool.pyright]

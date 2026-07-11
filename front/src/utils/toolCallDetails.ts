@@ -1,12 +1,8 @@
 import type { ChatToolCall } from '#types';
+import { t } from './i18nT';
 
 /**
  * Détails lisibles d'un appel d'outil pour la « vue détaillée ».
- *
- * Objectif (vue designer + front) : donner à l'utilisateur non-codeur un
- * contexte compréhensible — « où », « dans quoi », « combien », « combien de
- * temps » — plutôt qu'un dump JSON brut. Le brut technique reste accessible
- * dans un sous-bloc repliable (cf. ToolCallCard).
  */
 
 export interface ToolCallDetailRow {
@@ -15,13 +11,9 @@ export interface ToolCallDetailRow {
 }
 
 export interface ToolCallDetails {
-  /** Phrase courte : la cible de l'action (fichier, dossier, requête…). */
   target?: string;
-  /** Localisation / contexte (dans quel dossier, quel projet). */
   location?: string;
-  /** Résultat lisible (combien d'éléments, pages, lignes, succès/erreur). */
   outcome?: string;
-  /** Lignes ordonnées pour le rendu clé → valeur. */
   rows: ToolCallDetailRow[];
 }
 
@@ -34,14 +26,14 @@ function basename(value: string): string {
 
 function formatLocation(subdir: string): string {
   const cleaned = subdir.trim().replace(/^[/\\]+|[/\\]+$/g, '');
-  if (!cleaned || cleaned === '.') return 'du projet';
-  return `du dossier ${basename(cleaned)}`;
+  if (!cleaned || cleaned === '.') return t('toolCalls.ofSpace');
+  return t('toolCalls.ofFolder', { name: basename(cleaned) });
 }
 
 function formatLocationSubject(subdir: string): string {
   const cleaned = subdir.trim().replace(/^[/\\]+|[/\\]+$/g, '');
-  if (!cleaned || cleaned === '.') return 'le projet';
-  return `le dossier ${basename(cleaned)}`;
+  if (!cleaned || cleaned === '.') return t('toolCalls.theSpace');
+  return t('toolCalls.theFolder', { name: basename(cleaned) });
 }
 
 function formatQuery(query: string): string {
@@ -63,7 +55,7 @@ function dirname(path: string): string {
   if (!cleaned) return '';
   const parts = cleaned.split(/[/\\]/);
   parts.pop();
-  if (parts.length === 0) return 'racine du projet';
+  if (parts.length === 0) return t('toolCalls.spaceRoot');
   return parts.join('/');
 }
 
@@ -79,6 +71,10 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
+function pluralize(key: string, count: number): string {
+  return t(key, count, { count });
+}
+
 /** Construit le détail lisible d'un tool call (nom + args + résultat). */
 export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
   const args = toolCall.args ?? {};
@@ -92,28 +88,30 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
     case 'list_files': {
       const subdir = asString(args.subdir);
       location = formatLocationSubject(subdir);
-      target = `Liste du contenu ${formatLocation(subdir)}`;
+      target = t('toolCalls.listContent', { location: formatLocation(subdir) });
       if (result && typeof result === 'object') {
         const entries = asList((result as Record<string, unknown>).entries);
         const count = entries.length;
         outcome =
           count === 0
-            ? 'Aucun élément trouvé'
-            : `${count} ${count === 1 ? 'élément' : 'éléments'} listés`;
+            ? t('toolCalls.noElements')
+            : pluralize('toolCalls.elementsListed', count);
       }
       break;
     }
     case 'search_kb': {
       const query = formatQuery(asString(args.query));
-      target = query ? `Recherche : « ${query} »` : 'Recherche dans les fichiers';
-      location = 'la mémoire du projet';
+      target = query
+        ? t('toolCalls.searchQuery', { query })
+        : t('toolCalls.searchFiles');
+      location = t('toolCalls.spaceMemory');
       if (result && typeof result === 'object') {
         const results = asList((result as Record<string, unknown>).results);
         const count = results.length;
         outcome =
           count === 0
-            ? 'Aucun résultat'
-            : `${count} ${count === 1 ? 'résultat' : 'résultats'} trouvé${count === 1 ? '' : 's'}`;
+            ? t('toolCalls.noResults')
+            : pluralize('toolCalls.resultsFound', count);
       }
       break;
     }
@@ -123,10 +121,13 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
       const docId = asString(args.document_id);
       if (paths.length) {
         target = paths.map(formatFilePath).join(', ');
-        location = paths.length === 1 ? `dans ${dirname(paths[0])}` : undefined;
+        location =
+          paths.length === 1
+            ? t('toolCalls.inFolder', { path: dirname(paths[0]) })
+            : undefined;
       } else if (docId) {
         target = formatFilePath(docId);
-        location = `dans ${dirname(docId)}`;
+        location = t('toolCalls.inFolder', { path: dirname(docId) });
       }
       if (result && typeof result === 'object') {
         const meta = (result as Record<string, unknown>).metadata;
@@ -134,53 +135,62 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
           const m = meta as Record<string, unknown>;
           const pages = asNumber(m.pages_total);
           const lines = asNumber(m.lines_returned);
-          if (pages && pages > 0) outcome = `${pages} page${pages === 1 ? '' : 's'} lue${pages === 1 ? '' : 's'}`;
-          else if (lines && lines > 0) outcome = `${lines} ligne${lines === 1 ? '' : 's'} renvoyée${lines === 1 ? '' : 's'}`;
+          if (pages && pages > 0) {
+            outcome = pluralize('toolCalls.pagesRead', pages);
+          } else if (lines && lines > 0) {
+            outcome = pluralize('toolCalls.linesReturned', lines);
+          }
         }
       }
       break;
     }
     case 'run_code': {
       const lang = asString(args.language) || asString(args.lang) || 'code';
-      target = `Exécution de ${lang}`;
-      location = 'sandbox isolé';
+      target = t('toolCalls.runLanguage', { lang });
+      location = t('toolCalls.isolatedSandbox');
       if (result && typeof result === 'object') {
         const r = result as Record<string, unknown>;
         const stdout = asString(r.stdout);
         const files = asList(r.files);
         const plots = asList(r.plots);
         const parts: string[] = [];
-        if (stdout) parts.push('sortie produite');
-        if (files.length) parts.push(`${files.length} fichier${files.length === 1 ? '' : 's'}`);
-        if (plots.length) parts.push(`${plots.length} graphique${plots.length === 1 ? '' : 's'}`);
-        outcome = parts.length ? parts.join(', ') : 'Calcul terminé';
+        if (stdout) parts.push(t('toolCalls.outputProduced'));
+        if (files.length) parts.push(pluralize('toolCalls.filesCount', files.length));
+        if (plots.length) parts.push(pluralize('toolCalls.plotsCount', plots.length));
+        outcome = parts.length ? parts.join(', ') : t('toolCalls.calculationDone');
       }
       break;
     }
     case 'generate_document': {
-      const name = formatFilePath(asString(args.name) || asString(args.path) || toolCall.filePath || '');
-      target = name ? `Création de ${name}` : 'Création d’un document';
-      if (toolCall.filePath) location = `dans ${dirname(toolCall.filePath)}`;
+      const name = formatFilePath(
+        asString(args.name) || asString(args.path) || toolCall.filePath || '',
+      );
+      target = name
+        ? t('toolCalls.createDocument', { name })
+        : t('toolCalls.createDocumentGeneric');
+      if (toolCall.filePath) {
+        location = t('toolCalls.inFolder', { path: dirname(toolCall.filePath) });
+      }
       if (result && typeof result === 'object') {
         const r = result as Record<string, unknown>;
-        if (r.cancelled) outcome = 'Création annulée';
-        else if (toolCall.status === 'success') outcome = 'Document enregistré';
+        if (r.cancelled) outcome = t('toolCalls.creationCancelled');
+        else if (toolCall.status === 'success') outcome = t('toolCalls.documentSaved');
       }
       break;
     }
     default: {
       target = toolCall.humanSummary || undefined;
-  }
+    }
   }
 
-  if (target) rows.push({ label: 'Action', value: target });
-  if (location) rows.push({ label: 'Emplacement', value: location });
-  if (outcome) rows.push({ label: 'Résultat', value: outcome });
+  if (target) rows.push({ label: t('common.action'), value: target });
+  if (location) rows.push({ label: t('common.location'), value: location });
+  if (outcome) rows.push({ label: t('common.outcome'), value: outcome });
 
   const dur = durationLabel(toolCall);
-  if (dur) rows.push({ label: 'Durée', value: dur });
+  if (dur) rows.push({ label: t('common.duration'), value: dur });
 
-  rows.push({ label: 'Statut', value: statusLabel(toolCall.status) });
+  rows.push({ label: t('common.status'), value: statusLabel(toolCall.status) });
 
   return { target, location, outcome, rows };
 }
@@ -188,16 +198,16 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
 export function statusLabel(status: ChatToolCall['status']): string {
   switch (status) {
     case 'running':
-      return 'En cours…';
+      return t('toolCalls.statusRunning');
     case 'awaiting_confirmation':
-      return 'En attente de confirmation';
+      return t('toolCalls.statusAwaitingConfirmation');
     case 'success':
-      return 'Terminé';
+      return t('toolCalls.statusSuccess');
     case 'error':
-      return 'Échec';
+      return t('toolCalls.statusError');
     case 'pending':
     default:
-      return 'En attente';
+      return t('toolCalls.statusPending');
   }
 }
 
@@ -206,6 +216,6 @@ export function durationLabel(toolCall: ChatToolCall): string {
   if (!startedAt) return '';
   const end = endedAt ?? Date.now();
   const ms = Math.max(0, end - startedAt);
-  if (ms < 1000) return `${ms} ms`;
-  return `${(ms / 1000).toFixed(1)} s`;
+  if (ms < 1000) return t('toolCalls.durationMs', { ms });
+  return t('toolCalls.durationSec', { sec: (ms / 1000).toFixed(1) });
 }

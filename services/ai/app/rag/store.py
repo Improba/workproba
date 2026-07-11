@@ -9,11 +9,15 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import uuid
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
 import litellm
 import sqlite_vec
+
+from app.audit import log_event, resolve_app_data_dir
 
 _EMBEDDING_DIM_UNKNOWN = -1
 
@@ -127,6 +131,17 @@ class RagStore:
         )
         conn.execute(
             "CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)"
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS memories (
+                id TEXT PRIMARY KEY,
+                content TEXT NOT NULL,
+                source TEXT,
+                created_at TEXT NOT NULL,
+                tags TEXT
+            )
+            """
         )
         conn.commit()
         self._conn = conn
@@ -284,7 +299,154 @@ class RagStore:
             )
         return results
 
+    def list_memories(self) -> list[dict[str, Any]]:
+        conn = self._connect()
+        rows = conn.execute(
+            "SELECT id, content, source, created_at, tags FROM memories ORDER BY created_at DESC"
+        ).fetchall()
+        results: list[dict[str, Any]] = []
+        for memory_id, content, source, created_at, tags_json in rows:
+            tags: list[str] = []
+            if tags_json:
+                try:
+                    parsed = json.loads(tags_json)
+                    if isinstance(parsed, list):
+                        tags = [str(tag) for tag in parsed]
+                except json.JSONDecodeError:
+                    tags = []
+            results.append(
+                {
+                    "id": memory_id,
+                    "content": content,
+                    "source": source or "manual",
+                    "created_at": created_at,
+                    "tags": tags,
+                }
+            )
+        return results
+
+    def add_memory(
+        self,
+        *,
+        content: str,
+        source: str = "manual",
+        tags: list[str] | None = None,
+        memory_id: str | None = None,
+    ) -> dict[str, Any]:
+        cleaned = content.strip()
+        if not cleaned:
+            raise ValueError("empty_memory_content")
+        conn = self._connect()
+        entry_id = memory_id or f"mem_{uuid.uuid4().hex[:12]}"
+        created_at = datetime.now(UTC).isoformat()
+        tags_json = json.dumps(tags or [], ensure_ascii=False)
+        conn.execute(
+            "INSERT OR REPLACE INTO memories(id, content, source, created_at, tags) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (entry_id, cleaned, source, created_at, tags_json),
+        )
+        conn.commit()
+        return {
+            "id": entry_id,
+            "content": cleaned,
+            "source": source,
+            "created_at": created_at,
+            "tags": tags or [],
+        }
+
+    def forget_memory(self, memory_id: str, *, actor: str = "user", scope: str = "memory") -> bool:
+        conn = self._connect()
+        cursor = conn.execute("DELETE FROM memories WHERE id = ?", (memory_id,))
+        conn.commit()
+        removed = cursor.rowcount > 0
+        if removed:
+            log_event(
+                resolve_app_data_dir(self._db_path.parent),
+                "memory.forget",
+                actor,
+                {"memory_id": memory_id, "scope": scope},
+            )
+        return removed
+
+    def clear_memories(self) -> int:
+        conn = self._connect()
+        cursor = conn.execute("DELETE FROM memories")
+        conn.commit()
+        return int(cursor.rowcount)
+
+    def clear_rag_index(self) -> None:
+        conn = self._connect()
+        conn.execute("DELETE FROM chunks")
+        conn.execute("DELETE FROM documents")
+        if self._dim != _EMBEDDING_DIM_UNKNOWN:
+            conn.execute("DELETE FROM vec_chunks")
+        conn.commit()
+
+    def clear_all(self, *, actor: str = "user", scope: str = "all") -> dict[str, int]:
+        memories_removed = self.clear_memories()
+        self.clear_rag_index()
+        log_event(
+            resolve_app_data_dir(self._db_path.parent),
+            "memory.forget_all",
+            actor,
+            {"scope": scope},
+        )
+        return {"memories_removed": memories_removed}
+
+    async def search_combined(
+        self,
+        *,
+        query: str,
+        limit: int = 8,
+    ) -> list[dict[str, Any]]:
+        """Recherche RAG + correspondance textuelle sur les souvenirs explicites."""
+        results: list[dict[str, Any]] = []
+        rag_hits = await self.search(query=query, limit=limit)
+        for hit in rag_hits:
+            results.append({**hit, "kind": "rag"})
+        needle = query.strip().lower()
+        if needle:
+            for memory in self.list_memories():
+                content = str(memory.get("content") or "")
+                if needle in content.lower():
+                    results.append(
+                        {
+                            "kind": "memory",
+                            "memory_id": memory.get("id"),
+                            "content": content,
+                            "source": memory.get("source"),
+                            "score": 1.0,
+                            "metadata": {"tags": memory.get("tags") or []},
+                        }
+                    )
+        return results[:limit]
+
     def close(self) -> None:
         if self._conn is not None:
             self._conn.close()
             self._conn = None
+
+
+def clear_conversations(workspace_data_dir: Path) -> int:
+    """Efface l'historique des conversations d'un espace (fichiers JSON)."""
+    conv_dir = workspace_data_dir / "conversations"
+    if not conv_dir.is_dir():
+        return 0
+    removed = 0
+    for path in conv_dir.glob("*.json"):
+        try:
+            path.unlink()
+            removed += 1
+        except OSError:
+            continue
+    return removed
+
+
+def open_memory_store(db_path: Path) -> RagStore:
+    """Ouvre le store mémoire sans modèle d'embedding (souvenirs explicites seuls)."""
+    return RagStore(
+        db_path=db_path,
+        embedding_model="disabled/local",
+        embedding_base_url=None,
+        embedding_api_key=None,
+    )

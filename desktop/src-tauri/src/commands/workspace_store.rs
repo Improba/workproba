@@ -9,6 +9,7 @@ use uuid::Uuid;
 pub const WORKPROBA_DIR_NAME: &str = ".workproba";
 const REGISTRY_FILE: &str = "registry.json";
 const WORKSPACES_DIR: &str = "workspaces";
+const SPACES_DIR: &str = "spaces";
 const MANIFEST_FILE: &str = "manifest.json";
 const CONVERSATIONS_DIR: &str = "conversations";
 const VERSIONS_DIR: &str = "versions";
@@ -79,14 +80,48 @@ fn app_data_root(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|error| error.to_string())
 }
 
+/// Renomme `workspaces/` → `spaces/` une seule fois (T-V2-15b).
+/// La structure interne `.workproba/` est conservée pour éviter de casser
+/// les chemins existants ; le flatten canonique est reporté.
+pub fn migrate_workspaces_to_spaces(app_data: &Path) -> Result<(), String> {
+    let legacy = app_data.join(WORKSPACES_DIR);
+    let spaces = app_data.join(SPACES_DIR);
+    if legacy.is_dir() && !spaces.exists() {
+        fs::rename(&legacy, &spaces).map_err(|error| {
+            format!(
+                "Impossible de migrer {WORKSPACES_DIR} vers {SPACES_DIR} : {error}"
+            )
+        })?;
+    }
+    Ok(())
+}
+
+fn ensure_spaces_migrated(app: &AppHandle) -> Result<PathBuf, String> {
+    let root = app_data_root(app)?;
+    migrate_workspaces_to_spaces(&root)?;
+    Ok(root)
+}
+
+fn space_root(app: &AppHandle, space_id: &str) -> Result<PathBuf, String> {
+    let app_data = ensure_spaces_migrated(app)?;
+    let spaces_path = app_data.join(SPACES_DIR).join(space_id);
+    if spaces_path.is_dir() {
+        return Ok(spaces_path);
+    }
+    // Alias lecture : ancien chemin workspaces/{id}
+    let legacy_path = app_data.join(WORKSPACES_DIR).join(space_id);
+    if legacy_path.is_dir() {
+        return Ok(legacy_path);
+    }
+    Ok(spaces_path)
+}
+
 fn registry_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(app_data_root(app)?.join(REGISTRY_FILE))
+    Ok(ensure_spaces_migrated(app)?.join(REGISTRY_FILE))
 }
 
 fn workspace_root(app: &AppHandle, workspace_id: &str) -> Result<PathBuf, String> {
-    Ok(app_data_root(app)?
-        .join(WORKSPACES_DIR)
-        .join(workspace_id))
+    space_root(app, workspace_id)
 }
 
 pub fn workspace_data_dir(app: &AppHandle, workspace_id: &str) -> Result<PathBuf, String> {
@@ -108,6 +143,7 @@ pub fn normalize_folder_path(path: &Path) -> Result<String, String> {
 }
 
 fn load_registry(app: &AppHandle) -> Result<Registry, String> {
+    let _ = ensure_spaces_migrated(app)?;
     let path = registry_path(app)?;
     if !path.is_file() {
         return Ok(Registry {
@@ -181,7 +217,7 @@ pub fn lookup_workspace(app: &AppHandle, folder_path: &Path) -> Result<Option<Wo
 pub fn open_or_create_workspace(app: &AppHandle, folder_path: &Path) -> Result<WorkspaceInfo, String> {
     if !folder_path.is_dir() {
         return Err(format!(
-            "Le dossier projet n'existe pas : {}",
+            "Le dossier de l'espace n'existe pas : {}",
             folder_path.to_string_lossy()
         ));
     }
@@ -354,4 +390,54 @@ pub fn create_conversation(
     };
     save_conversation(app, session.clone())?;
     Ok(session)
+}
+
+#[cfg(test)]
+mod workspace_store_tests {
+    use super::*;
+    use std::fs;
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "workproba_ws_test_{name}_{}",
+            Uuid::new_v4().simple()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn migrate_workspaces_to_spaces_renames_directory() {
+        let root = unique_temp_dir("rename");
+        let legacy = root.join(WORKSPACES_DIR);
+        let marker = legacy.join("ws_test").join(".workproba");
+        fs::create_dir_all(&marker).expect("create legacy tree");
+        fs::write(marker.join("manifest.json"), "{}").expect("write manifest");
+
+        migrate_workspaces_to_spaces(&root).expect("migrate");
+
+        let spaces = root.join(SPACES_DIR);
+        assert!(spaces.is_dir());
+        assert!(!legacy.exists());
+        assert!(spaces.join("ws_test").join(".workproba").join("manifest.json").is_file());
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn migrate_workspaces_to_spaces_is_idempotent_when_spaces_exists() {
+        let root = unique_temp_dir("idempotent");
+        let legacy = root.join(WORKSPACES_DIR);
+        let spaces = root.join(SPACES_DIR);
+        fs::create_dir_all(legacy.join("ws_a")).expect("legacy");
+        fs::create_dir_all(spaces.join("ws_b")).expect("spaces");
+
+        migrate_workspaces_to_spaces(&root).expect("migrate");
+
+        assert!(legacy.is_dir());
+        assert!(spaces.is_dir());
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

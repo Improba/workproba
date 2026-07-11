@@ -18,6 +18,20 @@ export interface ChatConfirmation {
   turnId?: string | null;
 }
 
+export interface ChatPlanStep {
+  tool: string;
+  summary: string;
+  target: string;
+}
+
+export interface ChatProposedPlan {
+  planId: string;
+  steps: ChatPlanStep[];
+  rationale: string;
+  /** approved | rejected | pending */
+  status?: 'pending' | 'approved' | 'rejected';
+}
+
 /** Codes d'erreur stables émis par le sidecar, le backend ou le front. */
 export type ChatErrorCode =
   | 'idle_timeout'
@@ -107,9 +121,44 @@ export interface ChatThinkingPart {
 
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
 
+/** Nature d'un fichier joint, pour piloter rendu et transport. */
+export type ChatAttachmentKind = 'image' | 'document' | 'text';
+
+/** État de lecture d'une pièce jointe (encodage base64 / génération aperçu). */
+export type ChatAttachmentStatus = 'reading' | 'ready' | 'error';
+
+/**
+ * Pièce jointe à un message utilisateur.
+ *
+ * Le contenu binaire est transporté vers le sidecar sous forme de `contentBase64`
+ * (sans préfixe `data:`). `previewUrl` (URL d'objet) ne sert que pour l'aperçu
+ * image côté UI et n'est jamais sérialisé ni persisté.
+ */
+export interface ChatAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  kind: ChatAttachmentKind;
+  contentBase64?: string;
+  /** URL d'objet pour l'aperçu image (non persistée). */
+  previewUrl?: string;
+  status: ChatAttachmentStatus;
+  error?: string;
+}
+
+/** Variante persistée : on ne conserve que les métadonnées, pas les bytes. */
+export type ChatAttachmentSnapshot = Omit<
+  ChatAttachment,
+  'contentBase64' | 'previewUrl'
+>;
+
 /** Liste ordonnée des segments d'un message, pour respecter le flux réel :
  * texte -> outil -> texte -> ... */
-export type ChatMessagePart = ChatTextPart | ChatToolCallPart | ChatThinkingPart;
+export type ChatMessagePart =
+  | ChatTextPart
+  | ChatToolCallPart
+  | ChatThinkingPart;
 
 export interface ChatMessage {
   id: string;
@@ -123,9 +172,15 @@ export interface ChatMessage {
   error?: ChatError | null;
   /** Demande de confirmation avant écriture fichier (flux de confiance). */
   pendingConfirmation?: ChatConfirmation | null;
+  /** Plan proposé par l'agent (mode planification). */
+  pendingPlan?: ChatProposedPlan | null;
   /** Texte de raisonnement persisté (rejoué au backend lors des tours suivants). */
   thinking?: string | null;
+  /** Pièces jointes au message (côté user). Snapshots métadonnées après envoi. */
+  attachments?: ChatAttachmentSnapshot[];
   streaming?: boolean;
+  /** Carte d'avis personas (mode 1, distincte du message assistant). */
+  personasOpinion?: PersonasOpinionCard | null;
   /** Compteur interne pour le virtual scroller pendant le streaming. */
   _contentRev?: number;
   createdAt: string;
@@ -155,6 +210,7 @@ export interface CreateSessionPayload {
 export interface SendMessagePayload {
   content: string;
   parentId?: string | null;
+  attachments?: ChatAttachment[];
 }
 
 export type ChatStreamEventType =
@@ -166,6 +222,7 @@ export type ChatStreamEventType =
   | 'tool_call_start'
   | 'confirmation_request'
   | 'tool_call_result'
+  | 'plan_proposed'
   | 'compaction'
   | 'done'
   | 'error';
@@ -251,6 +308,12 @@ export interface ChatStreamCompactionData {
   truncated?: boolean;
 }
 
+export interface ChatStreamPlanProposedData {
+  planId: string;
+  steps: ChatPlanStep[];
+  rationale: string;
+}
+
 export type ChatStreamEvent =
   | { type: 'turn_start'; data: ChatStreamTurnStartData }
   | { type: 'token'; data: ChatStreamTokenData }
@@ -260,6 +323,7 @@ export type ChatStreamEvent =
   | { type: 'tool_call_start'; data: ChatStreamToolCallStartData }
   | { type: 'tool_call_result'; data: ChatStreamToolCallResultData }
   | { type: 'confirmation_request'; data: ChatStreamConfirmationRequestData }
+  | { type: 'plan_proposed'; data: ChatStreamPlanProposedData }
   | { type: 'compaction'; data: ChatStreamCompactionData }
   | { type: 'done'; data: ChatStreamDoneData }
   | { type: 'error'; data: ChatStreamErrorData };
@@ -268,4 +332,24 @@ export type ChatStreamEvent =
 export interface RawChatStreamEvent {
   type: ChatStreamEventType | string;
   data: Record<string, unknown>;
+}
+
+/** Bloc d'avis d'un persona (mode « Demander l'avis »). */
+export interface PersonasOpinionBlock {
+  personaId: string;
+  personaName: string;
+  personaRole: string;
+  avatarColor: string;
+  content: string;
+  memoryCitations?: string[];
+  memoryCited?: boolean;
+  streaming?: boolean;
+}
+
+/** Carte d'avis personas inline dans le chat. */
+export interface PersonasOpinionCard {
+  id: string;
+  question: string;
+  opinions: PersonasOpinionBlock[];
+  streaming?: boolean;
 }

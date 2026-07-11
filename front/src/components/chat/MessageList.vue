@@ -26,6 +26,7 @@
               item.streaming,
               item.error?.code,
               item.pendingConfirmation?.confirmationId,
+              item.pendingPlan?.planId,
               expansionEpoch,
             ]"
           >
@@ -33,12 +34,20 @@
               :message="item"
               :project-path="projectPath"
               :session-id="sessionId"
+              :workspace-data-dir="workspaceDataDir"
               :confirming="confirming"
+              :approving-plan="approvingPlan"
+              :attachment-statuses="attachmentStatuses"
+              :settings-locked="settingsLocked"
               class="message-list__item"
               @open-file="(path) => emit('open-file', path)"
               @restored="(path) => emit('restored', path)"
               @confirm-approve="emit('confirm-approve')"
               @confirm-deny="emit('confirm-deny')"
+              @plan-approve="emit('plan-approve')"
+              @plan-reject="emit('plan-reject')"
+              @personas-another="(card) => emit('personas-another', card)"
+              @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
             />
           </DynamicScrollerItem>
         </template>
@@ -46,7 +55,7 @@
 
       <div v-else class="message-list__empty">
         <Lucide name="messages-square" size="lg" color="neutral-medium" />
-        <p>Commencez la conversation. L'agent peut manipuler vos documents et exécuter des tâches pour vous.</p>
+        <p>{{ t('chat.emptyConversation') }}</p>
       </div>
     </q-scroll-area>
   </div>
@@ -54,6 +63,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import {
   DynamicScroller,
   DynamicScrollerItem,
@@ -69,7 +79,11 @@ defineProps<{
   messages: ChatMessage[];
   projectPath?: string | null;
   sessionId?: string | null;
+  workspaceDataDir?: string | null;
   confirming?: boolean;
+  approvingPlan?: boolean;
+  attachmentStatuses?: Record<string, import('@composables/useChatStream').AttachmentStatusEntry>;
+  settingsLocked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -77,7 +91,13 @@ const emit = defineEmits<{
   restored: [path: string];
   'confirm-approve': [];
   'confirm-deny': [];
+  'plan-approve': [];
+  'plan-reject': [];
+  'personas-another': [card: import('#types').PersonasOpinionCard];
+  'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
 }>();
+
+const { t } = useI18n();
 
 const scrollAreaRef = ref<QScrollArea | null>(null);
 
@@ -131,16 +151,15 @@ defineExpose({
 }
 
 .message-list__virtual {
+  width: 100%;
   max-width: 46rem;
   margin: 0 auto;
-  padding: 1rem 1.25rem 1.5rem;
+  padding: 0;
 }
 
 .message-list__item {
-  // vue-virtual-scroller positionne les items en absolu et mesure la
-  // border-box (margins ignorées) : on utilise padding-bottom pour créer
-  // un gap réellement visible entre les messages.
-  padding-bottom: 1rem;
+  // Pleine largeur : le séparateur et le fond user sont portés par Message.
+  width: 100%;
 }
 
 .message-list__empty {

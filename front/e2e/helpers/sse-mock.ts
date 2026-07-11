@@ -144,15 +144,17 @@ export async function installConfirmationSseMock(
         if (url.includes('/versions/restore')) {
           return new Response(
             JSON.stringify({
-              restored_path: `${projectPath}/contrat_dupont.docx`,
-              snapshot_path: `${projectPath}/.workproba/versions/snap1`,
+              ok: true,
+              restored_path: 'contrat_dupont.docx',
+              version_id: 'v1',
+              file_path: 'contrat_dupont.docx',
             }),
             { status: 200, headers: { 'Content-Type': 'application/json' } },
           );
         }
 
         if (url.includes('/versions?')) {
-          return new Response(JSON.stringify({ snapshots: [] }), {
+          return new Response(JSON.stringify({ versions: [] }), {
             status: 200,
             headers: { 'Content-Type': 'application/json' },
           });

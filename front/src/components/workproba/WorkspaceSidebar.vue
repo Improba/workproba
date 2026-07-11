@@ -1,13 +1,48 @@
 <template>
   <nav class="wp-sidebar" :class="{ 'wp-sidebar--rail': rail }">
     <div v-if="!rail" class="wp-sidebar__inner">
+      <!-- Onglets sidebar : espaces / mémoire -->
+      <div class="wp-sidebar__tabs" role="tablist">
+        <button
+          type="button"
+          role="tab"
+          class="wp-sidebar__tab"
+          :class="{ 'wp-sidebar__tab--active': sidebarTab === 'spaces' }"
+          :aria-selected="sidebarTab === 'spaces'"
+          @click="sidebarTab = 'spaces'"
+        >
+          {{ t('shell.spaces') }}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          class="wp-sidebar__tab wp-sidebar__tab--memory"
+          :class="{ 'wp-sidebar__tab--active': sidebarTab === 'memory' }"
+          :aria-selected="sidebarTab === 'memory'"
+          @click="onMemoryTab"
+        >
+          {{ t('memory.title') }}
+        </button>
+        <button
+          v-if="isPersonasPluginActive"
+          type="button"
+          role="tab"
+          class="wp-sidebar__tab wp-sidebar__tab--personas"
+          :class="{ 'wp-sidebar__tab--active': sidebarTab === 'personas' }"
+          :aria-selected="sidebarTab === 'personas'"
+          @click="onPersonasTab"
+        >
+          {{ t('personas.panel.title') }}
+        </button>
+      </div>
+
       <!-- En-tête : Workspaces + ouvrir un dossier -->
-      <div class="wp-sidebar__topbar">
-        <span class="wp-sidebar__brand">Projets</span>
+      <div v-if="sidebarTab === 'spaces'" class="wp-sidebar__topbar">
+        <span class="wp-sidebar__brand">{{ t('shell.spaces') }}</span>
         <button
           type="button"
           class="wp-sidebar__icon-btn"
-          title="Ouvrir un dossier…"
+          :title="t('common.openFolderEllipsis')"
           @click="onOpenFolder"
         >
           <Lucide name="folder-plus" size="15" color="accent" />
@@ -15,12 +50,12 @@
       </div>
 
       <!-- Arbre workspaces / conversations -->
-      <div class="wp-sidebar__tree">
+      <div v-if="sidebarTab === 'spaces'" class="wp-sidebar__tree">
         <div v-if="recentWorkspaces.length === 0" class="wp-sidebar__empty">
-          <p>Aucun projet pour l'instant.</p>
+          <p>{{ t('shell.noSpaces') }}</p>
           <button type="button" class="wp-sidebar__new-cta" @click="onOpenFolder">
             <Lucide name="plus" size="16" color="wp-canard" />
-            Ouvrir un dossier
+            {{ t('common.openFolder') }}
           </button>
         </div>
 
@@ -34,7 +69,7 @@
             <button
               type="button"
               class="wp-ws__chevron"
-              :title="isExpanded(ws.id) ? 'Replier' : 'Déplier'"
+              :title="isExpanded(ws.id) ? t('common.collapse') : t('common.expand')"
               :aria-expanded="isExpanded(ws.id)"
               :aria-controls="`wp-ws-children-${ws.id}`"
               @click="toggleExpand(ws)"
@@ -60,7 +95,7 @@
               v-if="ws.id === activeWorkspaceId"
               type="button"
               class="wp-ws__new"
-              title="Nouvelle conversation"
+              :title="t('common.newConversation')"
               @click.stop="onNewConversation"
             >
               <Lucide name="message-square-plus" size="14" color="text" />
@@ -68,7 +103,7 @@
           </div>
 
           <div v-if="isExpanded(ws.id)" class="wp-ws__children" :id="`wp-ws-children-${ws.id}`">
-            <div v-if="isLoading(ws.id)" class="wp-ws__hint">Chargement…</div>
+            <div v-if="isLoading(ws.id)" class="wp-ws__hint">{{ t('common.loading') }}</div>
 
             <div v-else-if="sessionsFor(ws.id).length === 0" class="wp-ws__hint">
               <button
@@ -78,9 +113,9 @@
                 @click="onNewConversation"
               >
                 <Lucide name="plus" size="13" color="wp-canard" />
-                Nouvelle conversation
+                {{ t('common.newConversation') }}
               </button>
-              <template v-else>Aucune conversation</template>
+              <template v-else>{{ t('shell.noConversations') }}</template>
             </div>
 
             <div v-else class="wp-ws__convos">
@@ -97,7 +132,7 @@
                   :class="`wp-convo__dot--${convoStatus(session)}`"
                   :title="convoStatusLabel(session)"
                 />
-                <span class="wp-convo__title">{{ session.title || 'Sans titre' }}</span>
+                <span class="wp-convo__title">{{ session.title || t('common.noTitle') }}</span>
                 <span class="wp-convo__date">{{ formatRelative(session.updatedAt) }}</span>
               </button>
               <button
@@ -106,19 +141,44 @@
                 class="wp-ws__more"
                 @click="toggleConvos(ws.id)"
               >
-                {{ isConvosExpanded(ws.id) ? 'Voir moins' : `Voir plus (${sessionsFor(ws.id).length - visibleSessions(ws.id).length})` }}
+                {{ isConvosExpanded(ws.id) ? t('common.seeLess') : t('common.seeMore', { count: sessionsFor(ws.id).length - visibleSessions(ws.id).length }) }}
               </button>
             </div>
           </div>
         </section>
       </div>
 
+      <MemoryPanel
+        v-else-if="sidebarTab === 'memory'"
+        :memories="memories"
+        :search-results="searchResults"
+        :loading="memoryLoading"
+        :searching="memorySearching"
+        :load-error="memoryLoadError"
+        @refresh="refreshMemoryPanel"
+        @search="onMemorySearch"
+        @forget="onMemoryForget"
+        @forget-all="onMemoryForgetAll"
+      />
+
+      <PersonasCentralPanel
+        v-else-if="sidebarTab === 'personas'"
+        :plugin-active="isPersonasPluginActive"
+        :plugin-data-dir="personasDataDir"
+        @ask-opinion="onPersonasAsk"
+        @meeting="onPersonasMeeting"
+        @discuss="onPersonasDiscuss"
+        @view-meeting="onPersonasViewMeeting"
+        @relaunch-meeting="onPersonasRelaunchMeeting"
+        @resume-discussion="onPersonasResumeDiscussion"
+      />
+
       <!-- Pied : profil (bas gauche) + réglages -->
       <div class="wp-sidebar__footer">
         <button
           type="button"
           class="wp-sidebar__profile"
-          title="Modifier le profil"
+          :title="t('shell.editProfile')"
           @click="profileDialogOpen = true"
         >
           <span class="wp-sidebar__avatar">{{ initials }}</span>
@@ -130,7 +190,7 @@
         <button
           type="button"
           class="wp-sidebar__footer-btn"
-          title="Paramètres — Modèles IA"
+          :title="t('shell.settingsModels')"
           @click="onOpenSettings"
         >
           <Lucide name="settings-2" size="16" color="text-muted" />
@@ -140,30 +200,30 @@
       <q-dialog v-model="profileDialogOpen">
         <div class="wp-profile-dialog">
           <header class="wp-profile-dialog__head">
-            <span class="wp-profile-dialog__title">Profil</span>
+            <span class="wp-profile-dialog__title">{{ t('common.profile') }}</span>
             <button
               type="button"
               class="wp-profile-dialog__close"
-              aria-label="Fermer"
+              :aria-label="t('common.close')"
               @click="profileDialogOpen = false"
             >
               <Lucide name="x" size="16" color="text-muted" />
             </button>
           </header>
           <div class="wp-profile-dialog__field">
-            <label for="wp-profile-name">Nom</label>
+            <label for="wp-profile-name">{{ t('common.name') }}</label>
             <input id="wp-profile-name" v-model="profileNameDraft" type="text" />
           </div>
           <div class="wp-profile-dialog__field">
-            <label for="wp-profile-org">Organisation</label>
+            <label for="wp-profile-org">{{ t('common.organisation') }}</label>
             <input id="wp-profile-org" v-model="profileOrgDraft" type="text" />
           </div>
           <footer class="wp-profile-dialog__foot">
             <button type="button" class="wp-profile-dialog__btn" @click="profileDialogOpen = false">
-              Annuler
+              {{ t('common.cancel') }}
             </button>
             <button type="button" class="wp-profile-dialog__btn wp-profile-dialog__btn--primary" @click="onSaveProfile">
-              Enregistrer
+              {{ t('common.save') }}
             </button>
           </footer>
         </div>
@@ -172,29 +232,29 @@
 
     <!-- Mode rail replié -->
     <div v-else class="wp-sidebar__rail">
-      <button class="wp-rail-btn" title="Projets" @click="$emit('expand')">
+      <button class="wp-rail-btn" :title="t('shell.spacesTitle')" @click="$emit('expand')">
         <Lucide name="folder" size="18" color="accent" />
       </button>
       <button
         class="wp-rail-btn"
-        title="Ouvrir un dossier…"
+        :title="t('common.openFolderEllipsis')"
         @click="onOpenFolder"
       >
         <Lucide name="folder-plus" size="18" color="accent" />
       </button>
       <button
         class="wp-rail-btn"
-        title="Nouvelle conversation"
+        :title="t('common.newConversation')"
         :disabled="!activeWorkspaceId"
         @click="onNewConversation"
       >
         <Lucide name="message-square-plus" size="18" color="text" />
       </button>
       <div class="wp-sidebar__rail-spacer" />
-      <button class="wp-rail-btn" title="Profil" @click="profileDialogOpen = true">
+      <button class="wp-rail-btn" :title="t('common.profile')" @click="profileDialogOpen = true">
         <span class="wp-sidebar__avatar wp-sidebar__avatar--sm">{{ initials }}</span>
       </button>
-      <button class="wp-rail-btn" title="Modèles IA" @click="onOpenSettings">
+      <button class="wp-rail-btn" :title="t('shell.settingsModelsShort')" @click="onOpenSettings">
         <Lucide name="settings-2" size="18" color="text" />
       </button>
     </div>
@@ -203,6 +263,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
@@ -213,6 +274,12 @@ import type { WorkspaceInfo } from '@composables/useDesktop.types';
 import { createSession, listSessions, type LocalSession } from '@services/workspaceSession';
 import { useSessionSync } from '@composables/useSessionSync';
 import { HOME_ROUTE } from '@router/meta';
+import MemoryPanel from '@components/memory/MemoryPanel.vue';
+import PersonasCentralPanel from '@components/personas/PersonasCentralPanel.vue';
+import { useMemory } from '@composables/useMemory';
+import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import { usePersonasNavigation } from '@composables/usePersonasNavigation';
+import type { DiscussionMessage } from '@composables/usePersonas';
 
 const props = defineProps<{
   rail?: boolean;
@@ -225,10 +292,12 @@ defineEmits<{
 
 const router = useRouter();
 const route = useRoute();
+const { t, locale } = useI18n();
 
 const {
   activePath,
   activeWorkspaceId,
+  activeDataDir,
   openFolder,
   switchWorkspace,
   initFromStoredPath,
@@ -241,6 +310,24 @@ const sessionsByWs = reactive<Record<string, LocalSession[]>>({});
 const loadingByWs = reactive<Record<string, boolean>>({});
 
 const PREVIEW_COUNT = 4;
+
+const sidebarTab = ref<'spaces' | 'memory' | 'personas'>('spaces');
+
+const { isPersonasPluginActive, getPluginDataDir } = usePlugins();
+const { requestAction } = usePersonasNavigation();
+const personasDataDir = ref<string | null>(null);
+
+const {
+  memories,
+  searchResults,
+  loading: memoryLoading,
+  searching: memorySearching,
+  loadError: memoryLoadError,
+  refresh: refreshMemory,
+  searchMemory: searchMemoryQuery,
+  forgetMemory,
+  forgetAll: forgetAllMemory,
+} = useMemory();
 
 const currentSessionId = computed(() => String(route.params.id ?? ''));
 
@@ -259,7 +346,7 @@ watch(profileDialogOpen, (open) => {
 function onSaveProfile(): void {
   saveProfile({ name: profileNameDraft.value, organisation: profileOrgDraft.value });
   profileDialogOpen.value = false;
-  Notify.create({ message: 'Profil enregistré', color: 'dark', timeout: 1500 });
+  Notify.create({ message: t('common.profileSaved'), color: 'dark', timeout: 1500 });
 }
 
 function basename(path: string): string {
@@ -315,18 +402,18 @@ function convoStatus(session: LocalSession): ConvoStatus {
 
 function convoStatusLabel(session: LocalSession): string {
   const status = convoStatus(session);
-  if (status === 'streaming') return 'Génération en cours';
-  if (status === 'active') return 'Conversation active';
-  return 'Inactif';
+  if (status === 'streaming') return t('shell.conversationStreaming');
+  if (status === 'active') return t('shell.conversationActive');
+  return t('shell.conversationIdle');
 }
 
 function formatRelative(iso: string): string {
   const t = new Date(iso).getTime();
   const diff = Date.now() - t;
-  if (diff < 60000) return 'à l’instant';
-  if (diff < 3600000) return `${Math.floor(diff / 60000)} min`;
-  if (diff < 86400000) return `${Math.floor(diff / 3600000)} h`;
-  return new Date(iso).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' });
+  if (diff < 60000) return t('common.justNow');
+  if (diff < 3600000) return t('common.minutesAgo', { count: Math.floor(diff / 60000) });
+  if (diff < 86400000) return t('common.hoursAgo', { count: Math.floor(diff / 3600000) });
+  return new Date(iso).toLocaleDateString(locale.value, { day: '2-digit', month: 'short' });
 }
 
 async function refreshWorkspaces(): Promise<void> {
@@ -395,7 +482,7 @@ async function onNewConversation(): Promise<void> {
     void router.push({ name: 'chat_session', params: { id: session.id } });
   } catch (err) {
     Notify.create({
-      message: err instanceof Error ? err.message : 'Conversation impossible à créer',
+      message: err instanceof Error ? err.message : t('shell.conversationCreateFailed'),
       classes: 'bg-danger text-white',
     });
   }
@@ -408,7 +495,7 @@ function onOpenSession(session: LocalSession): void {
       .then(() => router.push({ name: 'chat_session', params: { id: session.id } }))
       .catch(() =>
         Notify.create({
-          message: 'Conversation impossible à ouvrir (projet injoignable).',
+          message: t('shell.conversationOpenFailed'),
           classes: 'bg-danger text-white',
         }),
       );
@@ -419,6 +506,110 @@ function onOpenSession(session: LocalSession): void {
 
 function onOpenSettings(): void {
   void router.push({ name: 'settings_models' });
+}
+
+function onMemoryTab(): void {
+  sidebarTab.value = 'memory';
+  void refreshMemoryPanel();
+}
+
+async function ensurePersonasDataDir(): Promise<void> {
+  if (personasDataDir.value) return;
+  try {
+    personasDataDir.value = await getPluginDataDir(PERSONAS_PLUGIN_ID);
+  } catch {
+    personasDataDir.value = null;
+  }
+}
+
+function onPersonasTab(): void {
+  sidebarTab.value = 'personas';
+  void ensurePersonasDataDir();
+}
+
+function navigateToChatForPersonas(): void {
+  if (route.name !== 'chat_session' && activeWorkspaceId.value) {
+    const sessions = sessionsFor(activeWorkspaceId.value);
+    const target = sessions[0];
+    if (target) {
+      void router.push({ name: 'chat_session', params: { id: target.id } });
+    }
+  }
+}
+
+function onPersonasAsk(): void {
+  navigateToChatForPersonas();
+  requestAction('opinion');
+}
+
+function onPersonasMeeting(): void {
+  navigateToChatForPersonas();
+  requestAction('meeting');
+}
+
+function onPersonasViewMeeting(meeting: {
+  persona_ids: string[];
+  topic: string;
+  rounds?: number;
+}): void {
+  onPersonasRelaunchMeeting({
+    personaIds: meeting.persona_ids,
+    topic: meeting.topic,
+    rounds: meeting.rounds ?? 3,
+  });
+}
+
+function onPersonasRelaunchMeeting(config: {
+  personaIds: string[];
+  topic: string;
+  rounds: number;
+}): void {
+  navigateToChatForPersonas();
+  sessionStorage.setItem('workproba.personas.relaunchMeeting', JSON.stringify(config));
+  requestAction('meeting');
+}
+
+function onPersonasDiscuss(): void {
+  navigateToChatForPersonas();
+  requestAction('discuss');
+}
+
+function onPersonasResumeDiscussion(payload: {
+  discussionId: string;
+  personaIds: string[];
+  messages: DiscussionMessage[];
+}): void {
+  navigateToChatForPersonas();
+  requestAction('discuss');
+  sessionStorage.setItem(
+    'workproba.personas.resume',
+    JSON.stringify(payload),
+  );
+}
+
+async function refreshMemoryPanel(): Promise<void> {
+  if (!activeDataDir.value) return;
+  await refreshMemory(activeDataDir.value);
+}
+
+async function onMemorySearch(query: string): Promise<void> {
+  if (!activeDataDir.value) return;
+  await searchMemoryQuery(activeDataDir.value, query);
+}
+
+async function onMemoryForget(id: string): Promise<void> {
+  if (!activeDataDir.value) return;
+  await forgetMemory(activeDataDir.value, id);
+}
+
+async function onMemoryForgetAll(): Promise<void> {
+  if (!activeDataDir.value) return;
+  const ok = await forgetAllMemory(activeDataDir.value, 'all');
+  Notify.create({
+    message: ok ? t('memory.forgetAllDone') : t('memory.loadFailed'),
+    color: ok ? 'positive' : 'negative',
+    timeout: 2500,
+  });
 }
 
 watch(
@@ -477,6 +668,48 @@ onMounted(async () => {
   flex-direction: column;
   min-height: 0;
   width: 268px;
+}
+
+.wp-sidebar__tabs {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: var(--wp-space-2) var(--wp-space-2) 0;
+}
+
+.wp-sidebar__tab {
+  flex: 1;
+  padding: var(--wp-space-2) var(--wp-space-2);
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  font-family: var(--wp-font-head);
+  font-size: var(--wp-fs-xs);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--wp-text-faint);
+  cursor: pointer;
+  transition: color var(--wp-dur) var(--wp-ease), border-color var(--wp-dur) var(--wp-ease);
+
+  &:hover {
+    color: var(--wp-text);
+  }
+
+  &--active {
+    color: var(--wp-text);
+    border-bottom-color: var(--wp-accent);
+  }
+
+  &--memory.wp-sidebar__tab--active {
+    color: var(--wp-violet);
+    border-bottom-color: var(--wp-violet);
+  }
+
+  &--personas.wp-sidebar__tab--active {
+    color: var(--wp-gold);
+    border-bottom-color: var(--wp-gold);
+  }
 }
 
 .wp-sidebar__topbar {

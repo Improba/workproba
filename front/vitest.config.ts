@@ -26,9 +26,12 @@ export default defineConfig({
         // unitaires dédiés (MessageTextPart, ChatModelControl, useChatStream,
         // useToolCallExpansion, useSessionLoadGuard, chatMessageNormalize, ...).
         'src/components/chat/**/*.vue',
+        'src/components/workproba/RightPanel.vue',
         'src/composables/useChatStream.ts',
         'src/composables/useToolCallExpansion.ts',
         'src/composables/useSessionLoadGuard.ts',
+        'src/composables/usePluginSlots.ts',
+        'src/composables/useSideChat.ts',
         'lib-improba/composables/use-auth/**/*.ts',
         'lib-improba/utils/**/*.ts',
         'lib-improba/components/mastok/**/*.vue',

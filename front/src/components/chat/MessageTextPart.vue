@@ -237,6 +237,10 @@ watch(renderedHtml, async () => {
 
 <style scoped lang="scss">
 .chat-message__markdown {
+  font-family: var(--wp-font-head);
+  font-size: var(--wp-fs-base);
+  line-height: var(--wp-lh-relaxed);
+
   :deep(p) {
     margin: 0 0 0.65rem;
   }

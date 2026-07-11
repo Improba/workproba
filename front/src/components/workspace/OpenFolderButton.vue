@@ -6,28 +6,33 @@
     @click="emit('click')"
   >
     <Lucide name="folder-open" size="sm" color="text-invert" />
-    <span>{{ label }}</span>
+    <span>{{ displayLabel }}</span>
     <q-spinner v-if="loading" size="18px" class="open-folder-btn__spinner" />
   </button>
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     loading?: boolean;
     label?: string;
   }>(),
   {
     loading: false,
-    label: 'Ouvrir un dossier',
+    label: undefined,
   },
 );
 
 const emit = defineEmits<{
   click: [];
 }>();
+
+const { t } = useI18n();
+const displayLabel = computed(() => props.label ?? t('common.openFolder'));
 </script>
 
 <style scoped lang="scss">

@@ -27,7 +27,7 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["deb", "rpm", "appimage", "msi", "nsis", "dmg", "app"],
+    "targets": ["deb", "appimage", "msi", "nsis", "dmg"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -35,6 +35,36 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
+    "publisher": "Improba",
+    "copyright": "Copyright © Improba",
+    "category": "Productivity",
+    "shortDescription": "Assistant de travail local-first",
+    "longDescription": "Workproba est un assistant de travail bilingue pour documents locaux et collaboration projet.",
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": "",
+      "wix": {
+        "language": ["fr-FR", "en-US"]
+      },
+      "nsis": {
+        "installMode": "both"
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "10.13",
+      "signingIdentity": null,
+      "entitlements": null
+    },
+    "linux": {
+      "deb": {
+        "depends": ["libwebkit2gtk-4.1-0", "libayatana-appindicator3-1"],
+        "section": "utils"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
     "android": {
       "debugApplicationIdSuffix": ".debug"
     }

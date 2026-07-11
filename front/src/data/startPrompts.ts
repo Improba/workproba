@@ -1,52 +1,51 @@
-export interface StartPrompt {
-  id: string;
-  icon: string;
-  title: string;
-  subtitle: string;
-  prompt: string;
-}
+import type { StartPrompt } from './startPrompts.types';
+import { t } from '@utils/i18nT';
 
-export const START_PROMPTS: StartPrompt[] = [
-  {
-    id: 'pdf-summary',
-    icon: 'file-text',
-    title: 'Résumer un PDF',
-    subtitle: 'Les points clés en un coup d\'œil',
-    prompt: 'Résume ce PDF en 5 points clés',
-  },
-  {
-    id: 'search-mentions',
-    icon: 'search',
-    title: 'Chercher dans les docs',
-    subtitle: 'Trouver un mot ou une clause',
-    prompt: 'Trouve toutes les mentions de "congés payés" dans mes documents',
-  },
-  {
-    id: 'excel-candidates',
-    icon: 'table',
-    title: 'Tableau des candidats',
-    subtitle: 'À partir des CV du dossier',
-    prompt: 'Crée un tableau Excel des candidats à partir des CV du dossier',
-  },
-  {
-    id: 'compare-quotes',
-    icon: 'scale',
-    title: 'Comparer des devis',
-    subtitle: 'Identifier l\'offre la moins chère',
-    prompt: 'Compare les deux devis et donne-moi le moins cher',
-  },
-  {
-    id: 'invoice-reminder',
-    icon: 'mail',
-    title: 'Courrier de relance',
-    subtitle: 'Pour une facture impayée',
-    prompt: 'Rédige un courrier de relance pour facture impayée',
-  },
-  {
-    id: 'revenue-chart',
-    icon: 'bar-chart-3',
-    title: 'Graphique de CA',
-    subtitle: 'Extraire et visualiser les montants',
-    prompt: 'Extrais les montants du CA Q2 et fais-moi un graphique',
-  },
-];
+export type { StartPrompt } from './startPrompts.types';
+
+export function getStartPrompts(): StartPrompt[] {
+  return [
+    {
+      id: 'pdf-summary',
+      icon: 'file-text',
+      title: t('chat.prompts.pdfSummaryTitle'),
+      subtitle: t('chat.prompts.pdfSummarySubtitle'),
+      prompt: t('chat.prompts.pdfSummaryPrompt'),
+    },
+    {
+      id: 'search-mentions',
+      icon: 'search',
+      title: t('chat.prompts.searchTitle'),
+      subtitle: t('chat.prompts.searchSubtitle'),
+      prompt: t('chat.prompts.searchPrompt'),
+    },
+    {
+      id: 'excel-candidates',
+      icon: 'table',
+      title: t('chat.prompts.excelTitle'),
+      subtitle: t('chat.prompts.excelSubtitle'),
+      prompt: t('chat.prompts.excelPrompt'),
+    },
+    {
+      id: 'compare-quotes',
+      icon: 'scale',
+      title: t('chat.prompts.compareTitle'),
+      subtitle: t('chat.prompts.compareSubtitle'),
+      prompt: t('chat.prompts.comparePrompt'),
+    },
+    {
+      id: 'invoice-reminder',
+      icon: 'mail',
+      title: t('chat.prompts.reminderTitle'),
+      subtitle: t('chat.prompts.reminderSubtitle'),
+      prompt: t('chat.prompts.reminderPrompt'),
+    },
+    {
+      id: 'revenue-chart',
+      icon: 'bar-chart-3',
+      title: t('chat.prompts.chartTitle'),
+      subtitle: t('chat.prompts.chartSubtitle'),
+      prompt: t('chat.prompts.chartPrompt'),
+    },
+  ];
+}

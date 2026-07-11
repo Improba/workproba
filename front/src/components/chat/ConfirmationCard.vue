@@ -3,46 +3,86 @@
     class="confirmation-card"
     data-testid="confirmation-card"
     role="region"
-    aria-label="Confirmation requise"
+    :aria-label="t('chat.confirmationRegion')"
   >
     <p class="confirmation-card__summary" v-html="summaryHtml" />
 
     <div class="confirmation-card__actions">
       <button
+        v-if="canPreview"
+        type="button"
+        class="confirmation-card__btn confirmation-card__btn--preview"
+        :disabled="busy"
+        @click="previewOpen = true"
+      >
+        {{ t('chat.previewChange.voirChangements') }}
+      </button>
+      <button
         type="button"
         class="confirmation-card__btn confirmation-card__btn--deny"
         :disabled="busy"
-        aria-label="Annuler l'action"
+        :aria-label="t('chat.confirmationCancel')"
         @click="emit('cancel')"
       >
-        {{ busy ? 'En cours…' : 'Annuler' }}
+        {{ busy ? t('common.inProgress') : t('common.cancel') }}
       </button>
       <button
         type="button"
         class="confirmation-card__btn confirmation-card__btn--approve"
         :disabled="busy"
-        aria-label="Continuer l'action"
+        :aria-label="t('chat.confirmationApprove')"
         @click="emit('approve')"
       >
-        {{ busy ? 'En cours…' : 'Continuer' }}
+        {{ busy ? t('common.inProgress') : t('common.continue') }}
       </button>
     </div>
+
+    <PreviewChangeDialog
+      v-if="canPreview"
+      v-model:open="previewOpen"
+      :workspace-data-dir="workspaceDataDir"
+      :project-path="projectPath"
+      :file-path="confirmation.proposedPath"
+      :proposed-content="proposedContent!"
+      @confirm="emit('approve')"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { ChatConfirmation } from '#types';
+import PreviewChangeDialog from '@components/chat/PreviewChangeDialog.vue';
+import { extractProposedContent, isFileWriteTool } from '@utils/fileWriteTools';
 
 const props = defineProps<{
   confirmation: ChatConfirmation;
   busy?: boolean;
+  workspaceDataDir?: string | null;
+  projectPath?: string | null;
+  toolArgs?: Record<string, unknown>;
 }>();
+
+const { t } = useI18n();
 
 const emit = defineEmits<{
   approve: [];
   cancel: [];
 }>();
+
+const previewOpen = ref(false);
+
+const proposedContent = computed(() => extractProposedContent(props.toolArgs));
+
+const canPreview = computed(
+  () =>
+    isFileWriteTool(props.confirmation.toolName) &&
+    Boolean(props.workspaceDataDir) &&
+    Boolean(props.projectPath) &&
+    Boolean(props.confirmation.proposedPath) &&
+    proposedContent.value !== null,
+);
 
 function escapeHtml(text: string): string {
   return text
@@ -72,19 +112,23 @@ const summaryHtml = computed(() => {
     return escapeHtml(summary);
   }
 
-  const verb = props.confirmation.action === 'modify' ? 'modifier' : 'créer';
+  const verb = props.confirmation.action === 'modify'
+    ? t('chat.confirmationModify')
+    : t('chat.confirmationCreate');
   const file = escapeHtml(fileLabel(props.confirmation.proposedPath));
-  return `Je vais <strong>${verb}</strong> <strong class="confirmation-card__file">${file}</strong>`;
+  return t('chat.confirmationSummary', { verb, file });
 });
 </script>
 
 <style scoped lang="scss">
 .confirmation-card {
-  margin: 0.35rem 0;
+  width: 100%;
+  margin: 0;
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--wp-accent);
   border-radius: var(--wp-r-md);
   background: var(--wp-accent-soft);
+  box-shadow: var(--wp-shadow-1);
 }
 
 .confirmation-card__summary {
@@ -131,6 +175,13 @@ const summaryHtml = computed(() => {
     opacity: 0.65;
     cursor: not-allowed;
   }
+}
+
+.confirmation-card__btn--preview {
+  flex: 1 1 100%;
+  border: 1px solid var(--wp-border-strong);
+  background: var(--wp-surface);
+  color: var(--wp-accent-strong);
 }
 
 .confirmation-card__btn--deny {

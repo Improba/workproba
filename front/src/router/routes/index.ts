@@ -21,6 +21,18 @@ const routes: RouteRecordRaw[] = [
         meta: DESKTOP_META,
         component: () => import('@pages/settings/ModelsSettings.vue'),
       },
+      {
+        path: 'settings/plugins',
+        name: 'settings_plugins',
+        meta: DESKTOP_META,
+        component: () => import('@pages/settings/PluginsSettings.vue'),
+      },
+      {
+        path: 'settings/enterprise',
+        name: 'settings_enterprise',
+        meta: DESKTOP_META,
+        component: () => import('@pages/settings/EnterpriseSettings.vue'),
+      },
       ...chatRoutes,
     ],
   },

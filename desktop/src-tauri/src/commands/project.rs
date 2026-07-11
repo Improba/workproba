@@ -112,7 +112,7 @@ fn activate_workspace(
     let mut active_path = state
         .active_path
         .lock()
-        .map_err(|_| "Impossible de verrouiller l'état projet".to_string())?;
+        .map_err(|_| "Impossible de verrouiller l'état de l'espace".to_string())?;
     *active_path = Some(path.to_path_buf());
 
     let mut active_workspace_id = state
@@ -131,7 +131,7 @@ pub async fn pick_project_folder(app: AppHandle) -> Result<Option<String>, Strin
     let selection = app
         .dialog()
         .file()
-        .set_title("Ouvrir un dossier projet")
+        .set_title("Ouvrir un dossier d'espace")
         .blocking_pick_folder();
 
     Ok(selection.map(|path| path.to_string()))
@@ -152,7 +152,7 @@ pub fn get_active_project_path(state: State<'_, ProjectState>) -> Result<Option<
     let active_path = state
         .active_path
         .lock()
-        .map_err(|_| "Impossible de verrouiller l'état projet".to_string())?;
+        .map_err(|_| "Impossible de verrouiller l'état de l'espace".to_string())?;
 
     Ok(active_path
         .as_ref()
@@ -285,7 +285,7 @@ pub fn list_dir_entries(
     let project_root = PathBuf::from(&project_path);
     if !project_root.is_dir() {
         log::warn!("list_dir_entries: pas un dossier: {project_path:?}");
-        return Err(format!("Le dossier projet n'existe pas : {project_path}"));
+        return Err(format!("Le dossier de l'espace n'existe pas : {project_path}"));
     }
 
     let target_dir = if dir_relative_path.is_empty() {
@@ -408,7 +408,7 @@ pub fn reveal_in_os(path: String) -> Result<(), String> {
 pub fn list_documents(project_path: String) -> Result<Vec<DocumentEntry>, String> {
     let project_root = PathBuf::from(&project_path);
     if !project_root.is_dir() {
-        return Err(format!("Le dossier projet n'existe pas : {project_path}"));
+        return Err(format!("Le dossier de l'espace n'existe pas : {project_path}"));
     }
 
     let mut entries = Vec::new();

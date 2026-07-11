@@ -1,74 +1,40 @@
 <template>
   <div class="restore-banner" data-testid="restore-banner" role="status">
-    <span class="restore-banner__text">Sauvegarde créée.</span>
+    <span class="restore-banner__text">{{ t('shell.versions.restauré') }}</span>
     <button
       type="button"
       class="restore-banner__action"
-      :disabled="restoring"
-      aria-label="Restaurer la version précédente du fichier"
-      @click="handleRestore"
+      :disabled="busy"
+      :aria-label="t('shell.versions.annulerRestauration')"
+      @click="emit('undo')"
     >
-      {{ restoring ? 'Restauration…' : 'Restaurer' }}
+      {{ busy ? t('common.inProgress') : t('shell.versions.annulerRestauration') }}
+    </button>
+    <button
+      type="button"
+      class="restore-banner__dismiss"
+      :aria-label="t('common.close')"
+      @click="emit('dismiss')"
+    >
+      <Lucide name="x" size="14" color="text-muted" />
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
-import { Notify } from 'quasar';
-import { listVersions, restoreVersion } from '@services/versions';
+import { useI18n } from 'vue-i18n';
+import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 
-const props = defineProps<{
-  projectPath: string;
-  sessionId: string;
-  filePath: string;
-  snapshotPath?: string;
+defineProps<{
+  busy?: boolean;
 }>();
 
 const emit = defineEmits<{
-  restored: [path: string];
+  undo: [];
+  dismiss: [];
 }>();
 
-const restoring = ref(false);
-
-async function handleRestore(): Promise<void> {
-  if (restoring.value) return;
-  restoring.value = true;
-
-  try {
-    let snapshotPath = props.snapshotPath;
-    if (!snapshotPath) {
-      const snapshots = await listVersions(
-        props.projectPath,
-        props.sessionId,
-        props.filePath,
-      );
-      const latest = snapshots[snapshots.length - 1];
-      if (!latest?.snapshot_path) {
-        throw new Error('Aucune sauvegarde disponible');
-      }
-      snapshotPath = latest.snapshot_path;
-    }
-
-    const result = await restoreVersion(
-      props.projectPath,
-      props.sessionId,
-      snapshotPath,
-    );
-    Notify.create({
-      message: 'Version restaurée',
-      classes: 'bg-positive text-neutral-lowest',
-    });
-    emit('restored', result.restored_path);
-  } catch {
-    Notify.create({
-      message: 'Impossible de restaurer cette version',
-      classes: 'bg-danger text-neutral-lowest',
-    });
-  } finally {
-    restoring.value = false;
-  }
-}
+const { t } = useI18n();
 </script>
 
 <style scoped lang="scss">
@@ -80,15 +46,16 @@ async function handleRestore(): Promise<void> {
   margin-top: 0.45rem;
   padding: 0.45rem 0.65rem;
   border-radius: var(--wp-r-sm);
-  background: var(--wp-surface-2);
-  border: 1px solid var(--wp-border);
+  background: var(--wp-accent-soft);
+  border: 1px solid var(--wp-accent);
   font-size: var(--wp-fs-sm);
-  color: var(--wp-text-muted);
+  color: var(--wp-text);
 }
 
 .restore-banner__text {
   flex: 1 1 auto;
   min-width: 0;
+  font-weight: 600;
 }
 
 .restore-banner__action {
@@ -101,20 +68,18 @@ async function handleRestore(): Promise<void> {
   font-size: var(--wp-fs-sm);
   font-weight: 600;
   cursor: pointer;
-  transition: background var(--wp-dur) var(--wp-ease);
-
-  &:focus-visible {
-    outline: 2px solid var(--wp-focus-ring);
-    outline-offset: 2px;
-  }
 
   &:disabled {
     opacity: 0.65;
     cursor: not-allowed;
   }
+}
 
-  &:not(:disabled):hover {
-    background: var(--wp-accent-soft);
-  }
+.restore-banner__dismiss {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0.15rem;
 }
 </style>

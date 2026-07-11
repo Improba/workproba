@@ -3,13 +3,27 @@ import {
   getAppSettings,
   saveAppSettings,
   type AppSettings,
+  type AppLocale,
   type LlmProviderEntry,
+  type ProviderSet,
 } from '@composables/useDesktop';
 import type { DensityMode, SettingsMode, ToolCallViewMode } from '@composables/useDesktop.types';
 import type { ReasoningEffort } from '#types';
 import { getAiSidecarUrl, getDesktopSecret } from '@services/aiSidecar';
 import { isLocalLlmProvider } from '@utils/isLocalLlmProvider';
 import { supportsReasoning } from '@utils/reasoningSupport';
+import { normalizeLocale, resolveInitialLocale, setLang } from '@boot/i18n';
+import { t } from '@utils/i18nT';
+import {
+  applySessionOverridesToSet,
+  migrateLegacyProvidersToSets,
+  normalizeStoredSet,
+  providerSetToSidecar,
+  resolveActiveSet,
+  resolveSets,
+  toChatLlmConfigFromSet,
+  toEmbeddingLlmConfigFromSet,
+} from '@utils/providerSets';
 
 /** Payload de config LLM attendu par le sidecar (snake_case, cf. app/schemas.py). */
 export interface LlmConfigPayload {
@@ -29,6 +43,13 @@ export interface LlmTestResult {
   modelCount?: number | null;
 }
 
+export interface ProviderSetTestResult {
+  chat: { ok: boolean; detail?: string; models?: string[] | null };
+  embeddings: { ok: boolean; detail?: string };
+  ocr: { ok: boolean; supported: boolean; detail?: string };
+  vision: { ok: boolean; supported: boolean; detail?: string };
+}
+
 const ONBOARDING_DONE_KEY = 'workproba:onboardingDone';
 
 const settings = ref<AppSettings>({ version: 1, providers: [], density: 'comfortable' });
@@ -44,7 +65,36 @@ function persistOnboardingDone(done: boolean): void {
   localStorage.setItem(ONBOARDING_DONE_KEY, String(done));
 }
 
+function ensureSetsLoaded(value: AppSettings): AppSettings {
+  if (value.sets?.length) {
+    const normalizedSets = value.sets.map((s) => normalizeStoredSet(s));
+    return {
+      ...value,
+      sets: normalizedSets,
+      activeSetId:
+        value.activeSetId ??
+        normalizedSets.find((s) => s.isDefault)?.id ??
+        normalizedSets[0]?.id,
+    };
+  }
+  const migrated = migrateLegacyProvidersToSets(
+    value.providers ?? [],
+    value.activeChatProviderId,
+  );
+  return {
+    ...value,
+    sets: migrated.sets,
+    activeSetId: migrated.activeSetId,
+  };
+}
+
 const providers = computed(() => settings.value.providers);
+
+const sets = computed(() => resolveSets(settings.value.sets));
+
+const activeSet = computed<ProviderSet | null>(() =>
+  resolveActiveSet(sets.value, settings.value.activeSetId),
+);
 
 const activeChatProvider = computed<LlmProviderEntry | null>(() => {
   const id = settings.value.activeChatProviderId;
@@ -72,13 +122,27 @@ const settingsLocked = computed<boolean>(
   () => settings.value.settingsLocked ?? false,
 );
 
+const permissionsNetwork = computed<boolean>(
+  () => settings.value.permissionsNetwork !== false,
+);
+
 const density = computed<DensityMode>(
   () => settings.value.density ?? 'comfortable',
 );
 
-const isLocalChatProvider = computed(() =>
-  isLocalLlmProvider(activeChatProvider.value),
+const locale = computed<AppLocale>(
+  () => settings.value.locale ?? resolveInitialLocale(),
 );
+
+const localeLocked = computed<boolean>(
+  () => settings.value.localeLocked ?? false,
+);
+
+const isLocalChatProvider = computed(() => {
+  const set = activeSet.value;
+  if (set) return isLocalLlmProvider({ provider: set.chat.provider } as LlmProviderEntry);
+  return isLocalLlmProvider(activeChatProvider.value);
+});
 
 export function toChatLlmConfig(entry: LlmProviderEntry | null): LlmConfigPayload | null {
   if (!entry) return null;
@@ -127,11 +191,28 @@ export function toEmbeddingLlmConfig(
   };
 }
 
-/** Construit les deux configs (chat + embeddings) à injecter dans un tour agent. */
+/** Set actif pour un tour agent (overrides session optionnels). */
+export function buildActiveProviderSet(
+  sessionModel?: string | null,
+  sessionReasoning?: ReasoningEffort | null,
+): ProviderSet | null {
+  const base = activeSet.value;
+  if (!base) return null;
+  return applySessionOverridesToSet(base, sessionModel, sessionReasoning);
+}
+
+/** Construit les deux configs (chat + embeddings) depuis le set actif ou legacy. */
 export function buildActiveLlmConfigs(): {
   chat: LlmConfigPayload | null;
   embedding: LlmConfigPayload | null;
 } {
+  const set = activeSet.value;
+  if (set) {
+    return {
+      chat: toChatLlmConfigFromSet(set),
+      embedding: toEmbeddingLlmConfigFromSet(set),
+    };
+  }
   return {
     chat: toChatLlmConfig(activeChatProvider.value),
     embedding: toEmbeddingLlmConfig(activeEmbeddingProvider.value),
@@ -170,38 +251,113 @@ export async function testLlmConfig(
   };
 }
 
+export async function testSet(set: ProviderSet): Promise<ProviderSetTestResult> {
+  const response = await fetch(`${getAiSidecarUrl()}/llm/sets/test`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Secret': getDesktopSecret(),
+    },
+    body: JSON.stringify(providerSetToSidecar(set)),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(`HTTP ${response.status} ${body}`.trim());
+  }
+
+  const data = (await response.json()) as ProviderSetTestResult;
+  return data;
+}
+
 export interface UseAppSettingsReturn {
   settings: typeof settings;
   loaded: typeof loaded;
   providers: typeof providers;
+  sets: typeof sets;
+  activeSet: typeof activeSet;
   activeChatProvider: typeof activeChatProvider;
   activeEmbeddingProvider: typeof activeEmbeddingProvider;
   toolCallView: typeof toolCallView;
   onboardingDone: typeof onboardingDone;
   settingsMode: typeof settingsMode;
   settingsLocked: typeof settingsLocked;
+  permissionsNetwork: typeof permissionsNetwork;
   density: typeof density;
+  locale: typeof locale;
+  localeLocked: typeof localeLocked;
   isLocalChatProvider: typeof isLocalChatProvider;
   load: () => Promise<AppSettings>;
   save: (next: AppSettings) => Promise<AppSettings>;
+  setActiveSet: (id: string) => Promise<AppSettings>;
+  createSet: (set: ProviderSet) => Promise<AppSettings>;
+  updateSet: (set: ProviderSet) => Promise<AppSettings>;
+  deleteSet: (id: string) => Promise<AppSettings>;
   setToolCallView: (view: ToolCallViewMode) => Promise<AppSettings>;
   setOnboardingDone: (done: boolean) => Promise<void>;
   setSettingsMode: (mode: SettingsMode) => Promise<AppSettings>;
   setDensity: (mode: DensityMode) => Promise<AppSettings>;
+  setLocale: (nextLocale: AppLocale) => Promise<AppSettings>;
 }
 
 export function useAppSettings(): UseAppSettingsReturn {
   async function load(): Promise<AppSettings> {
     const value = await getAppSettings();
-    settings.value = { ...value, onboardingDone: readOnboardingDone() };
+    const storedLocale = normalizeLocale(value.locale ?? undefined);
+    const resolvedLocale = storedLocale ?? resolveInitialLocale();
+    settings.value = ensureSetsLoaded({
+      ...value,
+      locale: resolvedLocale,
+      onboardingDone: readOnboardingDone(),
+    });
+    setLang(resolvedLocale);
     loaded.value = true;
     return settings.value;
   }
 
   async function save(next: AppSettings): Promise<AppSettings> {
-    const persisted = await saveAppSettings(next);
+    const persisted = await saveAppSettings(ensureSetsLoaded(next));
     settings.value = persisted;
     return persisted;
+  }
+
+  async function setActiveSet(id: string): Promise<AppSettings> {
+    const currentSets = resolveSets(settings.value.sets);
+    if (!currentSets.some((s) => s.id === id)) {
+      throw new Error(t('settings.advancedSetNotFound'));
+    }
+    return save({ ...settings.value, activeSetId: id });
+  }
+
+  async function createSet(set: ProviderSet): Promise<AppSettings> {
+    const currentSets = resolveSets(settings.value.sets);
+    return save({
+      ...settings.value,
+      sets: [...currentSets, set],
+      activeSetId: settings.value.activeSetId ?? set.id,
+    });
+  }
+
+  async function updateSet(set: ProviderSet): Promise<AppSettings> {
+    const currentSets = resolveSets(settings.value.sets);
+    const idx = currentSets.findIndex((s) => s.id === set.id);
+    if (idx < 0) throw new Error(t('settings.advancedSetNotFound'));
+    const nextSets = [...currentSets];
+    nextSets[idx] = set;
+    return save({ ...settings.value, sets: nextSets });
+  }
+
+  async function deleteSet(id: string): Promise<AppSettings> {
+    const currentSets = resolveSets(settings.value.sets);
+    const target = currentSets.find((s) => s.id === id);
+    if (!target) throw new Error(t('settings.advancedSetNotFound'));
+    if (target.isBuiltin) throw new Error(t('settings.advancedCannotDeleteBuiltin'));
+    const nextSets = currentSets.filter((s) => s.id !== id);
+    let activeSetId = settings.value.activeSetId ?? null;
+    if (activeSetId === id) {
+      activeSetId = nextSets.find((s) => s.isDefault)?.id ?? nextSets[0]?.id ?? null;
+    }
+    return save({ ...settings.value, sets: nextSets, activeSetId });
   }
 
   async function setToolCallView(view: ToolCallViewMode): Promise<AppSettings> {
@@ -216,6 +372,14 @@ export function useAppSettings(): UseAppSettingsReturn {
     return save({ ...settings.value, density: mode });
   }
 
+  async function setLocale(nextLocale: AppLocale): Promise<AppSettings> {
+    if (localeLocked.value) {
+      return settings.value;
+    }
+    setLang(nextLocale);
+    return save({ ...settings.value, locale: nextLocale });
+  }
+
   async function setOnboardingDone(done: boolean): Promise<void> {
     persistOnboardingDone(done);
     settings.value = { ...settings.value, onboardingDone: done };
@@ -225,20 +389,30 @@ export function useAppSettings(): UseAppSettingsReturn {
     settings,
     loaded,
     providers,
+    sets,
+    activeSet,
     activeChatProvider,
     activeEmbeddingProvider,
     toolCallView,
     onboardingDone,
     settingsMode,
     settingsLocked,
+    permissionsNetwork,
     density,
+    locale,
+    localeLocked,
     isLocalChatProvider,
     load,
     save,
+    setActiveSet,
+    createSet,
+    updateSet,
+    deleteSet,
     setToolCallView,
     setOnboardingDone,
     setSettingsMode,
     setDensity,
+    setLocale,
   };
 }
 

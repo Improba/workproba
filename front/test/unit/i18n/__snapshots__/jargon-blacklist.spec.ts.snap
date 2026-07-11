@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`i18n jargon blacklist (mode guidé) > ne contient aucun terme de la liste noire dans les namespaces guidés 1`] = `[]`;

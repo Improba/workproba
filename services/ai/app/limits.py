@@ -55,6 +55,7 @@ class Limits:
     extract_max_rows: int = 20_000  # XLSX (par feuille)
     extract_max_chars: int = 200_000  # plafond global du texte extrait
     extract_max_input_bytes: int = _mb(50)  # taille max du fichier binaire chargé en RAM
+    ocr_max_pages: int = 30  # plafond pages OCR / vision PDF scanné par tour
 
     # --- search_kb ---
     search_max_limit: int = 20

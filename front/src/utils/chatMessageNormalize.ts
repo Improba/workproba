@@ -1,4 +1,5 @@
 import type {
+  ChatAttachmentSnapshot,
   ChatConfirmation,
   ChatError,
   ChatMessage,
@@ -16,6 +17,11 @@ const VALID_TOOL_STATUSES = new Set<ToolCallStatus>([
   'awaiting_confirmation',
   'success',
   'error',
+]);
+const VALID_ATTACHMENT_KINDS = new Set<ChatAttachmentSnapshot['kind']>([
+  'image',
+  'document',
+  'text',
 ]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -43,12 +49,18 @@ function normalizeToolCall(raw: unknown): ChatToolCall | null {
   if (typeof raw.startedAt === 'number') toolCall.startedAt = raw.startedAt;
   if (typeof raw.endedAt === 'number') toolCall.endedAt = raw.endedAt;
   if (typeof raw.filePath === 'string') toolCall.filePath = raw.filePath;
-  if (typeof raw.snapshotPath === 'string') toolCall.snapshotPath = raw.snapshotPath;
-  if (typeof raw.humanSummary === 'string') toolCall.humanSummary = raw.humanSummary;
+  if (typeof raw.snapshotPath === 'string')
+    toolCall.snapshotPath = raw.snapshotPath;
+  if (typeof raw.humanSummary === 'string')
+    toolCall.humanSummary = raw.humanSummary;
   return toolCall;
 }
 
-function normalizePart(raw: unknown, messageId: string, index: number): ChatMessagePart | null {
+function normalizePart(
+  raw: unknown,
+  messageId: string,
+  index: number,
+): ChatMessagePart | null {
   if (!isRecord(raw) || typeof raw.type !== 'string') return null;
 
   const id = asString(raw.id).trim() || `${messageId}__part_${index}`;
@@ -103,6 +115,29 @@ function normalizeError(raw: unknown): ChatError | null {
   };
 }
 
+function normalizeAttachment(raw: unknown): ChatAttachmentSnapshot | null {
+  if (!isRecord(raw)) return null;
+  const id = asString(raw.id).trim();
+  const fileName = asString(raw.fileName).trim();
+  if (!id || !fileName) return null;
+  const kindRaw = asString(raw.kind, 'document');
+  const kind = VALID_ATTACHMENT_KINDS.has(
+    kindRaw as ChatAttachmentSnapshot['kind'],
+  )
+    ? (kindRaw as ChatAttachmentSnapshot['kind'])
+    : 'document';
+  const snapshot: ChatAttachmentSnapshot = {
+    id,
+    fileName,
+    mimeType: asString(raw.mimeType),
+    sizeBytes: typeof raw.sizeBytes === 'number' ? raw.sizeBytes : 0,
+    kind,
+    status: 'ready',
+  };
+  if (typeof raw.error === 'string') snapshot.error = raw.error;
+  return snapshot;
+}
+
 /** Valide et normalise un message chargé depuis le stockage local ou Tauri. */
 export function normalizeChatMessage(raw: unknown): ChatMessage | null {
   if (!isRecord(raw)) return null;
@@ -136,6 +171,13 @@ export function normalizeChatMessage(raw: unknown): ChatMessage | null {
       .map((part, index) => normalizePart(part, id, index))
       .filter((part): part is ChatMessagePart => part != null);
     if (parts.length) message.parts = parts;
+  }
+
+  if (Array.isArray(raw.attachments)) {
+    const attachments = raw.attachments
+      .map((att) => normalizeAttachment(att))
+      .filter((att): att is ChatAttachmentSnapshot => att != null);
+    if (attachments.length) message.attachments = attachments;
   }
 
   const pendingConfirmation = normalizeConfirmation(raw.pendingConfirmation);

@@ -4,7 +4,7 @@
       type="button"
       class="thinking-card__header"
       :aria-expanded="expanded"
-      :aria-label="expanded ? 'Masquer le raisonnement' : 'Voir le raisonnement'"
+      :aria-label="expanded ? t('common.hide') : t('chat.reasoning')"
       @click="toggle"
     >
       <span
@@ -14,10 +14,10 @@
       />
       <q-icon v-else name="psychology" size="16px" class="thinking-card__icon" aria-hidden="true" />
       <span class="thinking-card__label">
-        {{ streaming && !thinking.done ? 'Le modèle réfléchit…' : 'Raisonnement' }}
+        {{ streaming && !thinking.done ? t('chat.thinking') : t('chat.reasoning') }}
       </span>
       <span class="thinking-card__hint">
-        {{ expanded ? 'Masquer' : 'Voir le détail' }}
+        {{ expanded ? t('common.hide') : t('common.show') }}
       </span>
       <Lucide
         name="chevron-down"
@@ -31,9 +31,9 @@
       v-if="expanded"
       class="thinking-card__body"
       role="region"
-      aria-label="Raisonnement"
+      :aria-label="t('chat.reasoning')"
     >
-      <span class="thinking-card__text">{{ thinking.content || 'Le détail du raisonnement apparaîtra ici dès qu’il sera disponible.' }}</span>
+      <span class="thinking-card__text">{{ thinking.content || t('chat.thinkingPlaceholder') }}</span>
       <span
         v-if="streaming && !thinking.done"
         class="thinking-card__cursor"
@@ -45,6 +45,7 @@
 
 <script setup lang="ts">
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+import { useI18n } from 'vue-i18n';
 import { useThinkingExpansion } from '@composables/useToolCallExpansion';
 import type { ChatThinkingPart } from '#types';
 
@@ -53,6 +54,8 @@ const props = defineProps<{
   streaming: boolean;
 }>();
 
+const { t } = useI18n();
+
 // État déplié porté hors du composant pour survivre au recyclage du
 // `DynamicScroller` (sinon le bloc se replie immédiatement au re-mesurage).
 const { expanded, toggle } = useThinkingExpansion(() => props.thinking.id);
@@ -60,10 +63,12 @@ const { expanded, toggle } = useThinkingExpansion(() => props.thinking.id);
 
 <style scoped lang="scss">
 .thinking-card {
-  margin: 0.5rem 0;
+  width: 100%;
+  margin: 0;
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-md);
   background: var(--wp-surface);
+  box-shadow: var(--wp-shadow-1);
   overflow: hidden;
 }
 

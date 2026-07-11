@@ -2,12 +2,13 @@ mod commands;
 mod sidecar;
 
 use commands::{
-    create_conversation, delete_conversation, ensure_workproba_dir, find_conversation_by_id,
-    get_active_project_path, get_app_settings, get_conversation, get_workproba_dir,
-    get_workspace_data_dir, get_workspace_info, list_conversations, list_dir_entries,
-    list_documents, list_workspaces, open_path, pick_project_folder, restore_last_project_path,
-    reveal_in_os, save_app_settings, save_conversation, set_active_project_path, FsWatchState,
-    ProjectState,
+    activate_plugin, create_conversation, deactivate_plugin, delete_conversation,
+    ensure_workproba_dir, find_conversation_by_id, get_active_project_path, get_app_settings,
+    get_conversation, get_enterprise_preset, get_plugin_data_dir, get_workproba_dir,
+    get_workspace_data_dir, get_workspace_info, install_local_plugin, is_preset_active,
+    list_conversations, list_dir_entries, list_documents, list_plugins, list_workspaces,
+    open_path, pick_project_folder, restore_last_project_path, reveal_in_os, save_app_settings,
+    save_conversation, set_active_project_path, uninstall_local_plugin, FsWatchState, ProjectState,
 };
 use sidecar::{ai_sidecar_status, start_ai_sidecar, try_spawn_dev_uvicorn};
 
@@ -65,6 +66,14 @@ pub fn run() {
             ai_sidecar_status,
             get_app_settings,
             save_app_settings,
+            list_plugins,
+            activate_plugin,
+            deactivate_plugin,
+            get_plugin_data_dir,
+            install_local_plugin,
+            uninstall_local_plugin,
+            get_enterprise_preset,
+            is_preset_active,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

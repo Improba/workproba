@@ -2,6 +2,7 @@ import json
 from typing import Any
 
 from app.config import Settings
+from app.i18n import DEFAULT_LOCALE, t
 from app.llm.utility import summarize_conversation
 from app.schemas import (
     ChatMessage,
@@ -39,6 +40,7 @@ async def compact_history_if_needed(
     auto_compact: bool,
     chat_config: LLMProviderConfig | None,
     settings: Settings | Any,
+    locale: str = DEFAULT_LOCALE,
 ) -> tuple[list[ChatMessage], CompactionEvent | None]:
     keep_last = settings.compaction_keep_messages
     min_history = settings.compaction_min_history
@@ -63,15 +65,15 @@ async def compact_history_if_needed(
             messages=old,
             llm_provider_config=chat_config,
             utility_llm_config=None,
-            focus=(
-                "Conserve les décisions, fichiers concernés et questions ouvertes "
-                "pour la suite du travail."
-            ),
+            focus=t(locale, "utility.compaction_focus"),
+            locale=locale,
         )
         resp = await summarize_conversation(req, settings)
         summary_msg = ChatMessage(
             role="system",
-            content=f"Résumé des échanges précédents :\n\n{resp.summary}",
+            content=(
+                f"{t(locale, 'utility.compaction_summary_prefix')}\n\n{resp.summary}"
+            ),
         )
         return (
             [summary_msg] + recent,

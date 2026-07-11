@@ -244,12 +244,15 @@ async def test_confirmation_deny_cancels_without_write(tmp_path: Path) -> None:
 
 async def test_confirmation_modify_action_for_existing_file(tmp_path: Path) -> None:
     (tmp_path / "a").write_text("v1", encoding="utf-8")
-    client = LocalProjectClient(project_root=tmp_path)
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+    client = LocalProjectClient(project_root=tmp_path, workspace_data_dir=ws_data)
     loop = _make_generate_loop(client, project_root=tmp_path)
     turn_id = "turn-modify"
     request = AgentTurnRequest(
         tenant_id="t",
         project_id=str(tmp_path),
+        workspace_data_dir=str(ws_data),
         session_id="sess-modify",
         turn_id=turn_id,
         message="modifier",
@@ -271,8 +274,10 @@ async def test_confirmation_modify_action_for_existing_file(tmp_path: Path) -> N
     assert confirm.action == "modify"
     assert confirm.proposed_path == "a"
 
-    snapshots_dir = tmp_path / ".workproba" / "versions" / "sess-modify"
-    assert snapshots_dir.is_dir()
+    from app.versions import versions_dir_for_file
+
+    versions_dir = versions_dir_for_file(ws_data, "a")
+    assert versions_dir.is_dir()
 
 
 def test_agent_confirm_unknown_returns_404(monkeypatch: pytest.MonkeyPatch) -> None:

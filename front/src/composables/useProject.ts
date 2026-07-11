@@ -10,6 +10,7 @@ import {
   type WorkspaceInfo,
 } from './useDesktop';
 import { ensureWorkspaceSessions } from '@services/workspaceSession';
+import { t } from '@utils/i18nT';
 
 const STORAGE_KEY = 'workproba:activeProjectPath';
 const WORKSPACE_ID_KEY = 'workproba:activeWorkspaceId';
@@ -74,7 +75,7 @@ export function useProject(): UseProjectReturn {
       documents.value = await listLocalDocuments(activePath.value);
     } catch (err) {
       error.value =
-        err instanceof Error ? err.message : 'Impossible de lister les documents';
+        err instanceof Error ? err.message : t('errors.listDocumentsFailed');
       documents.value = [];
     } finally {
       loading.value = false;
@@ -99,7 +100,7 @@ export function useProject(): UseProjectReturn {
       await activateWorkspace(workspace);
     } catch (err) {
       error.value =
-        err instanceof Error ? err.message : 'Impossible d’ouvrir le dossier';
+        err instanceof Error ? err.message : t('errors.openFolderFailed');
     } finally {
       loading.value = false;
     }
@@ -113,7 +114,7 @@ export function useProject(): UseProjectReturn {
       await activateWorkspace(workspace);
     } catch (err) {
       error.value =
-        err instanceof Error ? err.message : 'Impossible de basculer de projet';
+        err instanceof Error ? err.message : t('errors.switchSpaceFailed');
     } finally {
       loading.value = false;
     }
@@ -144,7 +145,7 @@ export function useProject(): UseProjectReturn {
       error.value =
         err instanceof Error
           ? err.message
-          : 'Impossible de restaurer le projet';
+          : t('errors.restoreSpaceFailed');
     } finally {
       loading.value = false;
     }

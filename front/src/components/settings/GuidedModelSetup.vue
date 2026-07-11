@@ -1,35 +1,53 @@
 <template>
   <section class="guided-setup">
-    <h2 class="guided-setup__section-title">Choisir un fournisseur</h2>
+    <h2 class="guided-setup__section-title">{{ t('settings.engine.chooseEngine') }}</h2>
 
-    <div class="guided-setup__cards" role="radiogroup" aria-label="Choisir un fournisseur">
-      <button
-        v-for="card in cards"
-        :key="card.id"
-        type="button"
+    <div class="guided-setup__cards" role="radiogroup" :aria-label="t('settings.engine.chooseEngine')">
+      <article
+        v-for="card in guidedCards"
+        :key="card.set.id"
         class="guided-card"
-        :class="{ 'guided-card--selected': selectedCard === card.id }"
-        role="radio"
-        :aria-checked="selectedCard === card.id"
-        @click="onSelectCard(card.id)"
+        :class="{ 'guided-card--selected': activeSetId === card.set.id }"
       >
-        <span class="guided-card__badge" :class="`guided-card__badge--${card.badgeTone}`">
-          {{ card.badge }}
-        </span>
-        <span class="guided-card__title">{{ card.title }}</span>
-        <span class="guided-card__subtitle">{{ card.subtitle }}</span>
-      </button>
+        <div class="guided-card__head">
+          <span
+            v-for="badge in card.displayBadges"
+            :key="badge"
+            class="guided-card__badge"
+            :class="card.badgeToneClass"
+          >
+            {{ badge }}
+          </span>
+        </div>
+        <h3 class="guided-card__title">{{ card.displayName }}</h3>
+        <p class="guided-card__subtitle">{{ card.description }}</p>
+        <ul v-if="card.capabilities.length" class="guided-card__caps" :aria-label="t('settings.advancedCapabilitiesAria')">
+          <li v-for="cap in card.capabilities" :key="cap">{{ cap }}</li>
+        </ul>
+        <button
+          type="button"
+          class="guided-card__use"
+          :class="{ 'guided-card__use--active': activeSetId === card.set.id }"
+          @click="onUseEngine(card.set.id)"
+        >
+          {{
+            activeSetId === card.set.id
+              ? t('settings.engine.activeEngine')
+              : t('settings.engine.useThisEngine')
+          }}
+        </button>
+      </article>
     </div>
 
-    <div v-if="selectedCard === 'mistral'" class="guided-setup__fields">
+    <div v-if="selectedBuiltinId === 'mistral-default'" class="guided-setup__fields">
       <q-input
-        v-model="apiKey"
-        label="Clé API Mistral"
+        v-model="accessKey"
+        :label="t('settings.engine.accessKey')"
         outlined
         dense
         :type="showKey ? 'text' : 'password'"
         class="guided-setup__field"
-        @update:model-value="onFieldChange"
+        @update:model-value="onAccessKeyChange"
       >
         <template #append>
           <button type="button" class="reveal-btn" @click="showKey = !showKey">
@@ -37,40 +55,38 @@
           </button>
         </template>
       </q-input>
-      <p class="guided-setup__hint">
-        Le modèle (Small, Medium, Large) se choisit ensuite dans chaque conversation.
-      </p>
+      <p class="guided-setup__hint">{{ t('settings.engine.accessKeyHint') }}</p>
     </div>
 
-    <div v-else-if="selectedCard === 'ollama'" class="guided-setup__fields">
+    <div v-else-if="selectedBuiltinId === 'ollama-local'" class="guided-setup__fields">
       <q-input
-        v-model="baseUrl"
-        label="URL Ollama"
+        v-model="ollamaUrl"
+        :label="t('settings.engine.ollamaUrl')"
         outlined
         dense
         class="guided-setup__field"
-        @update:model-value="onFieldChange"
+        @update:model-value="onOllamaChange"
       />
       <div class="guided-setup__row">
         <q-select
           v-if="ollamaModels.length > 0"
-          v-model="model"
+          v-model="ollamaModel"
           :options="ollamaModels"
-          label="Modèle détecté"
+          :label="t('settings.ollamaModelDetected')"
           outlined
           dense
           class="guided-setup__field"
-          @update:model-value="onFieldChange"
+          @update:model-value="onOllamaChange"
         />
         <q-input
           v-else
-          v-model="model"
-          label="Modèle"
+          v-model="ollamaModel"
+          :label="t('settings.engine.ollamaModel')"
           outlined
           dense
-          hint="Saisissez le nom du modèle Ollama"
+          :hint="t('settings.ollamaModelHint')"
           class="guided-setup__field"
-          @update:model-value="onFieldChange"
+          @update:model-value="onOllamaChange"
         />
         <button
           type="button"
@@ -79,268 +95,188 @@
           @click="onRefreshOllama"
         >
           <Lucide name="refresh-cw" size="14" color="text" />
-          {{ refreshingOllama ? 'Rafraîchissement…' : 'Rafraîchir' }}
+          {{ refreshingOllama ? t('settings.refreshing') : t('settings.refresh') }}
         </button>
       </div>
-    </div>
-
-    <div v-else class="guided-setup__fields">
-      <q-select
-        v-model="cloudProvider"
-        :options="cloudProviderOptions"
-        label="Fournisseur"
-        outlined
-        dense
-        emit-value
-        map-options
-        class="guided-setup__field"
-        @update:model-value="onCloudProviderChange"
-      />
-      <q-input
-        v-model="apiKey"
-        :label="cloudApiKeyLabel"
-        outlined
-        dense
-        :type="showKey ? 'text' : 'password'"
-        class="guided-setup__field"
-        @update:model-value="onFieldChange"
-      >
-        <template #append>
-          <button type="button" class="reveal-btn" @click="showKey = !showKey">
-            <Lucide :name="showKey ? 'eye-off' : 'eye'" size="16" color="text-faint" />
-          </button>
-        </template>
-      </q-input>
-      <p class="guided-setup__hint">
-        Le modèle se choisit ensuite dans chaque conversation.
-      </p>
     </div>
 
     <div class="guided-setup__actions">
       <button
         type="button"
         class="guided-setup__test"
-        :disabled="testing || !canTest"
+        :disabled="testing || !activeSetId"
         @click="onTest"
       >
         <Lucide name="plug-zap" size="14" color="wp-canard" />
-        {{ testing ? 'Test en cours…' : 'Tester la connexion' }}
+        {{ testing ? t('settings.test.inProgress') : t('settings.engine.testEngine') }}
       </button>
-      <p
-        v-if="testStatus"
-        class="guided-setup__status"
-        :class="{ 'guided-setup__status--ok': testStatus.ok }"
-      >
-        <Lucide
-          :name="testStatus.ok ? 'check-circle-2' : 'alert-circle'"
-          size="14"
-          :color="testStatus.ok ? 'success' : 'danger'"
-        />
-        {{ testStatus.label }}
-      </p>
+      <ul v-if="testResults.length" class="guided-setup__test-results">
+        <li
+          v-for="item in testResults"
+          :key="item.label"
+          :class="{ 'guided-setup__test-results--ok': item.ok }"
+        >
+          <Lucide
+            :name="item.ok ? 'check-circle-2' : 'alert-circle'"
+            size="14"
+            :color="item.ok ? 'success' : 'danger'"
+          />
+          {{ item.label }}
+        </li>
+      </ul>
     </div>
 
     <button type="button" class="guided-setup__advanced-link" @click="emit('switch-to-advanced')">
-      Réglages avancés
+      {{ t('settings.advancedSettingsLink') }}
     </button>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import {
-  useAppSettings,
-  toChatLlmConfig,
-  testLlmConfig,
-  type LlmTestResult,
-} from '@composables/useAppSettings';
-import type { AppSettings, LlmProviderEntry } from '@composables/useDesktop.types';
+import { useAppSettings, testSet } from '@composables/useAppSettings';
+import type { ProviderSet } from '@composables/useDesktop.types';
 import { fetchOllamaModels } from '@services/ollamaModels';
 import {
-  applyGuidedCard,
-  inferCloudProvider,
-  inferGuidedCard,
-  type CloudProviderName,
-  type GuidedCardId,
-} from '@utils/guidedModelSetup';
+  applyAccessKeyToSet,
+  applyOllamaOverrides,
+  capabilityLabels,
+  cloneProviderSet,
+  localizedSetDescription,
+  localizedSetName,
+} from '@utils/providerSets';
 
 const emit = defineEmits<{
   'switch-to-advanced': [];
 }>();
 
-const { settings, activeChatProvider, load, save } = useAppSettings();
+const { sets, activeSet, load, setActiveSet, updateSet, settings } = useAppSettings();
+const { t } = useI18n();
 
-const cards = [
-  {
-    id: 'mistral' as const,
-    title: 'Mistral',
-    subtitle: 'Service cloud Mistral AI. Requiert une clé API.',
-    badge: 'Recommandé',
-    badgeTone: 'recommended',
-  },
-  {
-    id: 'ollama' as const,
-    title: 'Local (Ollama)',
-    subtitle: 'Modèle exécuté sur votre machine via Ollama. Aucune donnée transmise. Requiert Ollama installé.',
-    badge: 'Local',
-    badgeTone: 'local',
-  },
-  {
-    id: 'cloud' as const,
-    title: 'Cloud tiers (OpenAI / Anthropic)',
-    subtitle: 'Services cloud OpenAI ou Anthropic. Requiert une clé API. Données transmises au fournisseur.',
-    badge: 'Cloud',
-    badgeTone: 'cloud',
-  },
-];
-
-const selectedCard = ref<GuidedCardId>('mistral');
-const cloudProvider = ref<CloudProviderName>('openai');
-const apiKey = ref('');
-const baseUrl = ref('http://localhost:11434');
-const model = ref('mistral-small-latest');
+const accessKey = ref('');
+const ollamaUrl = ref('http://127.0.0.1:11434');
+const ollamaModel = ref('llama3.2');
 const showKey = ref(false);
 const testing = ref(false);
 const refreshingOllama = ref(false);
 const ollamaModels = ref<string[]>([]);
-const testStatus = ref<{ ok: boolean; label: string } | null>(null);
+const testResults = ref<Array<{ ok: boolean; label: string }>>([]);
 
-const cloudProviderOptions = [
-  { label: 'OpenAI', value: 'openai' },
-  { label: 'Anthropic', value: 'anthropic' },
-];
+const activeSetId = computed(() => settings.value.activeSetId ?? activeSet.value?.id ?? null);
 
-const cloudApiKeyLabel = computed(() =>
-  cloudProvider.value === 'anthropic' ? 'Clé API Anthropic' : 'Clé API OpenAI',
-);
-
-const canTest = computed(() => {
-  if (selectedCard.value === 'ollama') return Boolean(model.value.trim());
-  return Boolean(model.value.trim() && apiKey.value.trim());
+const guidedCards = computed(() => {
+  const builtins = sets.value.filter((s) => s.isBuiltin);
+  const cards = builtins.length ? builtins : sets.value;
+  return cards.map((set) => {
+    const description = localizedSetDescription(set, t);
+    const displayBadges =
+      set.id === 'mistral-default'
+        ? [t('settings.badgeRecommended')]
+        : set.id === 'ollama-local'
+          ? [t('settings.badgeLocal')]
+          : set.badges;
+    const badgeToneClass =
+      set.id === 'mistral-default'
+        ? 'guided-card__badge--recommended'
+        : set.id === 'ollama-local'
+          ? 'guided-card__badge--local'
+          : 'guided-card__badge--cloud';
+    return {
+      set,
+      displayName: localizedSetName(set, t),
+      description,
+      displayBadges,
+      badgeToneClass,
+      capabilities: capabilityLabels(set, 'guided', t),
+    };
+  });
 });
 
-function newId(): string {
-  return `prov_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+const selectedBuiltinId = computed(() => activeSet.value?.id ?? null);
+
+function hydrateFromActiveSet(set: ProviderSet | null): void {
+  if (!set) return;
+  accessKey.value = set.chat.apiKey ?? '';
+  ollamaUrl.value = set.chat.baseUrl?.replace(/\/v1\/?$/, '') ?? 'http://127.0.0.1:11434';
+  ollamaModel.value = set.chat.model;
 }
 
-function getPrimaryEntry(): LlmProviderEntry | null {
-  return activeChatProvider.value ?? settings.value.providers[0] ?? null;
+async function persistSet(next: ProviderSet): Promise<void> {
+  await updateSet(next);
 }
 
-function hydrateFromEntry(entry: LlmProviderEntry | null): void {
-  selectedCard.value = inferGuidedCard(entry);
-  if (selectedCard.value === 'cloud') {
-    cloudProvider.value = inferCloudProvider(entry);
-  }
-  apiKey.value = entry?.apiKey ?? '';
-  baseUrl.value = entry?.baseUrl?.trim() || 'http://localhost:11434';
-  model.value = entry?.model ?? applyGuidedCard(selectedCard.value, cloudProvider.value).model;
-}
-
-function buildEntryFromForm(existing: LlmProviderEntry | null): LlmProviderEntry {
-  const preset = applyGuidedCard(selectedCard.value, cloudProvider.value);
-  // Les réglages définissent un provider/preset, pas un modèle spécifique :
-  // pour les providers catalogués (Mistral, OpenAI, Anthropic), on utilise le
-  // modèle par défaut du preset. Le choix fin du modèle se fait par
-  // conversation dans le compositeur. Ollama (pas de catalogue) garde la
-  // saisie libre, car il n'y a pas d'autre endroit pour la définir.
-  const resolvedModel =
-    selectedCard.value === 'ollama' ? model.value.trim() || preset.model : preset.model;
-  return {
-    id: existing?.id ?? newId(),
-    label: preset.label,
-    provider: preset.provider,
-    model: resolvedModel,
-    baseUrl:
-      selectedCard.value === 'ollama'
-        ? baseUrl.value.trim() || 'http://localhost:11434'
-        : preset.baseUrl || null,
-    apiKey: selectedCard.value === 'ollama' ? null : apiKey.value.trim() || null,
-    temperature: existing?.temperature ?? null,
-    maxTokens: existing?.maxTokens ?? null,
-    extraHeaders: existing?.extraHeaders ?? {},
-    embeddingModel: preset.embeddingModel || existing?.embeddingModel || null,
-    embeddingBaseUrl: existing?.embeddingBaseUrl ?? null,
-  };
-}
-
-async function persistEntry(entry: LlmProviderEntry): Promise<void> {
-  const current = settings.value;
-  const providers = current.providers.some((p) => p.id === entry.id)
-    ? current.providers.map((p) => (p.id === entry.id ? entry : p))
-    : [...current.providers, entry];
-
-  const next: AppSettings = {
-    ...current,
-    providers,
-    activeChatProviderId: entry.id,
-    activeEmbeddingProviderId: entry.embeddingModel ? entry.id : current.activeEmbeddingProviderId,
-  };
-
-  await save(next);
-}
-
-async function onFieldChange(): Promise<void> {
-  testStatus.value = null;
+async function onUseEngine(id: string): Promise<void> {
+  testResults.value = [];
   try {
-    const existing = getPrimaryEntry();
-    await persistEntry(buildEntryFromForm(existing));
+    await setActiveSet(id);
   } catch (err) {
     Notify.create({
-      message: err instanceof Error ? err.message : 'Enregistrement impossible',
+      message: err instanceof Error ? err.message : t('settings.saveFailed'),
       color: 'negative',
     });
   }
 }
 
-async function onSelectCard(card: GuidedCardId): Promise<void> {
-  selectedCard.value = card;
-  const preset = applyGuidedCard(card, cloudProvider.value);
-  model.value = preset.model;
-  if (card === 'ollama') {
-    baseUrl.value = preset.baseUrl;
-    apiKey.value = '';
-  } else if (card === 'mistral') {
-    apiKey.value = getPrimaryEntry()?.apiKey ?? '';
-  } else {
-    apiKey.value = getPrimaryEntry()?.apiKey ?? '';
+async function onAccessKeyChange(): Promise<void> {
+  testResults.value = [];
+  const current = activeSet.value;
+  if (!current || current.id !== 'mistral-default') return;
+  try {
+    await persistSet(applyAccessKeyToSet(current, accessKey.value));
+  } catch (err) {
+    Notify.create({
+      message: err instanceof Error ? err.message : t('settings.saveFailed'),
+      color: 'negative',
+    });
   }
-  testStatus.value = null;
-  await onFieldChange();
 }
 
-async function onCloudProviderChange(value: CloudProviderName): Promise<void> {
-  cloudProvider.value = value;
-  const preset = applyGuidedCard('cloud', value);
-  model.value = preset.model;
-  testStatus.value = null;
-  await onFieldChange();
-}
-
-function humanizeTestResult(result: LlmTestResult): string {
-  if (result.ok) return 'Connexion OK';
-  const detail = result.detail.toLowerCase();
-  if (detail.includes('401') || detail.includes('invalide')) return 'Clé invalide';
-  if (detail.includes('ollama') || detail.includes('connexion impossible')) return 'Ollama injoignable';
-  return result.detail || 'Échec de connexion';
+async function onOllamaChange(): Promise<void> {
+  testResults.value = [];
+  const current = activeSet.value;
+  if (!current || current.id !== 'ollama-local') return;
+  try {
+    await persistSet(applyOllamaOverrides(current, ollamaUrl.value, ollamaModel.value));
+  } catch (err) {
+    Notify.create({
+      message: err instanceof Error ? err.message : t('settings.saveFailed'),
+      color: 'negative',
+    });
+  }
 }
 
 async function onTest(): Promise<void> {
+  const set = activeSet.value;
+  if (!set) return;
   testing.value = true;
-  testStatus.value = null;
+  testResults.value = [];
   try {
-    const entry = buildEntryFromForm(getPrimaryEntry());
-    const config = toChatLlmConfig(entry);
-    if (!config) {
-      testStatus.value = { ok: false, label: 'Configuration incomplète' };
-      return;
-    }
-    const result = await testLlmConfig(config);
-    testStatus.value = { ok: result.ok, label: humanizeTestResult(result) };
+    const result = await testSet(cloneProviderSet(set));
+    testResults.value = [
+      {
+        ok: result.chat.ok,
+        label: result.chat.ok ? t('settings.test.chatOk') : t('settings.test.chatFailed'),
+      },
+      {
+        ok: result.embeddings.ok,
+        label: result.embeddings.ok
+          ? t('settings.test.embeddingsOk')
+          : t('settings.test.embeddingsFailed'),
+      },
+      {
+        ok: result.ocr.ok,
+        label: result.ocr.ok ? t('settings.test.ocrOk') : t('settings.test.ocrFailed'),
+      },
+      {
+        ok: result.vision.ok,
+        label: result.vision.ok ? t('settings.test.visionOk') : t('settings.test.visionFailed'),
+      },
+    ];
   } catch {
-    testStatus.value = { ok: false, label: 'Sidecar injoignable' };
+    testResults.value = [{ ok: false, label: t('settings.sidecarUnreachableShort') }];
   } finally {
     testing.value = false;
   }
@@ -349,16 +285,16 @@ async function onTest(): Promise<void> {
 async function onRefreshOllama(): Promise<void> {
   refreshingOllama.value = true;
   try {
-    const models = await fetchOllamaModels(baseUrl.value);
+    const models = await fetchOllamaModels(ollamaUrl.value);
     ollamaModels.value = models;
-    if (models.length > 0 && !models.includes(model.value)) {
-      model.value = models[0];
-      await onFieldChange();
+    if (models.length > 0 && !models.includes(ollamaModel.value)) {
+      ollamaModel.value = models[0];
+      await onOllamaChange();
     }
   } catch (err) {
     ollamaModels.value = [];
     Notify.create({
-      message: err instanceof Error ? err.message : 'Ollama injoignable',
+      message: err instanceof Error ? err.message : t('settings.testOllamaUnreachable'),
       color: 'warning',
     });
   } finally {
@@ -368,14 +304,14 @@ async function onRefreshOllama(): Promise<void> {
 
 onMounted(async () => {
   await load();
-  hydrateFromEntry(getPrimaryEntry());
-  if (selectedCard.value === 'ollama') {
+  hydrateFromActiveSet(activeSet.value);
+  if (activeSet.value?.id === 'ollama-local') {
     void onRefreshOllama();
   }
 });
 
-watch(activeChatProvider, (entry) => {
-  hydrateFromEntry(entry);
+watch(activeSet, (set) => {
+  hydrateFromActiveSet(set);
 });
 </script>
 
@@ -396,32 +332,29 @@ watch(activeChatProvider, (entry) => {
 
 .guided-setup__cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
 
 .guided-card {
-  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
+  gap: 8px;
   padding: 14px;
   border: 2px solid var(--wp-border);
   border-radius: var(--wp-r-md);
   background: var(--wp-surface);
-  text-align: left;
-  cursor: pointer;
-  transition: border-color 0.15s, box-shadow 0.15s;
-
-  &:hover {
-    border-color: var(--wp-accent);
-  }
 }
 
 .guided-card--selected {
   border-color: var(--wp-accent);
   box-shadow: 0 0 0 3px var(--wp-accent-soft);
+}
+
+.guided-card__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .guided-card__badge {
@@ -449,6 +382,7 @@ watch(activeChatProvider, (entry) => {
 }
 
 .guided-card__title {
+  margin: 0;
   font-family: var(--wp-font-head);
   font-size: var(--wp-fs-base);
   font-weight: 700;
@@ -456,9 +390,51 @@ watch(activeChatProvider, (entry) => {
 }
 
 .guided-card__subtitle {
+  margin: 0;
   font-size: var(--wp-fs-xs);
   line-height: var(--wp-lh-normal);
   color: var(--wp-text-muted);
+}
+
+.guided-card__caps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.guided-card__caps li {
+  font-size: var(--wp-fs-xs);
+  padding: 3px 8px;
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-surface-2);
+  color: var(--wp-text-muted);
+}
+
+.guided-card__use {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 8px 14px;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-md);
+  background: var(--wp-surface);
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  color: var(--wp-text);
+  cursor: pointer;
+
+  &:hover {
+    border-color: var(--wp-accent);
+    background: var(--wp-accent-soft);
+  }
+}
+
+.guided-card__use--active {
+  border-color: var(--wp-accent);
+  background: var(--wp-accent);
+  color: var(--wp-canard);
 }
 
 .guided-setup__fields {
@@ -537,15 +513,24 @@ watch(activeChatProvider, (entry) => {
   }
 }
 
-.guided-setup__status {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.guided-setup__test-results {
   margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   font-size: var(--wp-fs-sm);
   color: var(--wp-danger);
 
-  &--ok {
+  li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &--ok,
+  li.guided-setup__test-results--ok {
     color: var(--wp-success);
   }
 }

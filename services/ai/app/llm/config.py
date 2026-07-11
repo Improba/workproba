@@ -9,7 +9,8 @@ from pydantic_ai.settings import ModelSettings
 
 from app.config import ProviderName
 from app.llm.mistral import MistralChatModel
-from app.schemas import LLMProviderConfig, ReasoningEffort
+from app.llm.provider_sets import resolve_chat_from_set
+from app.schemas import LLMProviderConfig, ProviderSet, ReasoningEffort
 
 # Base URL par défaut selon le provider (quand non fourni par la config).
 _DEFAULT_BASE_URL: dict[str, str] = {
@@ -27,8 +28,12 @@ _OPENAI_COMPAT_PROVIDERS: frozenset[ProviderName] = frozenset(
 def resolve_llm_config(
     request_config: LLMProviderConfig | None,
     settings: Any,
+    provider_set: ProviderSet | None = None,
 ) -> LLMProviderConfig:
-    """Prefer the per-turn config from the request, then environment fallbacks."""
+    """Priorise le set actif, puis la config par tour, puis l'environnement."""
+
+    if provider_set is not None:
+        return resolve_chat_from_set(provider_set)
 
     if request_config is not None:
         return request_config

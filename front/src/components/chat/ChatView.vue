@@ -1,9 +1,15 @@
 <template>
   <div class="chat-view">
-    <div class="chat-view__messages">
+    <div
+      class="chat-view__messages"
+      @dragenter.prevent="onDragEnter"
+      @dragover.prevent
+      @dragleave.prevent="onDragLeave"
+      @drop.prevent="onDrop"
+    >
       <div v-if="messages.length === 0" class="chat-view__empty">
         <p class="chat-view__empty-hint">
-          Posez une question sur vos documents, ou choisissez un point de départ :
+          {{ t('chat.emptyHint') }}
         </p>
         <StartPrompts @select="applyPrompt" />
       </div>
@@ -14,11 +20,19 @@
         :messages="messages"
         :project-path="projectPath"
         :session-id="sessionId"
+        :workspace-data-dir="workspaceDataDir"
         :confirming="confirming"
+        :approving-plan="approvingPlan"
+        :attachment-statuses="attachmentStatuses"
+        :settings-locked="settingsLocked"
         @open-file="(path) => emit('open-file', path)"
         @restored="(path) => emit('restored', path)"
         @confirm-approve="emit('confirm-approve')"
         @confirm-deny="emit('confirm-deny')"
+        @plan-approve="emit('plan-approve')"
+        @plan-reject="emit('plan-reject')"
+        @personas-another="(card) => emit('personas-another', card)"
+        @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
       />
 
       <Transition name="chat-scroll-fab">
@@ -26,19 +40,47 @@
           v-if="showScrollDown"
           type="button"
           class="chat-view__scroll-down"
-          aria-label="Aller en bas"
+          :aria-label="t('chat.scrollDown')"
           @click="scrollToBottom(true)"
         >
           <Lucide name="arrow-down" size="sm" color="text-invert" />
         </button>
       </Transition>
+
+      <Transition name="chat-drop-overlay">
+        <div
+          v-if="isDragOver"
+          class="chat-view__drop-overlay"
+          aria-hidden="true"
+        >
+          <div class="chat-view__drop-card">
+            <Lucide name="plus" size="md" color="wp-accent" />
+            <span class="chat-view__drop-text">{{ t('chat.dropFiles') }}</span>
+            <span class="chat-view__drop-hint">{{ t('chat.dropFilesHint') }}</span>
+          </div>
+        </div>
+      </Transition>
     </div>
 
     <div
       class="chat-view__composer"
-      :class="{ 'chat-view__composer--expanded': hasDraft }"
+      :class="{ 'chat-view__composer--expanded': isExpanded }"
     >
       <form class="chat-view__composer-form" @submit.prevent="handleSubmit">
+        <input
+          ref="fileInputRef"
+          type="file"
+          class="chat-view__file-input"
+          multiple
+          :accept="ATTACHMENT_ACCEPT"
+          @change="onFileInputChange"
+        />
+        <ChatComposerAttachments
+          v-if="hasAttachments"
+          :attachments="attachments"
+          @remove="removeAttachment"
+        />
+
         <div class="chat-view__composer-field">
           <q-input
             ref="composerInputRef"
@@ -47,21 +89,62 @@
             autogrow
             borderless
             class="chat-view__input"
-            placeholder="Écrivez votre message…"
+            :placeholder="t('chat.messagePlaceholder')"
             :maxlength="COMPOSER_MAX_LENGTH"
             @keydown.enter.ctrl.prevent="handleSubmit"
             @keydown.enter.meta.prevent="handleSubmit"
+            @paste="onPaste"
           />
         </div>
 
         <div class="chat-view__composer-actions">
           <div class="chat-view__composer-actions-left">
+            <button
+              type="button"
+              class="chat-view__attach"
+              :aria-label="t('chat.attachFileAria', { current: attachments.length, max: MAX_ATTACHMENTS })"
+              :title="t('chat.attachFile')"
+              @click="openFilePicker"
+            >
+              <Lucide name="plus" size="18" color="wp-text" />
+            </button>
+            <template v-if="personasEnabled">
+              <button
+                type="button"
+                class="chat-view__personas-btn"
+                :title="t('personas.actions.askOpinion')"
+                @click="emit('personas-ask')"
+              >
+                <Lucide name="users" size="16" color="wp-gold" />
+                <span class="chat-view__personas-label">{{ t('personas.actions.askOpinion') }}</span>
+              </button>
+              <button
+                type="button"
+                class="chat-view__personas-btn"
+                :title="t('personas.actions.simulateMeeting')"
+                @click="emit('personas-meeting')"
+              >
+                <Lucide name="presentation" size="16" color="wp-gold" />
+                <span class="chat-view__personas-label">{{ t('personas.actions.simulateMeeting') }}</span>
+              </button>
+              <button
+                type="button"
+                class="chat-view__personas-btn"
+                :title="t('personas.actions.discuss')"
+                @click="emit('personas-discuss')"
+              >
+                <Lucide name="message-circle" size="16" color="wp-gold" />
+                <span class="chat-view__personas-label">{{ t('personas.actions.discuss') }}</span>
+              </button>
+            </template>
             <ChatModelControl
               v-if="showModelControl"
               :model-value="reasoningEffort ?? 'none'"
               :provider="reasoningProvider"
               :model="reasoningModel"
-              @update:model-value="(value) => emit('update:reasoningEffort', value)"
+              @update:model-value="
+                (value) => emit('update:reasoningEffort', value)
+              "
               @update:model="(value) => emit('update:reasoningModel', value)"
             />
           </div>
@@ -69,8 +152,8 @@
             v-if="streaming"
             type="button"
             class="chat-view__stop"
-            aria-label="Arrêter"
-            title="Arrêter"
+            :aria-label="t('chat.stop')"
+            :title="t('chat.stop')"
             @click="emit('abort')"
           >
             <Lucide name="square" size="16" color="wp-canard" />
@@ -80,7 +163,7 @@
             type="submit"
             class="chat-view__send"
             :disabled="!canSend"
-            aria-label="Envoyer"
+            :aria-label="t('chat.send')"
           >
             <Lucide name="arrow-up" size="18" color="wp-canard" />
           </button>
@@ -88,7 +171,7 @@
       </form>
 
       <p v-if="hasDraft" class="chat-view__composer-hint">
-        Entrée = saut de ligne · Ctrl+Entrée pour envoyer
+        {{ t('chat.composerHint') }}
       </p>
     </div>
   </div>
@@ -96,13 +179,20 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { useScroll } from '@vueuse/core';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import ChatModelControl from '@components/chat/ChatModelControl.vue';
+import ChatComposerAttachments from '@components/chat/ChatComposerAttachments.vue';
 import MessageList from '@components/chat/MessageList.vue';
 import StartPrompts from '@components/chat/StartPrompts.vue';
 import type { LlmProviderName } from '@composables/useDesktop.types';
-import type { ChatMessage, ReasoningEffort } from '#types';
+import {
+  ATTACHMENT_ACCEPT,
+  MAX_ATTACHMENTS,
+  useChatAttachments,
+} from '@composables/useChatAttachments';
+import type { ChatAttachment, ChatMessage, ReasoningEffort } from '#types';
 import type { QInput } from 'quasar';
 import { supportsReasoning } from '@utils/reasoningSupport';
 import { hasModelChoice } from '@utils/modelCatalog';
@@ -112,24 +202,51 @@ const props = defineProps<{
   streaming: boolean;
   projectPath?: string | null;
   sessionId?: string | null;
+  workspaceDataDir?: string | null;
   confirming?: boolean;
+  approvingPlan?: boolean;
+  attachmentStatuses?: Record<string, import('@composables/useChatStream').AttachmentStatusEntry>;
+  settingsLocked?: boolean;
+  personasEnabled?: boolean;
   reasoningEffort?: ReasoningEffort | null;
   reasoningProvider?: LlmProviderName | null;
   reasoningModel?: string | null;
 }>();
 
 const emit = defineEmits<{
-  send: [text: string];
+  send: [text: string, attachments: ChatAttachment[]];
   abort: [];
   'open-file': [path: string];
   restored: [path: string];
   'confirm-approve': [];
   'confirm-deny': [];
+  'plan-approve': [];
+  'plan-reject': [];
   'update:reasoningEffort': [value: ReasoningEffort];
   'update:reasoningModel': [model: string];
+  'personas-ask': [];
+  'personas-meeting': [];
+  'personas-discuss': [];
+  'personas-another': [card: import('#types').PersonasOpinionCard];
+  'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
 }>();
 
 const COMPOSER_MAX_LENGTH = 32_000;
+const { t } = useI18n();
+
+const {
+  attachments,
+  hasAttachments,
+  isReading,
+  isDragOver,
+  addFiles,
+  removeAttachment,
+  clear: clearAttachments,
+  setDragOver,
+} = useChatAttachments();
+
+const fileInputRef = ref<HTMLInputElement | null>(null);
+const dragCounter = ref(0);
 
 const showModelControl = computed(() => {
   const provider = props.reasoningProvider;
@@ -155,10 +272,12 @@ const canSend = computed(
   () =>
     draft.value.trim().length > 0 &&
     draft.value.length <= COMPOSER_MAX_LENGTH &&
-    !props.streaming,
+    !props.streaming &&
+    !isReading.value,
 );
 
 const hasDraft = computed(() => draft.value.trim().length > 0);
+const isExpanded = computed(() => hasDraft.value || hasAttachments.value);
 
 function applyPrompt(prompt: string): void {
   draft.value = prompt;
@@ -205,7 +324,10 @@ async function scrollToBottomStable(smooth = false): Promise<void> {
     const run = (): void => {
       const target = messageListRef.value?.getScrollTarget();
       if (!target) {
-        if (attempts < SCROLL_STABLE_MAX_ATTEMPTS && performance.now() < deadline) {
+        if (
+          attempts < SCROLL_STABLE_MAX_ATTEMPTS &&
+          performance.now() < deadline
+        ) {
           attempts += 1;
           requestAnimationFrame(run);
           return;
@@ -221,7 +343,11 @@ async function scrollToBottomStable(smooth = false): Promise<void> {
       const stable = height === lastHeight && lastHeight >= 0;
       lastHeight = height;
 
-      if (stable || attempts >= SCROLL_STABLE_MAX_ATTEMPTS || performance.now() >= deadline) {
+      if (
+        stable ||
+        attempts >= SCROLL_STABLE_MAX_ATTEMPTS ||
+        performance.now() >= deadline
+      ) {
         resolve();
         return;
       }
@@ -245,12 +371,50 @@ function scheduleScrollToBottom(): void {
 
 function handleSubmit(): void {
   const text = draft.value.trim();
-  if (!text || props.streaming || draft.value.length > COMPOSER_MAX_LENGTH) return;
-  emit('send', text);
+  if (!text || props.streaming || draft.value.length > COMPOSER_MAX_LENGTH)
+    return;
+  if (isReading.value) return;
+  const ready = attachments.value.filter((a) => a.status === 'ready');
+  emit('send', text, ready);
   draft.value = '';
+  clearAttachments();
   // L'utilisateur vient d'envoyer : on force le rappel en bas.
   isPinned.value = true;
   void scrollToBottomStable();
+}
+
+function openFilePicker(): void {
+  fileInputRef.value?.click();
+}
+
+function onFileInputChange(event: Event): void {
+  const input = event.target as HTMLInputElement;
+  addFiles(input.files);
+  // On réinitialise pour pouvoir re-sélectionner le même fichier ensuite.
+  input.value = '';
+}
+
+function onPaste(event: ClipboardEvent): void {
+  const files = event.clipboardData?.files;
+  if (files && files.length > 0) {
+    addFiles(files);
+  }
+}
+
+function onDragEnter(): void {
+  dragCounter.value += 1;
+  setDragOver(true);
+}
+
+function onDragLeave(): void {
+  dragCounter.value = Math.max(0, dragCounter.value - 1);
+  if (dragCounter.value === 0) setDragOver(false);
+}
+
+function onDrop(event: DragEvent): void {
+  dragCounter.value = 0;
+  setDragOver(false);
+  addFiles(event.dataTransfer?.files ?? null);
 }
 
 // L'utilisateur scroll : on mémorise son intention (collé au bas ou non).
@@ -363,8 +527,11 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--primary-highest) 25%, transparent);
-  transition: transform 0.15s ease, opacity 0.15s ease;
+  box-shadow: 0 4px 14px
+    color-mix(in srgb, var(--primary-highest) 25%, transparent);
+  transition:
+    transform 0.15s ease,
+    opacity 0.15s ease;
 
   &:hover {
     transform: translateY(-1px);
@@ -373,7 +540,9 @@ onUnmounted(() => {
 
 .chat-scroll-fab-enter-active,
 .chat-scroll-fab-leave-active {
-  transition: opacity 0.15s ease, transform 0.15s ease;
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease;
 }
 
 .chat-scroll-fab-enter-from,
@@ -386,7 +555,10 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  padding: 0.6rem 0.75rem 0.5rem;
+  width: 100%;
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem 0.5rem;
   background: var(--wp-surface);
 }
 
@@ -400,7 +572,8 @@ onUnmounted(() => {
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-pill);
   background: var(--wp-surface-2);
-  transition: border-color var(--wp-dur) var(--wp-ease),
+  transition:
+    border-color var(--wp-dur) var(--wp-ease),
     box-shadow var(--wp-dur) var(--wp-ease),
     border-radius var(--wp-dur) var(--wp-ease);
 
@@ -448,6 +621,118 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.4rem;
   min-width: 0;
+}
+
+.chat-view__file-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.chat-view__attach {
+  flex: 0 0 auto;
+  width: 2rem;
+  height: 2rem;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-surface-3);
+  color: var(--wp-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background var(--wp-dur) var(--wp-ease),
+    border-color var(--wp-dur) var(--wp-ease),
+    transform var(--wp-dur) var(--wp-ease);
+
+  &:hover {
+    background: var(--wp-surface-2);
+    border-color: var(--wp-accent);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--wp-accent-soft);
+  }
+}
+
+.chat-view__personas-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--wp-gold) 45%, var(--wp-border));
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-gold-soft);
+  color: var(--wp-text);
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--wp-dur) var(--wp-ease);
+
+  &:hover {
+    filter: brightness(0.97);
+  }
+}
+
+.chat-view__personas-label {
+  @media (max-width: 900px) {
+    display: none;
+  }
+}
+
+.chat-view__drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  background: color-mix(in srgb, var(--wp-surface) 80%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+.chat-view__drop-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 1.5rem 2.25rem;
+  border: 2px dashed var(--wp-accent);
+  border-radius: var(--wp-r-lg);
+  background: var(--wp-surface-2);
+  box-shadow: var(--wp-shadow-1);
+}
+
+.chat-view__drop-text {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--wp-text);
+}
+
+.chat-view__drop-hint {
+  font-size: 0.75rem;
+  color: var(--wp-text-muted);
+}
+
+.chat-drop-overlay-enter-active,
+.chat-drop-overlay-leave-active {
+  transition: opacity 0.15s ease;
+}
+
+.chat-drop-overlay-enter-from,
+.chat-drop-overlay-leave-to {
+  opacity: 0;
 }
 
 .chat-view__composer-hint {
@@ -512,8 +797,10 @@ onUnmounted(() => {
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 1px 2px color-mix(in srgb, var(--wp-accent) 35%, transparent);
-  transition: background-color var(--wp-dur) var(--wp-ease),
-    transform var(--wp-dur) var(--wp-ease), opacity var(--wp-dur) var(--wp-ease);
+  transition:
+    background-color var(--wp-dur) var(--wp-ease),
+    transform var(--wp-dur) var(--wp-ease),
+    opacity var(--wp-dur) var(--wp-ease);
 
   &:disabled {
     background: var(--wp-surface-3);
@@ -545,7 +832,8 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background-color var(--wp-dur) var(--wp-ease),
+  transition:
+    background-color var(--wp-dur) var(--wp-ease),
     transform var(--wp-dur) var(--wp-ease);
 
   &:hover {

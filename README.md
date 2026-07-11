@@ -10,12 +10,20 @@ Workproba est distribué sous **double licence** : usage personnel et éducatif 
 
 Voir [LICENSING.md](./LICENSING.md) pour le guide complet, la FAQ et les contacts.
 
+## Première installation
+
+Téléchargez l'installateur pour votre système (Windows, macOS ou Linux) sur la page **Releases** du dépôt. En V2, les installateurs ne sont pas encore signés numériquement : Windows et macOS affichent un avertissement au premier lancement. C'est normal.
+
+Guide pas à pas (SmartScreen, Gatekeeper, `.deb`, AppImage, désinstallation) : **[docs/installateurs.md](./docs/installateurs.md)**.
+
 ## Documentation
 
+- [docs/installateurs.md](./docs/installateurs.md) : installation (grand public)
 - [docs/intention.md](./docs/intention.md) : cadrage produit
 - [docs/desktop.md](./docs/desktop.md) : architecture bureau
 - [docs/architecture.md](./docs/architecture.md) : vue technique
 - [docs/workspace-storage.md](./docs/workspace-storage.md) : stockage par workspace
+- [docs/README.md](./docs/README.md) : index complet de la documentation
 - [desktop/README.md](./desktop/README.md) : développement Tauri
 
 ## Structure
@@ -39,6 +47,36 @@ workproba/
 - Dépendances OS Tauri : voir [desktop/README.md](./desktop/README.md)
 
 ### Développement
+
+#### Une seule commande (recommandé)
+
+Démarre le sidecar Python, attend qu'il soit sain (`/health`), puis lance Tauri qui démarre lui-même Quasar. Un seul `Ctrl+C` arrête proprement les deux.
+
+```bash
+make dev          # ou : yarn dev
+```
+
+Variantes :
+
+```bash
+make dev-ai       # sidecar Python seul
+make dev-desktop  # Tauri seul (si sidecar déjà lancé ailleurs)
+yarn dev:no-ai    # desktop sans (re)démarrer le sidecar
+yarn dev:ai-only  # sidecar Python seul
+```
+
+Variables d'environnement utiles :
+
+| Variable | Défaut | Rôle |
+|---|---|---|
+| `AI_PORT` | `8765` | Port du sidecar Python |
+| `AI_HOST` | `127.0.0.1` | Host du sidecar |
+| `HEALTH_TIMEOUT_S` | `30` | Délai max d'attente de `/health` |
+| `AI_SKIP_WAIT` | `0` | `=1` pour ne pas attendre la santé du sidecar |
+
+Logs du sidecar : `tail -f .dev-ai.log` à la racine.
+
+#### Deux terminaux (méthode historique)
 
 ```bash
 # Terminal 1 — sidecar Python (:8765)

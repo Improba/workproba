@@ -33,18 +33,9 @@
           color="wp-text-muted"
           :class="isTechView ? 'tool-call-card__chevron tool-call-card__chevron--up' : 'tool-call-card__chevron'"
         />
-        Détails
+        {{ t('common.showDetails') }}
       </button>
     </div>
-
-    <RestoreBanner
-      v-if="showRestoreBanner"
-      :project-path="projectPath!"
-      :session-id="sessionId!"
-      :file-path="toolCall.filePath!"
-      :snapshot-path="toolCall.snapshotPath"
-      @restored="(path) => emit('restored', path)"
-    />
 
     <div v-if="isTechView" class="tool-call-card__tech">
       <!-- Vue détaillée lisible : où, dans quoi, résultat, durée, statut -->
@@ -87,17 +78,17 @@
           color="wp-text-muted"
           :class="showRaw ? 'tool-call-card__chevron tool-call-card__chevron--up' : 'tool-call-card__chevron'"
         />
-        {{ showRaw ? 'Masquer les détails techniques' : 'Afficher les détails techniques' }}
+        {{ isTechView ? t('common.hideTechnicalDetails') : t('common.showTechnicalDetails') }}
       </button>
 
       <div v-if="showRaw" class="tool-call-card__raw">
         <section v-if="toolCall.args && Object.keys(toolCall.args).length">
-          <h4 class="tool-call-card__section-title">Arguments</h4>
+          <h4 class="tool-call-card__section-title">{{ t('common.arguments') }}</h4>
           <pre class="tool-call-card__json">{{ formattedArgs }}</pre>
         </section>
 
         <section v-if="toolCall.result !== undefined">
-          <h4 class="tool-call-card__section-title">Résultat</h4>
+          <h4 class="tool-call-card__section-title">{{ t('common.result') }}</h4>
           <pre class="tool-call-card__json">{{ formattedResult }}</pre>
         </section>
       </div>
@@ -107,8 +98,8 @@
 
 <script setup lang="ts">
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import RestoreBanner from '@components/chat/RestoreBanner.vue';
 import { useToolCallExpansion } from '@composables/useToolCallExpansion';
 import { fallbackHumanLabel } from '@utils/toolCallHumanLabel';
 import { buildToolCallDetails, statusLabel as statusLabelFn } from '@utils/toolCallDetails';
@@ -137,20 +128,13 @@ const { isTechView, showRaw, toggleTechView, toggleRaw } = useToolCallExpansion(
   () => props.toolCall.id,
 );
 
-const showRestoreBanner = computed(
-  () =>
-    props.toolCall.name === 'generate_document' &&
-    props.toolCall.status === 'success' &&
-    Boolean(props.toolCall.filePath) &&
-    Boolean(props.projectPath) &&
-    Boolean(props.sessionId),
-);
+const { t } = useI18n();
 
 const humanLabel = computed(() => {
   if (props.toolCall.status === 'awaiting_confirmation') {
     const summary = props.toolCall.humanSummary?.trim();
     if (summary) return summary;
-    return 'En attente de votre confirmation';
+    return t('chat.awaitingConfirmation');
   }
   const summary = props.toolCall.humanSummary?.trim();
   if (summary) return summary;
@@ -180,10 +164,12 @@ const fileName = computed(() => {
 
 <style scoped lang="scss">
 .tool-call-card {
-  margin: 0.5rem 0;
+  width: 100%;
+  margin: 0;
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-md);
   background: var(--wp-surface);
+  box-shadow: var(--wp-shadow-1);
   overflow: hidden;
 }
 
@@ -194,10 +180,6 @@ const fileName = computed(() => {
   gap: 0.5rem;
   padding: 0.65rem 0.85rem;
   color: var(--wp-text);
-}
-
-.tool-call-card__human + .restore-banner {
-  margin: 0 0.85rem 0.65rem;
 }
 
 .tool-call-card__dot {

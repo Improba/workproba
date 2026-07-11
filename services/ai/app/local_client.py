@@ -54,7 +54,11 @@ class LocalProjectClient(ProjectClient):
         limits: Limits = DEFAULT_LIMITS,
     ) -> None:
         self._project_root = Path(project_root).expanduser().resolve()
-        _ = workspace_data_dir
+        self._workspace_data_dir = (
+            Path(workspace_data_dir).expanduser().resolve()
+            if workspace_data_dir
+            else None
+        )
         self._limits = limits
         self._extractor = extractor or LocalExtractor(limits=limits)
         self._rag_store = rag_store
@@ -629,12 +633,12 @@ class LocalProjectClient(ProjectClient):
         target_path.parent.mkdir(parents=True, exist_ok=True)
 
         version_entry = snapshot_before_overwrite(
+            workspace_data_dir=self._workspace_data_dir,
             project_root=self._project_root,
-            session_id=session_id,
             relative_path=relative_path,
         )
-        version_relative_path = (
-            str(version_entry["snapshot_path"]) if version_entry else None
+        version_id = (
+            str(version_entry["version_id"]) if version_entry else None
         )
 
         target_path.write_bytes(content)
@@ -649,7 +653,7 @@ class LocalProjectClient(ProjectClient):
             metadata={
                 **(metadata or {}),
                 "path": relative_path,
-                "version_path": version_relative_path,
+                "version_id": version_id,
                 "size_bytes": len(content),
                 "source": "local",
                 "saved": True,

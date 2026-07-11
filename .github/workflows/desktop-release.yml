@@ -1,0 +1,89 @@
+name: Desktop Release
+
+# Builds unsigned installers for macOS, Windows, and Linux on version tags.
+# Code signing is intentionally omitted in V2.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest
+            args: '--target x86_64-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: yarn
+          cache-dependency-path: front/yarn.lock
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: desktop/src-tauri
+
+      - name: Install frontend dependencies
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - name: Build Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: desktop
+          tauriScript: yarn tauri
+          args: ${{ matrix.args }}
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Workproba ${{ github.ref_name }}'
+          releaseBody: |
+            Installateurs multi-plateformes Workproba (non signés, V2).
+
+            - macOS: `.dmg`
+            - Windows: `.msi` / `.exe` (NSIS)
+            - Linux: `.deb` / `.AppImage`
+
+            Le moteur IA est embarqué ; aucune dépendance de développement requise côté utilisateur.
+          releaseDraft: true
+          prerelease: false
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: workproba-${{ matrix.platform }}-${{ matrix.args || 'default' }}
+          path: |
+            desktop/src-tauri/target/release/bundle/**/*
+          if-no-files-found: warn

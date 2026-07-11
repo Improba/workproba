@@ -23,22 +23,19 @@ from pydantic_ai.exceptions import ModelRetry
 
 from app.agent.confirmation import ConfirmationGate
 from app.agent.human import build_human_summary
+from app.agent.plan import PlanGate
+from app.documents.writer import build_docx_bytes, build_pdf_bytes, build_xlsx_bytes
+from app.i18n import DEFAULT_LOCALE, t
 from app.limits import DEFAULT_LIMITS, Limits
 from app.project_client import ProjectClient
 from app.sandbox.runner import SandboxRunner
-from app.schemas import DocumentReference, UiMode
+from app.schemas import DocumentReference, ProviderSet, UiMode
 
-WORKPROBA_SYSTEM_PROMPT = (
-    "Tu es Workproba, l'assistant IA local d'Improba. Tu aides l'utilisateur "
-    "à analyser, comprendre et produire du contenu à partir des fichiers de "
-    "son workspace local. Utilise les outils fournis (list_files, search_kb, "
-    "read_document, run_code, generate_document) quand c'est pertinent. "
-    "Réponds en français, de façon claire et concise. Cite les chemins de "
-    "fichiers relatifs quand tu t'appuies sur leur contenu. Les outils "
-    "appliquent des plafonds de taille : si read_document renvoie "
-    "`truncated: true`, rappelle-le avec un `offset_lines` plus grand pour "
-    "paginer. Pour décrire le contenu d'un dossier, commence par list_files."
-)
+WORKPROBA_SYSTEM_PROMPT = t(DEFAULT_LOCALE, "tools.system_prompt")
+
+
+def system_prompt_for_locale(locale: str = DEFAULT_LOCALE) -> str:
+    return t(locale, "tools.system_prompt")
 
 
 @dataclass(frozen=True)
@@ -50,6 +47,15 @@ class ToolContext:
     documents: list[DocumentReference]
     project_root: Path | None = None
     workspace_data_dir: Path | None = None
+    locale: str = DEFAULT_LOCALE
+    active_plugins: list[str] | None = None
+    plugin_data_dir: Path | None = None
+    provider_set: ProviderSet | None = None
+    settings_locked: bool = False
+    permissions_network: bool = True
+    code_execute: bool = True
+    audit_retention_days: int | None = None
+    audit_enabled: bool | None = None
 
 
 @dataclass
@@ -59,6 +65,7 @@ class ToolDeps:
     sandbox_runner: SandboxRunner
     limits: Limits = field(default_factory=lambda: DEFAULT_LIMITS)
     confirmation_gate: ConfirmationGate | None = None
+    plan_gate: PlanGate | None = None
 
 
 def _retry(exc: Exception) -> ModelRetry:
@@ -85,7 +92,11 @@ def _write_action(
     return proposed_path, "create"
 
 
-def build_inventory_prompt(documents: list[DocumentReference], cap: int) -> str:
+def build_inventory_prompt(
+    documents: list[DocumentReference],
+    cap: int,
+    locale: str = DEFAULT_LOCALE,
+) -> str:
     """Construit le prompt système listant les fichiers projet transmis.
 
     Sans ça, l'agent ignore quels fichiers existent : search_kb est une
@@ -93,28 +104,20 @@ def build_inventory_prompt(documents: list[DocumentReference], cap: int) -> str:
     isolé. L'inventaire est borné par `cap`.
     """
     if not documents:
-        return (
-            "Aucun fichier projet n'a été transmis dans le contexte. "
-            "Utilise l'outil list_files pour explorer l'arborescence du "
-            "dossier projet avant de conclure qu'il est vide."
-        )
+        return t(locale, "tools.inventory_empty")
     lines: list[str] = []
     for doc in documents[:cap]:
         path = doc.metadata.get("relativePath") or doc.id
-        kind = doc.metadata.get("kind") or "fichier"
+        kind = doc.metadata.get("kind") or t(locale, "tools.inventory_kind_file")
         lines.append(f"- {path} ({kind})")
-    text = (
-        "Inventaire du projet (chemins relatifs, extrait de l'arborescence) :\n"
-        + "\n".join(lines)
-    )
+    text = t(locale, "tools.inventory_header") + "\n" + "\n".join(lines)
     if len(documents) > cap:
-        text += f"\n… et {len(documents) - cap} autres fichiers non listés ici."
-    text += (
-        "\nUtilise read_document pour lire un fichier (par chemin relatif), "
-        "search_kb pour rechercher du contenu par mot-clé, list_files pour "
-        "lister une sous-arborescence, run_code pour exécuter du code en "
-        "précisant les project_files à exposer au sandbox."
-    )
+        text += "\n" + t(
+            locale,
+            "tools.inventory_overflow",
+            count=len(documents) - cap,
+        )
+    text += t(locale, "tools.inventory_footer")
     return text
 
 
@@ -124,7 +127,7 @@ def _truncate_text(value: str, limit: int) -> str:
     return value[:limit].rstrip() + "..."
 
 
-def _session_extract(messages: Any) -> str:
+def _session_extract(messages: Any, locale: str = DEFAULT_LOCALE) -> str:
     if not isinstance(messages, list):
         return ""
 
@@ -144,9 +147,9 @@ def _session_extract(messages: Any) -> str:
 
     parts: list[str] = []
     if first_user:
-        parts.append(f"Première demande : {first_user}")
+        parts.append(t(locale, "tools.session_first_request", text=first_user))
     if last_assistant:
-        parts.append(f"Dernière réponse : {last_assistant}")
+        parts.append(t(locale, "tools.session_last_reply", text=last_assistant))
     return "\n".join(parts)
 
 
@@ -154,6 +157,7 @@ def build_session_digests(
     data_dir: Path,
     current_session_id: str,
     query: str = "",
+    locale: str = DEFAULT_LOCALE,
 ) -> dict[str, Any]:
     conv_dir = data_dir / "conversations"
     if not conv_dir.is_dir():
@@ -176,7 +180,7 @@ def build_session_digests(
         title = data.get("title") or "Conversation"
         summary_value = data.get("summary")
         summary = summary_value.strip() if isinstance(summary_value, str) else ""
-        extract = "" if summary else _session_extract(data.get("messages"))
+        extract = "" if summary else _session_extract(data.get("messages"), locale)
         sessions.append(
             {
                 "id": session_id,
@@ -215,20 +219,24 @@ def build_agent(
     *,
     ui_mode: UiMode = "guided",
     sandbox_available: bool = True,
+    locale: str = DEFAULT_LOCALE,
+    active_plugins: list[str] | None = None,
 ) -> Agent[ToolDeps, str]:
     """Construit l'agent Pydantic AI avec ses outils métier."""
     agent: Agent[ToolDeps, str] = Agent(
         model=model,
         deps_type=ToolDeps,
         output_type=str,
-        system_prompt=WORKPROBA_SYSTEM_PROMPT,
+        system_prompt=system_prompt_for_locale(locale),
     )
 
     @agent.system_prompt
     def project_inventory_prompt(ctx: RunContext[ToolDeps]) -> str:
         """Injecte l'inventaire des fichiers projet reçus dans le payload."""
         return build_inventory_prompt(
-            ctx.deps.context.documents, ctx.deps.limits.inventory_max_entries
+            ctx.deps.context.documents,
+            ctx.deps.limits.inventory_max_entries,
+            locale=ctx.deps.context.locale,
         )
 
     @agent.system_prompt
@@ -249,12 +257,44 @@ def build_agent(
             return ""
         if others == 0:
             return ""
-        return (
-            f"Ce projet contient {others} autre(s) conversation(s) antérieure(s). "
-            "Utilise l'outil recall_project_sessions pour obtenir un résumé de ces "
-            "sessions si l'utilisateur fait référence à un échange précédent ou si "
-            "le contexte le justifie."
+        return t(
+            ctx.deps.context.locale,
+            "tools.sessions_note",
+            count=others,
         )
+
+    @agent.system_prompt
+    def plan_mode_instruction(ctx: RunContext[ToolDeps]) -> str:
+        return t(ctx.deps.context.locale, "tools.plan_mode_prompt")
+
+    @agent.tool
+    async def propose_plan(
+        ctx: RunContext[ToolDeps],
+        steps: list[dict[str, Any]],
+        rationale: str,
+    ) -> dict[str, Any]:
+        """Propose an execution plan for user approval before complex work.
+
+        Call this when the task touches multiple files, requires three or more
+        tool steps, involves destructive changes, or the user explicitly asks
+        for a plan. Each step should include `tool`, `summary`, and optional
+        `target` (file path). Wait for approval before proceeding with writes.
+
+        Args:
+            steps: Planned steps as dicts with tool, summary, and optional target.
+            rationale: Short explanation of why this plan is needed.
+        """
+        gate = ctx.deps.plan_gate
+        if gate is None:
+            return {"skipped": True, "steps": steps, "rationale": rationale}
+        try:
+            return await gate.request_plan(
+                steps=steps,
+                rationale=rationale,
+                locale=ctx.deps.context.locale,
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise _retry(exc) from exc
 
     @agent.tool
     async def list_files(
@@ -306,13 +346,14 @@ def build_agent(
             return {
                 "sessions": [],
                 "count": 0,
-                "note": "Aucun dossier projet associé.",
+                "note": t(ctx.deps.context.locale, "tools.sessions_no_folder"),
             }
         try:
             return build_session_digests(
                 data_dir=data_dir,
                 current_session_id=ctx.deps.context.session_id,
                 query=query,
+                locale=ctx.deps.context.locale,
             )
         except Exception as exc:  # noqa: BLE001 - surfaced to the model
             raise _retry(exc) from exc
@@ -407,11 +448,10 @@ def build_agent(
                 project_files: Optional list of project file paths to make available.
             """
             deps = ctx.deps
+            if deps.context.settings_locked and not deps.context.code_execute:
+                raise ModelRetry(t(deps.context.locale, "errors.code_execute_locked"))
             if not sandbox_available:
-                raise ModelRetry(
-                    "Sandbox indisponible : Docker n'est pas démarré. "
-                    "Lancez Docker ou utilisez le mode guidé."
-                )
+                raise ModelRetry(t(ctx.deps.context.locale, "tools.sandbox_unavailable"))
             project_root = deps.context.project_root
             try:
                 result = await deps.sandbox_runner.run(
@@ -422,6 +462,56 @@ def build_agent(
                 return result.model_dump(mode="json")
             except Exception as exc:  # noqa: BLE001 - surfaced to the model
                 raise _retry(exc) from exc
+
+    async def _persist_binary_document(
+        ctx: RunContext[ToolDeps],
+        *,
+        tool_name: str,
+        name: str,
+        mime_type: str,
+        content: bytes,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        deps = ctx.deps
+        proposed_path, action = _write_action(deps.context.project_root, name)
+        gate = deps.confirmation_gate
+
+        if gate is not None:
+            human_summary = build_human_summary(
+                tool_name,
+                {"name": name},
+                locale=deps.context.locale,
+            )
+            approved = await gate.request_write(
+                tool_call_id=ctx.tool_call_id or "",
+                tool_name=tool_name,
+                action=action,
+                proposed_path=proposed_path,
+                human_summary=human_summary,
+            )
+            if not approved:
+                return {
+                    "cancelled": True,
+                    "message": t(
+                        deps.context.locale,
+                        "tools.action_cancelled_by_user",
+                    ),
+                }
+
+        content_base64 = base64.b64encode(content).decode("ascii")
+        try:
+            document = await deps.project_client.save_generated_document(
+                tenant_id=deps.context.tenant_id,
+                project_id=deps.context.project_id,
+                session_id=deps.context.session_id,
+                name=name,
+                mime_type=mime_type,
+                content_base64=content_base64,
+                metadata={"generated_by": "workproba-ai", **(metadata or {})},
+            )
+            return document.model_dump(mode="json")
+        except Exception as exc:  # noqa: BLE001 - surfaced to the model
+            raise _retry(exc) from exc
 
     @agent.tool
     async def generate_document(
@@ -437,40 +527,103 @@ def build_agent(
             mime_type: MIME type of the document (e.g. text/markdown).
             content_markdown: The markdown content to write.
         """
-        deps = ctx.deps
-        proposed_path, action = _write_action(deps.context.project_root, name)
-        gate = deps.confirmation_gate
+        return await _persist_binary_document(
+            ctx,
+            tool_name="generate_document",
+            name=name,
+            mime_type=mime_type,
+            content=content_markdown.encode("utf-8"),
+        )
 
-        # Future T-D3d: en mode advanced, permettre de désactiver la confirmation
-        # via un toggle UI (branchement ici sur ui_mode + préférence utilisateur).
-        if gate is not None:
-            human_summary = build_human_summary("generate_document", {"name": name})
-            approved = await gate.request_write(
-                tool_call_id=ctx.tool_call_id or "",
-                action=action,
-                proposed_path=proposed_path,
-                human_summary=human_summary,
-            )
-            if not approved:
-                return {
-                    "cancelled": True,
-                    "message": "Action annulée par l'utilisateur",
-                }
+    @agent.tool
+    async def write_docx(
+        ctx: RunContext[ToolDeps],
+        path: str,
+        title: str = "",
+        paragraphs: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Create a native Word (.docx) file in the workspace.
 
-        content_base64 = base64.b64encode(content_markdown.encode("utf-8")).decode("ascii")
+        Args:
+            path: Relative path for the .docx file.
+            title: Optional document title (heading).
+            paragraphs: Body paragraphs to include.
+        """
         try:
-            document = await deps.project_client.save_generated_document(
-                tenant_id=deps.context.tenant_id,
-                project_id=deps.context.project_id,
-                session_id=deps.context.session_id,
-                name=name,
-                mime_type=mime_type,
-                content_base64=content_base64,
-                metadata={"generated_by": "workproba-ai"},
-            )
-            return document.model_dump(mode="json")
-        except Exception as exc:  # noqa: BLE001 - surfaced to the model
+            content = build_docx_bytes(title=title or None, paragraphs=paragraphs)
+        except Exception as exc:  # noqa: BLE001
             raise _retry(exc) from exc
+        return await _persist_binary_document(
+            ctx,
+            tool_name="write_docx",
+            name=path,
+            mime_type=(
+                "application/vnd.openxmlformats-officedocument"
+                ".wordprocessingml.document"
+            ),
+            content=content,
+            metadata={"format": "docx"},
+        )
+
+    @agent.tool
+    async def write_xlsx(
+        ctx: RunContext[ToolDeps],
+        path: str,
+        sheets: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Create a native Excel (.xlsx) file in the workspace.
+
+        Args:
+            path: Relative path for the .xlsx file.
+            sheets: Sheet definitions with `name` and `rows` (list of row arrays).
+        """
+        try:
+            content = build_xlsx_bytes(sheets=sheets)
+        except Exception as exc:  # noqa: BLE001
+            raise _retry(exc) from exc
+        return await _persist_binary_document(
+            ctx,
+            tool_name="write_xlsx",
+            name=path,
+            mime_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            content=content,
+            metadata={"format": "xlsx"},
+        )
+
+    @agent.tool
+    async def write_pdf(
+        ctx: RunContext[ToolDeps],
+        path: str,
+        title: str = "",
+        sections: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        """Create a native PDF file in the workspace (ReportLab).
+
+        Args:
+            path: Relative path for the .pdf file.
+            title: Optional document title.
+            sections: Sections with optional `heading` and `body` text.
+        """
+        try:
+            content = build_pdf_bytes(title=title or None, sections=sections)
+        except RuntimeError as exc:
+            raise ModelRetry(str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise _retry(exc) from exc
+        return await _persist_binary_document(
+            ctx,
+            tool_name="write_pdf",
+            name=path,
+            mime_type="application/pdf",
+            content=content,
+            metadata={"format": "pdf"},
+        )
+
+    from app.plugins.registry import register_plugin_tools
+
+    register_plugin_tools(agent, active_plugins=active_plugins)
 
     return agent
 
@@ -481,5 +634,6 @@ __all__ = [
     "build_agent",
     "build_inventory_prompt",
     "build_session_digests",
+    "system_prompt_for_locale",
     "WORKPROBA_SYSTEM_PROMPT",
 ]

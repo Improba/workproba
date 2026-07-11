@@ -19,6 +19,7 @@ vi.mock('@composables/useDesktop', () => ({
 vi.mock('@composables/useProject', () => ({
   useProject: () => ({
     activePath: ref<string | null>(null),
+    activeDataDir: ref<string | null>(null),
     workspaceTitle: ref<string | null>('Projet test'),
   }),
 }));

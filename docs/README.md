@@ -2,6 +2,10 @@
 
 Index de la documentation du projet **Workproba** — assistant de travail sur dossier local (type Claude Cowork), application bureau Tauri 2 + sidecar Python.
 
+## Installation (grand public)
+
+- **[installateurs.md](./installateurs.md)** : télécharger et installer Workproba (Windows, macOS, Linux), avertissements SmartScreen/Gatekeeper, désinstallation
+
 ## Cadrage produit
 
 - **[intention.md](./intention.md)** — Intention produit, décision pivot bureau local-first, objectifs
@@ -24,6 +28,7 @@ Index de la documentation du projet **Workproba** — assistant de travail sur d
 
 ## Navigation rapide
 
+- **Installer Workproba** : [installateurs.md](./installateurs.md)
 - **Démarrer en dev** : `make dev-ai` puis `make dev-desktop` (voir [README racine](../README.md))
 - **Comprendre le produit** : [intention.md](./intention.md)
 - **Architecture** : [architecture.md](./architecture.md) · [desktop.md](./desktop.md)

@@ -1,3 +1,5 @@
+import { t } from './i18nT';
+
 /** Libellé lisible par défaut quand le sidecar n'envoie pas de humanSummary. */
 export function fallbackHumanLabel(
   name: string,
@@ -5,16 +7,16 @@ export function fallbackHumanLabel(
 ): string {
   switch (name) {
     case 'read_documents':
-      return "J'ai lu des documents";
+      return t('toolCalls.readDocuments');
     case 'generate_document':
-      return "J'ai créé un document";
+      return t('toolCalls.generateDocument');
     case 'search_kb':
-      return "J'ai cherché dans la mémoire";
+      return t('toolCalls.searchKb');
     case 'list_files':
-      return "J'ai listé les fichiers";
+      return t('toolCalls.listFiles');
     case 'run_code':
-      return "J'ai exécuté un calcul";
+      return t('toolCalls.runCode');
     default:
-      return "J'ai effectué une action";
+      return t('toolCalls.defaultAction');
   }
 }

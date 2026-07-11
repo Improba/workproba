@@ -1,3 +1,7 @@
+<!--
+  @deprecated Legacy Quasar layout — non utilisé par le shell desktop Workproba.
+  Conservé temporairement pour les tests unitaires layouts.spec.ts.
+-->
 <template>
   <q-layout class="bg-neutral-lower" view="hHh lpR fff">
     <q-header>
@@ -9,7 +13,7 @@
               :class="`${$q.screen?.lt.sm ? 'text-h6' : 'text-h4'}`"
               @click="$router.push({ name: HOME_ROUTE })"
             >
-              Workproba
+              {{ i18n.t('shell.brandName') }}
             </div>
           </q-route-tab>
 

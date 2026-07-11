@@ -1,9 +1,12 @@
 import type {
   AppSettings,
+  EnterprisePreset,
   LlmProviderEntry,
   LlmProviderName,
   LocalDirEntry,
   LocalDocumentEntry,
+  PluginInfo,
+  PluginManifest,
   WorkspaceInfo,
 } from './useDesktop.types';
 
@@ -117,4 +120,62 @@ export async function openLocalFile(
   await openPath(fullPath);
 }
 
-export type { LocalDirEntry, LocalDocumentEntry, WorkspaceInfo, LlmProviderEntry, LlmProviderName, AppSettings };
+export async function listPlugins(): Promise<PluginInfo[]> {
+  if (!isDesktopApp()) return [];
+  try {
+    return await tauriInvoke<PluginInfo[]>('list_plugins');
+  } catch {
+    return [];
+  }
+}
+
+export async function activatePlugin(id: string): Promise<void> {
+  if (!isDesktopApp()) return;
+  await tauriInvoke<void>('activate_plugin', { id });
+}
+
+export async function deactivatePlugin(id: string): Promise<void> {
+  if (!isDesktopApp()) return;
+  await tauriInvoke<void>('deactivate_plugin', { id });
+}
+
+export async function getPluginDataDir(pluginId: string): Promise<string | null> {
+  if (!isDesktopApp()) return null;
+  try {
+    return await tauriInvoke<string>('get_plugin_data_dir', { pluginId });
+  } catch {
+    return null;
+  }
+}
+
+export async function installLocalPlugin(folderPath: string): Promise<PluginInfo> {
+  if (!isDesktopApp()) {
+    throw new Error('installLocalPlugin nécessite l’application bureau Tauri');
+  }
+  return tauriInvoke<PluginInfo>('install_local_plugin', { folderPath });
+}
+
+export async function uninstallLocalPlugin(id: string): Promise<void> {
+  if (!isDesktopApp()) return;
+  await tauriInvoke<void>('uninstall_local_plugin', { id });
+}
+
+export async function isPresetActive(): Promise<boolean> {
+  if (!isDesktopApp()) return false;
+  try {
+    return await tauriInvoke<boolean>('is_preset_active');
+  } catch {
+    return false;
+  }
+}
+
+export async function getEnterprisePreset(): Promise<EnterprisePreset | null> {
+  if (!isDesktopApp()) return null;
+  try {
+    return await tauriInvoke<EnterprisePreset | null>('get_enterprise_preset');
+  } catch {
+    return null;
+  }
+}
+
+export type { LocalDirEntry, LocalDocumentEntry, WorkspaceInfo, LlmProviderEntry, LlmProviderName, AppSettings, AppLocale, ProviderSet, PluginInfo, PluginManifest, PluginSource, EnterprisePreset };

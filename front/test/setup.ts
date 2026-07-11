@@ -1,14 +1,19 @@
 import { config } from '@vue/test-utils';
+import { createApp } from 'vue';
 import { vi } from 'vitest';
 import { createI18n } from 'vue-i18n';
 
+import { boot, setLang } from '@boot/i18n';
+import enUS from '@i18n/en-US';
+import fr from '@i18n/fr';
+
 const i18n = createI18n({
   legacy: false,
-  locale: 'en-US',
-  fallbackLocale: 'en-US',
+  locale: 'fr',
+  fallbackLocale: 'fr',
   messages: {
-    'en-US': {},
-    fr: {},
+    fr,
+    'en-US': enUS,
   },
 });
 
@@ -35,3 +40,8 @@ config.global.stubs = {
   'router-view': true,
   Lucide: true,
 };
+
+// Initialise le singleton i18n pour les modules utilitaires (i18nT, toolCallDetails, …)
+const bootApp = createApp({ template: '<div />' });
+boot({ app: bootApp });
+setLang('fr');

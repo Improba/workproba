@@ -15,13 +15,13 @@
       >
         <header class="wp-shortcuts__header">
           <h2 id="wp-shortcuts-title" class="wp-shortcuts__title">
-            Raccourcis clavier
+            {{ t('shell.keyboardTitle') }}
           </h2>
           <button
             ref="closeBtnEl"
             type="button"
             class="wp-shortcuts__close"
-            aria-label="Fermer l'aide des raccourcis"
+            :aria-label="t('shell.keyboardCloseAria')"
             @click="close"
           >
             <Lucide name="x" size="16" color="text-muted" />
@@ -42,7 +42,11 @@
         </dl>
 
         <p class="wp-shortcuts__hint">
-          Appuyez sur <kbd>?</kbd> ou <kbd>Échap</kbd> pour fermer.
+          {{ t('shell.keyboardHintPrefix') }}
+          <kbd>{{ t('shell.keyboardKeyQuestion') }}</kbd>
+          {{ t('shell.keyboardHintOr') }}
+          <kbd>{{ t('shell.keyboardKeyEscape') }}</kbd>
+          {{ t('shell.keyboardHintSuffix') }}
         </p>
       </div>
     </div>
@@ -50,7 +54,8 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 
 export interface ShortcutItem {
@@ -59,15 +64,45 @@ export interface ShortcutItem {
   description: string;
 }
 
-const shortcuts: ShortcutItem[] = [
-  { keys: 'ctrl-b', keyParts: ['Ctrl', 'B'], description: 'Afficher ou masquer l\'explorateur de fichiers' },
-  { keys: 'ctrl-backslash', keyParts: ['Ctrl', '\\'], description: 'Afficher ou réduire la barre latérale' },
-  { keys: 'ctrl-p', keyParts: ['Ctrl', 'P'], description: 'Filtrer dans l\'explorateur de fichiers' },
-  { keys: 'ctrl-enter', keyParts: ['Ctrl', 'Entrée'], description: 'Envoyer le message' },
-  { keys: 'enter', keyParts: ['Entrée'], description: 'Saut de ligne dans le composer' },
-  { keys: 'f5', keyParts: ['F5'], description: 'Recharger l\'application (sidecar)' },
-  { keys: 'question', keyParts: ['?'], description: 'Afficher ou masquer cette aide' },
-];
+const { t } = useI18n();
+
+const shortcuts = computed<ShortcutItem[]>(() => [
+  {
+    keys: 'ctrl-b',
+    keyParts: ['Ctrl', 'B'],
+    description: t('shell.keyboardToggleFiles'),
+  },
+  {
+    keys: 'ctrl-backslash',
+    keyParts: ['Ctrl', '\\'],
+    description: t('shell.keyboardToggleSidebar'),
+  },
+  {
+    keys: 'ctrl-p',
+    keyParts: ['Ctrl', 'P'],
+    description: t('shell.keyboardFilterFiles'),
+  },
+  {
+    keys: 'ctrl-enter',
+    keyParts: ['Ctrl', t('shell.keyboardKeyEnter')],
+    description: t('shell.keyboardSendMessage'),
+  },
+  {
+    keys: 'enter',
+    keyParts: [t('shell.keyboardKeyEnter')],
+    description: t('shell.keyboardNewline'),
+  },
+  {
+    keys: 'f5',
+    keyParts: ['F5'],
+    description: t('shell.keyboardReload'),
+  },
+  {
+    keys: 'question',
+    keyParts: [t('shell.keyboardKeyQuestion')],
+    description: t('shell.keyboardToggleHelp'),
+  },
+]);
 
 const open = defineModel<boolean>('open', { default: false });
 

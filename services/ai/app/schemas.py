@@ -3,12 +3,25 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
 from app.config import ProviderName
+from app.i18n import DEFAULT_LOCALE, normalize_locale
 
 
 JsonDict = dict[str, Any]
 
 UiMode = Literal["guided", "advanced", "locked"]
+Locale = Literal["fr", "en"]
 ReasoningEffort = Literal["none", "low", "medium", "high"]
+ProviderSetChatReasoning = Literal["auto", "none", "low", "medium", "high"]
+ProviderSetOcrProvider = Literal["mistral", "mistral_ocr", "docling", "none"]
+ProviderSetOcrMode = Literal["auto", "none"]
+ProviderSetVisionMode = Literal["chat", "none"]
+ProviderSetCapabilitiesReasoning = Literal["low", "medium", "high"]
+
+
+def _coerce_locale(value: Any) -> str:
+    if value is None:
+        return DEFAULT_LOCALE
+    return normalize_locale(str(value))
 
 
 class ToolCall(BaseModel):
@@ -30,6 +43,12 @@ class DocumentReference(BaseModel):
     id: str
     name: str
     mime_type: str | None = None
+    # Contenu inline encodé base64 (pièces jointes au message depuis le chat).
+    # Quand absent, le document est supposé exister sur disque (projet) et est
+    # lu via l'outil read_document par son id/chemin relatif.
+    content_base64: str | None = None
+    kind: str | None = None
+    size_bytes: int | None = None
     metadata: JsonDict = Field(default_factory=dict)
 
 
@@ -44,6 +63,97 @@ class LLMProviderConfig(BaseModel):
     extra_headers: dict[str, str] = Field(default_factory=dict)
 
 
+class ProviderSetChat(BaseModel):
+    provider: ProviderName
+    model: str
+    api_key_ref: str | None = None
+    api_key: SecretStr | None = None
+    base_url: str | None = None
+    reasoning: ProviderSetChatReasoning = "auto"
+
+
+class ProviderSetEmbeddings(BaseModel):
+    provider: ProviderName
+    model: str
+    api_key_ref: str | None = None
+    api_key: SecretStr | None = None
+    base_url: str | None = None
+
+
+class ProviderSetOcr(BaseModel):
+    provider: ProviderSetOcrProvider | str = "none"
+    mode: ProviderSetOcrMode = "auto"
+    base_url: str | None = None
+    api_key_ref: str | None = None
+    api_key: SecretStr | None = None
+    model: str | None = None
+
+    @field_validator("provider", mode="before")
+    @classmethod
+    def normalize_ocr_provider(cls, value: Any) -> Any:
+        if value is None:
+            return "none"
+        normalized = str(value).strip().lower()
+        if normalized == "mistral_ocr":
+            return "mistral"
+        return normalized
+
+
+class ProviderSetVision(BaseModel):
+    mode: ProviderSetVisionMode = "none"
+
+
+class ProviderSetCapabilities(BaseModel):
+    reasoning: ProviderSetCapabilitiesReasoning = "medium"
+    vision: bool = False
+    tools: bool = True
+
+
+class ProviderSet(BaseModel):
+    id: str = ""
+    name: str = ""
+    description: str = ""
+    badges: list[str] = Field(default_factory=list)
+    chat: ProviderSetChat | None = None
+    embeddings: ProviderSetEmbeddings | None = None
+    ocr: ProviderSetOcr | None = None
+    vision: ProviderSetVision = Field(default_factory=ProviderSetVision)
+    capabilities: ProviderSetCapabilities = Field(default_factory=ProviderSetCapabilities)
+    is_default: bool = False
+    is_builtin: bool = False
+    ui_mode_locked: bool = False
+
+
+class ProviderSetTestChatResult(BaseModel):
+    ok: bool
+    detail: str = ""
+    models: list[str] | None = None
+
+
+class ProviderSetTestEmbeddingsResult(BaseModel):
+    ok: bool
+    detail: str = ""
+
+
+class ProviderSetTestOcrResult(BaseModel):
+    ok: bool
+    supported: bool
+    detail: str = ""
+
+
+class ProviderSetTestVisionResult(BaseModel):
+    ok: bool
+    supported: bool
+    detail: str = ""
+
+
+class ProviderSetTestResponse(BaseModel):
+    chat: ProviderSetTestChatResult
+    embeddings: ProviderSetTestEmbeddingsResult
+    ocr: ProviderSetTestOcrResult
+    vision: ProviderSetTestVisionResult
+
+
 class AgentTurnRequest(BaseModel):
     # Réservé pour une future isolation multi-tenant ; non appliqué côté local_client.
     tenant_id: str | None = None
@@ -56,6 +166,7 @@ class AgentTurnRequest(BaseModel):
     history: list[ChatMessage] = Field(default_factory=list)
     message: str
     llm_provider_config: LLMProviderConfig | None = None
+    provider_set: ProviderSet | None = None
     context_window: int | None = None
     auto_compact: bool = True
     # Config embeddings RAG par tour (gérée depuis l'app). Si absente, repli
@@ -63,6 +174,19 @@ class AgentTurnRequest(BaseModel):
     embedding_config: LLMProviderConfig | None = None
     documents: list[DocumentReference] = Field(default_factory=list)
     ui_mode: UiMode = "guided"
+    locale: Locale = "fr"
+    active_plugins: list[str] | None = None
+    plugin_data_dir: str | None = None
+    settings_locked: bool = False
+    permissions_network: bool = True
+    code_execute: bool = True
+    audit_retention_days: int | None = None
+    audit_enabled: bool | None = None
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def coerce_locale_field(cls, value: Any) -> str:
+        return _coerce_locale(value)
 
     @field_validator("history")
     @classmethod
@@ -96,6 +220,12 @@ class UtilityTitleRequest(BaseModel):
     first_assistant_reply: str
     llm_provider_config: LLMProviderConfig | None = None
     utility_llm_config: LLMProviderConfig | None = None
+    locale: Locale = "fr"
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def coerce_locale_field(cls, value: Any) -> str:
+        return _coerce_locale(value)
 
 
 class UtilityTitleResponse(BaseModel):
@@ -107,6 +237,12 @@ class UtilitySummarizeRequest(BaseModel):
     llm_provider_config: LLMProviderConfig | None = None
     utility_llm_config: LLMProviderConfig | None = None
     focus: str | None = None
+    locale: Locale = "fr"
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def coerce_locale_field(cls, value: Any) -> str:
+        return _coerce_locale(value)
 
 
 class UtilitySummarizeResponse(BaseModel):
@@ -164,12 +300,48 @@ class ConfirmationRequestEvent(BaseModel):
     human_summary: str
 
 
+class PlanStepInfo(BaseModel):
+    tool: str
+    summary: str
+    target: str = ""
+
+
+class PlanProposedEvent(BaseModel):
+    type: Literal["plan_proposed"] = "plan_proposed"
+    session_id: str
+    plan_id: str
+    steps: list[PlanStepInfo] = Field(default_factory=list)
+    rationale: str = ""
+
+
+class AgentPlanApproveRequest(BaseModel):
+    session_id: str
+    plan_id: str
+    approved: bool
+    modifications: list[PlanStepInfo] | None = None
+    turn_id: str | None = None
+    locale: Locale = "fr"
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def coerce_locale_field(cls, value: Any) -> str:
+        return _coerce_locale(value)
+
+
 class AgentConfirmRequest(BaseModel):
     session_id: str
     confirmation_id: str
     decision: Literal["approve", "deny"]
     # Rétrocompat : si absent, résolution sur la gate la plus récente de la session.
     turn_id: str | None = None
+    locale: Locale | None = None
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def coerce_locale_field(cls, value: Any) -> str | None:
+        if value is None:
+            return None
+        return _coerce_locale(value)
 
 
 class CapabilitiesResponse(BaseModel):
@@ -189,6 +361,14 @@ class CompactionEvent(BaseModel):
 class TurnStartEvent(BaseModel):
     type: Literal["turn_start"] = "turn_start"
     turn_id: str
+
+
+class AttachmentStatusEvent(BaseModel):
+    type: Literal["attachment_status"] = "attachment_status"
+    message_id: str = ""
+    attachment_id: str
+    status_key: str
+    label_locale: str
 
 
 class DoneEvent(BaseModel):
@@ -226,8 +406,10 @@ AgentEvent = Annotated[
     | ToolCallStartEvent
     | ToolCallResultEvent
     | ConfirmationRequestEvent
+    | PlanProposedEvent
     | CompactionEvent
     | TurnStartEvent
+    | AttachmentStatusEvent
     | DoneEvent
     | ErrorEvent,
     Field(discriminator="type"),
@@ -274,6 +456,12 @@ class FileEntry(BaseModel):
     kind: str = "file"
 
 
+class DocumentPreviewResponse(BaseModel):
+    type: Literal["docx", "xlsx", "pdf", "text", "image", "unsupported"]
+    title: str
+    html: str
+
+
 class FileListResponse(BaseModel):
     root: str
     entries: list[FileEntry] = Field(default_factory=list)
@@ -298,27 +486,58 @@ class SandboxResult(BaseModel):
     metadata: JsonDict = Field(default_factory=dict)
 
 
-class VersionSnapshotInfo(BaseModel):
-    original_path: str
-    snapshot_path: str
-    timestamp: str
-    session_id: str
+class VersionInfo(BaseModel):
+    version_id: str
+    created_at: str
+    size: int
+    label: str = ""
+    file_path: str = ""
 
 
 class VersionListResponse(BaseModel):
-    snapshots: list[VersionSnapshotInfo] = Field(default_factory=list)
+    versions: list[VersionInfo] = Field(default_factory=list)
 
 
 class VersionRestoreRequest(BaseModel):
+    workspace_data_dir: str
     project_path: str
-    session_id: str
-    snapshot_path: str
+    file_path: str
+    version_id: str
+    locale: Locale = "fr"
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def coerce_locale_field(cls, value: Any) -> str:
+        return _coerce_locale(value)
 
 
 class VersionRestoreResponse(BaseModel):
+    ok: bool = True
     restored_path: str
-    snapshot_path: str
-    session_id: str
+    version_id: str
+    file_path: str
+
+
+class PreviewChangeRequest(BaseModel):
+    workspace_data_dir: str
+    project_path: str
+    file_path: str
+    proposed_content: str
+    locale: Locale = "fr"
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def coerce_locale_field(cls, value: Any) -> str:
+        return _coerce_locale(value)
+
+
+class PreviewChangeResponse(BaseModel):
+    is_new: bool
+    is_binary: bool
+    diff_html: str
+    message: str = ""
+    old_size: int = 0
+    new_size: int = 0
 
 
 class WorkspaceIndexRequest(BaseModel):

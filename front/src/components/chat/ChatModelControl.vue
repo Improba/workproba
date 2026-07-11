@@ -13,7 +13,7 @@
         class="chat-model-control__reason"
         :class="{ 'chat-model-control__reason--active': barLevel > 0 }"
       >
-        <span class="chat-model-control__reason-sep" aria-hidden="true">·</span>
+        <span class="chat-model-control__reason-sep" aria-hidden="true">{{ t('chat.modelControlSep') }}</span>
         <Lucide
           :name="barLevel > 0 ? 'brain' : 'sparkles'"
           size="13"
@@ -33,7 +33,7 @@
       >
         <!-- Section Modèle -->
         <template v-if="modelOptions.length">
-          <div class="chat-model-control__head">Modèle</div>
+          <div class="chat-model-control__head">{{ t('chat.modelControlModel') }}</div>
           <q-list dense>
             <q-item
               v-for="opt in modelOptions"
@@ -66,7 +66,7 @@
 
         <!-- Section Raisonnement -->
         <template v-if="reasoningVisible">
-          <div class="chat-model-control__head">Raisonnement</div>
+          <div class="chat-model-control__head">{{ t('chat.modelControlReasoning') }}</div>
           <q-list dense>
             <q-item
               v-for="opt in availableEffortOptions"
@@ -101,6 +101,7 @@
 
 <script setup lang="ts">
 import { computed, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 import type { LlmProviderName } from '@composables/useDesktop.types';
 import type { ReasoningEffort } from '#types';
 import {
@@ -117,6 +118,8 @@ import {
   type ModelOption,
 } from '@utils/modelCatalog';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+
+const { t } = useI18n();
 
 const props = defineProps<{
   modelValue: ReasoningEffort;

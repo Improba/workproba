@@ -2,538 +2,355 @@
   <section class="advanced-setup">
     <div class="advanced-setup__toolbar">
       <button type="button" class="advanced-setup__guided-link" @click="emit('switch-to-guided')">
-        Retour au mode guidé
+        {{ t('settings.advancedBackToGuided') }}
       </button>
-      <button
-        type="button"
-        class="advanced-setup__add"
-        :disabled="editing !== null"
-        @click="onAddNew"
-      >
+      <button type="button" class="advanced-setup__add" :disabled="formOpen" @click="onAddNew">
         <Lucide name="plus" size="16" color="wp-canard" />
-        Ajouter un provider
+        {{ t('settings.advancedAddSet') }}
       </button>
     </div>
 
-    <q-expansion-item
-      v-model="providersOpen"
-      icon="dns"
-      label="Providers"
-      header-class="advanced-setup__accordion-head"
-      default-opened
-    >
-      <div v-if="providers.length === 0 && editing === null" class="advanced-setup__empty">
-        <p>Aucun provider configuré.</p>
-      </div>
+    <div v-if="sets.length === 0 && !formOpen" class="advanced-setup__empty">
+      <p>{{ t('settings.advancedNoSets') }}</p>
+    </div>
 
-      <div v-else class="advanced-setup__list">
-        <article
-          v-for="entry in providers"
-          :key="entry.id"
-          class="provider-card"
-          :class="{
-            'provider-card--active-chat': entry.id === activeChatId,
-            'provider-card--active-embed': entry.id === activeEmbeddingId,
-          }"
-        >
-          <div class="provider-card__head">
-            <div class="provider-card__title">
-              <Lucide name="cpu" size="16" color="accent" />
-              <span>{{ entry.label }}</span>
-            </div>
-            <div class="provider-card__badges">
-              <span v-if="entry.id === activeChatId" class="provider-badge provider-badge--chat">
-                Chat actif
-              </span>
-              <span
-                v-if="entry.id === activeEmbeddingId && entry.embeddingModel"
-                class="provider-badge provider-badge--embed"
-              >
-                Embeddings actif
-              </span>
-            </div>
+    <div v-else class="advanced-setup__list">
+      <article
+        v-for="set in sets"
+        :key="set.id"
+        class="set-card"
+        :class="{ 'set-card--active': set.id === activeSetId }"
+      >
+        <div class="set-card__head">
+          <div class="set-card__title">
+            <Lucide name="cpu" size="16" color="accent" />
+            <span>{{ set.name }}</span>
           </div>
-
-          <dl class="provider-card__meta">
-            <div><dt>Provider</dt><dd>{{ entry.provider }}</dd></div>
-            <div><dt>Modèle</dt><dd>{{ entry.model }}</dd></div>
-            <div v-if="entry.baseUrl"><dt>Base URL</dt><dd>{{ entry.baseUrl }}</dd></div>
-            <div><dt>Clé API</dt><dd>{{ entry.apiKey ? '••••••' + maskKey(entry.apiKey) : 'non définie' }}</dd></div>
-            <div v-if="entry.embeddingModel"><dt>Embeddings</dt><dd>{{ entry.embeddingModel }}</dd></div>
-          </dl>
-
-          <div class="provider-card__actions">
-            <button
-              type="button"
-              class="ghost-btn"
-              :class="{ 'ghost-btn--on': entry.id === activeChatId }"
-              @click="onSetActiveChat(entry)"
-            >
-              <Lucide name="message-square" size="14" :color="entry.id === activeChatId ? 'accent' : 'text'" />
-              {{ entry.id === activeChatId ? 'Chat actif' : 'Pour le chat' }}
-            </button>
-            <button
-              v-if="entry.embeddingModel"
-              type="button"
-              class="ghost-btn"
-              :class="{ 'ghost-btn--on': entry.id === activeEmbeddingId }"
-              @click="onSetActiveEmbedding(entry)"
-            >
-              <Lucide name="database" size="14" :color="entry.id === activeEmbeddingId ? 'success' : 'text'" />
-              {{ entry.id === activeEmbeddingId ? 'Embeddings actif' : 'Pour le RAG' }}
-            </button>
-            <button type="button" class="ghost-btn" @click="onEdit(entry)">
-              <Lucide name="pencil" size="14" color="text" /> Éditer
-            </button>
-            <button
-              type="button"
-              class="ghost-btn"
-              :disabled="testingId === entry.id"
-              @click="onTest(entry)"
-            >
-              <Lucide name="plug-zap" size="14" color="text" />
-              {{ testingId === entry.id ? 'Test…' : 'Tester' }}
-            </button>
-            <button
-              type="button"
-              class="ghost-btn"
-              :disabled="entry.id === activeChatId || entry.id === activeEmbeddingId"
-              @click="onDelete(entry)"
-            >
-              <Lucide name="trash-2" size="14" color="danger" /> Supprimer
-            </button>
+          <div class="set-card__badges">
+            <span v-if="set.id === activeSetId" class="set-badge set-badge--active">
+              {{ t('settings.advancedSetActive') }}
+            </span>
+            <span v-if="set.isBuiltin" class="set-badge">{{ t('settings.advancedSetBuiltin') }}</span>
           </div>
+        </div>
 
-          <p v-if="testResults[entry.id]" class="provider-card__test" :class="{ ok: testResults[entry.id].ok }">
-            <Lucide
-              :name="testResults[entry.id].ok ? 'check-circle-2' : 'alert-circle'"
-              size="14"
-              :color="testResults[entry.id].ok ? 'success' : 'danger'"
-            />
-            {{ testResults[entry.id].detail }}
+        <p class="set-card__desc">{{ localizedSetDescription(set, t) }}</p>
+
+        <div class="set-card__caps">
+          <span v-for="cap in capabilityLabels(set, 'advanced', t)" :key="cap" class="set-cap">{{ cap }}</span>
+        </div>
+
+        <dl class="set-card__meta">
+          <div><dt>{{ t('settings.advancedSetChat') }}</dt><dd>{{ set.chat.provider }}{{ t('settings.advancedSeparator') }}{{ set.chat.model }}</dd></div>
+          <div>
+            <dt>{{ t('settings.advancedSetEmbeddings') }}</dt>
+            <dd>{{ set.embeddings ? `${set.embeddings.provider}${t('settings.advancedSeparator')}${set.embeddings.model}` : t('settings.advancedEmptyValue') }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('settings.advancedSetOcr') }}</dt>
+            <dd>{{ set.ocr ? `${set.ocr.provider} (${set.ocr.mode})` : t('settings.advancedNone') }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('settings.advancedSetVision') }}</dt>
+            <dd>{{ set.vision.mode }}</dd>
+          </div>
+        </dl>
+
+        <div class="set-card__actions">
+          <button
+            type="button"
+            class="ghost-btn"
+            :class="{ 'ghost-btn--on': set.id === activeSetId }"
+            @click="onSetActive(set.id)"
+          >
+            {{ set.id === activeSetId ? t('settings.advancedSetActive') : t('settings.engine.useThisEngine') }}
+          </button>
+          <button type="button" class="ghost-btn" @click="onEdit(set)">
+            <Lucide name="pencil" size="14" color="text" /> {{ t('settings.advancedEdit') }}
+          </button>
+          <button type="button" class="ghost-btn" :disabled="testingId === set.id" @click="onTestAll(set)">
+            <Lucide name="plug-zap" size="14" color="text" />
+            {{ testingId === set.id ? t('settings.advancedTesting') : t('settings.advancedTest') }}
+          </button>
+          <button
+            v-if="!set.isBuiltin"
+            type="button"
+            class="ghost-btn"
+            :disabled="set.id === activeSetId"
+            @click="onDelete(set)"
+          >
+            <Lucide name="trash-2" size="14" color="danger" /> {{ t('settings.advancedDelete') }}
+          </button>
+        </div>
+
+        <div v-if="testResults[set.id]" class="set-card__tests">
+          <p :class="{ ok: testResults[set.id].chat.ok }">
+            {{ t('settings.advancedTestChat') }}: {{ testResults[set.id].chat.detail || (testResults[set.id].chat.ok ? 'OK' : 'KO') }}
           </p>
-        </article>
-      </div>
-    </q-expansion-item>
+          <p :class="{ ok: testResults[set.id].embeddings.ok }">
+            {{ t('settings.advancedTestEmbeddings') }}: {{ testResults[set.id].embeddings.detail || (testResults[set.id].embeddings.ok ? 'OK' : 'KO') }}
+          </p>
+          <p :class="{ ok: testResults[set.id].ocr.ok }">
+            {{ t('settings.advancedTestOcr') }}: {{ testResults[set.id].ocr.detail || (testResults[set.id].ocr.ok ? 'OK' : 'KO') }}
+          </p>
+          <p :class="{ ok: testResults[set.id].vision.ok }">
+            {{ t('settings.advancedTestVision') }}: {{ testResults[set.id].vision.detail || (testResults[set.id].vision.ok ? 'OK' : 'KO') }}
+          </p>
+        </div>
+      </article>
+    </div>
 
-    <q-expansion-item
-      v-model="modelParamsOpen"
-      icon="tune"
-      label="Paramètres modèle"
-      header-class="advanced-setup__accordion-head"
-      :disable="!formOpen"
-    >
-      <div v-if="!formOpen" class="advanced-setup__hint">
-        Ajoutez ou éditez un provider pour configurer les paramètres modèle.
+    <div v-if="formOpen" class="advanced-setup__form">
+      <h3 class="advanced-setup__form-title">{{ editing ? t('settings.advancedEdit') : t('settings.advancedAddSet') }}</h3>
+      <div class="advanced-setup__row">
+        <q-input v-model="form.name" :label="t('settings.advancedFieldLabel')" outlined dense class="advanced-setup__field" />
+        <q-input v-model="form.description" :label="t('settings.advancedDescription')" outlined dense class="advanced-setup__field" />
       </div>
-      <div v-else class="advanced-setup__form-block">
-        <div class="advanced-setup__row">
-          <q-input
-            v-model="form.label"
-            label="Libellé"
-            outlined
-            dense
-            class="advanced-setup__field"
-          />
-          <q-select
-            v-model="form.provider"
-            :options="providerOptions"
-            label="Provider"
-            outlined
-            dense
-            emit-value
-            map-options
-            class="advanced-setup__field"
-            @update:model-value="onProviderPreset"
-          />
-        </div>
-        <div class="advanced-setup__row">
-          <q-input
-            v-model="form.model"
-            label="Modèle (chat)"
-            outlined
-            dense
-            hint="ex. mistral-small-latest"
-            class="advanced-setup__field"
-          />
-          <q-input
-            v-model.number="form.temperature"
-            type="number"
-            label="Température"
-            outlined
-            dense
-            step="0.1"
-            min="0"
-            max="2"
-            class="advanced-setup__field"
-          />
-          <q-input
-            v-model.number="form.maxTokens"
-            type="number"
-            label="Max tokens"
-            outlined
-            dense
-            min="1"
-            class="advanced-setup__field"
-          />
-          <q-select
-            v-if="formSupportsReasoning"
-            v-model="form.reasoningEffort"
-            :options="reasoningEffortOptions"
-            label="Raisonnement"
-            outlined
-            dense
-            emit-value
-            map-options
-            class="advanced-setup__field"
-          />
-        </div>
-        <div class="advanced-setup__row">
-          <q-input
-            v-model="form.embeddingModel"
-            label="Modèle d'embeddings (RAG)"
-            outlined
-            dense
-            hint="Laisser vide pour désactiver le RAG"
-            class="advanced-setup__field"
-          />
-        </div>
-      </div>
-    </q-expansion-item>
-
-    <q-expansion-item
-      v-model="networkOpen"
-      icon="lan"
-      label="Réseau"
-      header-class="advanced-setup__accordion-head"
-      :disable="!formOpen"
-    >
-      <div v-if="!formOpen" class="advanced-setup__hint">
-        Ajoutez ou éditez un provider pour configurer le réseau et les clés API.
-      </div>
-      <div v-else class="advanced-setup__form-block">
-        <q-input
-          v-model="form.baseUrl"
-          label="Base URL"
-          outlined
-          dense
-          :hint="form.provider === 'ollama' ? 'Laisser vide = local' : 'Endpoint API'"
-          class="advanced-setup__field"
+      <div class="advanced-setup__row">
+        <q-select
+          v-model="form.chat.provider"
+          :options="providerOptions"
+          :label="t('settings.advancedProviderLabel')"
+          outlined dense emit-value map-options class="advanced-setup__field"
         />
+        <q-input v-model="form.chat.model" :label="t('settings.advancedChatModel')" outlined dense class="advanced-setup__field" />
+        <q-input v-model="form.chat.baseUrl" :label="t('settings.advancedBaseUrl')" outlined dense class="advanced-setup__field" />
+      </div>
+      <div class="advanced-setup__row">
         <q-input
-          v-model="form.apiKey"
-          label="Clé API"
-          outlined
-          dense
-          :type="showKey ? 'text' : 'password'"
-          class="advanced-setup__field"
-          hint="Stockée localement (app-data). Peut être changée à tout moment."
-        >
-          <template #append>
-            <button type="button" class="reveal-btn" @click="showKey = !showKey">
-              <Lucide :name="showKey ? 'eye-off' : 'eye'" size="16" color="text-faint" />
-            </button>
-          </template>
-        </q-input>
-        <q-input
-          v-model="form.embeddingBaseUrl"
-          label="Base URL embeddings"
-          outlined
-          dense
-          hint="Par défaut = base URL du provider"
-          class="advanced-setup__field"
+          v-model="form.chat.apiKey"
+          :label="t('settings.advancedApiKey')"
+          outlined dense :type="showKey ? 'text' : 'password'" class="advanced-setup__field"
+        />
+        <q-select
+          v-model="form.chat.reasoning"
+          :options="reasoningOptions"
+          :label="t('settings.advancedReasoning')"
+          outlined dense emit-value map-options class="advanced-setup__field"
         />
       </div>
-    </q-expansion-item>
-
-    <div v-if="formOpen" class="advanced-setup__form-actions">
-      <q-btn flat label="Annuler" @click="onCancelForm" />
-      <q-btn
-        unelevated
-        color="primary"
-        label="Enregistrer"
-        :disable="!form.label || !form.model"
-        @click="onSaveForm"
-      />
+      <div class="advanced-setup__row">
+        <q-input v-model="form.embeddings.provider" :label="t('settings.advancedProviderLabel') + ' (embeddings)'" outlined dense class="advanced-setup__field" />
+        <q-input v-model="form.embeddings.model" :label="t('settings.advancedEmbeddingModel')" outlined dense class="advanced-setup__field" />
+        <q-input v-model="form.embeddings.baseUrl" :label="t('settings.advancedEmbeddingBaseUrl')" outlined dense class="advanced-setup__field" />
+      </div>
+      <div class="advanced-setup__row">
+        <q-select v-model="form.ocr.provider" :options="ocrProviderOptions" :label="t('settings.advancedOcrProvider')" outlined dense emit-value map-options class="advanced-setup__field" />
+        <q-select v-model="form.ocr.mode" :options="ocrModeOptions" :label="t('settings.advancedOcrMode')" outlined dense emit-value map-options class="advanced-setup__field" />
+        <q-select v-model="form.vision.mode" :options="visionModeOptions" :label="t('settings.advancedSetVision')" outlined dense emit-value map-options class="advanced-setup__field" />
+      </div>
+      <div class="advanced-setup__row">
+        <q-toggle v-model="form.capabilities.vision" :label="t('settings.advancedCapVision')" />
+        <q-toggle v-model="form.capabilities.tools" :label="t('settings.advancedCapTools')" />
+        <q-select v-model="form.capabilities.reasoning" :options="capReasoningOptions" :label="t('settings.advancedCapReasoningLevel')" outlined dense emit-value map-options class="advanced-setup__field" />
+      </div>
+      <div class="advanced-setup__form-actions">
+        <q-btn flat :label="t('common.cancel')" @click="onCancelForm" />
+        <q-btn unelevated color="primary" :label="t('common.save')" :disable="!form.name || !form.chat.model" @click="onSaveForm" />
+      </div>
     </div>
   </section>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import {
-  useAppSettings,
-  toChatLlmConfig,
-  testLlmConfig,
-  type LlmTestResult,
-} from '@composables/useAppSettings';
-import type { AppSettings, LlmProviderEntry, LlmProviderName } from '@composables/useDesktop.types';
-import type { ReasoningEffort } from '#types';
-import {
-  defaultReasoningEffort,
-  REASONING_EFFORT_OPTIONS,
-  supportsReasoning,
-} from '@utils/reasoningSupport';
+import { useAppSettings, testSet, type ProviderSetTestResult } from '@composables/useAppSettings';
+import type { ProviderSet, LlmProviderName } from '@composables/useDesktop.types';
+import { capabilityLabels, cloneProviderSet, emptyCustomSet, localizedSetDescription } from '@utils/providerSets';
 
-const emit = defineEmits<{
-  'switch-to-guided': [];
-}>();
+const emit = defineEmits<{ 'switch-to-guided': [] }>();
 
-const { providers, settings, save } = useAppSettings();
+const { sets, settings, setActiveSet, createSet, updateSet, deleteSet } = useAppSettings();
+const { t } = useI18n();
 
-const editing = ref<LlmProviderEntry | null>(null);
 const formOpen = ref(false);
+const editing = ref<ProviderSet | null>(null);
 const showKey = ref(false);
 const testingId = ref<string | null>(null);
-const testResults = reactive<Record<string, LlmTestResult>>({});
-const providersOpen = ref(true);
-const modelParamsOpen = ref(false);
-const networkOpen = ref(false);
+const testResults = reactive<Record<string, ProviderSetTestResult>>({});
 
-const activeChatId = computed(() => settings.value.activeChatProviderId ?? null);
-const activeEmbeddingId = computed(() => settings.value.activeEmbeddingProviderId ?? null);
+const activeSetId = computed(() => settings.value.activeSetId ?? null);
 
 const providerOptions = [
   { label: 'Mistral', value: 'mistral' },
   { label: 'OpenAI', value: 'openai' },
-  { label: 'OpenAI-compat (vLLM, LM Studio…)', value: 'openai_compat' },
-  { label: 'Ollama (local)', value: 'ollama' },
+  { label: 'OpenAI-compat', value: 'openai_compat' },
+  { label: 'Ollama', value: 'ollama' },
   { label: 'vLLM', value: 'vllm' },
   { label: 'Anthropic', value: 'anthropic' },
 ];
 
-interface ProviderForm {
+const reasoningOptions = ['auto', 'none', 'low', 'medium', 'high'].map((v) => ({ label: v, value: v }));
+const ocrProviderOptions = [
+  { label: 'mistral', value: 'mistral' },
+  { label: 'docling', value: 'docling' },
+];
+const ocrModeOptions = [
+  { label: 'auto', value: 'auto' },
+  { label: 'none', value: 'none' },
+];
+const visionModeOptions = [
+  { label: 'chat', value: 'chat' },
+  { label: 'none', value: 'none' },
+];
+const capReasoningOptions = [
+  { label: 'low', value: 'low' },
+  { label: 'medium', value: 'medium' },
+  { label: 'high', value: 'high' },
+];
+
+interface SetForm {
   id: string;
-  label: string;
-  provider: LlmProviderName;
-  model: string;
-  baseUrl: string;
-  apiKey: string;
-  temperature: number | null;
-  maxTokens: number | null;
-  reasoningEffort: ReasoningEffort | null;
-  embeddingModel: string;
-  embeddingBaseUrl: string;
+  name: string;
+  description: string;
+  chat: {
+    provider: LlmProviderName;
+    model: string;
+    baseUrl: string;
+    apiKey: string;
+    reasoning: string;
+  };
+  embeddings: {
+    provider: LlmProviderName;
+    model: string;
+    baseUrl: string;
+  };
+  ocr: { provider: 'mistral' | 'docling'; mode: 'auto' | 'none' };
+  vision: { mode: 'chat' | 'none' };
+  capabilities: { reasoning: 'low' | 'medium' | 'high'; vision: boolean; tools: boolean };
+  isBuiltin: boolean;
 }
 
-const PRESETS: Record<LlmProviderName, Partial<ProviderForm>> = {
-  mistral: {
-    model: 'mistral-small-latest',
-    baseUrl: 'https://api.mistral.ai/v1',
-    embeddingModel: 'mistral-embed',
-  },
-  openai: { model: 'gpt-4o-mini', baseUrl: '', embeddingModel: 'text-embedding-3-small' },
-  openai_compat: { model: '', baseUrl: '', embeddingModel: '' },
-  ollama: { model: 'mistral', baseUrl: '', embeddingModel: 'nomic-embed-text' },
-  vllm: { model: '', baseUrl: '', embeddingModel: '' },
-  anthropic: { model: 'claude-3-5-sonnet-latest', baseUrl: '', embeddingModel: '' },
-};
+const form = reactive<SetForm>(formFromSet(emptyCustomSet()));
 
-const form = reactive<ProviderForm>(emptyForm());
-
-const reasoningEffortOptions = REASONING_EFFORT_OPTIONS;
-
-const formSupportsReasoning = computed(() =>
-  supportsReasoning(form.provider, form.model),
-);
-
-function emptyForm(): ProviderForm {
+function formFromSet(set: ProviderSet): SetForm {
   return {
-    id: '',
-    label: '',
-    provider: 'mistral',
-    model: '',
-    baseUrl: '',
-    apiKey: '',
-    temperature: null,
-    maxTokens: null,
-    reasoningEffort: null,
-    embeddingModel: '',
-    embeddingBaseUrl: '',
+    id: set.id,
+    name: set.name,
+    description: set.description,
+    chat: {
+      provider: set.chat.provider,
+      model: set.chat.model,
+      baseUrl: set.chat.baseUrl ?? '',
+      apiKey: set.chat.apiKey ?? '',
+      reasoning: set.chat.reasoning ?? 'auto',
+    },
+    embeddings: {
+      provider: set.embeddings?.provider ?? 'mistral',
+      model: set.embeddings?.model ?? '',
+      baseUrl: set.embeddings?.baseUrl ?? '',
+    },
+    ocr: {
+      provider: set.ocr?.provider ?? 'mistral',
+      mode: set.ocr?.mode ?? 'auto',
+    },
+    vision: { mode: set.vision.mode },
+    capabilities: { ...set.capabilities },
+    isBuiltin: set.isBuiltin,
   };
 }
 
-function newId(): string {
-  return `prov_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-}
-
-function maskKey(key: string): string {
-  return key.length > 4 ? key.slice(-4) : '';
-}
-
-function onProviderPreset(value: LlmProviderName): void {
-  const preset = PRESETS[value] ?? {};
-  if (!form.model) form.model = preset.model ?? '';
-  if (!form.baseUrl) form.baseUrl = preset.baseUrl ?? '';
-  if (!form.embeddingModel) form.embeddingModel = preset.embeddingModel ?? '';
-}
-
-function openFormSections(): void {
-  modelParamsOpen.value = true;
-  networkOpen.value = true;
+function formToSet(): ProviderSet {
+  return {
+    id: form.id,
+    name: form.name.trim(),
+    description: form.description.trim(),
+    badges: editing.value?.badges ?? [],
+    chat: {
+      provider: form.chat.provider,
+      model: form.chat.model.trim(),
+      baseUrl: form.chat.baseUrl.trim() || null,
+      apiKey: form.chat.apiKey.trim() || null,
+      reasoning: form.chat.reasoning as ProviderSet['chat']['reasoning'],
+    },
+    embeddings: form.embeddings.model.trim()
+      ? {
+          provider: form.embeddings.provider,
+          model: form.embeddings.model.trim(),
+          baseUrl: form.embeddings.baseUrl.trim() || null,
+          apiKey: form.chat.apiKey.trim() || null,
+        }
+      : null,
+    ocr: { provider: form.ocr.provider, mode: form.ocr.mode },
+    vision: { mode: form.vision.mode },
+    capabilities: { ...form.capabilities },
+    isDefault: editing.value?.isDefault ?? false,
+    isBuiltin: form.isBuiltin,
+  };
 }
 
 function onAddNew(): void {
   editing.value = null;
-  Object.assign(form, emptyForm());
-  onProviderPreset('mistral');
-  form.provider = 'mistral';
-  showKey.value = false;
+  Object.assign(form, formFromSet(emptyCustomSet()));
   formOpen.value = true;
-  openFormSections();
 }
 
-function onEdit(entry: LlmProviderEntry): void {
-  editing.value = entry;
-  Object.assign(form, {
-    id: entry.id,
-    label: entry.label,
-    provider: entry.provider,
-    model: entry.model,
-    baseUrl: entry.baseUrl ?? '',
-    apiKey: entry.apiKey ?? '',
-    temperature: entry.temperature ?? null,
-    maxTokens: entry.maxTokens ?? null,
-    reasoningEffort:
-      entry.reasoningEffort ??
-      defaultReasoningEffort(entry.provider, entry.model),
-    embeddingModel: entry.embeddingModel ?? '',
-    embeddingBaseUrl: entry.embeddingBaseUrl ?? '',
-  });
-  showKey.value = false;
+function onEdit(set: ProviderSet): void {
+  editing.value = set;
+  Object.assign(form, formFromSet(set));
   formOpen.value = true;
-  openFormSections();
 }
 
 function onCancelForm(): void {
   formOpen.value = false;
   editing.value = null;
-  Object.assign(form, emptyForm());
-  modelParamsOpen.value = false;
-  networkOpen.value = false;
-}
-
-function formToEntry(): LlmProviderEntry {
-  const reasoningEffort =
-    form.reasoningEffort ??
-    defaultReasoningEffort(form.provider, form.model);
-  return {
-    id: form.id || newId(),
-    label: form.label.trim(),
-    provider: form.provider,
-    model: form.model.trim(),
-    baseUrl: form.baseUrl.trim() || null,
-    apiKey: form.apiKey.trim() || null,
-    temperature: form.temperature ?? null,
-    maxTokens: form.maxTokens ?? null,
-    reasoningEffort: supportsReasoning(form.provider, form.model)
-      ? reasoningEffort
-      : null,
-    extraHeaders: {},
-    embeddingModel: form.embeddingModel.trim() || null,
-    embeddingBaseUrl: form.embeddingBaseUrl.trim() || null,
-  };
-}
-
-async function persist(next: AppSettings): Promise<void> {
-  await save(next);
 }
 
 async function onSaveForm(): Promise<void> {
-  const entry = formToEntry();
-  const current = settings.value;
-  const nextProviders = current.providers.some((p) => p.id === entry.id)
-    ? current.providers.map((p) => (p.id === entry.id ? entry : p))
-    : [...current.providers, entry];
-
-  let activeChatId = current.activeChatProviderId ?? null;
-  let activeEmbeddingId = current.activeEmbeddingProviderId ?? null;
-
-  if (nextProviders.length === 1) {
-    activeChatId = nextProviders[0].id;
-    if (nextProviders[0].embeddingModel) activeEmbeddingId = nextProviders[0].id;
-  }
-
+  const next = formToSet();
   try {
-    await persist({
-      ...current,
-      providers: nextProviders,
-      activeChatProviderId: activeChatId,
-      activeEmbeddingProviderId: activeEmbeddingId,
-    });
+    if (editing.value) {
+      await updateSet(next);
+    } else {
+      await createSet(next);
+    }
     onCancelForm();
-    Notify.create({ message: 'Provider enregistré', color: 'positive', timeout: 1500 });
+    Notify.create({ message: t('settings.advancedSetSaved'), color: 'positive', timeout: 1500 });
   } catch (err) {
     Notify.create({
-      message: err instanceof Error ? err.message : 'Enregistrement impossible',
+      message: err instanceof Error ? err.message : t('settings.saveFailed'),
       color: 'negative',
     });
   }
 }
 
-async function onDelete(entry: LlmProviderEntry): Promise<void> {
-  const nextProviders = settings.value.providers.filter((p) => p.id !== entry.id);
-  const activeChatProviderId =
-    settings.value.activeChatProviderId === entry.id ? null : settings.value.activeChatProviderId;
-  const activeEmbeddingProviderId =
-    settings.value.activeEmbeddingProviderId === entry.id
-      ? null
-      : settings.value.activeEmbeddingProviderId;
+async function onDelete(set: ProviderSet): Promise<void> {
   try {
-    await persist({
-      ...settings.value,
-      providers: nextProviders,
-      activeChatProviderId,
-      activeEmbeddingProviderId,
-    });
-    delete testResults[entry.id];
+    await deleteSet(set.id);
+    delete testResults[set.id];
+    Notify.create({ message: t('settings.advancedSetDeleted'), color: 'positive', timeout: 1500 });
   } catch (err) {
     Notify.create({
-      message: err instanceof Error ? err.message : 'Suppression impossible',
+      message: err instanceof Error ? err.message : t('settings.advancedCannotDeleteBuiltin'),
       color: 'negative',
     });
   }
 }
 
-async function onSetActiveChat(entry: LlmProviderEntry): Promise<void> {
+async function onSetActive(id: string): Promise<void> {
   try {
-    await persist({
-      ...settings.value,
-      activeChatProviderId: entry.id,
-    });
+    await setActiveSet(id);
   } catch (err) {
     Notify.create({
-      message: err instanceof Error ? err.message : 'Activation impossible',
+      message: err instanceof Error ? err.message : t('settings.saveFailed'),
       color: 'negative',
     });
   }
 }
 
-async function onSetActiveEmbedding(entry: LlmProviderEntry): Promise<void> {
+async function onTestAll(set: ProviderSet): Promise<void> {
+  testingId.value = set.id;
   try {
-    await persist({
-      ...settings.value,
-      activeEmbeddingProviderId: entry.id,
-    });
+    testResults[set.id] = await testSet(cloneProviderSet(set));
   } catch (err) {
-    Notify.create({
-      message: err instanceof Error ? err.message : 'Activation impossible',
-      color: 'negative',
-    });
-  }
-}
-
-async function onTest(entry: LlmProviderEntry): Promise<void> {
-  testingId.value = entry.id;
-  try {
-    const result = await testLlmConfig(toChatLlmConfig(entry)!);
-    testResults[entry.id] = result;
-  } catch (err) {
-    testResults[entry.id] = {
-      ok: false,
-      detail: err instanceof Error ? err.message : 'Sidecar injoignable',
+    testResults[set.id] = {
+      chat: { ok: false, detail: err instanceof Error ? err.message : 'error' },
+      embeddings: { ok: false },
+      ocr: { ok: false, supported: false },
+      vision: { ok: false, supported: false },
     };
   } finally {
     testingId.value = null;
@@ -545,7 +362,7 @@ async function onTest(entry: LlmProviderEntry): Promise<void> {
 .advanced-setup {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .advanced-setup__toolbar {
@@ -553,7 +370,6 @@ async function onTest(entry: LlmProviderEntry): Promise<void> {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 4px;
 }
 
 .advanced-setup__guided-link {
@@ -564,10 +380,6 @@ async function onTest(entry: LlmProviderEntry): Promise<void> {
   font-size: 12px;
   text-decoration: underline;
   cursor: pointer;
-
-  &:hover {
-    color: var(--wp-text);
-  }
 }
 
 .advanced-setup__add {
@@ -582,19 +394,6 @@ async function onTest(entry: LlmProviderEntry): Promise<void> {
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
-
-  &:hover:not(:disabled) {
-    background: var(--wp-accent-strong);
-  }
-  &:disabled {
-    opacity: 0.45;
-    cursor: not-allowed;
-  }
-}
-
-.advanced-setup__accordion-head {
-  font-family: var(--wp-font-head);
-  font-weight: 600;
 }
 
 .advanced-setup__empty {
@@ -603,46 +402,13 @@ async function onTest(entry: LlmProviderEntry): Promise<void> {
   font-size: 14px;
 }
 
-.advanced-setup__hint {
-  padding: 8px 4px 12px;
-  font-size: 13px;
-  color: var(--wp-text-muted);
-}
-
 .advanced-setup__list {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding-bottom: 8px;
 }
 
-.advanced-setup__form-block {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 4px 0 12px;
-}
-
-.advanced-setup__row {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.advanced-setup__field {
-  flex: 1;
-  min-width: 180px;
-}
-
-.advanced-setup__form-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 8px 0 4px;
-  border-top: 1px solid var(--wp-border);
-}
-
-.provider-card {
+.set-card {
   border: 1px solid var(--wp-border);
   border-left: 3px solid transparent;
   border-radius: var(--wp-r-md);
@@ -650,86 +416,95 @@ async function onTest(entry: LlmProviderEntry): Promise<void> {
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 }
 
-.provider-card--active-chat {
+.set-card--active {
   border-left-color: var(--wp-accent);
 }
 
-.provider-card--active-embed {
-  box-shadow: inset 2px 0 0 var(--wp-success);
-}
-
-.provider-card__head {
+.set-card__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
 
-.provider-card__title {
+.set-card__title {
   display: flex;
   align-items: center;
   gap: 8px;
   font-family: var(--wp-font-head);
   font-weight: 700;
   font-size: 14px;
-  color: var(--wp-text);
 }
 
-.provider-card__badges {
+.set-card__badges {
   display: flex;
   gap: 6px;
 }
 
-.provider-badge {
+.set-badge {
   font-size: 11px;
   font-weight: 600;
   padding: 3px 8px;
   border-radius: var(--wp-r-pill);
+  background: var(--wp-surface-2);
+  color: var(--wp-text-muted);
 }
 
-.provider-badge--chat {
+.set-badge--active {
   background: var(--wp-accent-soft);
-  color: var(--wp-accent-strong, var(--wp-accent));
+  color: var(--wp-accent);
 }
 
-.provider-badge--embed {
-  background: var(--wp-success-soft, var(--wp-accent-soft));
-  color: var(--wp-success);
+.set-card__desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--wp-text-muted);
 }
 
-.provider-card__meta {
+.set-card__caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.set-cap {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-surface-2);
+  color: var(--wp-text-faint);
+  font-family: var(--wp-font-mono, monospace);
+}
+
+.set-card__meta {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
   gap: 6px 16px;
   margin: 0;
 }
 
-.provider-card__meta div {
+.set-card__meta div {
   display: flex;
   flex-direction: column;
-  min-width: 0;
 }
 
-.provider-card__meta dt {
+.set-card__meta dt {
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--wp-text-faint);
 }
 
-.provider-card__meta dd {
+.set-card__meta dd {
   margin: 0;
   font-size: 13px;
   color: var(--wp-text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
-.provider-card__actions {
+.set-card__actions {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
@@ -744,16 +519,7 @@ async function onTest(entry: LlmProviderEntry): Promise<void> {
   border-radius: var(--wp-r-sm);
   background: transparent;
   font-size: 12px;
-  color: var(--wp-text);
   cursor: pointer;
-
-  &:hover:not(:disabled) {
-    background: var(--wp-surface-2);
-  }
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
 }
 
 .ghost-btn--on {
@@ -761,25 +527,45 @@ async function onTest(entry: LlmProviderEntry): Promise<void> {
   background: var(--wp-accent-soft);
 }
 
-.provider-card__test {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin: 0;
+.set-card__tests {
   font-size: 12px;
   color: var(--wp-danger);
 
-  &.ok {
+  p.ok {
     color: var(--wp-success);
   }
 }
 
-.reveal-btn {
-  border: none;
-  background: transparent;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  padding: 2px;
+.advanced-setup__form {
+  margin-top: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--wp-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.advanced-setup__form-title {
+  margin: 0;
+  font-family: var(--wp-font-head);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.advanced-setup__row {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.advanced-setup__field {
+  flex: 1;
+  min-width: 160px;
+}
+
+.advanced-setup__form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 </style>

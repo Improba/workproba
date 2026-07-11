@@ -7,12 +7,32 @@ vi.mock('@services/aiSidecar', () => ({
   getAiSidecarUrl: () => 'http://127.0.0.1:8765',
   getDesktopSecret: () => 'desktop-dev-secret',
   buildAgentTurnPayload: vi.fn(() => ({ message: 'fake' })),
+  buildSidecarSecurityContext: vi.fn(() => ({
+    settingsLocked: false,
+    permissionsNetwork: true,
+    locale: 'fr',
+  })),
+}));
+vi.mock('@composables/usePlugins', () => ({
+  PROJET_PLUGIN_ID: 'workproba.projet',
+  PERSONAS_PLUGIN_ID: 'workproba.personas',
+  BROWSER_PLUGIN_ID: 'workproba.browser',
+  usePlugins: () => ({
+    activePluginIds: ref([]),
+    getPluginDataDir: vi.fn(async () => null),
+  }),
 }));
 vi.mock('@composables/useAppSettings', () => ({
   buildActiveLlmConfigs: () => ({ chat: null, embedding: null }),
+  buildActiveProviderSet: () => null,
+  useAppSettings: () => ({
+    locale: ref('fr'),
+    settingsLocked: ref(false),
+    permissionsNetwork: ref(true),
+  }),
 }));
 
-import { useChatStream, mapPythonSseEvent, applyStreamEvent, mergeLlmConfigsWithSessionReasoning, type UseChatStreamReturn } from '@composables/useChatStream';
+import { useChatStream, mapPythonSseEvent, applyStreamEvent, applyAttachmentStatusEvent, mergeLlmConfigsWithSessionReasoning, type UseChatStreamReturn } from '@composables/useChatStream';
 import type { ChatMessage } from '#types';
 
 /** Construit une Response SSE dont le body émet `events` puis ferme le flux. */
@@ -619,5 +639,62 @@ describe('mergeLlmConfigsWithSessionReasoning', () => {
       'low',
     );
     expect(merged.chat?.reasoning_effort).toBeUndefined();
+  });
+});
+
+describe('attachment_status SSE', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  it('applyAttachmentStatusEvent stocke status_key et label_locale', () => {
+    const statuses: Record<string, { status_key: string; label_locale: string }> = {};
+    applyAttachmentStatusEvent(statuses, {
+      attachment_id: 'att_1',
+      status_key: 'attachments.status.read',
+      label_locale: 'Lue (texte)',
+    });
+    expect(statuses.att_1).toEqual({
+      status_key: 'attachments.status.read',
+      label_locale: 'Lue (texte)',
+    });
+  });
+
+  it('accumule attachment_status pendant un tour SSE', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sseResponse([
+        {
+          event: 'attachment_status',
+          data: {
+            message_id: 'sess-1',
+            attachment_id: 'att_42',
+            status_key: 'attachments.status.word',
+            label_locale: 'Lue (Word)',
+          },
+        },
+        { event: 'token', data: { content: 'OK' } },
+        { event: 'done', data: { content: '' } },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('hi', {
+      attachments: [
+        {
+          id: 'att_42',
+          fileName: 'doc.docx',
+          mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          sizeBytes: 100,
+          kind: 'document',
+          status: 'ready',
+        },
+      ],
+    });
+
+    expect(api.attachmentStatuses.value.att_42).toEqual({
+      status_key: 'attachments.status.word',
+      label_locale: 'Lue (Word)',
+    });
+    unmount();
   });
 });

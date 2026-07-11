@@ -1,18 +1,20 @@
 <template>
   <div class="models-settings" :class="{ 'models-settings--locked': settingsLocked }">
+    <SettingsSubnav active="models" />
+
     <header class="models-settings__header">
       <div>
-        <h1 class="models-settings__title">Modèles IA</h1>
+        <h1 class="models-settings__title">{{ pageTitle }}</h1>
         <p class="models-settings__subtitle">
-          Configurez l'accès aux modèles (clé API, endpoint, modèle). La clé est
-          stockée localement sur cette machine, dans les données de l'app.
+          {{ pageSubtitle }}
         </p>
       </div>
     </header>
 
-    <section v-if="loading" class="models-settings__empty">Chargement…</section>
+    <section v-if="loading" class="models-settings__empty">{{ t('common.loading') }}</section>
 
     <template v-else>
+      <LanguageControl />
       <DensityControl />
 
       <LockedModelSetup v-if="settingsLocked" />
@@ -29,13 +31,18 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import { useAppSettings } from '@composables/useAppSettings';
 import GuidedModelSetup from '@components/settings/GuidedModelSetup.vue';
 import AdvancedModelSetup from '@components/settings/AdvancedModelSetup.vue';
 import LockedModelSetup from '@components/settings/LockedModelSetup.vue';
 import DensityControl from '@components/settings/DensityControl.vue';
+import LanguageControl from '@components/settings/LanguageControl.vue';
+import SettingsSubnav from '@components/settings/SettingsSubnav.vue';
+
+const { t } = useI18n();
 
 const {
   load,
@@ -46,12 +53,24 @@ const {
 
 const loading = ref(true);
 
+const pageTitle = computed(() =>
+  settingsMode.value === 'guided' && !settingsLocked.value
+    ? t('settings.engine.title')
+    : t('settings.title'),
+);
+
+const pageSubtitle = computed(() =>
+  settingsMode.value === 'guided' && !settingsLocked.value
+    ? t('settings.engine.subtitle')
+    : t('settings.subtitle'),
+);
+
 async function onSwitchToAdvanced(): Promise<void> {
   try {
     await setSettingsMode('advanced');
   } catch (err) {
     Notify.create({
-      message: err instanceof Error ? err.message : 'Bascule impossible',
+      message: err instanceof Error ? err.message : t('common.switchFailed'),
       color: 'negative',
     });
   }
@@ -62,7 +81,7 @@ async function onSwitchToGuided(): Promise<void> {
     await setSettingsMode('guided');
   } catch (err) {
     Notify.create({
-      message: err instanceof Error ? err.message : 'Bascule impossible',
+      message: err instanceof Error ? err.message : t('common.switchFailed'),
       color: 'negative',
     });
   }

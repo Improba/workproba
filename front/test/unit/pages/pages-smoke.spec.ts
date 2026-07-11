@@ -26,6 +26,13 @@ vi.mock('@composables/useAppSettings', () => ({
   }),
 }));
 
+vi.mock('@composables/useUserProfile', () => ({
+  useUserProfile: () => ({
+    needsOnboarding: ref(false),
+    completeOnboarding: vi.fn(),
+  }),
+}));
+
 vi.mock('@composables/useDesktop', () => ({
   listWorkspaces: vi.fn(async () => []),
 }));
@@ -61,6 +68,7 @@ describe('pages smoke tests', () => {
           OpenFolderButton: { template: '<button class="open-folder" />' },
           StartPrompts: true,
           Lucide: true,
+          'q-dialog': { template: '<div><slot /></div>' },
         },
       },
     });
@@ -75,13 +83,14 @@ describe('pages smoke tests', () => {
     const wrapper = shallowMount(ErrorNotFoundPage, {
       global: {
         stubs: {
-          'q-btn': { template: '<button>Go Home</button>' },
+          'router-link': { template: '<a><slot /></a>' },
+          Lucide: true,
         },
       },
     });
 
     expect(wrapper.text()).toContain('404');
-    expect(wrapper.text()).toContain('Oops. Nothing here...');
-    expect(wrapper.text()).toContain('Go Home');
+    expect(wrapper.text()).toContain('Page introuvable');
+    expect(wrapper.text()).toContain('Retour à l\'accueil');
   });
 });

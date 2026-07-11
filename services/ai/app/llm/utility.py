@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from pydantic_ai import Agent
 
 from app.config import ProviderName
+from app.i18n import DEFAULT_LOCALE, t
 from app.llm.config import build_model, build_model_settings
 from app.schemas import (
     ChatMessage,
@@ -19,18 +20,16 @@ from app.schemas import (
 )
 
 
-TITLE_SYSTEM_PROMPT = (
-    "Tu génères un titre court en français pour une conversation Workproba. "
-    "Réponds uniquement par un titre en texte brut, 60 caractères maximum, "
-    "sans guillemets et sans ponctuation finale. Résume l'intention de l'utilisateur."
-)
+def title_system_prompt(locale: str = DEFAULT_LOCALE) -> str:
+    return t(locale, "utility.title_system_prompt")
 
-SUMMARY_SYSTEM_PROMPT = (
-    "Tu synthétises une conversation de travail en français. Produis un résumé compact "
-    "et structuré. Utilise seulement les sections qui ont du contenu : Décisions, "
-    "Faits établis, Fichiers concernés, Questions ouvertes. Reste factuel, sans "
-    "inventer, et privilégie les informations utiles pour reprendre le travail."
-)
+
+def summary_system_prompt(locale: str = DEFAULT_LOCALE) -> str:
+    return t(locale, "utility.summary_system_prompt")
+
+
+TITLE_SYSTEM_PROMPT = title_system_prompt()
+SUMMARY_SYSTEM_PROMPT = summary_system_prompt()
 
 
 def resolve_utility_config(
@@ -54,6 +53,7 @@ def resolve_utility_config(
 
 
 async def generate_title(req: UtilityTitleRequest, settings: Any) -> UtilityTitleResponse:
+    locale = req.locale
     config = resolve_utility_config(
         req.utility_llm_config,
         req.llm_provider_config,
@@ -61,24 +61,27 @@ async def generate_title(req: UtilityTitleRequest, settings: Any) -> UtilityTitl
     )
     agent = Agent(
         build_model(config),
-        system_prompt=TITLE_SYSTEM_PROMPT,
+        system_prompt=title_system_prompt(locale),
         output_type=str,
         model_settings=build_model_settings(config),
     )
     result = await agent.run(
-        "Message utilisateur :\n"
+        f"{t(locale, 'utility.user_message_label')}\n"
         f"{req.first_user_message.strip()}\n\n"
-        "Réponse assistant :\n"
+        f"{t(locale, 'utility.assistant_reply_label')}\n"
         f"{req.first_assistant_reply.strip()}\n\n"
-        "Titre :"
+        f"{t(locale, 'utility.title_prompt_suffix')}"
     )
-    return UtilityTitleResponse(title=_clean_title(_result_output(result)))
+    return UtilityTitleResponse(
+        title=_clean_title(_result_output(result), locale=locale)
+    )
 
 
 async def summarize_conversation(
     req: UtilitySummarizeRequest,
     settings: Any,
 ) -> UtilitySummarizeResponse:
+    locale = req.locale
     config = resolve_utility_config(
         req.utility_llm_config,
         req.llm_provider_config,
@@ -86,11 +89,11 @@ async def summarize_conversation(
     )
     agent = Agent(
         build_model(config),
-        system_prompt=SUMMARY_SYSTEM_PROMPT,
+        system_prompt=summary_system_prompt(locale),
         output_type=str,
         model_settings=build_model_settings(config),
     )
-    result = await agent.run(_summary_prompt(req))
+    result = await agent.run(_summary_prompt(req, locale))
     input_tokens, output_tokens, _ = extract_usage_tokens(result)
     return UtilitySummarizeResponse(
         summary=_result_output(result).strip(),
@@ -135,24 +138,30 @@ def _utility_config_from_settings(settings: Any) -> LLMProviderConfig | None:
         raise ValueError(f"Configuration LLM utilitaire invalide : {exc}") from exc
 
 
-def _summary_prompt(req: UtilitySummarizeRequest) -> str:
+def _summary_prompt(req: UtilitySummarizeRequest, locale: str) -> str:
     parts: list[str] = []
     focus = (req.focus or "").strip()
     if focus:
-        parts.append(f"Point d'attention à préserver : {focus}")
-    parts.append("Transcription :")
-    parts.append(_format_transcript(req.messages))
+        parts.append(t(locale, "utility.focus_prefix", focus=focus))
+    parts.append(t(locale, "utility.transcript_label"))
+    parts.append(_format_transcript(req.messages, locale))
     return "\n\n".join(parts)
 
 
-def _format_transcript(messages: list[ChatMessage]) -> str:
+def _format_transcript(messages: list[ChatMessage], locale: str) -> str:
     rendered: list[str] = []
     for index, message in enumerate(messages, start=1):
         chunks: list[str] = []
         if message.content:
             chunks.append(message.content.strip())
         if message.thinking:
-            chunks.append(f"Raisonnement assistant : {message.thinking.strip()}")
+            chunks.append(
+                t(
+                    locale,
+                    "utility.thinking_label",
+                    thinking=message.thinking.strip(),
+                )
+            )
         if message.tool_calls:
             calls = [
                 (
@@ -161,19 +170,32 @@ def _format_transcript(messages: list[ChatMessage]) -> str:
                 )
                 for tool in message.tool_calls
             ]
-            chunks.append(f"Appels outils : {', '.join(calls)}")
-        content = "\n".join(chunk for chunk in chunks if chunk) or "(vide)"
-        rendered.append(f"{index}. {message.role} : {content}")
+            chunks.append(
+                t(locale, "utility.tool_calls_label", calls=", ".join(calls))
+            )
+        content = (
+            "\n".join(chunk for chunk in chunks if chunk)
+            or t(locale, "utility.empty_transcript")
+        )
+        rendered.append(
+            t(
+                locale,
+                "utility.role_prefix",
+                index=index,
+                role=message.role,
+                content=content,
+            )
+        )
     return "\n".join(rendered)
 
 
-def _clean_title(value: str) -> str:
+def _clean_title(value: str, *, locale: str = DEFAULT_LOCALE) -> str:
     title = re.sub(r"\s+", " ", value.strip())
     while len(title) >= 2 and title[0] == title[-1] and title[0] in {"'", '"'}:
         title = title[1:-1].strip()
     title = title[:60].strip()
     title = title.rstrip(" .!?:;,")
-    return title or "Nouvelle conversation"
+    return title or t(locale, "utility.default_title")
 
 
 def _result_output(result: Any) -> str:

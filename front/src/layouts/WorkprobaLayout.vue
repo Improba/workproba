@@ -6,8 +6,11 @@
       :files-open="filesOpen"
       :sidebar-rail="sidebarRail"
       :sidecar-state="sidecarState"
+      :side-chat-open="sideChatOpen"
+      :has-side-chat="hasSideChat"
       @toggle-files="filesOpen = !filesOpen"
       @toggle-sidebar="sidebarRail = !sidebarRail"
+      @toggle-side-chat="toggleSideChat"
       @open-shortcuts="shortcutsHelpOpen = true"
     />
 
@@ -24,24 +27,31 @@
         <slot><router-view /></slot>
       </main>
 
-      <FileExplorer
+      <RightPanel
         :active-path="activePath"
+        :workspace-data-dir="activeDataDir"
         :open="filesOpen"
         @toggle="filesOpen = !filesOpen"
       />
+
+      <SideChatPanel />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import WorkprobaTitleBar from '@components/workproba/WorkprobaTitleBar.vue';
 import WorkspaceSidebar from '@components/workproba/WorkspaceSidebar.vue';
-import FileExplorer from '@components/workproba/FileExplorer.vue';
+import RightPanel from '@components/workproba/RightPanel.vue';
+import SideChatPanel from '@components/workproba/SideChatPanel.vue';
 import KeyboardShortcutsHelp from '@components/workproba/KeyboardShortcutsHelp.vue';
 import { useProject } from '@composables/useProject';
 import { useSidecarHealth } from '@composables/useSidecarHealth';
 import { useAppSettings } from '@composables/useAppSettings';
+import { PERSONAS_PLUGIN_ID } from '@composables/usePlugins';
+import { usePluginSlots } from '@composables/usePluginSlots';
+import { useSideChat } from '@composables/useSideChat';
 
 useSidecarHealth();
 
@@ -53,11 +63,29 @@ defineProps<{
   sidecarState?: 'connected' | 'idle' | 'working' | 'error';
 }>();
 
-const { activePath, workspaceTitle } = useProject();
+const { activePath, workspaceTitle, activeDataDir } = useProject();
 
 const sidebarRail = ref(false);
 const filesOpen = ref(true);
 const shortcutsHelpOpen = ref(false);
+
+const { sideChatOpen, openSideChat, closeSideChat, hasSideChat } = useSideChat();
+const { sideChatPluginPanels } = usePluginSlots();
+
+const firstSideChatPluginId = computed(
+  () => sideChatPluginPanels.value[0]?.pluginId ?? PERSONAS_PLUGIN_ID,
+);
+
+function toggleSideChat(): void {
+  if (sideChatOpen.value) {
+    closeSideChat();
+    return;
+  }
+  openSideChat(firstSideChatPluginId.value);
+  if (window.innerWidth < 1100) {
+    filesOpen.value = false;
+  }
+}
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -107,6 +135,9 @@ function onKeydown(e: KeyboardEvent): void {
   } else if (key === '\\') {
     e.preventDefault();
     sidebarRail.value = !sidebarRail.value;
+  } else if (e.shiftKey && key === 'l' && hasSideChat.value) {
+    e.preventDefault();
+    toggleSideChat();
   }
 }
 
