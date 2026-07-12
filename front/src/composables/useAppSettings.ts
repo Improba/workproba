@@ -346,7 +346,12 @@ export function useAppSettings(): UseAppSettingsReturn {
   }
 
   async function save(next: AppSettings): Promise<AppSettings> {
-    const persisted = await saveAppSettings(ensureSetsLoaded(next));
+    const prepared = ensureSetsLoaded(next);
+    settings.value = prepared;
+    if (!isDesktopApp()) {
+      return prepared;
+    }
+    const persisted = await saveAppSettings(prepared);
     settings.value = persisted;
     return persisted;
   }
@@ -399,12 +404,7 @@ export function useAppSettings(): UseAppSettingsReturn {
   }
 
   async function setDensity(mode: DensityMode): Promise<AppSettings> {
-    const next = { ...settings.value, density: mode };
-    settings.value = next;
-    if (!isDesktopApp()) {
-      return next;
-    }
-    return save(next);
+    return save({ ...settings.value, density: mode });
   }
 
   async function setLocale(nextLocale: AppLocale): Promise<AppSettings> {
@@ -412,12 +412,7 @@ export function useAppSettings(): UseAppSettingsReturn {
       return settings.value;
     }
     setLang(nextLocale);
-    const next = { ...settings.value, locale: nextLocale };
-    settings.value = next;
-    if (!isDesktopApp()) {
-      return next;
-    }
-    return save(next);
+    return save({ ...settings.value, locale: nextLocale });
   }
 
   async function setOnboardingDone(done: boolean): Promise<void> {
@@ -457,4 +452,4 @@ export function useAppSettings(): UseAppSettingsReturn {
   };
 }
 
-export { isLocalLlmProvider };
+export { isLocalLlmProvider, activeChatProvider };

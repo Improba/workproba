@@ -20,6 +20,7 @@ export interface AgentTurnPayload {
   project_id: string;
   project_path: string;
   workspace_data_dir?: string;
+  workspace_title?: string;
   session_id: string;
   ui_mode?: UiMode;
   locale?: 'fr' | 'en';
@@ -154,6 +155,7 @@ export function buildAgentTurnPayload(
   history: ChatMessage[],
   documents: LocalDocumentEntry[],
   workspaceDataDir?: string | null,
+  workspaceTitle?: string | null,
   llmConfigs?: {
     chat: LlmConfigPayload | null;
     embedding: LlmConfigPayload | null;
@@ -194,6 +196,7 @@ export function buildAgentTurnPayload(
     project_id: projectPath,
     project_path: projectPath,
     workspace_data_dir: workspaceDataDir ?? undefined,
+    workspace_title: workspaceTitle ?? undefined,
     session_id: sessionId,
     ui_mode: uiMode ?? undefined,
     locale: locale ? toSidecarLocale(locale) : undefined,
@@ -282,6 +285,7 @@ export async function requestTitle(opts: {
   firstAssistantReply: string;
   chatConfig?: LlmConfigPayload | null;
   utilityConfig?: LlmConfigPayload | null;
+  locale?: 'fr' | 'en' | null;
 }): Promise<string> {
   const response = await fetch(`${getAiSidecarUrl()}/util/title`, {
     method: 'POST',
@@ -294,6 +298,7 @@ export async function requestTitle(opts: {
       first_assistant_reply: opts.firstAssistantReply,
       llm_provider_config: opts.chatConfig ?? null,
       utility_llm_config: opts.utilityConfig ?? null,
+      locale: opts.locale ?? undefined,
     }),
   });
 
@@ -311,6 +316,7 @@ export async function requestSummary(opts: {
   chatConfig?: LlmConfigPayload | null;
   utilityConfig?: LlmConfigPayload | null;
   focus?: string | null;
+  locale?: 'fr' | 'en' | null;
 }): Promise<{ summary: string; inputTokens?: number; outputTokens?: number }> {
   const response = await fetch(`${getAiSidecarUrl()}/util/summarize`, {
     method: 'POST',
@@ -323,6 +329,7 @@ export async function requestSummary(opts: {
       llm_provider_config: opts.chatConfig ?? null,
       utility_llm_config: opts.utilityConfig ?? null,
       focus: opts.focus ?? null,
+      locale: opts.locale ?? undefined,
     }),
   });
 

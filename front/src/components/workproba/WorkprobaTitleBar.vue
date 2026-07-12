@@ -24,9 +24,6 @@
       >
         <span class="wp-titlebar__chip-dot" />
         <span class="wp-titlebar__chip-label">{{ providerLabel }}</span>
-        <span v-if="capabilityChips.length" class="wp-titlebar__chip-caps">
-          <span v-for="cap in capabilityChips" :key="cap" class="wp-titlebar__cap">{{ cap }}</span>
-        </span>
         <q-tooltip anchor="bottom middle" self="top middle" :offset="[0, 6]">
           {{ providerTooltip }}
         </q-tooltip>
@@ -155,7 +152,7 @@ import ThemeToggler from '@lib-improba/components/layouts/theme-toggler/ThemeTog
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useAppSettings } from '@composables/useAppSettings';
 import { useUserProfile } from '@composables/useUserProfile';
-import { capabilityLabels, localizedSetName } from '@utils/providerSets';
+import { capabilityLabels, guidedPresetLabel, localizedSetName } from '@utils/providerSets';
 
 const props = defineProps<{
   workspaceTitle: string | null;
@@ -228,13 +225,6 @@ const labelMode = computed(() => {
   return settingsMode.value === 'advanced' ? 'advanced' : 'guided';
 });
 
-const capabilityChips = computed(() => {
-  const set = activeSet.value;
-  if (!set) return [];
-  const caps = capabilityLabels(set, labelMode.value, t);
-  return caps.slice(0, 2);
-});
-
 const activeSetCapabilities = computed(() => {
   const set = activeSet.value;
   if (!set) return [];
@@ -243,7 +233,10 @@ const activeSetCapabilities = computed(() => {
 
 const providerLabel = computed(() => {
   const set = activeSet.value;
-  if (set) return localizedSetName(set, t);
+  if (set) {
+    if (labelMode.value === 'guided') return guidedPresetLabel(set, t);
+    return localizedSetName(set, t);
+  }
   return providerDisplay(activeChatProvider.value);
 });
 
@@ -264,7 +257,8 @@ const providerTooltip = computed(() =>
 const chatProviderLabel = computed(() => {
   const set = activeSet.value;
   if (set) {
-    return `${localizedSetName(set, t)} ${t('shell.titlebarSep')} ${set.chat.model || '—'}`;
+    const name = labelMode.value === 'guided' ? guidedPresetLabel(set, t) : localizedSetName(set, t);
+    return `${name} ${t('shell.titlebarSep')} ${set.chat.model || '—'}`;
   }
   const entry = activeChatProvider.value;
   if (!entry) return t('shell.titlebarNoChatModel');
@@ -378,22 +372,6 @@ function onOpenSettings(): void {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.wp-titlebar__chip-caps {
-  display: inline-flex;
-  gap: 4px;
-  max-width: 160px;
-  overflow: hidden;
-}
-
-.wp-titlebar__cap {
-  font-size: 10px;
-  padding: 1px 6px;
-  border-radius: var(--wp-r-pill);
-  background: var(--wp-accent-soft);
-  color: var(--wp-text-muted);
-  white-space: nowrap;
 }
 
 .wp-titlebar__chip-dot {

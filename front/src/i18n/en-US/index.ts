@@ -440,6 +440,7 @@ export default {
       titleAdvanced: 'Installed extensions',
       subtitle: 'Enable or disable modules that extend Workproba.',
       empty: 'No extensions available yet.',
+      desktopOnly: 'Extensions are managed by the Workproba desktop app.',
       loadFailed: 'Could not load extensions.',
       sourceBuiltin: 'Pre-installed',
       sourceLocal: 'Local',

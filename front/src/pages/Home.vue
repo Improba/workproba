@@ -204,6 +204,7 @@ import { useUserProfile } from '@composables/useUserProfile';
 import { listWorkspaces } from '@composables/useDesktop';
 import { useProject } from '@composables/useProject';
 import { createSession, listSessions, type LocalSession } from '@services/workspaceSession';
+import { bumpSessions } from '@composables/useSessionSync';
 
 const router = useRouter();
 const { t, locale } = useI18n();
@@ -257,7 +258,8 @@ const showFirstLaunchOnboarding = computed(
     && sessionsChecked.value
     && !activePath.value
     && !hasAnySessions.value
-    && !onboardingDone.value,
+    && !onboardingDone.value
+    && !needsProfileOnboarding.value,
 );
 
 async function refreshSessions(): Promise<void> {
@@ -316,7 +318,12 @@ function startNewConversation(): void {
         activeWorkspaceId.value!,
         activePath.value!,
       );
-      void router.push({ name: 'chat_session', params: { id: session.id } });
+      bumpSessions();
+      await router.push({
+        name: 'chat_session',
+        params: { id: session.id },
+        state: { focusComposer: true },
+      });
     } catch (err) {
       Notify.create({
         message: err instanceof Error ? err.message : t('shell.conversationCreateFailed'),
@@ -340,7 +347,8 @@ function startConversationWithPrompt(prompt: string): void {
         activeWorkspaceId.value!,
         activePath.value!,
       );
-      void router.push({
+      bumpSessions();
+      await router.push({
         name: 'chat_session',
         params: { id: session.id },
         state: { initialPrompt: prompt },

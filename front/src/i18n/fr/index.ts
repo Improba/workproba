@@ -439,6 +439,7 @@ export default {
       titleAdvanced: 'Extensions installées',
       subtitle: 'Activez ou désactivez les modules qui étendent Workproba.',
       empty: 'Aucune extension disponible pour l\'instant.',
+      desktopOnly: 'Les extensions sont gérées par l\'application bureau Workproba.',
       loadFailed: 'Impossible de charger les extensions.',
       sourceBuiltin: 'Préinstallé',
       sourceLocal: 'Local',

@@ -26,6 +26,7 @@ describe('aiSidecar payload', () => {
       [],
       null,
       null,
+      null,
       'guided',
     );
     expect(payload.ui_mode).toBe('guided');
@@ -53,6 +54,7 @@ describe('aiSidecar payload', () => {
       [],
       null,
       null,
+      null,
       'guided',
       null,
       true,
@@ -72,6 +74,7 @@ describe('aiSidecar payload', () => {
       'hello',
       [],
       [],
+      null,
       null,
       null,
       'guided',
@@ -94,6 +97,7 @@ describe('aiSidecar payload', () => {
       [],
       null,
       null,
+      null,
       'guided',
       null,
       true,
@@ -114,6 +118,7 @@ describe('aiSidecar payload', () => {
       [],
       null,
       null,
+      null,
       'guided',
       null,
       true,
@@ -126,6 +131,20 @@ describe('aiSidecar payload', () => {
     expect(payload.plugin_data_dir).toBe('/data/plugins/workproba.projet');
   });
 
+  it('buildAgentTurnPayload inclut workspace_title quand fourni', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [],
+      [],
+      '/data/ws',
+      'kaggle',
+    );
+    expect(payload.workspace_data_dir).toBe('/data/ws');
+    expect(payload.workspace_title).toBe('kaggle');
+  });
+
   it('buildAgentTurnPayload inclut le contexte sécurité preset', () => {
     const payload = buildAgentTurnPayload(
       'sess-1',
@@ -133,6 +152,7 @@ describe('aiSidecar payload', () => {
       'hello',
       [],
       [],
+      null,
       null,
       null,
       'locked',

@@ -95,11 +95,11 @@ export function usePersonasActions() {
 
   async function resumeDiscussion(payload: ResumePayload): Promise<void> {
     await ensureChatSession();
-    requestAction('discuss');
     sessionStorage.setItem(
       'workproba.personas.resume',
       JSON.stringify(payload),
     );
+    requestAction('discuss');
   }
 
   return {

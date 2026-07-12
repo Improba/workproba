@@ -233,6 +233,7 @@ class AgentLoop:
             documents=project_docs,
             project_root=self._project_root,
             workspace_data_dir=workspace_data_dir,
+            workspace_title=request.workspace_title,
             locale=request.locale,
             active_plugins=request.active_plugins,
             plugin_data_dir=plugin_data_dir,

@@ -246,7 +246,7 @@ import { useUserProfile } from '@composables/useUserProfile';
 import { listWorkspaces } from '@composables/useDesktop';
 import type { WorkspaceInfo } from '@composables/useDesktop.types';
 import { createSession, listSessions, type LocalSession } from '@services/workspaceSession';
-import { useSessionSync } from '@composables/useSessionSync';
+import { bumpSessions, useSessionSync } from '@composables/useSessionSync';
 import { HOME_ROUTE } from '@router/meta';
 import MemoryPanel from '@components/memory/MemoryPanel.vue';
 
@@ -388,19 +388,36 @@ async function ensureSessionsLoaded(ws: WorkspaceInfo): Promise<void> {
   }
 }
 
+const refreshInFlight = new Map<string, Promise<void>>();
+
 async function refreshActiveSessions(): Promise<void> {
   const id = activeWorkspaceId.value;
   const path = activePath.value;
   if (!id || !path) return;
-  if (loadingByWs[id]) return;
-  loadingByWs[id] = true;
-  try {
-    sessionsByWs[id] = await listSessions(id, path);
-  } catch {
-    sessionsByWs[id] = [];
-  } finally {
-    loadingByWs[id] = false;
-  }
+
+  const existing = refreshInFlight.get(id);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    loadingByWs[id] = true;
+    try {
+      sessionsByWs[id] = await listSessions(id, path);
+    } catch {
+      sessionsByWs[id] = [];
+    } finally {
+      loadingByWs[id] = false;
+      refreshInFlight.delete(id);
+    }
+  })();
+
+  refreshInFlight.set(id, promise);
+  return promise;
+}
+
+function prependSession(wsId: string, session: LocalSession): void {
+  const existing = sessionsByWs[wsId] ?? [];
+  if (existing.some((s) => s.id === session.id)) return;
+  sessionsByWs[wsId] = [session, ...existing];
 }
 
 async function toggleExpand(ws: WorkspaceInfo): Promise<void> {
@@ -435,9 +452,14 @@ async function onNewConversation(): Promise<void> {
   }
   try {
     const session = await createSession(activeWorkspaceId.value, activePath.value);
-    await refreshActiveSessions();
+    prependSession(activeWorkspaceId.value, session);
+    bumpSessions();
     expanded[activeWorkspaceId.value] = true;
-    void router.push({ name: 'chat_session', params: { id: session.id } });
+    await router.push({
+      name: 'chat_session',
+      params: { id: session.id },
+      state: { focusComposer: true },
+    });
   } catch (err) {
     Notify.create({
       message: err instanceof Error ? err.message : t('shell.conversationCreateFailed'),
@@ -495,6 +517,7 @@ watch(sessionVersion, () => {
 });
 
 onMounted(async () => {
+  void import('@pages/chat/ChatPage.vue');
   await initFromStoredPath();
   await refreshWorkspaces();
   // Sans espace ouvert, seule la page chat est inaccessible ; réglages et accueil restent valides.

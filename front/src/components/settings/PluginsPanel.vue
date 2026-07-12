@@ -17,6 +17,10 @@
       </button>
     </section>
 
+    <section v-else-if="plugins.length === 0 && !isDesktopApp()" class="plugins-panel__empty">
+      <p>{{ t('settings.plugins.desktopOnly') }}</p>
+    </section>
+
     <section v-else-if="plugins.length === 0" class="plugins-panel__empty">
       <p>{{ t('settings.plugins.empty') }}</p>
     </section>
@@ -117,7 +121,7 @@ import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useAppSettings } from '@composables/useAppSettings';
-import { pickProjectFolder } from '@composables/useDesktop';
+import { pickProjectFolder, isDesktopApp } from '@composables/useDesktop';
 import { isUpcomingPluginId, BROWSER_PLUGIN_ID, CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import type { PluginInfo, PluginSource } from '@composables/useDesktop.types';
 

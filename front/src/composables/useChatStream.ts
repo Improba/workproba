@@ -645,6 +645,7 @@ export interface UseChatStreamOptions {
   initialMessages?: ChatMessage[];
   projectPath?: Ref<string | null>;
   workspaceDataDir?: Ref<string | null>;
+  workspaceTitle?: Ref<string | null>;
   documents?: Ref<LocalDocumentEntry[]>;
   uiMode?: Ref<UiMode | undefined>;
   /** Override du niveau de raisonnement pour la conversation active. */
@@ -1012,6 +1013,7 @@ export function useChatStream(
         history,
         documents,
         options.workspaceDataDir?.value,
+        options.workspaceTitle?.value ?? null,
         llmConfigs,
         options.uiMode?.value,
         contextWindow,

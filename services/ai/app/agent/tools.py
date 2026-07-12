@@ -47,6 +47,7 @@ class ToolContext:
     documents: list[DocumentReference]
     project_root: Path | None = None
     workspace_data_dir: Path | None = None
+    workspace_title: str | None = None
     locale: str = DEFAULT_LOCALE
     active_plugins: list[str] | None = None
     plugin_data_dir: Path | None = None
@@ -261,6 +262,17 @@ def build_agent(
             ctx.deps.context.locale,
             "tools.sessions_note",
             count=others,
+        )
+
+    @agent.system_prompt
+    def space_name_prompt(ctx: RunContext[ToolDeps]) -> str:
+        title = ctx.deps.context.workspace_title
+        if not title or not title.strip():
+            return ""
+        return t(
+            ctx.deps.context.locale,
+            "tools.space_name_context",
+            name=title.strip(),
         )
 
     @agent.system_prompt

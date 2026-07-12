@@ -97,6 +97,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { Notify } from 'quasar';
 import { useDebounceFn } from '@vueuse/core';
+import { toSidecarLocale } from '@boot/i18n';
 import ChatView from '@components/chat/ChatView.vue';
 import PersonasMeetingView from '@components/personas/PersonasMeetingView.vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
@@ -106,7 +107,8 @@ import {
   useAppSettings,
 } from '@composables/useAppSettings';
 import { setLlmSessionContext } from '@composables/useLlmSessionContext';
-import { buildSessionAwareLlmConfigs } from '@utils/llmRouting';
+import { buildSessionAwareLlmConfigs, buildUtilityLlmConfig } from '@utils/llmRouting';
+import { isProvisionalConversationTitle } from '@utils/conversationTitle';
 import { openLocalFile } from '@composables/useDesktop';
 import { useProject } from '@composables/useProject';
 import { clearExpansionState } from '@composables/useToolCallExpansion';
@@ -139,7 +141,7 @@ import { useBrowser } from '@composables/useBrowser';
 
 const route = useRoute();
 const router = useRouter();
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const sessionId = computed(() => String(route.params.id ?? ''));
 const sessionTitle = ref(t('chat.page.defaultTitle'));
@@ -150,11 +152,11 @@ const lastSummaryTurn = ref(0);
 const chatViewRef = ref<InstanceType<typeof ChatView> | null>(null);
 const sessionLoadGuard = createSessionLoadGuard();
 
-const { activePath, activeDataDir, documents } = useProject();
+const { activePath, activeDataDir, workspaceTitle, documents } = useProject();
 const { settingsMode, settingsLocked, activeChatRouting } = useAppSettings();
 const { setStreaming, setSidecarState } = useChatActivity();
 const { isPersonasPluginActive, isProjetPluginActive, getPluginDataDir } = usePlugins();
-const { consumeAction } = usePersonasNavigation();
+const { consumeAction, pendingAction } = usePersonasNavigation();
 const {
   personas: personasList,
   loading: personasLoading,
@@ -235,6 +237,7 @@ const {
   sessionId: toRef(() => sessionId.value),
   projectPath: activePath,
   workspaceDataDir: activeDataDir,
+  workspaceTitle,
   documents,
   uiMode,
   reasoningEffort: sessionReasoningOverride,
@@ -367,19 +370,71 @@ watch(
         : null;
     if (sessionLoadGuard.isStale(loadGen)) return;
     loadMessages(session.messages ?? []);
-    await applyInitialPrompt();
+    await afterSessionLoaded(loadGen);
   },
   { immediate: true },
 );
 
-async function applyInitialPrompt(): Promise<void> {
-  const state = history.state as { initialPrompt?: string } | null;
+async function afterSessionLoaded(loadGen: number): Promise<void> {
+  const state = history.state as {
+    initialPrompt?: string;
+    focusComposer?: boolean;
+  } | null;
   const prompt = state?.initialPrompt?.trim();
-  if (!prompt) return;
 
   await nextTick();
-  chatViewRef.value?.setDraft(prompt);
-  history.replaceState({ ...history.state, initialPrompt: undefined }, '');
+  if (sessionLoadGuard.isStale(loadGen)) return;
+
+  if (prompt) {
+    chatViewRef.value?.setDraft(prompt);
+    history.replaceState({ ...history.state, initialPrompt: undefined }, '');
+    void tryAutoTitle(loadGen);
+    return;
+  }
+
+  if (messages.value.length === 0 || state?.focusComposer) {
+    chatViewRef.value?.setDraft('', true);
+    if (state?.focusComposer) {
+      history.replaceState({ ...history.state, focusComposer: undefined }, '');
+    }
+  }
+
+  void tryAutoTitle(loadGen);
+}
+
+async function tryAutoTitle(loadGen?: number): Promise<void> {
+  if (autoTitleStarted.value) return;
+  if (!isProvisionalConversationTitle(sessionTitle.value, t)) return;
+
+  const firstUser = messages.value.find((m) => m.role === 'user');
+  const firstAssistant = messages.value.find(
+    (m) => m.role === 'assistant' && m.content?.trim() && !m.streaming,
+  );
+  const firstUserMessage = firstUser?.content?.trim();
+  const firstAssistantReply = firstAssistant?.content?.trim();
+  if (!firstUserMessage || !firstAssistantReply) return;
+
+  const targetSessionId = sessionId.value;
+  autoTitleStarted.value = true;
+
+  try {
+    const title = await requestTitle({
+      firstUserMessage,
+      firstAssistantReply,
+      chatConfig: sessionLlmConfigs().chat,
+      utilityConfig: buildUtilityLlmConfig(),
+      locale: toSidecarLocale(locale.value),
+    });
+    if (loadGen !== undefined && sessionLoadGuard.isStale(loadGen)) return;
+    if (sessionId.value !== targetSessionId) return;
+    if (!title.trim()) return;
+    if (!isProvisionalConversationTitle(sessionTitle.value, t)) return;
+    sessionTitle.value = title;
+    await flushPersistSession();
+    bumpSessions();
+  } catch {
+    // Titre auto en arrière-plan : on garde le titre par défaut sans notifier.
+  }
 }
 
 // Sauvegarde debouncée : un seul writer pour messages, titre, résumé,
@@ -431,8 +486,9 @@ watch(completedTurns, async (turns) => {
     const result = await requestSummary({
       messages: transcript,
       chatConfig: sessionLlmConfigs().chat,
-      utilityConfig: null,
+      utilityConfig: buildUtilityLlmConfig(),
       focus: t('chat.page.summaryFocus'),
+      locale: toSidecarLocale(locale.value),
     });
     if (!result.summary.trim()) return;
     sessionSummary.value = result.summary.trim();
@@ -446,34 +502,8 @@ watch(completedTurns, async (turns) => {
 });
 
 watch(completedTurns, async (turns) => {
-  if (turns < 1 || autoTitleStarted.value) return;
-  const currentTitle = sessionTitle.value.trim();
-  if (currentTitle && currentTitle !== t('chat.page.defaultTitle')) return;
-
-  const firstUser = messages.value.find((m) => m.role === 'user');
-  const firstAssistant = messages.value.find(
-    (m) => m.role === 'assistant' && m.content?.trim(),
-  );
-  const firstUserMessage = firstUser?.content?.trim();
-  const firstAssistantReply = firstAssistant?.content?.trim();
-  if (!firstUserMessage || !firstAssistantReply) return;
-
-  autoTitleStarted.value = true;
-
-  try {
-    const title = await requestTitle({
-      firstUserMessage,
-      firstAssistantReply,
-      chatConfig: sessionLlmConfigs().chat,
-      utilityConfig: null,
-    });
-    if (!title.trim()) return;
-    sessionTitle.value = title;
-    await flushPersistSession();
-    bumpSessions();
-  } catch {
-    // Titre auto en arrière-plan : on garde le titre par défaut sans notifier.
-  }
+  if (turns < 1) return;
+  await tryAutoTitle();
 });
 
 function onReasoningEffortChange(effort: ReasoningEffort): void {
@@ -585,6 +615,10 @@ watch(
   },
   { immediate: true },
 );
+
+watch(pendingAction, (action) => {
+  if (action) applyPersonasNavigation();
+});
 
 function closePersonasView(): void {
   personasView.value = null;

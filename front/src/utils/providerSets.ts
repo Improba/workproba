@@ -128,6 +128,19 @@ export function toEmbeddingLlmConfigFromSet(set: ProviderSet | null): LlmConfigP
   };
 }
 
+/** Config LLM utilitaire (titre, résumé) : preset sans override session ni raisonnement. */
+export function toUtilityLlmConfigFromSet(set: ProviderSet | null): LlmConfigPayload | null {
+  if (!set) return null;
+  const chat = set.chat;
+  return {
+    provider: chat.provider,
+    model: chat.model,
+    base_url: chat.baseUrl ?? null,
+    api_key: chat.apiKey ?? null,
+    extra_headers: {},
+  };
+}
+
 /** Applique clé API saisie aux blocs chat/embeddings d'un set (mode guidé). */
 export function applyAccessKeyToSet(set: ProviderSet, apiKey: string | null): ProviderSet {
   const next = cloneProviderSet(set);
@@ -257,6 +270,20 @@ export function localizedSetName(
   if (set.id === 'mistral-default') return t('settings.engine.mistralName');
   if (set.id === 'ollama-local') return t('settings.engine.ollamaName');
   return set.name;
+}
+
+/** Libellé preset en mode guidé (titlebar) : Mistral, Ollama local, etc. */
+export function guidedPresetLabel(
+  set: ProviderSet,
+  t: (key: string) => string,
+): string {
+  if (set.id === 'mistral-default' || set.chat.provider === 'mistral') {
+    return t('settings.engine.mistralName');
+  }
+  if (set.id === 'ollama-local' || set.chat.provider === 'ollama') {
+    return t('settings.engine.ollamaName');
+  }
+  return localizedSetName(set, t);
 }
 
 /** Description affichée d'un set intégré (i18n) ou description stockée. */

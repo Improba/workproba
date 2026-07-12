@@ -1,6 +1,7 @@
 import type { ReasoningEffort } from '#types';
 import type { LlmConfigPayload } from '@composables/useAppSettings';
 import {
+  activeChatProvider,
   buildActiveLlmConfigs,
   buildActiveProviderSet,
 } from '@composables/useAppSettings';
@@ -8,6 +9,7 @@ import type { LlmProviderName } from '@composables/useDesktop.types';
 import {
   toChatLlmConfigFromSet,
   toEmbeddingLlmConfigFromSet,
+  toUtilityLlmConfigFromSet,
 } from '@utils/providerSets';
 import {
   clampReasoningEffort,
@@ -85,6 +87,26 @@ export function buildRoutedProviderSet(
   sessionReasoning?: ReasoningEffort | null,
 ) {
   return buildActiveProviderSet(sessionModel, sessionReasoning);
+}
+
+/** Config LLM utilitaire : petit modèle du preset actif, sans override de session. */
+export function buildUtilityLlmConfig(): LlmConfigPayload | null {
+  const providerSet = buildActiveProviderSet();
+  if (providerSet) {
+    return toUtilityLlmConfigFromSet(providerSet);
+  }
+
+  const configs = buildActiveLlmConfigs();
+  if (!configs.chat) return null;
+
+  const legacy = activeChatProvider.value;
+  const utilityModel = legacy?.utilityModel?.trim();
+  const chat = { ...configs.chat };
+  if (utilityModel) {
+    chat.model = utilityModel;
+  }
+  delete chat.reasoning_effort;
+  return chat;
 }
 
 /** Effort de raisonnement effectif pour l'UI (set ou legacy + override session). */

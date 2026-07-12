@@ -96,7 +96,7 @@ export default configure(function (/* ctx */) {
 
             // if you want to use named tokens in your Vue I18n messages, such as 'Hello {name}',
             // you need to set `runtimeOnly: false`
-            // runtimeOnly: false,
+            runtimeOnly: false,
 
             // you need to set i18n resource including paths !
             include: resolve(__dirname, './src/i18n/**'),

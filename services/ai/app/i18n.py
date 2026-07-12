@@ -261,6 +261,12 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "obtenir un résumé de ces sessions si l'utilisateur fait "
                 "référence à un échange précédent ou si le contexte le justifie."
             ),
+            "space_name_context": (
+                "L'espace de travail actif s'appelle « {name} ». Quand tu désignes "
+                "l'espace par son nom, utilise celui-ci plutôt qu'un nom d'espace lu "
+                "dans l'historique de conversation. Si l'utilisateur indique travailler "
+                "dans un autre espace, fais confiance à l'utilisateur."
+            ),
             "sessions_no_folder": "Aucun dossier d'espace associé.",
             "sandbox_unavailable": (
                 "Sandbox indisponible : Docker n'est pas démarré. "
@@ -579,6 +585,12 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "This space has {count} other prior conversation(s). Use "
                 "recall_project_sessions for a summary if the user refers to "
                 "a previous exchange or context requires it."
+            ),
+            "space_name_context": (
+                'The active workspace is named "{name}". When you refer to the '
+                "space by name, use this one rather than a workspace name read from "
+                "the conversation history. If the user says they are now working in "
+                "a different space, trust the user."
             ),
             "sessions_no_folder": "No space folder associated.",
             "sandbox_unavailable": (

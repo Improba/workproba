@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MISTRAL_BUILTIN_SET, applySessionOverridesToSet, toChatLlmConfigFromSet } from '@utils/providerSets';
+import { MISTRAL_BUILTIN_SET, applySessionOverridesToSet, toChatLlmConfigFromSet, toUtilityLlmConfigFromSet } from '@utils/providerSets';
 import { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
 
 describe('llmRouting', () => {
@@ -29,5 +29,20 @@ describe('llmRouting', () => {
       'mistral-large-latest',
     );
     expect(merged.chat?.model).toBe('mistral-large-latest');
+  });
+
+  it('toUtilityLlmConfigFromSet ignore les overrides de session', () => {
+    const routed = applySessionOverridesToSet(
+      MISTRAL_BUILTIN_SET,
+      'mistral-large-latest',
+      'high',
+    );
+    const chat = toChatLlmConfigFromSet(routed);
+    expect(chat?.model).toBe('mistral-large-latest');
+    expect(chat?.reasoning_effort).toBe('high');
+
+    const utility = toUtilityLlmConfigFromSet(MISTRAL_BUILTIN_SET);
+    expect(utility?.model).toBe('mistral-small-latest');
+    expect(utility?.reasoning_effort).toBeUndefined();
   });
 });

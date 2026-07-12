@@ -1,5 +1,6 @@
 import type {
   AppSettings,
+  AppLocale,
   EnterprisePreset,
   LlmProviderEntry,
   LlmProviderName,
@@ -7,6 +8,8 @@ import type {
   LocalDocumentEntry,
   PluginInfo,
   PluginManifest,
+  PluginSource,
+  ProviderSet,
   WorkspaceInfo,
 } from './useDesktop.types';
 

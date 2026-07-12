@@ -160,6 +160,7 @@ class AgentTurnRequest(BaseModel):
     project_id: str
     project_path: str | None = None
     workspace_data_dir: str | None = None
+    workspace_title: str | None = None
     session_id: str
     # Identifiant de tour optionnel ; généré côté serveur si absent (event turn_start).
     turn_id: str | None = None
