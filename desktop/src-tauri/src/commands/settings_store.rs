@@ -5,6 +5,8 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
+use crate::commands::atomic_io::atomic_write;
+
 const SETTINGS_FILE: &str = "settings.json";
 const SETTINGS_VERSION: u32 = 1;
 
@@ -443,7 +445,7 @@ pub fn save_settings(app: &AppHandle, settings: &AppSettings) -> Result<(), Stri
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     let json = serde_json::to_string_pretty(settings).map_err(|error| error.to_string())?;
-    fs::write(path, json).map_err(|error| error.to_string())
+    atomic_write(&path, &json)
 }
 
 /// Validation légère d'une entrée avant persistance.

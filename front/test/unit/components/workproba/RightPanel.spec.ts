@@ -22,6 +22,19 @@ vi.mock('@composables/usePluginSlots', () => ({
 vi.mock('@composables/usePlugins', () => ({
   usePlugins: () => ({
     isProjetPluginActive: ref(true),
+    isPersonasPluginActive: ref(false),
+    getPluginDataDir: vi.fn().mockResolvedValue(null),
+  }),
+}));
+
+vi.mock('@composables/usePersonasActions', () => ({
+  usePersonasActions: () => ({
+    askOpinion: vi.fn(),
+    startMeeting: vi.fn(),
+    discuss: vi.fn(),
+    viewMeeting: vi.fn(),
+    relaunchMeeting: vi.fn(),
+    resumeDiscussion: vi.fn(),
   }),
 }));
 

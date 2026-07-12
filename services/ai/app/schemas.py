@@ -556,6 +556,7 @@ class WorkspaceIndexRequest(BaseModel):
     # Restreint l'indexation à une liste de chemins relatifs (re-index
     # incrémental déclenché par le watcher FS). None = passe complète.
     paths: list[str] | None = None
+    provider_set: ProviderSet | None = None
 
 
 class WorkspaceIndexReport(BaseModel):

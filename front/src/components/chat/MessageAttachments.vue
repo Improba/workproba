@@ -45,10 +45,8 @@ import { useI18n } from 'vue-i18n';
 import { useRoute } from 'vue-router';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import {
-  buildActiveProviderSet,
-  useAppSettings,
-} from '@composables/useAppSettings';
+import { useAppSettings } from '@composables/useAppSettings';
+import { useLlmSessionContext } from '@composables/useLlmSessionContext';
 import { useProject } from '@composables/useProject';
 import {
   applyAttachmentStatusEvent,
@@ -60,6 +58,7 @@ import {
   chatAttachmentRelativePath,
   reprocessAttachment,
 } from '@services/aiSidecar';
+import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
 
 const props = defineProps<{
   attachments: ChatAttachmentSnapshot[];
@@ -71,6 +70,7 @@ const { t, locale } = useI18n();
 const route = useRoute();
 const { activePath, activeDataDir } = useProject();
 const { sets, activeSet, setActiveSet } = useAppSettings();
+const { buildContextProviderSet } = useLlmSessionContext();
 
 const statuses = computed(() => props.attachmentStatuses ?? {});
 const rereadingId = ref<string | null>(null);
@@ -163,8 +163,9 @@ async function onRereadWithCurrent(att: ChatAttachmentSnapshot): Promise<void> {
     return;
   }
 
-  const providerSet = buildActiveProviderSet(null, null);
+  const providerSet = buildContextProviderSet();
   if (!providerSet || !setCanReadAttachments(providerSet, att.kind)) return;
+  if (!ensureProviderSetChatReady(providerSet)) return;
 
   rereadingId.value = att.id;
   try {

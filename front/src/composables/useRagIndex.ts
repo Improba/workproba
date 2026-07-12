@@ -3,7 +3,8 @@ import { useDebounceFn } from '@vueuse/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import { useProject } from '@composables/useProject';
-import { useAppSettings, buildActiveLlmConfigs, type LlmConfigPayload } from '@composables/useAppSettings';
+import { buildActiveProviderSet, useAppSettings } from '@composables/useAppSettings';
+import { ensureProviderSetEmbeddingsReady } from '@utils/providerSetNotify';
 import {
   indexWorkspace,
   type RagStatus,
@@ -38,14 +39,24 @@ function queuePath(path: string): void {
 async function runIndex(opts: {
   projectPath: string;
   workspaceDataDir: string | null;
-  embeddingConfig: LlmConfigPayload | null;
   paths?: string[] | null;
 }): Promise<void> {
+  const providerSet = buildActiveProviderSet(null, null);
+  if (!providerSet?.embeddings) {
+    status.value = 'disabled';
+    return;
+  }
+  if (!ensureProviderSetEmbeddingsReady(providerSet)) {
+    status.value = 'disabled';
+    error.value = 'api_key_missing';
+    return;
+  }
+
   try {
     const result = await indexWorkspace({
       projectPath: opts.projectPath,
       workspaceDataDir: opts.workspaceDataDir,
-      embeddingConfig: opts.embeddingConfig,
+      providerSet,
       paths: opts.paths ?? null,
     });
     report.value = result;
@@ -64,8 +75,8 @@ async function triggerFull(): Promise<void> {
   const projectPath = activePath.value;
   if (!projectPath) return;
 
-  const embedding = buildActiveLlmConfigs().embedding;
-  if (!embedding) {
+  const providerSet = buildActiveProviderSet(null, null);
+  if (!providerSet?.embeddings) {
     status.value = 'disabled';
     return;
   }
@@ -81,7 +92,6 @@ async function triggerFull(): Promise<void> {
   await runIndex({
     projectPath,
     workspaceDataDir: activeDataDir.value,
-    embeddingConfig: embedding,
   });
   currentJob = null;
   drainPending();
@@ -92,18 +102,12 @@ async function triggerPaths(paths: string[]): Promise<void> {
   const projectPath = activePath.value;
   if (!projectPath || paths.length === 0) return;
 
-  const embedding = buildActiveLlmConfigs().embedding;
-  if (!embedding) {
+  const providerSet = buildActiveProviderSet(null, null);
+  if (!providerSet?.embeddings) {
     status.value = 'disabled';
     return;
   }
 
-  // Une passe full en cours couvre déjà ces chemins a priori : on ne lance
-  // pas de re-index ciblé en parallèle. Mais la passe full prend un snapshot
-  // des candidats au démarrage de sa collecte ; un fichier créé pendant la
-  // passe ne sera PAS couvert. On replanifie donc les chemins pour qu'ils
-  // soient traités par `drainPending` à la fin de la passe full, au lieu de
-  // les perdre (flushPaths a déjà vidé pendingPaths avant cet appel).
   if (currentJob === 'full') {
     for (const p of paths) pendingPaths.add(p);
     return;
@@ -118,7 +122,6 @@ async function triggerPaths(paths: string[]): Promise<void> {
   await runIndex({
     projectPath,
     workspaceDataDir: activeDataDir.value,
-    embeddingConfig: embedding,
     paths,
   });
   currentJob = null;
@@ -143,29 +146,29 @@ function ensureStarted(): void {
   started = true;
 
   const { activeWorkspaceId } = useProject();
-  const { activeEmbeddingProvider } = useAppSettings();
+  const { activeSet } = useAppSettings();
 
-  // (Re)indexe quand le workspace actif change ou qu'un provider d'embedding
-  // devient disponible / change.
-  const triggerKey = computed(
-    () => `${activeWorkspaceId.value ?? ''}::${activeEmbeddingProvider.value?.id ?? ''}`,
-  );
+  const triggerKey = computed(() => {
+    const ws = activeWorkspaceId.value ?? '';
+    const set = activeSet.value;
+    if (!set?.embeddings) return `${ws}::none`;
+    const embed = set.embeddings;
+    return `${ws}::${set.id}::${embed.provider}::${embed.model}`;
+  });
+
   watch(
     triggerKey,
     (next, prev) => {
-      if (!next) {
+      if (!next || next.endsWith('::none')) {
         status.value = 'idle';
         return;
       }
-      // Évite le double déclenchement quand workspace et provider se résolvent
-      // quasi simultanément : on ne déclenche que si la clé a réellement changé.
       if (next === prev) return;
       void triggerFull();
     },
     { immediate: true },
   );
 
-  // Re-index ciblé sur les évènements FS (create / modify de fichiers).
   void (async () => {
     try {
       unlistenFs = await listen<{ kind: string; path: string; isDir: boolean }>(

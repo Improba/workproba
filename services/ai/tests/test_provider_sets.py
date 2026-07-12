@@ -12,6 +12,7 @@ from app.llm.provider_sets import (
     MISTRAL_BUILTIN_SET,
     OLLAMA_BUILTIN_SET,
     BUILTIN_PROVIDER_SETS,
+    MissingApiKeyError,
     ocr_is_supported,
     resolve_chat_from_set,
     resolve_embeddings_from_set,
@@ -65,12 +66,27 @@ def test_resolve_chat_from_set_maps_reasoning() -> None:
 
 
 def test_resolve_chat_auto_reasoning_is_none() -> None:
-    cfg = resolve_chat_from_set(MISTRAL_BUILTIN_SET)
+    base = MISTRAL_BUILTIN_SET.model_copy(deep=True)
+    base.chat = base.chat.model_copy(update={"api_key": SecretStr("k")})
+    cfg = resolve_chat_from_set(base)
     assert cfg.reasoning_effort is None
 
 
+def test_resolve_chat_raises_when_cloud_key_missing() -> None:
+    with pytest.raises(MissingApiKeyError):
+        resolve_chat_from_set(MISTRAL_BUILTIN_SET)
+
+
+def test_resolve_embeddings_raises_when_cloud_key_missing() -> None:
+    with pytest.raises(MissingApiKeyError):
+        resolve_embeddings_from_set(MISTRAL_BUILTIN_SET)
+
+
 def test_resolve_embeddings_from_set() -> None:
-    cfg = resolve_embeddings_from_set(MISTRAL_BUILTIN_SET)
+    base = MISTRAL_BUILTIN_SET.model_copy(deep=True)
+    base.chat = base.chat.model_copy(update={"api_key": SecretStr("k")})
+    base.embeddings = base.embeddings.model_copy(update={"api_key": SecretStr("k")}) if base.embeddings else None
+    cfg = resolve_embeddings_from_set(base)
     assert cfg is not None
     assert cfg.model == "mistral-embed"
     assert cfg.provider == "mistral"

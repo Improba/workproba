@@ -104,10 +104,17 @@ l'app : écran **« Modèles IA »** (icône réglages en pied de sidebar, route
 - **Plusieurs providers** configurables ; un provider actif pour le **chat**, un
   pour les **embeddings RAG** (la clé est partagée entre chat et embeddings d'une
   même entrée). Bouton **Tester** qui valide la clé via `GET /models` (coût nul).
-- **Transit** : à chaque tour, le front envoie la config active dans
-  `llm_provider_config` (chat) et `embedding_config` (RAG) du payload
-  `/agent/turn`. Le sidecar n'utilise les variables d'environnement `LLM_DEFAULT_*`
-  / `LLM_EMBEDDING_*` que comme **repli de dev** si l'app n'envoie rien.
+- **Transit** : à chaque tour agent, le front envoie le **`provider_set`** actif
+  (avec overrides de session : modèle et raisonnement par conversation) dans le
+  payload `/agent/turn`. En l'absence de set, repli sur `llm_provider_config` +
+  `embedding_config` (legacy). Le sidecar priorise toujours `provider_set` côté
+  `resolve_llm_config`. Les variables d'environnement `LLM_DEFAULT_*` /
+  `LLM_EMBEDDING_*` ne servent qu'en **repli de dev**.
+- **Clé API** : pour les moteurs cloud (ex. Mistral), la clé est saisie dans
+  Réglages → Modèles IA et stockée dans `set.chat.apiKey`. Si elle manque, le
+  front bloque l'envoi et le sidecar renvoie `api_key_missing`. Le champ
+  `api_key_ref` des sets intégrés est un marqueur interne ; seule `api_key`
+  compte à l'exécution.
 - La clé peut être changée à tout moment depuis l'app, sans toucher au `.env`.
 
 ## Modèle et raisonnement par conversation
@@ -127,10 +134,11 @@ les réglages.
   `reasoningEffort`). Au chargement d'une session, le modèle sauvegardé est
   restauré s'il reste applicable au provider actif ; sinon il retombe sur le modèle
   par défaut du provider (logique `isModelApplicable` + watch du provider actif).
-- **Transit du tour** : `mergeLlmConfigsWithSessionReasoning` (dans
-  `useChatStream`) substitue le modèle de session à `llm_provider_config.model`
-  puis **clampe** l'effort de raisonnement contre ce modèle, pour éviter une 400
-  (ex. `mistral-small-latest` n'accepte que `none`/`high`).
+- **Transit du tour** : `buildActiveProviderSet` applique les overrides de
+  session au set actif ; `useLlmSessionContext` propage ces overrides aux
+  personas et aux pièces jointes tant que la conversation est active.
+  `mergeLlmConfigsWithSessionReasoning` (`utils/llmRouting.ts`) ne sert qu'au
+  repli legacy sans set.
 - **Étiquettes FR** : `Aucun` · `Faible` · `Moyen` · `Élevé`.
 
 ## UX du chat (compositeur & raisonnement)

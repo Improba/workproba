@@ -152,6 +152,7 @@ import { useFileTree, type FileNode } from '@composables/useFileTree';
 import { useRagIndex } from '@composables/useRagIndex';
 import { ragStatusLabel, type RagStatus } from '@services/aiSidecar';
 import { openLocalFile, revealInOs } from '@composables/useDesktop';
+import { t as tCount } from '@utils/i18nT';
 
 const props = defineProps<{
   activePath: string | null;
@@ -220,23 +221,23 @@ function onShowRagDetail(): void {
   const lines: string[] = [];
 
   if (added > 0) {
-    lines.push(t('shell.memoryFilesAdded', added, { count: added }));
+    lines.push(tCount('shell.memoryFilesAdded', added, { count: added }));
   }
   if (upToDate > 0) {
     lines.push(
       added > 0
-        ? t('shell.memoryKnownUnchanged', upToDate, { count: upToDate })
-        : t('shell.memoryFilesUpToDate', upToDate, { count: upToDate }),
+        ? tCount('shell.memoryKnownUnchanged', upToDate, { count: upToDate })
+        : tCount('shell.memoryFilesUpToDate', upToDate, { count: upToDate }),
     );
   }
   if (added === 0 && upToDate === 0) {
     lines.push(t('shell.memoryNoDocuments'));
   }
   if (r.skipped > 0) {
-    lines.push(t('shell.memoryFilesSkipped', r.skipped, { count: r.skipped }));
+    lines.push(tCount('shell.memoryFilesSkipped', r.skipped, { count: r.skipped }));
   }
   if (r.errors > 0) {
-    lines.push(t('shell.memoryFilesError', r.errors, { count: r.errors }));
+    lines.push(tCount('shell.memoryFilesError', r.errors, { count: r.errors }));
   }
   if (r.truncated) {
     lines.push(t('shell.memoryTruncated'));

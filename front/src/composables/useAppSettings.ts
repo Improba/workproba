@@ -1,17 +1,18 @@
 import { computed, ref } from 'vue';
 import {
   getAppSettings,
+  isDesktopApp,
   saveAppSettings,
   type AppSettings,
   type AppLocale,
   type LlmProviderEntry,
   type ProviderSet,
 } from '@composables/useDesktop';
-import type { DensityMode, SettingsMode, ToolCallViewMode } from '@composables/useDesktop.types';
+import type { DensityMode, LlmProviderName, SettingsMode, ToolCallViewMode } from '@composables/useDesktop.types';
 import type { ReasoningEffort } from '#types';
 import { getAiSidecarUrl, getDesktopSecret } from '@services/aiSidecar';
 import { isLocalLlmProvider } from '@utils/isLocalLlmProvider';
-import { supportsReasoning } from '@utils/reasoningSupport';
+import { supportsReasoning, defaultReasoningEffort } from '@utils/reasoningSupport';
 import { normalizeLocale, resolveInitialLocale, setLang } from '@boot/i18n';
 import { t } from '@utils/i18nT';
 import {
@@ -144,6 +145,48 @@ const isLocalChatProvider = computed(() => {
   return isLocalLlmProvider(activeChatProvider.value);
 });
 
+export interface ActiveChatRouting {
+  provider: LlmProviderName;
+  model: string;
+  label: string;
+  defaultReasoning: ReasoningEffort;
+}
+
+function reasoningFromSetChat(
+  reasoning: import('@composables/useDesktop.types').ProviderSetChatReasoning | undefined,
+  provider: LlmProviderName,
+  model: string,
+): ReasoningEffort {
+  if (!reasoning || reasoning === 'auto') {
+    return defaultReasoningEffort(provider, model);
+  }
+  if (reasoning === 'none') return 'none';
+  return reasoning;
+}
+
+/** Provider/modèle chat effectifs (set actif ou legacy). */
+const activeChatRouting = computed<ActiveChatRouting | null>(() => {
+  const set = activeSet.value;
+  if (set) {
+    const chat = set.chat;
+    return {
+      provider: chat.provider,
+      model: chat.model,
+      label: set.name,
+      defaultReasoning: reasoningFromSetChat(chat.reasoning, chat.provider, chat.model),
+    };
+  }
+  const legacy = activeChatProvider.value;
+  if (!legacy) return null;
+  return {
+    provider: legacy.provider,
+    model: legacy.model,
+    label: legacy.label,
+    defaultReasoning:
+      legacy.reasoningEffort ?? defaultReasoningEffort(legacy.provider, legacy.model),
+  };
+});
+
 export function toChatLlmConfig(entry: LlmProviderEntry | null): LlmConfigPayload | null {
   if (!entry) return null;
   const payload: LlmConfigPayload = {
@@ -163,20 +206,6 @@ export function toChatLlmConfig(entry: LlmProviderEntry | null): LlmConfigPayloa
     payload.reasoning_effort = entry.reasoningEffort;
   }
   return payload;
-}
-
-export function toUtilityLlmConfig(entry: LlmProviderEntry | null): LlmConfigPayload | null {
-  if (!entry) return null;
-  const utilityModel = entry.utilityModel?.trim();
-  return {
-    provider: entry.provider,
-    model: utilityModel || entry.model,
-    base_url: entry.baseUrl ?? null,
-    api_key: entry.apiKey ?? null,
-    temperature: entry.temperature ?? null,
-    max_tokens: entry.maxTokens ?? null,
-    extra_headers: entry.extraHeaders ?? {},
-  };
 }
 
 export function toEmbeddingLlmConfig(
@@ -276,6 +305,7 @@ export interface UseAppSettingsReturn {
   providers: typeof providers;
   sets: typeof sets;
   activeSet: typeof activeSet;
+  activeChatRouting: typeof activeChatRouting;
   activeChatProvider: typeof activeChatProvider;
   activeEmbeddingProvider: typeof activeEmbeddingProvider;
   toolCallView: typeof toolCallView;
@@ -369,7 +399,12 @@ export function useAppSettings(): UseAppSettingsReturn {
   }
 
   async function setDensity(mode: DensityMode): Promise<AppSettings> {
-    return save({ ...settings.value, density: mode });
+    const next = { ...settings.value, density: mode };
+    settings.value = next;
+    if (!isDesktopApp()) {
+      return next;
+    }
+    return save(next);
   }
 
   async function setLocale(nextLocale: AppLocale): Promise<AppSettings> {
@@ -377,7 +412,12 @@ export function useAppSettings(): UseAppSettingsReturn {
       return settings.value;
     }
     setLang(nextLocale);
-    return save({ ...settings.value, locale: nextLocale });
+    const next = { ...settings.value, locale: nextLocale };
+    settings.value = next;
+    if (!isDesktopApp()) {
+      return next;
+    }
+    return save(next);
   }
 
   async function setOnboardingDone(done: boolean): Promise<void> {
@@ -391,6 +431,7 @@ export function useAppSettings(): UseAppSettingsReturn {
     providers,
     sets,
     activeSet,
+    activeChatRouting,
     activeChatProvider,
     activeEmbeddingProvider,
     toolCallView,

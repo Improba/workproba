@@ -1,3 +1,4 @@
+pub mod atomic_io;
 pub mod audit;
 pub mod fs_watch;
 pub mod plugins;

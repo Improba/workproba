@@ -28,6 +28,7 @@ from app.local_client import LocalProjectClient
 from app.llm.config import build_model, build_model_settings, resolve_llm_config
 from app.llm.provider import resolve_litellm_model
 from app.llm.provider_sets import (
+    MissingApiKeyError,
     ocr_is_supported,
     resolve_chat_from_set,
     resolve_embeddings_from_set,
@@ -281,6 +282,11 @@ async def util_title(request: Request, payload: UtilityTitleRequest) -> UtilityT
     require_internal_secret(request, settings)
     try:
         return await generate_title(payload, settings)
+    except MissingApiKeyError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "api_key_missing", "message": str(exc)},
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -294,6 +300,11 @@ async def util_summarize(
     require_internal_secret(request, settings)
     try:
         return await summarize_conversation(payload, settings)
+    except MissingApiKeyError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "api_key_missing", "message": str(exc)},
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -344,6 +355,19 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                 "message": t(payload.locale, "main.turn_in_progress"),
             },
         )
+
+    try:
+        resolve_llm_config(
+            payload.llm_provider_config,
+            settings,
+            provider_set=payload.provider_set,
+        )
+    except MissingApiKeyError as exc:
+        await turn_manager.release(payload.session_id, turn_id)
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "api_key_missing", "message": str(exc)},
+        ) from exc
 
     project_root = resolve_project_root(settings, payload)
     workspace_data_dir = resolve_workspace_data_dir(payload)
@@ -464,13 +488,20 @@ async def agent_index_workspace(request: Request, payload: WorkspaceIndexRequest
     settings: Settings = request.app.state.settings
     project_root = _resolve_root(settings, payload.project_path, payload.project_id)
     workspace_data_dir = resolve_workspace_data_dir(payload)
-    rag_store = build_rag_store(
-        settings,
-        workspace_data_dir,
-        project_root,
-        payload.embedding_config,
-        provider_set=getattr(payload, "provider_set", None),
-    )
+    try:
+        rag_store = build_rag_store(
+            settings,
+            workspace_data_dir,
+            project_root,
+            payload.embedding_config,
+            provider_set=payload.provider_set,
+        )
+    except MissingApiKeyError:
+        return WorkspaceIndexReport(
+            project_root=project_root.as_posix(),
+            enabled=False,
+            metadata={"reason": "api_key_missing"},
+        )
 
     if rag_store is None:
         return WorkspaceIndexReport(
@@ -1209,13 +1240,18 @@ async def personas_delete_set(
 
 def _personas_sse_stream(
     generator: Any,
+    rag_store: Any | None = None,
 ) -> Any:
     async def event_stream() -> AsyncIterator[dict[str, str]]:
-        async for event in generator:
-            yield {
-                "event": str(event.get("type", "message")),
-                "data": json.dumps(event, ensure_ascii=False),
-            }
+        try:
+            async for event in generator:
+                yield {
+                    "event": str(event.get("type", "message")),
+                    "data": json.dumps(event, ensure_ascii=False),
+                }
+        finally:
+            if rag_store is not None:
+                rag_store.close()
 
     return event_stream
 
@@ -1246,7 +1282,7 @@ async def personas_ask(request: Request, payload: PersonasAskRequest) -> EventSo
         rag_store=rag_store,
     )
     return EventSourceResponse(
-        _personas_sse_stream(stream)(),
+        _personas_sse_stream(stream, rag_store)(),
         media_type="text/event-stream",
     )
 
@@ -1282,7 +1318,7 @@ async def personas_meeting(
         meeting_id=payload.meeting_id,
     )
     return EventSourceResponse(
-        _personas_sse_stream(stream)(),
+        _personas_sse_stream(stream, rag_store)(),
         media_type="text/event-stream",
     )
 
@@ -1318,7 +1354,7 @@ async def personas_discuss(
         include_memory=payload.include_memory,
     )
     return EventSourceResponse(
-        _personas_sse_stream(stream)(),
+        _personas_sse_stream(stream, rag_store)(),
         media_type="text/event-stream",
     )
 

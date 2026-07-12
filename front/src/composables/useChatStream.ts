@@ -23,6 +23,7 @@ import {
   getAiSidecarUrl,
   getDesktopSecret,
   approveAgentPlan,
+  SidecarHttpError,
   reprocessAttachment as callReprocessAttachment,
   type UiMode,
 } from '@services/aiSidecar';
@@ -39,10 +40,8 @@ import {
   usePlugins,
 } from '@composables/usePlugins';
 import type { LlmProviderName } from '@composables/useDesktop.types';
-import {
-  clampReasoningEffort,
-  supportsReasoning,
-} from '@utils/reasoningSupport';
+import { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
+import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
 import { contextWindowFor } from '@utils/modelCatalog';
 import { t } from '@utils/i18nT';
 
@@ -339,12 +338,36 @@ function localizeAgentError(code: string, fallback: string): string {
       return t('errors.agentTurnInProgress');
     case 'input_too_large':
       return t('errors.agentInputTooLarge');
+    case 'api_key_missing':
+      return t('errors.apiKeyMissing');
     case 'internal_error':
     case 'parse_error':
       return t('errors.agentInternalError');
     default:
       return fallback || t('errors.agentGeneric');
   }
+}
+
+const NON_RETRYABLE_AGENT_CODES = new Set(['api_key_missing', 'input_too_large', 'no_project']);
+
+function chatErrorFromSidecarHttp(err: SidecarHttpError): ChatError {
+  const code = err.code ? normalizeChatErrorCode(err.code) : 'sidecar_unreachable';
+  if (code !== 'sidecar_unreachable' && code !== 'unknown') {
+    return {
+      code,
+      message: localizeAgentError(err.code!, err.message),
+      retryable: !NON_RETRYABLE_AGENT_CODES.has(err.code!),
+    };
+  }
+  return {
+    code: 'sidecar_unreachable',
+    message: t('errors.sidecarUnreachable', {
+      detail: err.message
+        ? t('errors.sidecarUnreachableDetail', { detail: err.message })
+        : '',
+    }),
+    retryable: true,
+  };
 }
 
 function extractFilePathFromResult(result: unknown): string | undefined {
@@ -640,56 +663,7 @@ export interface UseChatStreamOptions {
   ) => void;
 }
 
-export function mergeLlmConfigsWithSessionReasoning(
-  configs: ReturnType<typeof buildActiveLlmConfigs> | null | undefined,
-  sessionReasoningEffort?: ReasoningEffort | null,
-  sessionModel?: string | null,
-): { chat: LlmConfigPayload | null; embedding: LlmConfigPayload | null } {
-  if (!configs) {
-    return { chat: null, embedding: null };
-  }
-  if (!configs.chat) return configs;
-
-  const chat: LlmConfigPayload = { ...configs.chat };
-  // Override du modèle par conversation : on substitue avant d'évaluer le
-  // raisonnement, car les niveaux supportés dépendent du modèle.
-  const sessionModelTrimmed = sessionModel?.trim();
-  if (sessionModelTrimmed) {
-    chat.model = sessionModelTrimmed;
-  }
-
-  const provider = chat.provider as LlmProviderName;
-  if (!supportsReasoning(provider, chat.model)) {
-    delete chat.reasoning_effort;
-    return { ...configs, chat };
-  }
-
-  // L'override de session prime sur la config globale ; à défaut on repart
-  // de l'effort global (qu'on re-clampe contre le modèle de session au besoin).
-  const effectiveEffort =
-    sessionReasoningEffort ?? chat.reasoning_effort ?? null;
-  if (effectiveEffort != null) {
-    if (effectiveEffort === 'none') {
-      delete chat.reasoning_effort;
-    } else {
-      // L'override peut venir d'un modèle précédent qui acceptait `low`/`medium` ;
-      // on clampe à ce que le modèle courant supporte pour éviter une 400
-      // (ex. mistral-small-latest n'accepte que none/high).
-      const clamped = clampReasoningEffort(
-        provider,
-        chat.model,
-        effectiveEffort,
-      );
-      if (clamped === 'none') {
-        delete chat.reasoning_effort;
-      } else {
-        chat.reasoning_effort = clamped;
-      }
-    }
-  }
-
-  return { ...configs, chat };
-}
+export { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
 
 export interface AttachmentStatusEntry {
   status_key: string;
@@ -932,6 +906,31 @@ export function useChatStream(
       return;
     }
 
+    const providerSet = buildActiveProviderSet(
+      options.sessionModel?.value ?? null,
+      options.reasoningEffort?.value ?? null,
+    );
+    if (providerSet) {
+      if (!ensureProviderSetChatReady(providerSet)) {
+        error.value = {
+          code: 'api_key_missing',
+          message: t('errors.apiKeyMissing'),
+          retryable: false,
+        };
+        return;
+      }
+    } else {
+      const legacyChat = buildActiveLlmConfigs().chat;
+      if (!legacyChat) {
+        error.value = {
+          code: 'no_model',
+          message: t('chat.page.noModelConfigured'),
+          retryable: false,
+        };
+        return;
+      }
+    }
+
     error.value = null;
     streaming.value = true;
     lastUserText = trimmed;
@@ -1064,7 +1063,7 @@ export function useChatStream(
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw await SidecarHttpError.fromResponse(response);
       }
 
       await consumeSseStream(
@@ -1099,6 +1098,16 @@ export function useChatStream(
       } else if (name === 'AbortError') {
         // Abort utilisateur (stop / navigation) : silencieux, le finally normalise.
         // On conserve le contenu partiel déjà streamé, sans marquer d'erreur.
+      } else if (err instanceof SidecarHttpError) {
+        const chatError = chatErrorFromSidecarHttp(err);
+        error.value = chatError;
+        const assistant = messages.value.find(
+          (m) => m.id === assistantMessage.id,
+        );
+        if (assistant) {
+          assistant.streaming = false;
+          assistant.error = chatError;
+        }
       } else {
         const detail = err instanceof Error ? err.message : '';
         const chatError: ChatError = {
@@ -1177,17 +1186,21 @@ export function useChatStream(
         }),
       });
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        throw await SidecarHttpError.fromResponse(response);
       }
     } catch (err) {
-      const detail = err instanceof Error ? err.message : '';
-      error.value = {
-        code: 'confirm_failed',
-        message: t('errors.confirmFailed', {
-          detail: detail ? t('errors.confirmFailedDetail', { detail }) : '',
-        }),
-        retryable: true,
-      };
+      if (err instanceof SidecarHttpError && err.code) {
+        error.value = chatErrorFromSidecarHttp(err);
+      } else {
+        const detail = err instanceof Error ? err.message : '';
+        error.value = {
+          code: 'confirm_failed',
+          message: t('errors.confirmFailed', {
+            detail: detail ? t('errors.confirmFailedDetail', { detail }) : '',
+          }),
+          retryable: true,
+        };
+      }
     } finally {
       confirming.value = false;
     }
@@ -1211,6 +1224,9 @@ export function useChatStream(
       options.sessionModel?.value ?? null,
       options.reasoningEffort?.value ?? null,
     );
+    if (providerSet && !ensureProviderSetChatReady(providerSet)) {
+      throw new Error(t('errors.apiKeyMissing'));
+    }
 
     const result = await callReprocessAttachment({
       workspaceDataDir,

@@ -6,6 +6,7 @@ use tauri::{AppHandle, Manager};
 
 use super::settings_store::{load_settings, AppSettings, SettingsMode};
 use super::audit::log_audit_event;
+use crate::commands::atomic_io::atomic_write;
 
 const PLUGINS_DIR: &str = "plugins";
 const REGISTRY_FILE: &str = "registry.json";
@@ -336,7 +337,7 @@ fn save_registry(app_data: &Path, registry: &PluginRegistry) -> Result<(), Strin
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }
     let json = serde_json::to_string_pretty(registry).map_err(|e| e.to_string())?;
-    fs::write(path, json).map_err(|e| e.to_string())
+    atomic_write(&path, &json)
 }
 
 fn registry_entry<'a>(

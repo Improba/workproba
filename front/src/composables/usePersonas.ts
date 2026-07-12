@@ -21,6 +21,8 @@ import {
   type PersonasMeetingTranscriptTurn,
 } from '@services/aiSidecar';
 import { buildActiveProviderSet, useAppSettings } from '@composables/useAppSettings';
+import { useLlmSessionContext } from '@composables/useLlmSessionContext';
+import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
 import { providerSetToSidecar } from '@utils/providerSets';
 import { t } from '@utils/i18nT';
 import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
@@ -453,6 +455,7 @@ async function syncPersonasHistory(pluginDataDir: string): Promise<void> {
 export function usePersonas(): UsePersonasReturn {
   const { locale, settingsLocked, permissionsNetwork } = useAppSettings();
   const { isPersonasPluginActive } = usePlugins();
+  const { buildContextProviderSet } = useLlmSessionContext();
 
   async function refresh(pluginDataDir: string): Promise<void> {
     if (!isPersonasPluginActive.value) {
@@ -506,7 +509,10 @@ export function usePersonas(): UsePersonasReturn {
       streaming: true,
     };
 
-    const providerSet = buildActiveProviderSet(null, null);
+    const providerSet = buildContextProviderSet();
+    if (!ensureProviderSetChatReady(providerSet)) {
+      throw new Error('api_key_missing');
+    }
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
 
     const controller = new AbortController();
@@ -582,7 +588,13 @@ export function usePersonas(): UsePersonasReturn {
     };
     onUpdate?.(state);
 
-    const providerSet = buildActiveProviderSet(null, null);
+    const providerSet = buildContextProviderSet();
+    if (!ensureProviderSetChatReady(providerSet)) {
+      state.error = 'api_key_missing';
+      state.streaming = false;
+      onUpdate?.(state);
+      return state;
+    }
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
     const controller = new AbortController();
 
@@ -683,7 +695,10 @@ export function usePersonas(): UsePersonasReturn {
     messages.push(userMsg);
     onUpdate?.([...messages]);
 
-    const providerSet = buildActiveProviderSet(null, null);
+    const providerSet = buildContextProviderSet();
+    if (!ensureProviderSetChatReady(providerSet)) {
+      throw new Error('api_key_missing');
+    }
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
     const controller = new AbortController();
     let newDiscussionId = discussionId;
@@ -756,7 +771,10 @@ export function usePersonas(): UsePersonasReturn {
     mode: PersonasEstimateMode,
     rounds?: number,
   ): Promise<PersonasCostEstimate | null> {
-    const providerSet = buildActiveProviderSet(null, null);
+    const providerSet = buildContextProviderSet();
+    if (!ensureProviderSetChatReady(providerSet)) {
+      return null;
+    }
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
     return estimatePersonasCost({
       pluginDataDir,

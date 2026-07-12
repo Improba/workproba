@@ -497,7 +497,8 @@ watch(sessionVersion, () => {
 onMounted(async () => {
   await initFromStoredPath();
   await refreshWorkspaces();
-  if (!activeWorkspaceId.value) {
+  // Sans espace ouvert, seule la page chat est inaccessible ; réglages et accueil restent valides.
+  if (!activeWorkspaceId.value && route.name === 'chat_session') {
     void router.push({ name: HOME_ROUTE });
   }
 });

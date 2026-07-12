@@ -14,6 +14,7 @@ const desktopMocks = vi.hoisted(() => ({
 vi.mock('@composables/useDesktop', () => ({
   getAppSettings: desktopMocks.getAppSettings,
   saveAppSettings: desktopMocks.saveAppSettings,
+  isDesktopApp: () => true,
 }));
 
 vi.mock('@composables/useProject', () => ({

@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use uuid::Uuid;
 
+use crate::commands::atomic_io::atomic_write;
+
 pub const WORKPROBA_DIR_NAME: &str = ".workproba";
 const REGISTRY_FILE: &str = "registry.json";
 const WORKSPACES_DIR: &str = "workspaces";
@@ -158,11 +160,8 @@ fn load_registry(app: &AppHandle) -> Result<Registry, String> {
 
 fn save_registry(app: &AppHandle, registry: &Registry) -> Result<(), String> {
     let path = registry_path(app)?;
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
     let json = serde_json::to_string_pretty(registry).map_err(|error| error.to_string())?;
-    fs::write(path, json).map_err(|error| error.to_string())
+    atomic_write(&path, &json)
 }
 
 fn ensure_workspace_layout(app: &AppHandle, workspace_id: &str) -> Result<PathBuf, String> {
@@ -181,7 +180,7 @@ fn write_manifest(data_dir: &Path, entry: &RegistryEntry) -> Result<(), String> 
         last_opened_at: entry.last_opened_at.clone(),
     };
     let json = serde_json::to_string_pretty(&manifest).map_err(|error| error.to_string())?;
-    fs::write(data_dir.join(MANIFEST_FILE), json).map_err(|error| error.to_string())
+    atomic_write(&data_dir.join(MANIFEST_FILE), &json)
 }
 
 fn entry_to_info(app: &AppHandle, entry: &RegistryEntry) -> Result<WorkspaceInfo, String> {
@@ -346,7 +345,7 @@ pub fn save_conversation(app: &AppHandle, session: ConversationSession) -> Resul
     let data_dir = ensure_workspace_layout(app, &session.workspace_id)?;
     let path = conversation_path(&data_dir, &session.id);
     let json = serde_json::to_string_pretty(&session).map_err(|error| error.to_string())?;
-    fs::write(path, json).map_err(|error| error.to_string())
+    atomic_write(&path, &json)
 }
 
 pub fn delete_conversation(

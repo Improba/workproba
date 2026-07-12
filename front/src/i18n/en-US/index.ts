@@ -491,6 +491,9 @@ export default {
     agentInputTooLarge: 'The message is too large for the available context.',
     agentInternalError: 'An internal error occurred during generation.',
     agentGeneric: 'An error occurred during generation.',
+    apiKeyMissing:
+      'API key missing for this engine. Open Settings → AI Models and enter your key.',
+    apiKeyMissingAction: 'Settings',
   },
   toolCalls: {
     readDocuments: 'I read documents',

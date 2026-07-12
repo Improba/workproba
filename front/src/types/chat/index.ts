@@ -48,6 +48,8 @@ export type ChatErrorCode =
   | 'unexpected_model_behavior'
   | 'turn_in_progress'
   | 'input_too_large'
+  | 'api_key_missing'
+  | 'no_model'
   | 'parse_error'
   | 'unknown';
 
@@ -66,6 +68,8 @@ const KNOWN_CHAT_ERROR_CODES = new Set<string>([
   'unexpected_model_behavior',
   'turn_in_progress',
   'input_too_large',
+  'api_key_missing',
+  'no_model',
   'parse_error',
   'unknown',
 ]);

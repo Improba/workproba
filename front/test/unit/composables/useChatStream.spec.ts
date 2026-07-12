@@ -3,16 +3,20 @@ import { mount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mocks des dépendances réseau/config avant l'import du composable.
-vi.mock('@services/aiSidecar', () => ({
-  getAiSidecarUrl: () => 'http://127.0.0.1:8765',
-  getDesktopSecret: () => 'desktop-dev-secret',
-  buildAgentTurnPayload: vi.fn(() => ({ message: 'fake' })),
-  buildSidecarSecurityContext: vi.fn(() => ({
-    settingsLocked: false,
-    permissionsNetwork: true,
-    locale: 'fr',
-  })),
-}));
+vi.mock('@services/aiSidecar', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@services/aiSidecar')>();
+  return {
+    ...actual,
+    getAiSidecarUrl: () => 'http://127.0.0.1:8765',
+    getDesktopSecret: () => 'desktop-dev-secret',
+    buildAgentTurnPayload: vi.fn(() => ({ message: 'fake' })),
+    buildSidecarSecurityContext: vi.fn(() => ({
+      settingsLocked: false,
+      permissionsNetwork: true,
+      locale: 'fr',
+    })),
+  };
+});
 vi.mock('@composables/usePlugins', () => ({
   PROJET_PLUGIN_ID: 'workproba.projet',
   PERSONAS_PLUGIN_ID: 'workproba.personas',
@@ -23,7 +27,10 @@ vi.mock('@composables/usePlugins', () => ({
   }),
 }));
 vi.mock('@composables/useAppSettings', () => ({
-  buildActiveLlmConfigs: () => ({ chat: null, embedding: null }),
+  buildActiveLlmConfigs: () => ({
+    chat: { provider: 'ollama', model: 'llama3', base_url: null, api_key: null },
+    embedding: null,
+  }),
   buildActiveProviderSet: () => null,
   useAppSettings: () => ({
     locale: ref('fr'),
@@ -54,6 +61,19 @@ function sseResponse(
     status: init.status ?? 200,
     body,
     headers: new Headers(),
+    text: async () => '',
+  } as unknown as Response;
+}
+
+function httpErrorResponse(
+  status: number,
+  body: string,
+): Response {
+  return {
+    ok: false,
+    status,
+    headers: new Headers(),
+    text: async () => body,
   } as unknown as Response;
 }
 
@@ -311,13 +331,33 @@ describe('useChatStream — feedbacks', () => {
 
   it('classifie un HTTP non-2xx en sidecar_unreachable', async () => {
     (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      sseResponse([], { ok: false, status: 503 }),
+      httpErrorResponse(503, ''),
     );
 
     const { api, unmount } = mountStream();
     await api.send('hi');
 
     expect(api.error.value?.code).toBe('sidecar_unreachable');
+    unmount();
+  });
+
+  it('mappe HTTP 400 api_key_missing en message i18n explicite', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      httpErrorResponse(
+        400,
+        JSON.stringify({
+          detail: { code: 'api_key_missing', message: 'No API key for openai' },
+        }),
+      ),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('hi');
+
+    expect(api.error.value?.code).toBe('api_key_missing');
+    expect(api.error.value?.message).toContain('Clé API manquante');
+    expect(api.error.value?.retryable).toBe(false);
+    expect(lastAssistant(api.messages.value)?.error?.code).toBe('api_key_missing');
     unmount();
   });
 

@@ -235,6 +235,7 @@ export interface IndexWorkspaceOptions {
   projectPath: string;
   workspaceDataDir?: string | null;
   embeddingConfig?: LlmConfigPayload | null;
+  providerSet?: import('@composables/useDesktop.types').ProviderSet | null;
   maxFiles?: number | null;
   /** Restreint l'indexation à ces chemins relatifs (re-index incrémental). */
   paths?: string[] | null;
@@ -252,7 +253,8 @@ export async function indexWorkspace(
     body: JSON.stringify({
       project_path: opts.projectPath,
       workspace_data_dir: opts.workspaceDataDir ?? null,
-      embedding_config: opts.embeddingConfig ?? null,
+      embedding_config: opts.providerSet ? null : (opts.embeddingConfig ?? null),
+      provider_set: opts.providerSet ? providerSetToSidecar(opts.providerSet) : null,
       max_files: opts.maxFiles ?? null,
       paths: opts.paths ?? null,
     }),
@@ -868,12 +870,57 @@ function sidecarSecurityPayload(
   };
 }
 
+export interface SidecarHttpErrorBody {
+  code: string | null;
+  message: string;
+}
+
+export function parseSidecarHttpError(raw: string): SidecarHttpErrorBody {
+  const trimmed = raw.trim();
+  if (!trimmed) return { code: null, message: '' };
+  try {
+    const parsed = JSON.parse(trimmed) as { detail?: unknown };
+    const detail = parsed.detail;
+    if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+      const record = detail as Record<string, unknown>;
+      const code = typeof record.code === 'string' ? record.code : null;
+      const message = typeof record.message === 'string' ? record.message : '';
+      if (code || message) return { code, message };
+    }
+    return { code: null, message: parseSidecarErrorDetail(trimmed) };
+  } catch {
+    return { code: null, message: trimmed };
+  }
+}
+
+export class SidecarHttpError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+
+  constructor(status: number, code: string | null, message: string) {
+    super(message || `HTTP ${status}`);
+    this.name = 'SidecarHttpError';
+    this.status = status;
+    this.code = code;
+  }
+
+  static async fromResponse(response: Response): Promise<SidecarHttpError> {
+    const raw = await response.text().catch(() => '');
+    const parsed = parseSidecarHttpError(raw);
+    return new SidecarHttpError(response.status, parsed.code, parsed.message);
+  }
+}
+
 export function parseSidecarErrorDetail(raw: string): string {
   const trimmed = raw.trim();
   if (!trimmed) return '';
   try {
     const parsed = JSON.parse(trimmed) as { detail?: unknown };
     if (typeof parsed.detail === 'string') return parsed.detail;
+    if (parsed.detail && typeof parsed.detail === 'object' && !Array.isArray(parsed.detail)) {
+      const record = parsed.detail as Record<string, unknown>;
+      if (typeof record.message === 'string') return record.message;
+    }
     if (Array.isArray(parsed.detail)) {
       return parsed.detail
         .map((item) => {

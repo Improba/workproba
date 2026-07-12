@@ -200,6 +200,8 @@ def test_resolve_llm_config_falls_back_to_settings() -> None:
 
 
 def test_resolve_llm_config_from_provider_set() -> None:
+    from pydantic import SecretStr
+
     from app.llm.provider_sets import MISTRAL_BUILTIN_SET
 
     class FakeSettings:
@@ -208,7 +210,9 @@ def test_resolve_llm_config_from_provider_set() -> None:
         llm_default_base_url = None
         llm_default_api_key = None
 
-    resolved = resolve_llm_config(None, FakeSettings(), provider_set=MISTRAL_BUILTIN_SET)
+    set_with_key = MISTRAL_BUILTIN_SET.model_copy(deep=True)
+    set_with_key.chat = set_with_key.chat.model_copy(update={"api_key": SecretStr("k")})
+    resolved = resolve_llm_config(None, FakeSettings(), provider_set=set_with_key)
     assert resolved.provider == "mistral"
     assert resolved.model == "mistral-small-latest"
 

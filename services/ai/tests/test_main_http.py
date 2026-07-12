@@ -194,3 +194,49 @@ def test_agent_turn_construction_error_surfaces_as_sse_error(tmp_path, monkeypat
         ) as resp:
             assert resp.status_code == 200
             assert _sse_event_types(resp)[-1] == "error"
+
+
+async def _fake_personas_stream(**_kwargs: Any) -> Any:
+    yield {"type": "done", "ok": True}
+
+
+def test_personas_ask_closes_rag_store(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    close_calls: list[str] = []
+
+    def fake_memory_store(_settings: Any, _ws_dir: Any, provider_set: Any = None) -> Any:
+        from unittest.mock import MagicMock
+
+        store = MagicMock(name="RagStore")
+        store.close = MagicMock(side_effect=lambda: close_calls.append("close"))
+        return store
+
+    from app.plugins.workproba_personas import orchestrator as personas_orchestrator
+
+    monkeypatch.setattr(mainmod, "_memory_store_for_workspace", fake_memory_store)
+    monkeypatch.setattr(personas_orchestrator, "stream_ask", _fake_personas_stream)
+
+    ws_dir = tmp_path / ".workproba"
+    ws_dir.mkdir()
+    plugin_dir = tmp_path / "plugins" / "workproba.personas"
+    plugin_dir.mkdir(parents=True)
+
+    payload = {
+        "plugin_data_dir": str(plugin_dir),
+        "persona_ids": ["01"],
+        "question": "test?",
+        "include_memory": True,
+        "workspace_data_dir": str(ws_dir),
+        "locale": "fr",
+    }
+    with TestClient(mainmod.app) as client:
+        with client.stream(
+            "POST",
+            "/plugins/personas/ask",
+            json=payload,
+            headers={"X-Internal-Secret": "desktop-dev-secret"},
+        ) as resp:
+            assert resp.status_code == 200
+            for _ in resp.iter_lines():
+                pass
+
+    assert close_calls == ["close"]

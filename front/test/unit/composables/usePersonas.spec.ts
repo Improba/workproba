@@ -43,6 +43,29 @@ vi.mock('@composables/useAppSettings', () => ({
   }),
 }));
 
+vi.mock('@utils/providerSetNotify', () => ({
+  ensureProviderSetChatReady: () => true,
+  ensureProviderSetEmbeddingsReady: () => true,
+}));
+
+vi.mock('@composables/useLlmSessionContext', () => ({
+  useLlmSessionContext: () => ({
+    buildContextProviderSet: () => ({
+      id: 'mistral-default',
+      name: 'Mistral',
+      chat: { provider: 'mistral', model: 'mistral-small-latest', apiKey: 'k' },
+      embeddings: null,
+      vision: { mode: 'none' },
+      capabilities: { reasoning: 'medium', vision: false, tools: true },
+      badges: [],
+      description: '',
+      isDefault: true,
+      isBuiltin: true,
+    }),
+    buildContextLlmConfigs: () => ({ chat: null, embedding: null }),
+  }),
+}));
+
 vi.mock('@composables/usePlugins', () => ({
   PERSONAS_PLUGIN_ID: 'workproba.personas',
   usePlugins: () => ({

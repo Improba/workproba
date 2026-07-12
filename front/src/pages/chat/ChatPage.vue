@@ -70,7 +70,7 @@
         :settings-locked="settingsLocked"
         :personas-enabled="isPersonasPluginActive"
         :reasoning-effort="displayReasoningEffort"
-        :reasoning-provider="activeChatProvider?.provider ?? null"
+        :reasoning-provider="activeChatRouting?.provider ?? null"
         :reasoning-model="displayReasoningModel"
         @send="(text, atts) => send(text, { attachments: atts })"
         @abort="abort"
@@ -104,8 +104,9 @@ import { useChatActivity } from '@composables/useChatActivity';
 import { useChatStream } from '@composables/useChatStream';
 import {
   useAppSettings,
-  buildActiveLlmConfigs,
 } from '@composables/useAppSettings';
+import { setLlmSessionContext } from '@composables/useLlmSessionContext';
+import { buildSessionAwareLlmConfigs } from '@utils/llmRouting';
 import { openLocalFile } from '@composables/useDesktop';
 import { useProject } from '@composables/useProject';
 import { clearExpansionState } from '@composables/useToolCallExpansion';
@@ -142,6 +143,7 @@ const { t } = useI18n();
 
 const sessionId = computed(() => String(route.params.id ?? ''));
 const sessionTitle = ref(t('chat.page.defaultTitle'));
+const sessionSummary = ref<string | null>(null);
 const autoTitleStarted = ref(false);
 const autoSummaryRunning = ref(false);
 const lastSummaryTurn = ref(0);
@@ -149,7 +151,7 @@ const chatViewRef = ref<InstanceType<typeof ChatView> | null>(null);
 const sessionLoadGuard = createSessionLoadGuard();
 
 const { activePath, activeDataDir, documents } = useProject();
-const { settingsMode, settingsLocked, activeChatProvider } = useAppSettings();
+const { settingsMode, settingsLocked, activeChatRouting } = useAppSettings();
 const { setStreaming, setSidecarState } = useChatActivity();
 const { isPersonasPluginActive, isProjetPluginActive, getPluginDataDir } = usePlugins();
 const { consumeAction } = usePersonasNavigation();
@@ -176,7 +178,7 @@ const sessionReasoningOverride = ref<ReasoningEffort | null>(null);
 const sessionModelOverride = ref<string | null>(null);
 
 const displayReasoningModel = computed<string | null>(
-  () => sessionModelOverride.value ?? activeChatProvider.value?.model ?? null,
+  () => sessionModelOverride.value ?? activeChatRouting.value?.model ?? null,
 );
 
 const displayReasoningEffort = computed<ReasoningEffort>({
@@ -184,18 +186,30 @@ const displayReasoningEffort = computed<ReasoningEffort>({
     if (sessionReasoningOverride.value != null) {
       return sessionReasoningOverride.value;
     }
-    const provider = activeChatProvider.value;
-    if (!provider) return 'none';
-    const model = displayReasoningModel.value ?? provider.model;
-    return (
-      provider.reasoningEffort ??
-      defaultReasoningEffort(provider.provider, model)
-    );
+    const routing = activeChatRouting.value;
+    if (!routing) return 'none';
+    const model = displayReasoningModel.value ?? routing.model;
+    return routing.defaultReasoning ?? defaultReasoningEffort(routing.provider, model);
   },
   set(effort: ReasoningEffort) {
     void onReasoningEffortChange(effort);
   },
 });
+
+function sessionLlmConfigs() {
+  return buildSessionAwareLlmConfigs(
+    sessionModelOverride.value,
+    sessionReasoningOverride.value,
+  );
+}
+
+watch(
+  [sessionId, sessionModelOverride, sessionReasoningOverride],
+  ([id, model, reasoning]) => {
+    if (id) setLlmSessionContext(id, model, reasoning);
+  },
+  { immediate: true },
+);
 
 const uiMode = computed(() =>
   resolveUiMode(settingsLocked.value, settingsMode.value),
@@ -249,13 +263,13 @@ function formatTokenCount(n: number): string {
 }
 
 const metaParts = computed<ChatMetaPart[]>(() => {
-  const provider = activeChatProvider.value;
+  const routing = activeChatRouting.value;
   const parts: ChatMetaPart[] = [];
-  if (provider) {
-    const model = displayReasoningModel.value ?? provider.model;
-    parts.push({ text: provider.label || model });
+  if (routing) {
+    const model = displayReasoningModel.value ?? routing.model;
+    parts.push({ text: routing.label || model });
     if (
-      supportsReasoning(provider.provider, model) &&
+      supportsReasoning(routing.provider, model) &&
       displayReasoningEffort.value !== 'none'
     ) {
       const effort = displayReasoningEffort.value;
@@ -264,7 +278,7 @@ const metaParts = computed<ChatMetaPart[]>(() => {
         text: t('chat.page.reasoningLevel', { level: levelLabel.toLowerCase() }),
       });
     }
-    const contextWindow = contextWindowFor(provider.provider, model);
+    const contextWindow = contextWindowFor(routing.provider, model);
     const usedTokens =
       lastUsage.value.inputTokens ?? estimateMessagesTokens(messages.value);
     const pct = Math.round((usedTokens / contextWindow) * 100);
@@ -326,6 +340,7 @@ watch(
     autoTitleStarted.value = false;
     autoSummaryRunning.value = false;
     lastSummaryTurn.value = 0;
+    sessionSummary.value = null;
 
     const session = await getSession(id);
     if (sessionLoadGuard.isStale(loadGen)) return;
@@ -339,14 +354,15 @@ watch(
       return;
     }
     sessionTitle.value = session.title || t('chat.page.defaultTitle');
+    sessionSummary.value = session.summary ?? null;
     sessionReasoningOverride.value = session.reasoningEffort ?? null;
     // On ne restaure le modèle sauvegardé que s'il est toujours utilisable par
     // le provider actif (l'utilisateur a pu changer de provider entre-temps).
-    const provider = activeChatProvider.value;
+    const chatProvider = activeChatRouting.value?.provider;
     sessionModelOverride.value =
-      provider &&
+      chatProvider &&
       session.model &&
-      isModelApplicable(provider.provider, session.model)
+      isModelApplicable(chatProvider, session.model)
         ? session.model
         : null;
     if (sessionLoadGuard.isStale(loadGen)) return;
@@ -366,34 +382,26 @@ async function applyInitialPrompt(): Promise<void> {
   history.replaceState({ ...history.state, initialPrompt: undefined }, '');
 }
 
-// Sauvegarde debouncée : on évite la rafale d'écritures pendant le streaming
-// (le watch deep se déclenche à chaque flush de tokens) et les races
-// read-modify-write concurrentes sur le fichier de session. Un seul writer
-// pour messages + modèle + raisonnement = pas d'écrasement croisé.
-const persistSession = useDebounceFn(async (items: ChatMessage[]) => {
+// Sauvegarde debouncée : un seul writer pour messages, titre, résumé,
+// modèle et raisonnement (évite les races read-modify-write).
+async function saveSessionNow(items: ChatMessage[]): Promise<void> {
   if (!activePath.value) return;
   const session = await getSession(sessionId.value);
   if (!session) return;
   await saveSession({
     ...session,
+    title: sessionTitle.value.trim() || session.title,
+    summary: sessionSummary.value ?? session.summary ?? null,
     messages: items.filter((m) => !m.streaming),
     reasoningEffort: sessionReasoningOverride.value ?? null,
     model: sessionModelOverride.value ?? null,
   });
-}, 500);
-
-async function persistSessionTitle(title: string): Promise<void> {
-  if (!activePath.value) return;
-  const session = await getSession(sessionId.value);
-  if (!session) return;
-  await saveSession({ ...session, title });
 }
 
-async function persistSessionSummary(summary: string): Promise<void> {
-  if (!activePath.value) return;
-  const session = await getSession(sessionId.value);
-  if (!session) return;
-  await saveSession({ ...session, summary });
+const persistSession = useDebounceFn(saveSessionNow, 500);
+
+async function flushPersistSession(): Promise<void> {
+  await saveSessionNow(messages.value);
 }
 
 // Rafraîchissement du résumé cross-conversation : on régénère un résumé
@@ -422,12 +430,13 @@ watch(completedTurns, async (turns) => {
   try {
     const result = await requestSummary({
       messages: transcript,
-      chatConfig: buildActiveLlmConfigs().chat,
+      chatConfig: sessionLlmConfigs().chat,
       utilityConfig: null,
       focus: t('chat.page.summaryFocus'),
     });
     if (!result.summary.trim()) return;
-    await persistSessionSummary(result.summary.trim());
+    sessionSummary.value = result.summary.trim();
+    await flushPersistSession();
     bumpSessions();
   } catch {
     // Résumé en arrière-plan : on ignore l'échec sans notifier l'utilisateur.
@@ -455,12 +464,12 @@ watch(completedTurns, async (turns) => {
     const title = await requestTitle({
       firstUserMessage,
       firstAssistantReply,
-      chatConfig: buildActiveLlmConfigs().chat,
+      chatConfig: sessionLlmConfigs().chat,
       utilityConfig: null,
     });
     if (!title.trim()) return;
     sessionTitle.value = title;
-    await persistSessionTitle(title);
+    await flushPersistSession();
     bumpSessions();
   } catch {
     // Titre auto en arrière-plan : on garde le titre par défaut sans notifier.
@@ -484,7 +493,7 @@ function onReasoningModelChange(model: string): void {
 // utilisable par le nouveau provider. On l'invalide pour retomber sur le
 // modèle par défaut du provider actif.
 watch(
-  () => activeChatProvider.value?.provider ?? null,
+  () => activeChatRouting.value?.provider ?? null,
   (providerName) => {
     if (!providerName) return;
     const override = sessionModelOverride.value;

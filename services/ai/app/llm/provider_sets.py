@@ -68,6 +68,23 @@ OLLAMA_BUILTIN_SET = ProviderSet(
 
 BUILTIN_PROVIDER_SETS: tuple[ProviderSet, ...] = (MISTRAL_BUILTIN_SET, OLLAMA_BUILTIN_SET)
 
+_LOCAL_PROVIDERS = frozenset({"ollama", "vllm"})
+
+
+class MissingApiKeyError(ValueError):
+    """Clé API cloud absente du provider set."""
+
+    def __init__(self, provider: str) -> None:
+        self.provider = provider
+        super().__init__(
+            f"Clé API manquante pour le provider {provider}. "
+            "Renseignez-la dans Réglages → Modèles IA."
+        )
+
+
+def provider_requires_api_key(provider: str) -> bool:
+    return provider not in _LOCAL_PROVIDERS
+
 
 def _chat_reasoning_to_effort(reasoning: str) -> ReasoningEffort | None:
     if reasoning == "auto":
@@ -79,9 +96,19 @@ def _chat_reasoning_to_effort(reasoning: str) -> ReasoningEffort | None:
 
 def _resolve_api_key(
     chat_or_embed: ProviderSetChat | ProviderSetEmbeddings,
+    *,
+    fallback_key: SecretStr | None = None,
 ) -> SecretStr | None:
     if chat_or_embed.api_key is not None:
-        return chat_or_embed.api_key
+        raw = chat_or_embed.api_key.get_secret_value().strip()
+        if raw:
+            return chat_or_embed.api_key
+    if fallback_key is not None:
+        raw = fallback_key.get_secret_value().strip()
+        if raw:
+            return fallback_key
+    if provider_requires_api_key(chat_or_embed.provider):
+        raise MissingApiKeyError(chat_or_embed.provider)
     return None
 
 
@@ -104,11 +131,12 @@ def resolve_embeddings_from_set(provider_set: ProviderSet) -> LLMProviderConfig 
     if provider_set.embeddings is None:
         return None
     embed = provider_set.embeddings
+    chat_key = provider_set.chat.api_key if provider_set.chat else None
     return LLMProviderConfig(
         provider=embed.provider,
         model=embed.model,
         base_url=embed.base_url,
-        api_key=_resolve_api_key(embed),
+        api_key=_resolve_api_key(embed, fallback_key=chat_key),
     )
 
 

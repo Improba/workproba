@@ -490,6 +490,9 @@ export default {
     agentInputTooLarge: 'Le message est trop volumineux pour le contexte disponible.',
     agentInternalError: 'Une erreur interne est survenue pendant la génération.',
     agentGeneric: 'Une erreur est survenue pendant la génération.',
+    apiKeyMissing:
+      'Clé API manquante pour ce moteur. Ouvrez Réglages → Modèles IA et renseignez votre clé.',
+    apiKeyMissingAction: 'Réglages',
   },
   toolCalls: {
     readDocuments: 'J\'ai lu des documents',
