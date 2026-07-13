@@ -1,6 +1,6 @@
 # Quasar App (front)
 
-FR: Pour un démarrage rapide et la structure globale, voir le README à la racine (sections « Démarrage rapide (FR) » et « Structure du monorepo (FR) »). Les commandes ci-dessous sont spécifiques au front.
+For a quick start and the overall structure, see the root README (Getting started and Structure sections). The commands below are specific to the front.
 
 ## Install the dependencies
 

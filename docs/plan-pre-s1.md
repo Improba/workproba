@@ -1,53 +1,53 @@
-# Plan pré-démarrage projet (S1)
+# Pre-Project Kickoff Plan (S1)
 
-Document de référence pour préparer la base Glutamat **avant le début du projet métier** (semaine 1).
+Reference document for preparing the Glutamat base **before the business project starts** (week 1).
 
-**Branche de travail :** `feature/update-package` — tout le chantier (migrations, tests, CI) se fait sur cette branche jusqu’au merge final.
+**Working branch:** `feature/update-package`, all work (migrations, tests, CI) happens on this branch until the final merge.
 
-**État au point de départ (déjà fait sur la branche) :**
+**Starting point (already done on the branch):**
 
-- Mise à jour sécurité + patch/minor (`yarn audit` = 0 sur api et front)
-- Commits : sécurité/résolutions, puis patch/minor compatibles
+- Security update + patch/minor (`yarn audit` = 0 on api and front)
+- Commits: security/resolutions, then compatible patch/minor
 
-**Objectif final :** stack majors à jour, tests unitaires opérationnels, squelette e2e, documentation et CI minimale.
+**Final goal:** up-to-date major stack, operational unit tests, e2e skeleton, documentation and minimal CI.
 
-### Documentation (fichiers MD)
+### Documentation (MD files)
 
-| Fichier | Rôle | À jour |
+| File | Role | Up to date |
 |---------|------|--------|
-| [plan-pre-s1.md](./plan-pre-s1.md) | Plan + cases à cocher | Oui |
-| [stack.md](./stack.md) | Versions + écarts assumés | Oui |
-| [testing.md](./testing.md) | Vitest, commandes, inventaire specs | Oui |
-| [README.md](./README.md) (docs/) | Index doc | Oui |
-| [README.md](../README.md) (racine) | Setup + **Comment tester** | Oui |
-| [api/test/README.md](../api/test/README.md) | Renvoi vers `docs/testing.md` | Oui |
+| [plan-pre-s1.md](./plan-pre-s1.md) | Plan + checkboxes | Yes |
+| [stack.md](./stack.md) | Versions + accepted gaps | Yes |
+| [testing.md](./testing.md) | Vitest, commands, spec inventory | Yes |
+| [README.md](./README.md) (docs/) | Doc index | Yes |
+| [README.md](../README.md) (root) | Setup + **How to test** | Yes |
+| [api/test/README.md](../api/test/README.md) | Pointer to `docs/testing.md` | Yes |
 
-Les cases `[ ]` restantes dans ce plan décrivent du **travail technique ou manuel** encore à faire, pas de la rédaction MD.
+Remaining `[ ]` checkboxes in this plan describe **technical or manual work** still to do, not MD writing.
 
 ---
 
-## État des lieux
+## Current state
 
-*Dernière vérification : 26/05/2026 — branche `feature/update-package` (migration Vitest API validée).*
+*Last verified: 26/05/2026, branch `feature/update-package` (API Vitest migration validated).*
 
-| Zone | Situation |
+| Area | Situation |
 |------|-----------|
-| **Dépendances** | Audit 0 ; MikroORM 7, TS 6, class-validator 0.15, vue-router 5 en place ; **1.5** (uuid 14, Brevo 5, inquirer 13) non fait |
-| **API — tests** | **Vitest** — scripts `test:unit*` et `test:e2e*` dans `api/package.json` |
-| **API — e2e** | Vitest e2e opérationnels (`test/e2e/`) ; exécution isolée via `yarn test:e2e` |
-| **Front — tests** | **Vitest** — 3 fichiers, **7 tests** verts |
-| **CI** | `.github/workflows/ci.yml` présent ; **non validé** tant que la branche n’est pas poussée |
-| **`lib-improba`** | Code copié api + front ; pas de package npm |
+| **Dependencies** | Audit 0; MikroORM 7, TS 6, class-validator 0.15, vue-router 5 in place; **1.5** (uuid 14, Brevo 5, inquirer 13) not done |
+| **API, tests** | **Vitest**, `test:unit*` and `test:e2e*` scripts in `api/package.json` |
+| **API, e2e** | Vitest e2e operational (`test/e2e/`); isolated run via `yarn test:e2e` |
+| **Front, tests** | **Vitest**, 3 files, **7 tests** passing |
+| **CI** | `.github/workflows/ci.yml` present; **not validated** until branch is pushed |
+| **`lib-improba`** | Code copied api + front; no npm package |
 
 ---
 
-## Vue d’ensemble des phases
+## Phase overview
 
 ```mermaid
 flowchart TB
-  P0[Phase 0 - Baseline] --> P1[Phase 1 - Migrations majeures]
-  P1 --> P2[Phase 2 - Tests unitaires]
-  P2 --> P3[Phase 3 - Tests e2e]
+  P0[Phase 0 - Baseline] --> P1[Phase 1 - Major migrations]
+  P1 --> P2[Phase 2 - Unit tests]
+  P2 --> P3[Phase 3 - E2E tests]
   P1 --> P1a[PR1 MikroORM 7]
   P1a --> P1b[PR2 TypeScript 6]
   P1b --> P1c[PR3 class-validator 0.15]
@@ -59,171 +59,171 @@ flowchart TB
   P3 --> P3b[Front Playwright]
 ```
 
-**Règle :** après chaque bloc, valider `yarn build`, `yarn test:unit` + `yarn test:e2e` (api), `yarn audit`, smoke Docker.
+**Rule:** after each block, validate `yarn build`, `yarn test:unit` + `yarn test:e2e` (api), `yarn audit`, Docker smoke.
 
-**Commits :** commits atomiques sur `feature/update-package` (pas besoin de branches filles sauf préférence équipe).
+**Commits:** atomic commits on `feature/update-package` (no child branches needed unless team preference).
 
 ---
 
-## Phase 0 — Baseline
+## Phase 0, Baseline
 
-**Durée indicative :** ½ journée
+**Indicative duration:** ½ day
 
-- [x] Vérifier que la branche `feature/update-package` est à jour et propre
-- [x] Créer `docs/stack.md` (versions cibles figées)
-- [ ] Smoke manuel :
+- [x] Verify that branch `feature/update-package` is up to date and clean
+- [x] Create `docs/stack.md` (frozen target versions)
+- [ ] Manual smoke:
   - [ ] `sh compose.sh up` → API + front + DB
-  - [ ] Migrations si première install (voir [README](../README.md))
-  - [ ] Login / navigation admin minimale
-- [x] Tests api via Docker (`docker-compose.test.yml` — 37 tests)
-- [x] `yarn build` api + front (local, mai 2026)
+  - [ ] Migrations if first install (see [README](../README.md))
+  - [ ] Login / minimal admin navigation
+- [x] API tests via Docker (`docker-compose.test.yml`, 37 tests)
+- [x] `yarn build` api + front (local, May 2026)
 
-**Livrable :** baseline documentée, prête pour les majors.
+**Deliverable:** documented baseline, ready for majors.
 
 ---
 
-## Phase 1 — Migrations majeures
+## Phase 1, Major migrations
 
-**Durée indicative :** 2–4 jours  
-**Ordre obligatoire** (chaque étape peut être un ou plusieurs commits sur `feature/update-package`).
+**Indicative duration:** 2–4 days  
+**Mandatory order** (each step can be one or more commits on `feature/update-package`).
 
-### 1.1 — MikroORM 6 → 7 (+ `@mikro-orm/nestjs` 7)
+### 1.1, MikroORM 6 → 7 (+ `@mikro-orm/nestjs` 7)
 
-**Impact :** le plus large — `api/lib-improba/base/*`, `config/mikro-orm.config.ts`, migrations, tests DB.
+**Impact:** widest, `api/lib-improba/base/*`, `config/mikro-orm.config.ts`, migrations, DB tests.
 
-- [x] Lire le [guide de migration MikroORM 6 → 7](https://mikro-orm.io/docs/upgrading-v6-to-v7)
-- [x] Monter **toutes** les deps `@mikro-orm/*` en **7.x** (versions alignées)
-- [x] Monter `@mikro-orm/nestjs` en **7.x**
-- [x] Adapter `api/config/mikro-orm.config.ts`, `migrations.config.ts`, `api/test/config/database.config.ts`
-- [ ] Valider migrations sur DB vide (`migration:fresh` en dev si acceptable)
-- [x] Corriger `api/lib-improba` si l’API base/repository change
+- [x] Read the [MikroORM 6 → 7 migration guide](https://mikro-orm.io/docs/upgrading-v6-to-v7)
+- [x] Bump **all** `@mikro-orm/*` deps to **7.x** (aligned versions)
+- [x] Bump `@mikro-orm/nestjs` to **7.x**
+- [x] Adapt `api/config/mikro-orm.config.ts`, `migrations.config.ts`, `api/test/config/database.config.ts`
+- [ ] Validate migrations on empty DB (`migration:fresh` in dev if acceptable)
+- [x] Fix `api/lib-improba` if base/repository API changes
 - [x] `yarn build` OK
-- [x] Tests migrés vers **Vitest** (MikroORM 7 = ESM ; Jest nécessite Node ≥ 24.9)
-- [x] Tests api verts avec DB via Docker (`api/docker/docker-compose.test.yml` — **37 tests**)
-- [ ] Smoke Docker dev
+- [x] Tests migrated to **Vitest** (MikroORM 7 = ESM; Jest requires Node ≥ 24.9)
+- [x] API tests green with DB via Docker (`api/docker/docker-compose.test.yml`, **37 tests**)
+- [ ] Docker dev smoke
 
-**Critère de succès :** app démarre, migrations OK, tests existants verts.
+**Success criterion:** app starts, migrations OK, existing tests green.
 
 ---
 
-### 1.2 — TypeScript 5.9 → 6 (api + front)
+### 1.2, TypeScript 5.9 → 6 (api + front)
 
-**Impact :** transverse (Nest, Quasar, `vue-tsc`, ESLint).
+**Impact:** cross-cutting (Nest, Quasar, `vue-tsc`, ESLint).
 
-- [x] Monter `typescript` dans `api/package.json` et `front/package.json`
-- [x] `ignoreDeprecations: "6.0"` dans les `tsconfig` (baseUrl déprécié)
+- [x] Bump `typescript` in `api/package.json` and `front/package.json`
+- [x] `ignoreDeprecations: "6.0"` in `tsconfig` (baseUrl deprecated)
 - [x] `yarn build` api + front
 - [x] `yarn audit` = 0
 
-**Note :** si un outil bloque, documenter l’exception dans `docs/stack.md`.
+**Note:** if a tool blocks, document the exception in `docs/stack.md`.
 
 ---
 
-### 1.3 — class-validator 0.14 → 0.15
+### 1.3, class-validator 0.14 → 0.15
 
-**Impact :** DTOs / pipes — `api/lib-improba`, `api/src/core/users`, auth-jwt.
+**Impact:** DTOs / pipes, `api/lib-improba`, `api/src/core/users`, auth-jwt.
 
-- [x] Monter `class-validator` ^0.15.0
-- [x] `yarn build` + tests Docker (37/37)
+- [x] Bump `class-validator` ^0.15.0
+- [x] `yarn build` + Docker tests (37/37)
 
 ---
 
-### 1.4 — Front : vue-router 5 + satellites optionnels
+### 1.4, Front: vue-router 5 + optional satellites
 
-**Impact :** `front/src/router/*`, `front/lib-improba/composables/use-auth/router.ts`, query params.
+**Impact:** `front/src/router/*`, `front/lib-improba/composables/use-auth/router.ts`, query params.
 
-- [x] Monter `vue-router` ^5.0.0 (pas de breaking change sans file-based routing)
+- [x] Bump `vue-router` ^5.0.0 (no breaking change without file-based routing)
 - [x] `yarn build` front OK
-- [ ] Smoke manuel : login, admin, navigation
-- [ ] Optionnel : `lucide-vue-next` 1.x, `dotenv` 17
+- [ ] Manual smoke: login, admin, navigation
+- [ ] Optional: `lucide-vue-next` 1.x, `dotenv` 17
 
 ---
 
-### 1.5 — Petites majors API isolées
+### 1.5, Small isolated API majors
 
 | Package | Action |
 |---------|--------|
-| **uuid 14** | [ ] Reste en **11.x** ; `v4` dans `user-jwt.service.ts` — à monter si besoin |
-| **@getbrevo/brevo 5** | [ ] Non utilisé dans le code TS actuellement (dep seulement) — optionnel |
-| **inquirer 13** | [ ] Tester `yarn generator` |
+| **uuid 14** | [ ] Remains on **11.x**; `v4` in `user-jwt.service.ts`, bump if needed |
+| **@getbrevo/brevo 5** | [ ] Not used in current TS code (dep only), optional |
+| **inquirer 13** | [ ] Test `yarn generator` |
 
-**Ne pas modifier** (sauf décision explicite) les `resolutions` de sécurité (`minimatch` 9, `path-to-regexp` 0.1 côté front, etc.) — les « latest » dans `yarn outdated` sont trompeurs.
+**Do not modify** (unless explicit decision) security `resolutions` (`minimatch` 9, `path-to-regexp` 0.1 on front, etc.), "latest" in `yarn outdated` is misleading.
 
 ---
 
-### Majors volontairement hors scope (ou report documenté)
+### Majors intentionally out of scope (or documented deferral)
 
-| Package | Raison |
+| Package | Reason |
 |---------|--------|
-| MikroORM 7 | Fait en 1.1 — si report, documenter dans `docs/stack.md` |
-| TypeScript 6 | Fait en 1.2 |
-| `minimatch` 10, `file-type` 22, `jws` 4 via resolutions | Risque audit / régression express |
+| MikroORM 7 | Done in 1.1, if deferred, document in `docs/stack.md` |
+| TypeScript 6 | Done in 1.2 |
+| `minimatch` 10, `file-type` 22, `jws` 4 via resolutions | Audit risk / express regression |
 
-**Fin Phase 1 :** `yarn outdated` ne montre plus que des écarts **assumés** et listés dans `docs/stack.md`.
+**End of Phase 1:** `yarn outdated` only shows **accepted** gaps listed in `docs/stack.md`.
 
 ---
 
-## Phase 2 — Tests unitaires
+## Phase 2, Unit tests
 
-**Durée indicative :** 1,5–2 jours  
-**Objectif :** filet de sécurité avant le code métier S1.
+**Indicative duration:** 1.5–2 days  
+**Goal:** safety net before S1 business code.
 
-### 2.1 — API : Vitest (remplace Jest pour MikroORM 7 ESM)
+### 2.1, API: Vitest (replaces Jest for MikroORM 7 ESM)
 
-**En place :** Vitest + `unplugin-swc`, `api/vitest.config.ts`, aliases monorepo alignés, imports `supertest` corrigés pour ESM ; scripts unit/e2e séparés en place (`test:unit*`, `test:e2e*`).
+**In place:** Vitest + `unplugin-swc`, `api/vitest.config.ts`, monorepo aliases aligned, `supertest` imports fixed for ESM; separate unit/e2e scripts in place (`test:unit*`, `test:e2e*`).
 
-| Tâche | Détail |
+| Task | Detail |
 |-------|--------|
-| [x] Doc | [testing.md](./testing.md) aligné Vitest + e2e |
-| Convention | `api/test/unit/` = unit mocké (à plat) ; `api/test/e2e/` = e2e |
-| [x] Specs pipes | `ParseFilter`, `ParseIntOrUndefined` |
-| Specs prioritaires | `lib-improba/base`, `src/core/users` |
-| Couverture cible | ~60–70 % sur `lib-improba` + `src/core` (pas 100 % avant S1) |
+| [x] Doc | [testing.md](./testing.md) aligned Vitest + e2e |
+| Convention | `api/test/unit/` = mocked unit (flat); `api/test/e2e/` = e2e |
+| [x] Pipe specs | `ParseFilter`, `ParseIntOrUndefined` |
+| Priority specs | `lib-improba/base`, `src/core/users` |
+| Target coverage | ~60–70% on `lib-improba` + `src/core` (not 100% before S1) |
 
-**Specs à ajouter (ordre suggéré) :**
+**Specs to add (suggested order):**
 
-1. `user.service.spec.ts` (mocks EntityManager)
-2. `base.repository.spec.ts` (pagination / soft delete si applicable)
-3. [x] `ParseFilter.pipe.spec.ts` (unit pur, sans DB)
+1. `user.service.spec.ts` (EntityManager mocks)
+2. `base.repository.spec.ts` (pagination / soft delete if applicable)
+3. [x] `ParseFilter.pipe.spec.ts` (pure unit, no DB)
 
-**Commandes :**
+**Commands:**
 
 ```bash
 cd api && yarn test:unit
 cd api && yarn test:unit:cov
-cd api && yarn test:e2e                # e2e seuls (DB requise)
-cd .. && make unit-test                # unitaires front + api dans Docker
+cd api && yarn test:e2e                # e2e only (DB required)
+cd .. && make unit-test                # front + api unit tests in Docker
 ```
 
 ---
 
-### 2.2 — Front : Vitest + Vue Test Utils
+### 2.2, Front: Vitest + Vue Test Utils
 
-**Stack cible :**
+**Target stack:**
 
 - `vitest`
 - `@vue/test-utils`
-- `happy-dom` ou `jsdom`
-- Config alias identique à Vite (`@lib-improba`, `~`, etc.)
+- `happy-dom` or `jsdom`
+- Config alias identical to Vite (`@lib-improba`, `~`, etc.)
 
-| Tâche | Détail |
+| Task | Detail |
 |-------|--------|
 | Scripts | [x] `vitest run` / `vitest watch` |
 | Config | [x] `front/vitest.config.ts` |
-| Premier test | [x] `pagination-filters.utils.spec.ts` |
-| Setup Quasar/i18n | [x] `front/test/setup.ts` |
-| Suite | [x] `use-auth`, composants Mastok |
+| First test | [x] `pagination-filters.utils.spec.ts` |
+| Quasar/i18n setup | [x] `front/test/setup.ts` |
+| Suite | [x] `use-auth`, Mastok components |
 
-**Critère :** `cd front && yarn test:all` — au moins 5 tests verts (**7/5** ✓).
+**Criterion:** `cd front && yarn test:all`, at least 5 tests green (**7/5** ✓).
 
 ---
 
-### 2.3 — CI minimale
+### 2.3, Minimal CI
 
-Créer `.github/workflows/ci.yml` :
+Create `.github/workflows/ci.yml`:
 
 ```yaml
-# Structure cible
+# Target structure
 jobs:
   api:
     - checkout
@@ -238,115 +238,115 @@ jobs:
     - yarn test
 ```
 
-- [x] Fichier `.github/workflows/ci.yml` (api + front, Postgres service)
-- [ ] CI verte sur push vers `feature/update-package`
-- [x] Option : déclencher aussi sur `develop` après merge (déjà configuré)
+- [x] `.github/workflows/ci.yml` file (api + front, Postgres service)
+- [ ] Green CI on push to `feature/update-package`
+- [x] Option: also trigger on `develop` after merge (already configured)
 
 ---
 
-## Phase 3 — Tests e2e (second temps)
+## Phase 3, E2E tests (second pass)
 
-**Durée indicative :** 2–3 jours  
-**Prérequis :** Phase 1 et 2 stables.
+**Indicative duration:** 2–3 days  
+**Prerequisites:** Phase 1 and 2 stable.
 
-### 3.1 — API e2e (Supertest + Vitest)
+### 3.1, API e2e (Supertest + Vitest)
 
-| Tâche | Détail |
+| Task | Detail |
 |-------|--------|
-| [x] Dossier `api/test/e2e/` | `app.e2e-spec.ts`, `auth-jwt.e2e-spec.ts` |
+| [x] `api/test/e2e/` folder | `app.e2e-spec.ts`, `auth-jwt.e2e-spec.ts` |
 | [x] Script | `yarn test:e2e` |
-| [ ] Route protégée 401/200 | Guard JWT sur module complet |
-| Docker | Étendre `docker-compose.test.yml` si besoin |
+| [ ] Protected route 401/200 | JWT guard on full module |
+| Docker | Extend `docker-compose.test.yml` if needed |
 
-**Distinction :**
+**Distinction:**
 
-| Type | Outil | Exemple |
+| Type | Tool | Example |
 |------|-------|---------|
-| Unit | Vitest | Pipe, util, service mocké |
-| Intégration | Vitest + MikroORM + DB | `user-jwt.service`, controller spec actuel |
-| E2E API | Vitest + Supertest | HTTP bout en bout |
+| Unit | Vitest | Pipe, util, mocked service |
+| Integration | Vitest + MikroORM + DB | `user-jwt.service`, current controller spec |
+| API E2E | Vitest + Supertest | End-to-end HTTP |
 
 ---
 
-### 3.2 — Front e2e (Playwright)
+### 3.2, Front e2e (Playwright)
 
-| Tâche | Détail |
+| Task | Detail |
 |-------|--------|
-| Dépendance | `@playwright/test` |
+| Dependency | `@playwright/test` |
 | Config | `front/playwright.config.ts` |
-| Specs | `front/e2e/auth.spec.ts`, `front/e2e/admin-users.spec.ts` (optionnel) |
-| Prérequis | API + front + DB (`compose.sh up`) ou `webServer` Playwright |
+| Specs | `front/e2e/auth.spec.ts`, `front/e2e/admin-users.spec.ts` (optional) |
+| Prerequisites | API + front + DB (`compose.sh up`) or Playwright `webServer` |
 
-**Scénarios minimum S1 :**
+**Minimum S1 scenarios:**
 
-1. Page login affichée
-2. Login → redirection espace admin
-3. (Optionnel) Liste users visible
+1. Login page displayed
+2. Login → redirect to admin area
+3. (Optional) Users list visible
 
 ---
 
-## Matrice des types de tests
+## Test type matrix
 
-| Niveau | API | Front |
+| Level | API | Front |
 |--------|-----|-------|
 | Unit | Vitest | Vitest |
-| Intégration | Vitest + DB | — |
+| Integration | Vitest + DB | (none) |
 | E2E | Supertest + Vitest | Playwright |
 
-Documentation : [testing.md](./testing.md) (Vitest api + front).
+Documentation: [testing.md](./testing.md) (Vitest api + front).
 
 ---
 
-## Planning indicatif
+## Indicative schedule
 
-| Jour | Focus |
+| Day | Focus |
 |------|--------|
-| J1 | Phase 0 + MikroORM 7 |
-| J2 | TypeScript 6 + class-validator |
-| J3 | vue-router 5 + uuid/Brevo + smoke Docker |
-| J4 | Tests unitaires API + début Vitest |
-| J5 | Fin Vitest + CI + mise à jour docs |
-| J6–J7 | E2E API puis Playwright (si le temps le permet) |
+| D1 | Phase 0 + MikroORM 7 |
+| D2 | TypeScript 6 + class-validator |
+| D3 | vue-router 5 + uuid/Brevo + Docker smoke |
+| D4 | API unit tests + start Vitest |
+| D5 | Finish Vitest + CI + doc updates |
+| D6–D7 | API E2E then Playwright (if time allows) |
 
-**Si manque de temps :** prioriser MikroORM 7 + TS 6 + tests unitaires API ; reporter Playwright au début S1 (garder au minimum e2e API auth).
+**If short on time:** prioritize MikroORM 7 + TS 6 + API unit tests; defer Playwright to S1 start (keep at minimum API auth e2e).
 
 ---
 
-## Definition of Done (globale)
+## Definition of Done (global)
 
-| Critère | Statut |
+| Criterion | Status |
 |---------|--------|
-| MikroORM 7, TypeScript 6, vue-router 5 | [x] — voir [stack.md](./stack.md) |
-| `yarn audit` = 0 (api + front) | [x] vérifié localement |
-| `yarn build` OK (api + front) | [x] vérifié localement |
-| api: tests unitaires/e2e (Docker) | [x] 94/94 |
-| api: e2e (`yarn test:e2e`) | [x] 3/3 en conteneur API (`app.e2e` + `auth-jwt.e2e`) |
-| front: `yarn test:all` (Vitest) | [x] 7 tests (objectif 5 atteint ; pas encore composants Quasar) |
-| Couverture ~60–70 % lib-improba + core | [ ] non mesurée / insuffisante |
-| front: Playwright smoke login | [ ] Phase 3.2 |
-| docs/stack.md, testing.md | [x] testing.md à jour ; stack.md basique |
-| CI verte sur remote | [ ] après push |
-| Smoke `compose.sh up` + login admin | [ ] manuel |
-| README section « Comment tester » | [x] [README.md](../README.md) |
+| MikroORM 7, TypeScript 6, vue-router 5 | [x], see [stack.md](./stack.md) |
+| `yarn audit` = 0 (api + front) | [x] verified locally |
+| `yarn build` OK (api + front) | [x] verified locally |
+| api: unit/e2e tests (Docker) | [x] 94/94 |
+| api: e2e (`yarn test:e2e`) | [x] 3/3 in API container (`app.e2e` + `auth-jwt.e2e`) |
+| front: `yarn test:all` (Vitest) | [x] 7 tests (5 target met; Quasar components not yet) |
+| ~60–70% coverage lib-improba + core | [ ] not measured / insufficient |
+| front: Playwright login smoke | [ ] Phase 3.2 |
+| docs/stack.md, testing.md | [x] testing.md up to date; stack.md basic |
+| Green CI on remote | [ ] after push |
+| Smoke `compose.sh up` + admin login | [ ] manual |
+| README "How to test" section | [x] [README.md](../README.md) |
 
 ---
 
-## Risques
+## Risks
 
-1. **MikroORM 7** — surprises migrations → DB vide + `migration:fresh` en dev acceptable avant S1.
-2. **Vitest parallèle + DB** — conserver `truncate` / `generateUniqueId` ; réduire `maxWorkers` si flaky.
-3. **Front sans historique de tests** — viser des **patterns**, pas 80 % de coverage.
-4. **E2E flaky** — peu de scénarios, compte seed fixe, pas de dépendance horaire.
+1. **MikroORM 7**, migration surprises → empty DB + `migration:fresh` in dev acceptable before S1.
+2. **Vitest parallel + DB**, keep `truncate` / `generateUniqueId`; reduce `maxWorkers` if flaky.
+3. **Front with no test history**, target **patterns**, not 80% coverage.
+4. **Flaky E2E**, few scenarios, fixed seed account, no time dependency.
 
 ---
 
-## Prochaine étape
+## Next step
 
-**Prêt pour S1 côté stack** (majors cœur + tests API mockés). Avant merge `develop` :
+**Ready for S1 on the stack side** (core majors + mocked API tests). Before merging to `develop`:
 
-1. Push → valider **CI verte** (aligner scripts CI avec `package.json` si nécessaire).
-2. Garder les e2e en exécution conteneurisée (DB Docker) avec `yarn test:e2e`.
-3. Smoke manuel : `compose.sh up`, login/admin.
-4. Optionnel avant S1 : `migration:fresh`, uuid 14, Playwright login, specs `base.repository` / `user.service`.
+1. Push → validate **green CI** (align CI scripts with `package.json` if needed).
+2. Keep e2e in containerized run (Docker DB) with `yarn test:e2e`.
+3. Manual smoke: `compose.sh up`, login/admin.
+4. Optional before S1: `migration:fresh`, uuid 14, Playwright login, `base.repository` / `user.service` specs.
 
-**Non bloquant S1 :** Brevo 5, lucide/dotenv, couverture 60 %, e2e route JWT protégée.
+**Not blocking S1:** Brevo 5, lucide/dotenv, 60% coverage, protected JWT route e2e.

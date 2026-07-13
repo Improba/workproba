@@ -1,100 +1,99 @@
-# Postmortem: panneau fichier droit vide (triangle d'erreur permanent)
+# Postmortem: empty right file panel (permanent error triangle)
 
 Date: 2026-07-10
-Composant: `front/src/components/workproba/FileExplorer.vue` + `front/src/composables/useFileTree.ts`
+Component: `front/src/components/workproba/FileExplorer.vue` + `front/src/composables/useFileTree.ts`
 
-## Symptôme
+## Symptom
 
-Le panneau droit de l'app desktop (explorateur de fichiers) affichait en
-permanence un triangle d'erreur `alert-triangle` avec un bouton « Réessayer »,
-mais **aucun texte d'erreur**, et l'arborescence ne s'affichait jamais, quelle
-que soit le dossier ouvert.
+The desktop app right panel (file explorer) permanently displayed an
+`alert-triangle` error with a "Retry" button,
+but **no error text**, and the tree never rendered, regardless of the
+opened folder.
 
-## Comportement attendu
+## Expected behavior
 
-Quand `list_dir_entries` réussit (ce que le log Rust confirmait: 3 entrées
-renvoyées pour le dossier `cor`), la branche erreur ne doit pas s'afficher et
-le `RecycleScroller` doit afficher les entrées.
+When `list_dir_entries` succeeds (as Rust logs confirmed: 3 entries
+returned for the `cor` folder), the error branch must not display and
+the `RecycleScroller` must show the entries.
 
-## Cause racine
+## Root cause
 
-Bug Vue 3 dans le template de `FileExplorer.vue`. `tree` est un objet plain
-retourné par `useFileTree()` et `tree.error` / `tree.indexing` sont des `ref`.
+Vue 3 bug in the `FileExplorer.vue` template. `tree` is a plain object
+returned by `useFileTree()` and `tree.error` / `tree.indexing` are `ref`s.
 
-Dans Vue 3, les `ref` sont **auto-déballées** dans le template uniquement pour
-les bindings **top-level** du setup. Elles ne le sont **pas** quand on y accède
-via une propriété nichée d'un objet (`tree.error`). L'expression
-`v-else-if="tree.error"` évaluait donc l'**objet ref** lui-même, qui est
-**toujours truthy**. La branche erreur s'affichait en permanence.
+In Vue 3, `ref`s are **auto-unwrapped** in the template only for
+**top-level** setup bindings. They are **not** unwrapped when accessed
+via a nested object property (`tree.error`). The expression
+`v-else-if="tree.error"` therefore evaluated the **ref object** itself, which is
+**always truthy**. The error branch displayed permanently.
 
-Comme il n'y avait aucune erreur réelle (`tree.error.value` restait `null`), le
-computed `errorMessage` retournait `''` (branche `raw === null`), d'où le
-triangle sans texte.
+Since there was no real error (`tree.error.value` stayed `null`), the
+computed `errorMessage` returned `''` (`raw === null` branch), hence the
+triangle without text.
 
-Le code montrait déjà la bonne pratique pour `flatList`:
+The code already showed the right pattern for `flatList`:
 ```ts
 const flatList = computed(() => tree.flatList.value);
 ```
-...précisément parce que `tree.flatList` ne se déballle pas seul. Mais le même
-wrapper avait été oublié pour `tree.error` et `tree.indexing`.
+...precisely because `tree.flatList` does not unwrap on its own. But the same
+wrapper was forgotten for `tree.error` and `tree.indexing`.
 
 ## Fix
 
-Ajout de computed top-level auto-déballés dans `FileExplorer.vue`:
+Added top-level auto-unwrapped computeds in `FileExplorer.vue`:
 ```ts
 const treeError = computed(() => tree.error.value);
 const treeIndexing = computed(() => tree.indexing.value);
 ```
 
-Template corrigé (3 conditions):
+Corrected template (3 conditions):
 - `v-else-if="tree.error"` -> `v-else-if="treeError"`
 - `v-else-if="flatList.length === 0 && !tree.indexing"` -> `... && !treeIndexing`
 - `v-if="tree.indexing && !tree.error"` -> `v-if="treeIndexing && !treeError"`
 
-Flux après fix (cas nominal, succès Rust):
-1. `v-if="!activePath"` -> faux (dossier ouvert)
-2. `v-else-if="treeError"` -> `tree.error.value` est `null` -> faux
-3. `v-else-if="flatList.length === 0 && !treeIndexing"` -> faux (3 entrées)
-4. `v-else` `RecycleScroller` -> affiche l'arbre
+Flow after fix (nominal case, Rust success):
+1. `v-if="!activePath"` -> false (folder open)
+2. `v-else-if="treeError"` -> `tree.error.value` is `null` -> false
+3. `v-else-if="flatList.length === 0 && !treeIndexing"` -> false (3 entries)
+4. `v-else` `RecycleScroller` -> displays the tree
 
-## Pièges rencontrés pendant le diagnostic
+## Pitfalls encountered during diagnosis
 
-1. **HMR non fonctionnel dans la webview Tauri**: les éditions frontend ne
-   sont pas hot-replacées dans la webview Linux (webkitgtk). Un rechargement
-   complet est nécessaire pour voir le code à jour. Symptôme: « l'interface ne
-   bouge pas » après une édition.
+1. **HMR not working in Tauri webview**: frontend edits are not
+   hot-replaced in the Linux webview (webkitgtk). A full reload is
+   required to see updated code. Symptom: "the UI does not change" after an edit.
 
-2. **Race au démarrage `tauri dev`**: le dev server Quasar (`beforeDevCommand`)
-   peut démarrer une seconde avant la webview. La webview charge pendant la
-   compilation initiale et récupère un bundle partiel. Un rechargement une fois
-   le dev server prêt résout l'état stale.
+2. **Startup race in `tauri dev`**: the Quasar dev server (`beforeDevCommand`)
+   can start a second before the webview. The webview loads during
+   initial compilation and picks up a partial bundle. Reloading once the
+   dev server is ready fixes the stale state.
 
-3. **Pas de raccourci reload natif**: Ctrl+R / F5 ne sont pas bindés par défaut
-   dans une webview Tauri v2 sur Linux. Fix: binding ajouté dans
-   `WorkprobaLayout.vue` qui appelle `getCurrentWindow().reload()` (avec
-   fallback `location.reload()`). Rechargeable aussi via `location.reload()`
-   dans la console DevTools.
+3. **No native reload shortcut**: Ctrl+R / F5 are not bound by default
+   in a Tauri v2 webview on Linux. Fix: binding added in
+   `WorkprobaLayout.vue` calling `getCurrentWindow().reload()` (with
+   `location.reload()` fallback). Also reloadable via `location.reload()`
+   in DevTools console.
 
-4. **Bruit console**: les erreurs du sidecar (port 8765 `Connection refused` /
-   CORS) inondent la console et masquent les logs de diagnostic. Le sidecar est
-   un sujet séparé (l'explorateur de fichiers n'en dépend pas, il utilise des
-   commandes Tauri).
+4. **Console noise**: sidecar errors (port 8765 `Connection refused` /
+   CORS) flood the console and hide diagnostic logs. The sidecar is
+   a separate topic (the file explorer does not depend on it, it uses
+   Tauri commands).
 
-## Règle à retenir
+## Rule to remember
 
-Toujours wrappers en computed top-level les refs issues d'un composable quand
-elles sont lues dans le template via une propriété nichée (`tree.x`), ou
-utiliser `tree.x.value` explicitement. Ne jamais faire `v-if="tree.refProp"`:
-cela teste l'objet ref, pas sa valeur.
+Always wrap in top-level computeds refs from a composable when
+read in the template via a nested property (`tree.x`), or
+use `tree.x.value` explicitly. Never do `v-if="tree.refProp"`:
+that tests the ref object, not its value.
 
-## Fichiers modifiés
+## Modified files
 
-- `front/src/components/workproba/FileExplorer.vue`: fix du bug (computed
-  `treeError` / `treeIndexing` + template), bouton « Réessayer », affichage
-  robuste du message d'erreur, `console.error` de diagnostic.
-- `front/src/composables/useFileTree.ts`: catch robuste garantissant un
-  message non vide + `console.error`.
-- `front/src/layouts/WorkprobaLayout.vue`: binding Ctrl+R / F5 pour recharger
-  la webview.
-- `desktop/src-tauri/src/commands/project.rs`: `log::info!` / `log::warn!` sur
-  `list_dir_entries` pour diagnostic backend.
+- `front/src/components/workproba/FileExplorer.vue`: bug fix (computed
+  `treeError` / `treeIndexing` + template), "Retry" button, robust
+  error message display, diagnostic `console.error`.
+- `front/src/composables/useFileTree.ts`: robust catch guaranteeing a
+  non-empty message + `console.error`.
+- `front/src/layouts/WorkprobaLayout.vue`: Ctrl+R / F5 binding to reload
+  the webview.
+- `desktop/src-tauri/src/commands/project.rs`: `log::info!` / `log::warn!` on
+  `list_dir_entries` for backend diagnostics.

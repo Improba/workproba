@@ -1,84 +1,84 @@
-# Tests Workproba
+# Workproba tests
 
-Workproba est une application bureau (Tauri + Quasar) avec un sidecar Python. Les tests se répartissent sur trois couches.
+Workproba is a desktop application (Tauri + Quasar) with a Python sidecar. Tests are split across three layers.
 
-> **Node requis :** ≥ 22.22 (Node 24 recommandé). vitest 4 et le build Quasar échouent sur Node 20.
+> **Node required:** ≥ 22.22 (Node 24 recommended). vitest 4 and the Quasar build fail on Node 20.
 
-## Sidecar Python (`services/ai/`)
+## Python sidecar (`services/ai/`)
 
-Cadre : **pytest** + `pytest-asyncio`. Les tests hors-ligne sont déterministes (pas de LLM, `TestModel` Pydantic AI en remplacement du modèle réel).
+Framework: **pytest** + `pytest-asyncio`. Offline tests are deterministic (no LLM, Pydantic AI `TestModel` replaces the real model).
 
-### Organisation
+### Organization
 
-- `tests/conftest.py` — fixtures partagées
-- `tests/test_llm_config.py` — `build_model`, settings, helpers
-- `tests/test_agent_loop.py` — conversion messages, events SSE, robustesse outils
-- `tests/test_agent_remember.py` — outil `remember`, injection mémoire
-- `tests/test_main_http.py` — `/agent/turn`, CORS preflight, erreurs HTTP
-- `tests/test_rag_store.py` — chunking, `RagStore` sans réseau
-- `tests/test_memory_scope.py`, `test_memory_extended.py` — scopes user/projet
-- `tests/test_plugin_personas.py`, `test_personas_estimate_cost.py` — plugin personas
-- `tests/test_plugin_projet.py`, `test_plugin_projet_http.py` — plugin projet
-- `tests/test_plugin_browser.py`, `test_plugin_cloud.py` — plugins expérimentaux
-- `tests/test_documents_preview.py`, `test_preview_change.py` — aperçu documents
-- `tests/test_attachments.py`, `test_reprocess_attachment.py` — pièces jointes
-- `tests/test_audit.py`, `test_audit_export.py` — journal d'audit
-- `tests/test_versions.py` — versions fichier
-- `tests/test_extractor.py` — extraction `.docx`, binaire
-- `tests/test_live_mistral.py` — **live** (réseau + clé Mistral), ignoré par défaut
+- `tests/conftest.py`: shared fixtures
+- `tests/test_llm_config.py`: `build_model`, settings, helpers
+- `tests/test_agent_loop.py`: message conversion, SSE events, tool robustness
+- `tests/test_agent_remember.py`: `remember` tool, memory injection
+- `tests/test_main_http.py`: `/agent/turn`, CORS preflight, HTTP errors
+- `tests/test_rag_store.py`: chunking, `RagStore` without network
+- `tests/test_memory_scope.py`, `test_memory_extended.py`: user/project scopes
+- `tests/test_plugin_personas.py`, `test_personas_estimate_cost.py`: personas plugin
+- `tests/test_plugin_projet.py`, `test_plugin_projet_http.py`: project plugin
+- `tests/test_plugin_browser.py`, `test_plugin_cloud.py`: experimental plugins
+- `tests/test_documents_preview.py`, `test_preview_change.py`: document preview
+- `tests/test_attachments.py`, `test_reprocess_attachment.py`: attachments
+- `tests/test_audit.py`, `test_audit_export.py`: audit log
+- `tests/test_versions.py`: file versions
+- `tests/test_extractor.py`: `.docx` extraction, binary
+- `tests/test_live_mistral.py`: **live** (network + Mistral key), skipped by default
 
-### Commandes
+### Commands
 
 ```bash
 cd services/ai
 
-# Suite hors-ligne (déterministe)
+# Offline suite (deterministic)
 .venv/bin/pytest -q
 
-# Tests live contre Mistral (réseau + clé requis)
+# Live tests against Mistral (network + key required)
 WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 ```
 
-### Couverture actuelle
+### Current coverage
 
-Exécuter `pytest -q` pour le décompte à jour (environ **336 tests** offline + quelques skips, plus 2 live). Couvre : agent, mémoire scopée, plugins, documents, audit, attachments, RAG, HTTP SSE.
+Run `pytest -q` for the up-to-date count (about **336 offline tests** + a few skips, plus 2 live). Covers: agent, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE.
 
 ## Frontend (`front/`)
 
-Cadre : **Vitest 4** + `@vue/test-utils`, environment `happy-dom`.
+Framework: **Vitest 4** + `@vue/test-utils`, `happy-dom` environment.
 
-### Organisation
+### Organization
 
-- Unitaires : `front/test/unit/**/*.spec.ts`
-- Setup global : `front/test/setup.ts` (i18n + mocks/stubs Quasar)
-- Config : `front/vitest.config.ts`
-- Composables Workproba : `useSidecarHealth.spec.ts`, etc.
+- Unit: `front/test/unit/**/*.spec.ts`
+- Global setup: `front/test/setup.ts` (i18n + Quasar mocks/stubs)
+- Config: `front/vitest.config.ts`
+- Workproba composables: `useSidecarHealth.spec.ts`, etc.
 
-### Commandes
+### Commands
 
 ```bash
 cd front
 
-yarn test:unit                 # vitest run + couverture
-npx vitest run test/unit --no-coverage   # rapide sans couverture
+yarn test:unit                 # vitest run + coverage
+npx vitest run test/unit --no-coverage   # quick without coverage
 yarn test:e2e                  # Playwright (smoke)
 ```
 
-### État connu
+### Known state
 
-- `useSidecarHealth.spec.ts` : polling santé sidecar (connected / error / streaming).
-- Échecs **préexistants** non liés au sidecar : `pages-smoke.spec.ts` et `ssr-paths.spec.ts` (imports de pages absentes), `layouts.spec.ts` (`StandardLayout` lib-improba).
+- `useSidecarHealth.spec.ts`: sidecar health polling (connected / error / streaming).
+- **Pre-existing failures** unrelated to the sidecar: `pages-smoke.spec.ts` and `ssr-paths.spec.ts` (imports of missing pages), `layouts.spec.ts` (`StandardLayout` lib-improba).
 
-### Sélection des tests par risque
+### Test selection by risk
 
-- **Composables / utils** : Vitest unitaire avec mocks (`vi.fn`, mock des services).
-- **Composants** : Vitest + Vue Test Utils (props, emits, slots, états observables).
-- **Pages** : Vitest ciblé rendu + interactions ; e2e Playwright si flux critique.
-- Privilégier des tests rapides et déterministes ; limiter les e2e au parcours métier critique.
+- **Composables / utils**: Vitest unit with mocks (`vi.fn`, service mocks).
+- **Components**: Vitest + Vue Test Utils (props, emits, slots, observable states).
+- **Pages**: targeted Vitest render + interactions; Playwright e2e for critical flows.
+- Prefer fast deterministic tests; limit e2e to critical business paths.
 
-## Coque Tauri (`desktop/`)
+## Tauri shell (`desktop/`)
 
-Pas de suite automatisée. Vérification de compilation :
+No automated suite. Compilation check:
 
 ```bash
 cd desktop/src-tauri && cargo check
@@ -86,9 +86,9 @@ cd desktop/src-tauri && cargo check
 
 ## CI
 
-Pas de CI configurée pour le pivot bureau (à mettre en place avec la phase E / packaging). Cibles futures : `cargo check`, `pytest -q`, `yarn test:unit`, `yarn build`.
+No CI configured for the desktop pivot (to be set up with phase E / packaging). Future targets: `cargo check`, `pytest -q`, `yarn test:unit`, `yarn build`.
 
-## Référence
+## Reference
 
 - [Vue.js Testing Guide](https://vuejs.org/guide/scaling-up/testing)
 - [Pydantic AI testing](https://ai.pydantic.dev/testing/)

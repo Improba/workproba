@@ -1,182 +1,182 @@
-# Workproba, proposition UX
+# Workproba, UX Proposal
 
-Auteur : Léa (UX strategist), débat avec Inès (lead designer).
+Author: Léa (UX strategist), debate with Inès (lead designer).
 
-## 1. Architecture de l'information et hiérarchie
+## 1. Information architecture and hierarchy
 
-### Choix : une seule sidebar à gauche, à deux niveaux, pas deux panneaux.
+### Choice: a single left sidebar, two levels deep, not two panels.
 
-Structure de la sidebar, de haut en bas :
+Sidebar structure, top to bottom:
 
-1. **En-tête de sidebar** : le workspace actif (icône dossier + nom), cliquable, ouvre un **switcher de workspaces récents** (menu transient, pas un panneau permanent). Bouton "Ouvrir un dossier" en pied de ce menu.
-2. **Section "Conversations"** du workspace actif : liste scrollable, groupée par date (Aujourd'hui / Cette semaine / Plus ancien), comme Claude/Cursor. Bouton "Nouvelle conversation" en haut de la section.
-3. **Pied de sidebar** : statut compact (sidecar IA connecté, mémoire RAG indexée), réduit à une ligne.
+1. **Sidebar header**: the active workspace (folder icon + name), clickable, opens a **recent workspaces switcher** (transient menu, not a permanent panel). "Open a folder" button at the bottom of this menu.
+2. **"Conversations" section** of the active workspace: scrollable list, grouped by date (Today / This week / Older), like Claude/Cursor. "New conversation" button at the top of the section.
+3. **Sidebar footer**: compact status (AI sidecar connected, RAG memory indexed), reduced to one line.
 
-Le centre reste **la conversation**. La droite reste **l'arborescence fichiers** du workspace.
+The center remains **the conversation**. The right side remains **the workspace file tree**.
 
-### Pourquoi pas deux panneaux séparés (workspaces | conversations) ?
+### Why not two separate panels (workspaces | conversations)?
 
-Pour un non-codeur, jongler entre deux listes demande de savoir "où je suis dans la hiérarchie". Cursor peut se le permettre : sa cible vit dans un éditeur 8 h/jour. Nous non. Un seul panneau qui **change de niveau sémantique** avec un retour clair (le nom du workspace en haut), c'est moins de surfaces à scanner, une seule colonne à lire. Le switcher de workspaces est un **menu** (transient), pas un panneau permanent : on l'ouvre, on choisit, il disparaît. Le workspace actif reste le repère stable.
+For a non-coder, juggling between two lists requires knowing "where I am in the hierarchy." Cursor can afford that: its audience lives in an editor 8 hours a day. We cannot. A single panel that **changes semantic level** with a clear way back (the workspace name at the top) means fewer surfaces to scan, a single column to read. The workspace switcher is a **menu** (transient), not a permanent panel: you open it, you choose, it disappears. The active workspace remains the stable anchor.
 
-### Pourquoi ne pas tout mettre dans un seul arbre (workspace > conversations) ?
+### Why not put everything in a single tree (workspace > conversations)?
 
-Les workspaces sont des **dossiers physiques** (peu, ~5 à 20 max), les conversations sont des **objets nombreux** (des dizaines par workspace). Mélanger les deux crée une profondeur injustifiée et masque les conversations sous un nœud replié. On sépare : workspaces = switcher plat, conversations = liste dédiée.
+Workspaces are **physical folders** (few, ~5 to 20 max), conversations are **numerous objects** (dozens per workspace). Mixing the two creates unjustified depth and hides conversations under a collapsed node. We separate them: workspaces = flat switcher, conversations = dedicated list.
 
-Modèle mental : *un dossier de chantier (workspace), plusieurs discussions (conversations) dedans.*
+Mental model: *one project folder (workspace), several discussions (conversations) inside it.*
 
-## 2. Parcours clés
+## 2. Key flows
 
-### 2.1 Premier lancement (aucun workspace)
+### 2.1 First launch (no workspace)
 
-- Fenêtre centrée, fond de marque Improba, **grande zone d'action unique** : "Ouvrez un dossier pour commencer".
-- Sous-titre court : "Workproba travaille sur vos fichiers locaux. Rien ne sort de votre machine sauf ce que vous envoyez à l'IA."
-- Un seul bouton principal : "Choisir un dossier" (sélecteur natif Tauri).
-- Pas de liste récente vide affichée : on n'affiche jamais un état vide "il n'y a rien", on affiche l'action.
-- À droite : arbre vide avec un pictogramme et la phrase "Votre arborescence apparaîtra ici."
+- Centered window, Improba brand background, **single large action area**: "Open a folder to get started."
+- Short subtitle: "Workproba works on your local files. Nothing leaves your machine except what you send to the AI."
+- Single primary button: "Choose a folder" (native Tauri picker).
+- No empty recent list displayed: we never show an empty "there is nothing" state, we show the action.
+- On the right: empty tree with an icon and the text "Your file tree will appear here."
 
-### 2.2 Ouvrir un nouveau dossier
+### 2.2 Opening a new folder
 
-1. User clique "Choisir un dossier" (onboarding) ou le bouton dans le switcher de workspaces.
-2. Sélecteur natif Tauri. L'user valide un dossier.
-3. Retour frontend : on génère un UUID, on crée `~/.local/share/fr.improba.workproba/workspaces/{uuid}/`, on indexe l'arborescence (Rust, watch_FS démarré).
-4. Feedback transitoire : "Dossier 'Devis 2026' ouvert" (toast 2 s).
-5. **Première conversation créée automatiquement**, titrée "Nouvelle conversation", focus dans la zone de saisie. Micro-onboarding inline dans le premier message assistant : "Je suis prêt. Décrivez ce que vous voulez faire avec les fichiers de ce dossier."
-6. L'arborescence de droite se peuple.
+1. User clicks "Choose a folder" (onboarding) or the button in the workspace switcher.
+2. Native Tauri picker. The user confirms a folder.
+3. Frontend response: we generate a UUID, create `~/.local/share/fr.improba.workproba/workspaces/{uuid}/`, index the tree (Rust, watch_FS started).
+4. Transient feedback: "Folder 'Devis 2026' opened" (2 s toast).
+5. **First conversation created automatically**, titled "New conversation", focus in the input area. Inline micro-onboarding in the first assistant message: "I'm ready. Describe what you want to do with the files in this folder."
+6. The right-hand tree populates.
 
-### 2.3 Basculer entre workspaces récents
+### 2.3 Switching between recent workspaces
 
-1. User clique le **workspace actif en tête de sidebar**.
-2. Menu transient : liste des workspaces récents (icône + nom + chemin tronqué), item actif surligné, entrée "Ouvrir un autre dossier…".
-3. Clic sur un item : fermeture du menu, chargement du workspace, conversations rechargées, arbre de droite rafraîchi. La conversation active du workspace est restaurée (la dernière ouverte, ou la première si jamais visité).
-4. Pas de confirmation : changement de contexte réversible.
+1. User clicks the **active workspace at the top of the sidebar**.
+2. Transient menu: list of recent workspaces (icon + name + truncated path), active item highlighted, "Open another folder…" entry.
+3. Click on an item: menu closes, workspace loads, conversations reload, right tree refreshes. The active conversation of the workspace is restored (the last opened, or the first if never visited).
+4. No confirmation: reversible context change.
 
-### 2.4 Démarrer une nouvelle conversation dans le workspace courant
+### 2.4 Starting a new conversation in the current workspace
 
-1. Bouton "Nouvelle conversation" en haut de la section conversations (et raccourci `Cmd/Ctrl+N`, affiché en tooltip, pas exigé).
-2. La conversation courante est **mise en pause** (état scroll + messages persisté en mémoire et sur disque).
-3. Une nouvelle conversation vide prend le centre, titre provisoire "Nouvelle conversation", focus dans la saisie.
-4. Le titre se renomme automatiquement après le premier échange user/assistant (résumé court côté IA), comme Claude. L'user peut le renommer au double-clic.
+1. "New conversation" button at the top of the conversations section (and `Cmd/Ctrl+N` shortcut, shown in tooltip, not required).
+2. The current conversation is **paused** (scroll state + messages persisted in memory and on disk).
+3. A new empty conversation takes the center, provisional title "New conversation", focus in the input.
+4. The title renames automatically after the first user/assistant exchange (short AI summary), like Claude. The user can rename it on double-click.
 
-### 2.5 Reprise d'une conversation existante
+### 2.5 Resuming an existing conversation
 
-1. Clic sur une conversation dans la liste.
-2. Chargement depuis le disque (Tauri). Pendant le chargement (<200 ms) : on garde la conversation précédente affichée avec un voile léger, pas un écran blanc.
-3. Restauration de la **position de scroll** et de la sélection de message. On persiste `scrollTop` + `activeMessageId` dans les métadonnées de la conversation.
-4. L'arbre de droite reste le même (c'est le workspace), mais on peut optionnellement **surligner les fichiers déjà touchés dans cette conversation** (toggle discret).
+1. Click on a conversation in the list.
+2. Load from disk (Tauri). During loading (<200 ms): keep the previous conversation displayed with a light veil, not a blank screen.
+3. Restore **scroll position** and message selection. We persist `scrollTop` + `activeMessageId` in conversation metadata.
+4. The right tree stays the same (it's the workspace), but we can optionally **highlight files already touched in this conversation** (discrete toggle).
 
-### 2.6 Interaction avec l'arborescence
+### 2.6 Interacting with the file tree
 
-- **Déplier/replier** : clic sur le chevron du nœud (pas sur le label, pour éviter l'ouverture accidentelle). `→`/`←` clavier pour expand/collapse.
-- **Ouvrir dans l'OS** : double-clic sur le label = ouvrir le fichier avec l'application par défaut du système (Tauri `open`). Action la plus "non-codeur" : on ne veut pas un éditeur de code intégré, on veut "ouvrir mon devis.docx dans Word".
-- **Révéler dans le Finder/Explorer** : menu contextuel (clic droit) + bouton "Révéler" sur le nœud survolé.
-- **Filtrer** : barre de filtre en tête de l'arbre (toujours visible). Filtre flou, instantané, avec affichage du chemin parent en filigrane pour désambiguïser.
-- **Raccourcis clavier** : `Cmd/Ctrl+P` ouvre le filtre et focus direct. On n'exige pas les raccourcis, on les offre.
+- **Expand/collapse**: click on the node chevron (not the label, to avoid accidental opening). `→`/`←` keyboard for expand/collapse.
+- **Open in the OS**: double-click on the label = open the file with the system's default application (Tauri `open`). The most "non-coder" action: we don't want a built-in code editor, we want "open my quote.docx in Word."
+- **Reveal in Finder/Explorer**: context menu (right-click) + "Reveal" button on hovered node.
+- **Filter**: filter bar at the top of the tree (always visible). Fuzzy filter, instant, with parent path shown in watermark to disambiguate.
+- **Keyboard shortcuts**: `Cmd/Ctrl+P` opens the filter and focuses directly. We don't require shortcuts, we offer them.
 
-### 2.7 Pendant que l'agent travaille (streaming + tool calls)
+### 2.7 While the agent is working (streaming + tool calls)
 
-Moment le plus anxiogène pour un non-codeur. Le soulagement est le critère numéro un.
+The most anxiety-inducing moment for a non-coder. Relief is the number one criterion.
 
-- **Centre** : le message assistant se construit en streaming, curseur de frappe doux. Au-dessus du bloc, un statut animé : "L'agent réfléchit…" puis "L'agent lit `devis.pdf`…" puis "L'agent modifie `facture.xlsx`…" (libellés humains, pas `tool_call:read_file`).
-- **Droite (arbre)** : les fichiers **touchés pendant la session** reçoivent un badge discret (un point coloré Improba pour "créé/modifié récemment"). Le nœud se déplie automatiquement pour être visible, et un surlignage temporaire (fade out sur 3 s) signale le changement. Pas de clignotement, pas de saut de scroll violent.
-- **Sidebar** : la conversation active affiche un point d'activité à côté de son titre.
-- **Pied de sidebar** : le statut sidecar passe de "Connecté" à "Travaille…" avec un pulse subtil.
-- L'user peut **arrêter** (bouton "Arrêter" remplace "Envoyer" pendant le streaming). Arrêter toujours visible et accessible.
+- **Center**: the assistant message builds in streaming, soft typing cursor. Above the block, an animated status: "The agent is thinking…" then "The agent is reading `devis.pdf`…" then "The agent is modifying `facture.xlsx`…" (human labels, not `tool_call:read_file`).
+- **Right (tree)**: files **touched during the session** receive a discrete badge (a colored Improba dot for "recently created/modified"). The node auto-expands to be visible, and a temporary highlight (fade out over 3 s) signals the change. No blinking, no violent scroll jumps.
+- **Sidebar**: the active conversation shows an activity dot next to its title.
+- **Sidebar footer**: sidecar status goes from "Connected" to "Working…" with a subtle pulse.
+- The user can **stop** ("Stop" button replaces "Send" during streaming). Stop always visible and accessible.
 
-## 3. États et feedback
+## 3. States and feedback
 
-### États vides (jamais "vide", toujours "action")
+### Empty states (never "empty", always "action")
 
-- **Aucun workspace** : écran d'accueil décrit en 2.1.
-- **Workspace ouvert, aucune conversation** : impossible par design (on crée la première conversation à l'ouverture). On élimine un état vide.
-- **Dossier workspace vide** (aucun fichier) : arbre de droite affiche "Ce dossier est vide. Glissez-y des fichiers ou demandez à l'agent d'en créer." Avec un bouton "Créer un premier fichier". On transforme le vide en invitation.
+- **No workspace**: welcome screen described in 2.1.
+- **Workspace open, no conversation**: impossible by design (we create the first conversation on open). We eliminate an empty state.
+- **Empty workspace folder** (no files): right tree shows "This folder is empty. Drag files here or ask the agent to create some." With a "Create a first file" button. We turn emptiness into an invitation.
 
-### Chargements
+### Loading
 
-- Changement de workspace : voile léger sur le précédent (pas d'écran blanc).
-- Indexation initiale de l'arbre (gros dossier) : barre fine en pied de l'arbre, "Indexation de 12 480 fichiers…", disparaît à la fin. Jamais de spinner plein écran.
+- Workspace change: light veil on the previous one (no blank screen).
+- Initial tree indexing (large folder): thin bar at the bottom of the tree, "Indexing 12,480 files…", disappears when done. Never a full-screen spinner.
 
-### Erreurs
+### Errors
 
-- **Sidecar IA injoignable** : bannière discrète en pied de la conversation (pas en plein écran), "L'agent est injoignable pour le moment. Nouvelle tentative dans 3 s…" avec bouton "Réessayer maintenant". La zone de saisie reste active. On ne bloque jamais la saisie.
-- **Fichier supprimé entre deux opérations** : toast non bloquant "Le fichier n'existe plus" + l'arbre se met à jour via le watch.
-- **Permission dossier refusée** : message clair, "Workproba n'a pas accès à ce dossier", avec un lien vers la doc courte.
+- **AI sidecar unreachable**: discrete banner at the bottom of the conversation (not full screen), "The agent is unreachable at the moment. Retrying in 3 s…" with "Retry now" button. The input area stays active. We never block input.
+- **File deleted between operations**: non-blocking toast "The file no longer exists" + tree updates via watch.
+- **Folder permission denied**: clear message, "Workproba does not have access to this folder", with a link to short documentation.
 
 ### Streaming
 
-- Indicateur "L'agent réfléchit…" avant le premier token (et non un message vide qui s'affiche puis se remplit). Distinguer "réflexion" (rien encore) et "rédaction" (tokens arrivents), ça rassure.
+- "The agent is thinking…" indicator before the first token (not an empty message that appears then fills). Distinguish "thinking" (nothing yet) and "writing" (tokens arriving), it reassures.
 
-## 4. Arborescence droite, "nickel et performante"
+## 4. Right file tree, "polished and performant"
 
-### Modèle de données (côté front)
+### Data model (frontend side)
 
-Un arbre en mémoire, plat par profondeur, indexé par chemin absolu :
+An in-memory tree, flat by depth, indexed by absolute path:
 
 ```ts
 type TreeNode = {
-  path: string // absolu, clé unique
+  path: string // absolute, unique key
   name: string
   isDir: boolean
   depth: number
-  children?: string[] // chemins enfants, chargés lazy
-  loaded: boolean // enfants déjà fetchés ?
-  sessionState: 'idle' | 'created' | 'modified' // pendant la session
+  children?: string[] // child paths, lazy loaded
+  loaded: boolean // children already fetched?
+  sessionState: 'idle' | 'created' | 'modified' // during the session
 }
 ```
 
-Un `Map<string, TreeNode>` + un tableau de chemins visibles (correspond aux nœuds dépliés), servi à la virtualisation.
+A `Map<string, TreeNode>` + an array of visible paths (corresponds to expanded nodes), used for virtualization.
 
-### Virtualisation
+### Virtualization
 
-vue-virtual-scroller déjà dispo : on ne rend que les nœuds visibles + marge. Pour 50 000 fichiers, défilement fluide. Hauteur de ligne fixe (26 px), profondeur rendue par padding gauche calculé, pas par DOM imbriqué (gain de perf et de simplicité de scroll).
+vue-virtual-scroller already available: we only render visible nodes + margin. For 50,000 files, smooth scrolling. Fixed row height (26 px), depth rendered by calculated left padding, not nested DOM (performance and scroll simplicity gain).
 
-### Mise à jour temps réel
+### Real-time updates
 
-- Côté Rust : un watcher filesystem par workspace (`notify`). On émet des événements Tauri typés : `fs:create`, `fs:modify`, `fs:delete`, `fs:rename`.
-- Côté front : un store Pinia consomme les événements, met à jour le `Map`, et ne re-rend que la branche concernée (les ancêtres du chemin touché). Pas de re-indexation globale.
-- **Debounce** : on groupe les rafales (un `git checkout` qui touche 500 fichiers ne doit pas faire 500 mises à jour UI). Fenêtre de 150 ms, puis une seule passe de réconciliation.
-- **Tri stable** : dossiers d'abord, puis fichiers, alphabétique insensible à la casse. Option "Fichiers modifiés récemment en haut" dans un menu de préférences de l'arbre (offerte, pas par défaut).
+- Rust side: a filesystem watcher per workspace (`notify`). We emit typed Tauri events: `fs:create`, `fs:modify`, `fs:delete`, `fs:rename`.
+- Frontend side: a Pinia store consumes events, updates the `Map`, and only re-renders the affected branch (ancestors of the touched path). No global re-indexing.
+- **Debounce**: we group bursts (a `git checkout` touching 500 files should not cause 500 UI updates). 150 ms window, then a single reconciliation pass.
+- **Stable sort**: directories first, then files, case-insensitive alphabetical. "Recently modified files at top" option in a tree preferences menu (offered, not default).
 
 ### Lazy expand
 
-Les enfants d'un dossier ne sont jamais chargés tant que le nœud n'est pas déplié. À l'ouverture du workspace, on ne charge que **le premier niveau** + les éventuels dossiers précédemment dépliés (persistés dans les métadonnées du workspace). Pour un dossier à 10 000 entrées, on pagine le rendu des enfants par le virtualizer, pas de pagination logicielle visible.
+A folder's children are never loaded until the node is expanded. On workspace open, we only load **the first level** + any previously expanded folders (persisted in workspace metadata). For a folder with 10,000 entries, we paginate child rendering via the virtualizer, no visible logical pagination.
 
-### Recherche/filtre instantané
+### Instant search/filter
 
-- Saisie dans la barre de filtre : filtre flou sur le nom, affichage des résultats à plat avec chemin parent en filigrane gris. Échappement du mode filtre par `Esc`, retour à l'arbre déplié.
-- Pendant le filtre, les nœuds matchés se déplient automatiquement, leurs ancêtres aussi.
-- Compteur : "12 résultats".
+- Input in the filter bar: fuzzy filter on name, flat result display with parent path in gray watermark. Escape filter mode with `Esc`, return to expanded tree.
+- During filtering, matched nodes auto-expand, as do their ancestors.
+- Counter: "12 results".
 
-### Accessibilité clavier
+### Keyboard accessibility
 
-- L'arbre est une `tree` ARIA avec `treeitem`. Navigation `↑/↓`, expand/collapse `→/←`, ouverture `Entrée`, révéler `Cmd/Ctrl+R` (offert).
-- Focus visible : anneau de focus Improba, jamais supprimé.
+- The tree is an ARIA `tree` with `treeitem`. Navigation `↑/↓`, expand/collapse `→/←`, open `Enter`, reveal `Cmd/Ctrl+R` (offered).
+- Visible focus: Improba focus ring, never removed.
 
-### Indicateurs de session
+### Session indicators
 
-- `created` : badge vert "nouveau".
-- `modified` : badge orange "modifié".
-- Réinitialisés au changement de conversation (option : "Garder le surlignage entre les conversations" en préférences).
+- `created`: green "new" badge.
+- `modified`: orange "modified" badge.
+- Reset on conversation change (option: "Keep highlighting between conversations" in preferences).
 
-## 5. Marque et repérage "je suis dans Workproba"
+## 5. Brand and orientation "I'm in Workproba"
 
-Sans surcharger, trois points de repère :
+Without overloading, three anchor points:
 
-1. **Titre de fenêtre natif** : "Workproba, {nom du workspace}". Le premier mot = la marque, toujours là dans la barre des tâches OS. Gratuit et puissant.
-2. **Logo compact en tête de sidebar** : un logotype Improba mini (pas une grosse bannière), accolé au nom du workspace actif. C'est le repère "je suis dans la bonne app".
-3. **Accent couleur** : une seule couleur d'accent Improba, utilisée pour le focus, les badges de session, le statut "travaille", le bouton principal d'envoi. Une seule. Jamais éparpillée.
+1. **Native window title**: "Workproba, {workspace name}". The first word = the brand, always there in the OS taskbar. Free and powerful.
+2. **Compact logo at the top of the sidebar**: a mini Improba logotype (not a large banner), next to the active workspace name. This is the "I'm in the right app" anchor.
+3. **Color accent**: a single Improba accent color, used for focus, session badges, "working" status, primary send button. Just one. Never scattered.
 
-Micro-élément de marque : la signature de l'assistant dans les messages (avatar petit format + prénom), qui crée une présence humaine cohérente avec la marque. On n'est pas un outil froid, on est un atelier avec quelqu'un dedans.
+Micro brand element: the assistant signature in messages (small avatar + first name), creating a human presence consistent with the brand. We're not a cold tool, we're a workshop with someone inside.
 
-## 6. Risques UX et arbitrages
+## 6. UX risks and trade-offs
 
-- **Densité vs respiration** : arbre de fichiers dense (24 px) maximise l'information mais peut impressionner un non-codeur. Compromis proposé : 26 px. Décision design (Inès).
-- **Arbre persistant vs masquable** : pour les petits écrans (13"), l'arbre droit peut encombrer. Panneau **repliable** avec mémorisation de l'état par workspace, raccourci `Cmd/Ctrl+B` (offert, non exigé). La sidebar gauche ne se masque pas : c'est le repère stable.
-- **Raccourcis clavier pour non-codeurs** : les proposer sans les exiger. Tous les boutons primaires visibles et labellisés. Palette de commandes `Cmd/Ctrl+K` ? Puissant mais potentiellement effrayant. Avis : oui, avec libellés en clair ("Nouvelle conversation", pas "chat.new"), ça devient une aide à la découverte plutôt qu'un repaire d'experts.
-- **Renommage automatique des conversations** : pratique mais peut déstabiliser. Undo de renommage discret.
-- **Surlignage des fichiers touchés pendant le travail de l'IA** : dépliage auto + fade out. À valider sur un vrai dossier de test.
+- **Density vs breathing room**: dense file tree (24 px) maximizes information but can intimidate a non-coder. Proposed compromise: 26 px. Design decision (Inès).
+- **Persistent vs hideable tree**: for small screens (13"), the right tree can clutter. **Collapsible** panel with state remembered per workspace, `Cmd/Ctrl+B` shortcut (offered, not required). The left sidebar does not hide: it's the stable anchor.
+- **Keyboard shortcuts for non-coders**: offer them without requiring them. All primary buttons visible and labeled. `Cmd/Ctrl+K` command palette? Powerful but potentially intimidating. Opinion: yes, with clear labels ("New conversation", not "chat.new"), it becomes a discovery aid rather than an expert hideout.
+- **Automatic conversation renaming**: convenient but can destabilize. Discrete rename undo.
+- **Highlighting files touched during AI work**: auto-expand + fade out. To validate on a real test folder.
 
-## 7. Arbitrages à soumettre à Inès
+## 7. Trade-offs to submit to Inès
 
-1. **Sidebar unique à deux niveaux (mon choix) vs deux panneaux workspaces/conversations** : valider le modèle "switcher transient + liste conversations dédiée", ou tester les deux en maquette rapide avec 3 non-codeurs ?
-2. **Badge de session dans l'arbre (vert "nouveau" / orange "modifié")** : on garde les deux niveaux, ou on simplifie à un seul signal "touché pendant la session" pour réduire la charge visuelle ?
-3. **Palette de commandes `Cmd/Ctrl+K`** : on l'offre comme aide à la découverte (libellés en clair), ou on la réserve à une phase 2 pour ne pas surcharger le premier lancement ?
+1. **Single two-level sidebar (my choice) vs two workspaces/conversations panels**: validate the "transient switcher + dedicated conversations list" model, or test both in a quick mockup with 3 non-coders?
+2. **Session badge in the tree (green "new" / orange "modified")**: keep both levels, or simplify to a single "touched during session" signal to reduce visual load?
+3. **`Cmd/Ctrl+K` command palette**: offer it as a discovery aid (clear labels), or reserve it for a future release to avoid overloading first launch?

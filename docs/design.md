@@ -1,212 +1,212 @@
-# Système de design
+# Design System
 
-Ce document décrit le système de design utilisé dans ce projet, centré autour de la bibliothèque **Anubis UI** pour la gestion des couleurs et des styles.
+This document describes the design system used in this project, centered around the **Anubis UI** library for color and style management.
 
-## Vue d'ensemble
+## Overview
 
-Le projet utilise **Anubis UI** (`anubis-ui` v1.3.1), un framework CSS personnalisé qui fournit :
+The project uses **Anubis UI** (`anubis-ui` v1.3.1), a custom CSS framework that provides:
 
-- Un système de couleurs cohérent avec support du mode clair/sombre
-- Des classes utilitaires générées automatiquement
-- Des variables CSS pour une utilisation flexible
-- Une intégration transparente avec Quasar Framework
+- A consistent color system with light/dark mode support
+- Automatically generated utility classes
+- CSS variables for flexible usage
+- Seamless integration with Quasar Framework
 
-Workproba ajoute par-dessus un système de tokens dédiés **`--wp-*`** (définis dans `front/src/css/workproba.scss`) pour tout le CSS custom de l'application : typographie, focus, espacement, densité, surfaces et accents de marque.
+Workproba adds a dedicated **`--wp-*`** token system on top (defined in `front/src/css/workproba.scss`) for all custom application CSS: typography, focus, spacing, density, surfaces, and brand accents.
 
-## Tokens Workproba (`--wp-*`)
+## Workproba Tokens (`--wp-*`)
 
-### Rôle dans l'architecture
+### Role in the architecture
 
-| Couche | Usage |
+| Layer | Usage |
 |--------|-------|
-| **`--wp-*`** | Alias sémantiques du **shell** Workproba (surfaces, bordures, typo, focus) — définis dans `workproba.scss`, souvent mappés sur Anubis (`var(--neutral-lower)`, etc.) |
-| **Anubis** (`--primary`, `--neutral-*`, classes `bg-*` / `text-*`) | **Source de vérité palette** via `anubis.config.json` → `_anubis.scss` |
-| **Quasar** | Composants structurels ; couleurs via `--q-*` synchronisées dans `workproba.scss` |
+| **`--wp-*`** | Semantic aliases for the Workproba **shell** (surfaces, borders, typography, focus), defined in `workproba.scss`, often mapped to Anubis (`var(--neutral-lower)`, etc.) |
+| **Anubis** (`--primary`, `--neutral-*`, `bg-*` / `text-*` classes) | **Palette source of truth** via `anubis.config.json` → `_anubis.scss` |
+| **Quasar** | Structural components; colors via `--q-*` synchronized in `workproba.scss` |
 
-**Règle de contribution** : tout style custom dans un composant Workproba passe par les tokens `--wp-*`. Pas de couleur ni de taille en dur (`#203d52`, `14px`, etc.) dans les fichiers `.vue` / `.scss` des composants.
+**Contribution rule**: all custom styling in a Workproba component goes through `--wp-*` tokens. No hardcoded colors or sizes (`#203d52`, `14px`, etc.) in component `.vue` / `.scss` files.
 
-### Typographie
+### Typography
 
-| Token | Valeur | Rôle |
+| Token | Value | Role |
 |-------|--------|------|
-| `--wp-fs-xs` | 12px | Texte tertiaire, labels compacts |
-| `--wp-fs-sm` | 13px | Texte secondaire, hints |
-| `--wp-fs-base` | 15px | Corps de texte par défaut |
-| `--wp-fs-md` | 17px | Sous-titres, titres de section |
-| `--wp-fs-lg` | 20px | Titres intermédiaires |
-| `--wp-fs-xl` | 24px | Titres de page |
-| `--wp-fs-display` | 32px | Affichage hero |
-| `--wp-lh-tight` | 1.2 | Titres, labels |
-| `--wp-lh-normal` | 1.5 | Corps de texte |
-| `--wp-lh-relaxed` | 1.65 | Paragraphes aérés |
-| `--wp-font-ui` | Varela Round, … | Police interface |
-| `--wp-font-head` | Inter, … | Titres et chat |
-| `--wp-font-mono` | JetBrains Mono, … | Code, raccourcis clavier |
+| `--wp-fs-xs` | 12px | Tertiary text, compact labels |
+| `--wp-fs-sm` | 13px | Secondary text, hints |
+| `--wp-fs-base` | 15px | Default body text |
+| `--wp-fs-md` | 17px | Subtitles, section titles |
+| `--wp-fs-lg` | 20px | Intermediate titles |
+| `--wp-fs-xl` | 24px | Page titles |
+| `--wp-fs-display` | 32px | Hero display |
+| `--wp-lh-tight` | 1.2 | Titles, labels |
+| `--wp-lh-normal` | 1.5 | Body text |
+| `--wp-lh-relaxed` | 1.65 | Spacious paragraphs |
+| `--wp-font-ui` | Varela Round, … | Interface font |
+| `--wp-font-head` | Inter, … | Titles and chat |
+| `--wp-font-mono` | JetBrains Mono, … | Code, keyboard shortcuts |
 
-### Focus clavier
+### Keyboard focus
 
-| Token | Rôle |
+| Token | Role |
 |-------|------|
-| `--wp-focus-ring` | Anneau `:focus-visible` — `var(--accent-high)` (cyan clair, or sombre) |
-| `--wp-focus-offset` | Décalage de l'outline (2px) |
+| `--wp-focus-ring` | `:focus-visible` ring, `var(--accent-high)` (light cyan, dark gold) |
+| `--wp-focus-offset` | Outline offset (2px) |
 
-Appliqué globalement sur `.wp-shell` pour titlebar, sidebar, explorateur, composer et boutons.
+Applied globally on `.wp-shell` for titlebar, sidebar, explorer, composer, and buttons.
 
-### Espacement et densité
+### Spacing and density
 
-Les tokens `--wp-space-1` à `--wp-space-6` définissent l'échelle d'espacement. Leur valeur dépend de l'attribut `data-density` sur le layout racine (`.wp-shell`), piloté par `useAppSettings.density` :
+The `--wp-space-1` through `--wp-space-6` tokens define the spacing scale. Their values depend on the `data-density` attribute on the root layout (`.wp-shell`), driven by `useAppSettings.density`:
 
-| Densité | `--wp-space-1` … `--wp-space-6` | Usage |
+| Density | `--wp-space-1` … `--wp-space-6` | Usage |
 |---------|----------------------------------|-------|
-| `compact` | 2, 4, 8, 12, 16, 20 px | Power-users, écrans denses |
-| `comfortable` (défaut) | 4, 8, 12, 16, 20, 24 px | Parcours guidé / verrouillé |
-| `spacious` | 6, 10, 14, 20, 28, 32 px | Lisibilité maximale |
+| `compact` | 2, 4, 8, 12, 16, 20 px | Power users, dense screens |
+| `comfortable` (default) | 4, 8, 12, 16, 20, 24 px | Guided / locked flow |
+| `spacious` | 6, 10, 14, 20, 28, 32 px | Maximum readability |
 
-### Surfaces, bordures et accents
+### Surfaces, borders, and accents
 
-| Token | Rôle |
+| Token | Role |
 |-------|------|
-| `--wp-bg` | Fond global de l'application |
-| `--wp-surface`, `--wp-surface-2`, `--wp-surface-3` | Cartes, panneaux, zones surélevées |
-| `--wp-border`, `--wp-border-strong` | Séparateurs et contours |
-| `--wp-text`, `--wp-text-muted`, `--wp-text-faint` | Hiérarchie de texte |
-| `--wp-primary`, `--wp-primary-soft` | Branding : canard (clair) / or (sombre), via `var(--primary)` |
-| `--wp-accent`, `--wp-accent-strong`, `--wp-accent-soft` | Actions, focus, onglets actifs : cyan (clair) / or (sombre) |
-| `--wp-canard`, `--wp-cyan`, `--wp-gold`, `--wp-violet` | Accents de marque Improba (stables entre thèmes) |
-| `--wp-success`, `--wp-danger`, `--wp-danger-soft` | États sémantiques |
-| `--wp-r-sm` … `--wp-r-pill` | Rayons de bordure |
-| `--wp-shadow-1`, `--wp-shadow-2` | Ombres légères |
+| `--wp-bg` | Global application background |
+| `--wp-surface`, `--wp-surface-2`, `--wp-surface-3` | Cards, panels, elevated areas |
+| `--wp-border`, `--wp-border-strong` | Separators and outlines |
+| `--wp-text`, `--wp-text-muted`, `--wp-text-faint` | Text hierarchy |
+| `--wp-primary`, `--wp-primary-soft` | Branding: teal (light) / gold (dark), via `var(--primary)` |
+| `--wp-accent`, `--wp-accent-strong`, `--wp-accent-soft` | Actions, focus, active tabs: cyan (light) / gold (dark) |
+| `--wp-canard`, `--wp-cyan`, `--wp-gold`, `--wp-violet` | Improba brand accents (stable across themes) |
+| `--wp-success`, `--wp-danger`, `--wp-danger-soft` | Semantic states |
+| `--wp-r-sm` … `--wp-r-pill` | Border radii |
+| `--wp-shadow-1`, `--wp-shadow-2` | Light shadows |
 | `--wp-ease`, `--wp-dur` | Transitions (180ms) |
 
-### Fichier source
+### Source files
 
-- **Palette** (`--primary`, `--neutral-*`, sémantique) : `front/anubis.config.json` → génère `_anubis.scss`. Voir [anubis-ui.md](./anubis-ui.md).
-- **Shell** (`--wp-*`, typo, densité, `--q-*`) : `front/src/css/workproba.scss`, chargé **après** `_anubis.scss`.
+- **Palette** (`--primary`, `--neutral-*`, semantic): `front/anubis.config.json` → generates `_anubis.scss`. See [anubis-ui.md](./anubis-ui.md).
+- **Shell** (`--wp-*`, typography, density, `--q-*`): `front/src/css/workproba.scss`, loaded **after** `_anubis.scss`.
 
 ## Anubis UI
 
-### Qu'est-ce qu'Anubis UI ?
+### What is Anubis UI?
 
-Anubis UI est une bibliothèque CSS qui génère automatiquement des classes utilitaires et des variables CSS à partir d'une configuration JSON. Elle permet de :
+Anubis UI is a CSS library that automatically generates utility classes and CSS variables from a JSON configuration. It allows you to:
 
-1. **Définir un système de couleurs** avec des variantes pour le mode clair et sombre
-2. **Générer des classes utilitaires** (bg, text, border, shadow, etc.) uniquement pour les classes utilisées dans le code
-3. **Créer des variables CSS** accessibles dans les styles SCSS/CSS
-4. **Supporter le mode clair/sombre** automatiquement via les variables CSS
+1. **Define a color system** with variants for light and dark mode
+2. **Generate utility classes** (bg, text, border, shadow, etc.) only for classes used in the code
+3. **Create CSS variables** accessible in SCSS/CSS styles
+4. **Support light/dark mode** automatically via CSS variables
 
-### Intégration dans le projet
+### Integration in the project
 
-Anubis UI est intégré via :
+Anubis UI is integrated via:
 
-- **Package npm** : `anubis-ui@^1.4.4` (déclaré dans `front/package.json`)
-- **Plugin Vite** : Configuré dans `front/quasar.config.js` via `anubis.plugin`
-- **Configuration couleurs** : `front/anubis.config.json` (section `"colors"`) — **source de vérité**
-- **Styles générés** : `front/src/css/_anubis.scss`, `front/src/css/anubis/_tokens.scss` (ne pas éditer à la main)
-- **Tokens shell** : `front/src/css/workproba.scss` (`--wp-*`, `--q-*` uniquement)
+- **npm package**: `anubis-ui@^1.4.4` (declared in `front/package.json`)
+- **Vite plugin**: Configured in `front/quasar.config.js` via `anubis.plugin`
+- **Color configuration**: `front/anubis.config.json` (`"colors"` section), **source of truth**
+- **Generated styles**: `front/src/css/_anubis.scss`, `front/src/css/anubis/_tokens.scss` (do not edit manually)
+- **Shell tokens**: `front/src/css/workproba.scss` (`--wp-*`, `--q-*` only)
 
-### Fonctionnement
+### How it works
 
-1. **Scan du code** : Anubis scanne les fichiers `.vue` et `*use-mastok.ts` pour détecter les classes utilisées
-2. **Génération** : Seules les classes détectées sont générées dans `_anubis.scss`
-3. **Variables CSS** : Les couleurs sont exposées comme variables CSS (`--primary`, `--neutral-lower`, etc.)
-4. **Mode clair/sombre** : Les variables changent automatiquement selon la classe `body--light` ou `body--dark`
+1. **Code scan**: Anubis scans `.vue` files and `*use-mastok.ts` to detect used classes
+2. **Generation**: Only detected classes are generated in `_anubis.scss`
+3. **CSS variables**: Colors are exposed as CSS variables (`--primary`, `--neutral-lower`, etc.)
+4. **Light/dark mode**: Variables change automatically based on the `body--light` or `body--dark` class
 
-## Système de couleurs
+## Color system
 
-### Palette de couleurs
+### Color palette
 
-Le système définit plusieurs palettes avec leurs variantes :
+The system defines several palettes with their variants:
 
-| Couleur | Usage | Exemple |
+| Color | Usage | Example |
 |---------|-------|---------|
-| **Primary** | Couleur principale de l'application | Actions principales, liens importants |
-| **Secondary** | Couleur secondaire | Éléments secondaires, bordures |
-| **Neutral** | Couleurs neutres | Arrière-plans, textes, séparateurs |
-| **Success** | Actions réussies | Messages de succès, validations |
-| **Danger** | Erreurs et actions destructives | Messages d'erreur, boutons de suppression |
-| **Warning** | Avertissements | Messages d'avertissement, alertes |
-| **Accent** | Accents visuels | Éléments mis en avant (identique à primary) |
-| **Text** | Couleurs de texte | Texte principal, texte inversé, liens |
+| **Primary** | Main application color | Primary actions, important links |
+| **Secondary** | Secondary color | Secondary elements, borders |
+| **Neutral** | Neutral colors | Backgrounds, text, separators |
+| **Success** | Successful actions | Success messages, validations |
+| **Danger** | Errors and destructive actions | Error messages, delete buttons |
+| **Warning** | Warnings | Warning messages, alerts |
+| **Accent** | Visual accents | Highlighted elements (same as primary) |
+| **Text** | Text colors | Main text, inverted text, links |
 
-### Variantes de couleurs
+### Color variants
 
-Chaque couleur dispose de 7 variantes pour créer une hiérarchie visuelle :
+Each color has 7 variants to create visual hierarchy:
 
-| Suffixe | Description | Usage typique |
+| Suffix | Description | Typical usage |
 |---------|-------------|---------------|
-| `-lowest` | La plus claire | Arrière-plans très clairs |
-| `-lower` | Très claire | Arrière-plans clairs, zones secondaires |
-| `-low` | Claire | Bordures subtiles, états hover légers |
-| *(sans suffixe)* | Couleur de base | Couleur principale |
-| `-medium` | Identique à la base | Alias pour la couleur principale |
-| `-high` | Foncée | Textes sur fond clair, éléments importants |
-| `-higher` | Très foncée | Textes très contrastés |
-| `-highest` | La plus foncée | Textes sur fond clair, maximum de contraste |
+| `-lowest` | Lightest | Very light backgrounds |
+| `-lower` | Very light | Light backgrounds, secondary areas |
+| `-low` | Light | Subtle borders, light hover states |
+| *(no suffix)* | Base color | Main color |
+| `-medium` | Same as base | Alias for the main color |
+| `-high` | Dark | Text on light backgrounds, important elements |
+| `-higher` | Very dark | High-contrast text |
+| `-highest` | Darkest | Text on light backgrounds, maximum contrast |
 
-### Support du mode clair/sombre
+### Light/dark mode support
 
-Les couleurs s'adaptent automatiquement au thème :
+Colors adapt automatically to the theme:
 
-- **Mode clair** (`body.body--light`) : Utilise les valeurs définies pour `light`
-- **Mode sombre** (`body.body--dark`) : Utilise les valeurs définies pour `dark`
+- **Light mode** (`body.body--light`): Uses values defined for `light`
+- **Dark mode** (`body.body--dark`): Uses values defined for `dark`
 
-Les variantes sont inversées intelligemment : par exemple, `neutral-lowest` est blanc en mode clair et très foncé en mode sombre, garantissant toujours un bon contraste.
+Variants are intelligently inverted: for example, `neutral-lowest` is white in light mode and very dark in dark mode, always ensuring good contrast.
 
-### Exemples de couleurs (Workproba)
+### Color examples (Workproba)
 
-Valeurs définies dans `front/anubis.config.json` :
+Values defined in `front/anubis.config.json`:
 
 ```text
-// Clair — canard + cyan
-primary:       #203d52 / —
-accent:        #2bb5c2 / —
-neutral-lowest: #ffffff / —
-text:          #1c2a36 / —
+// Light: teal + cyan
+primary:       #203d52 / n/a
+accent:        #2bb5c2 / n/a
+neutral-lowest: #ffffff / n/a
+text:          #1c2a36 / n/a
 
-// Sombre — Charbon chaud + or
-primary:       — / #e0a93a
-accent:        — / #e0a93a
-neutral-lowest: — / #161514
-neutral-lower:  — / #1f1e1c
-text:          — / #eceae6
-text-link:     — / #ffcc49
-success:       — / #4ade80
+// Dark: warm charcoal + gold
+primary:       n/a / #e0a93a
+accent:        n/a / #e0a93a
+neutral-lowest: n/a / #161514
+neutral-lower:  n/a / #1f1e1c
+text:          n/a / #eceae6
+text-link:     n/a / #ffcc49
+success:       n/a / #4ade80
 ```
 
-Liste complète et procédure de modification : [anubis-ui.md](./anubis-ui.md).
+Full list and modification procedure: [anubis-ui.md](./anubis-ui.md).
 
-## Utilisation
+## Usage
 
-### Dans les templates Vue
+### In Vue templates
 
-**✅ À FAIRE** : Utiliser les classes Anubis
+**✅ DO**: Use Anubis classes
 
 ```vue
 <template>
   <div class="bg-neutral-lower text-neutral-highest">
-    <q-btn class="bg-primary text-white">Action principale</q-btn>
-    <p class="text-warning">Message d'avertissement</p>
+    <q-btn class="bg-primary text-white">Primary action</q-btn>
+    <p class="text-warning">Warning message</p>
     <div class="bg-success-lower border-success text-success-high">
-      Opération réussie
+      Operation successful
     </div>
   </div>
 </template>
 ```
 
-**❌ À ÉVITER** : Utiliser les couleurs Quasar par défaut
+**❌ AVOID**: Using default Quasar colors
 
 ```vue
 <template>
-  <!-- Ne pas utiliser -->
+  <!-- Do not use -->
   <q-btn color="primary">Action</q-btn>
-  <p class="text-grey-7">Texte</p>
-  <div class="bg-grey-1">Contenu</div>
+  <p class="text-grey-7">Text</p>
+  <div class="bg-grey-1">Content</div>
 </template>
 ```
 
-### Dans les styles SCSS/CSS
+### In SCSS/CSS styles
 
-**✅ À FAIRE** : Utiliser les variables CSS Anubis
+**✅ DO**: Use Anubis CSS variables
 
 ```scss
 .my-component {
@@ -222,162 +222,162 @@ Liste complète et procédure de modification : [anubis-ui.md](./anubis-ui.md).
 .custom-card {
   background: var(--neutral-lowest);
   border: 1px solid var(--neutral-low);
-  box-shadow: 0px 2px 8px var(--neutral-high-20); // Opacité 20%
+  box-shadow: 0px 2px 8px var(--neutral-high-20); // 20% opacity
 }
 ```
 
-**❌ À ÉVITER** : Utiliser les variables Quasar ou valeurs hexadécimales
+**❌ AVOID**: Using Quasar variables or hexadecimal values
 
 ```scss
 .my-component {
-  // Ne pas utiliser
+  // Do not use
   color: var(--q-primary);
   background-color: var(--q-grey-2);
-  color: #0f84cb; // Valeur hexadécimale hardcodée
+  color: #0f84cb; // Hardcoded hexadecimal value
 }
 ```
 
-### Classes utilitaires disponibles
+### Available utility classes
 
-#### Couleurs de fond (`bg-*`)
-
-```vue
-<div class="bg-primary">Fond primary</div>
-<div class="bg-primary-lower">Fond primary clair</div>
-<div class="bg-neutral-lowest">Fond neutre très clair</div>
-<div class="bg-success">Fond success</div>
-<div class="bg-danger-lower">Fond danger clair</div>
-```
-
-#### Couleurs de texte (`text-*`)
+#### Background colors (`bg-*`)
 
 ```vue
-<p class="text-primary">Texte primary</p>
-<p class="text-neutral-highest">Texte neutre foncé</p>
-<p class="text-success">Texte success</p>
-<p class="text-danger-high">Texte danger foncé</p>
-<p class="text-text-link">Lien</p>
+<div class="bg-primary">Primary background</div>
+<div class="bg-primary-lower">Light primary background</div>
+<div class="bg-neutral-lowest">Very light neutral background</div>
+<div class="bg-success">Success background</div>
+<div class="bg-danger-lower">Light danger background</div>
 ```
 
-#### Bordures (`border-*`)
+#### Text colors (`text-*`)
 
 ```vue
-<div class="border-primary">Bordure primary (1px)</div>
-<div class="border-neutral-xs">Bordure neutre fine (1px)</div>
-<div class="border-warning-sm">Bordure warning (2px)</div>
-<div class="border-success-md">Bordure success (3px)</div>
+<p class="text-primary">Primary text</p>
+<p class="text-neutral-highest">Dark neutral text</p>
+<p class="text-success">Success text</p>
+<p class="text-danger-high">Dark danger text</p>
+<p class="text-text-link">Link</p>
 ```
 
-Variations disponibles : `xs` (1px), `sm` (2px), `md` (3px), `lg` (6px), `xl` (8px), `xxl` (10px)
-
-#### Ombres (`shadow-*`)
+#### Borders (`border-*`)
 
 ```vue
-<div class="shadow-primary">Ombre primary</div>
-<div class="shadow-neutral-xs">Ombre neutre petite</div>
-<div class="shadow-warning-lg">Ombre warning grande</div>
+<div class="border-primary">Primary border (1px)</div>
+<div class="border-neutral-xs">Thin neutral border (1px)</div>
+<div class="border-warning-sm">Warning border (2px)</div>
+<div class="border-success-md">Success border (3px)</div>
 ```
 
-Variations disponibles : `xs`, `sm`, `md`, `lg`, `xl`
+Available variations: `xs` (1px), `sm` (2px), `md` (3px), `lg` (6px), `xl` (8px), `xxl` (10px)
 
-#### Autres utilitaires
+#### Shadows (`shadow-*`)
 
-- **Bordures internes** : `inner-border-{color}-{size}`
-- **Blur** : `blur` (backdrop-filter)
-- **Transitions** : `smooth`, `smooth-slow`, `smooth-quick`, etc.
-- **Bordures arrondies** : `rounded`, `rounded-md`, `rounded-lg`, `rounded-full`, etc.
-- **Tailles de texte** : `size-xs`, `size-sm`, `size-md`, `size-lg`, etc.
-- **Poids de police** : `weight-light`, `weight-normal`, `weight-bold`, etc.
+```vue
+<div class="shadow-primary">Primary shadow</div>
+<div class="shadow-neutral-xs">Small neutral shadow</div>
+<div class="shadow-warning-lg">Large warning shadow</div>
+```
+
+Available variations: `xs`, `sm`, `md`, `lg`, `xl`
+
+#### Other utilities
+
+- **Inner borders**: `inner-border-{color}-{size}`
+- **Blur**: `blur` (backdrop-filter)
+- **Transitions**: `smooth`, `smooth-slow`, `smooth-quick`, etc.
+- **Rounded borders**: `rounded`, `rounded-md`, `rounded-lg`, `rounded-full`, etc.
+- **Text sizes**: `size-xs`, `size-sm`, `size-md`, `size-lg`, etc.
+- **Font weights**: `weight-light`, `weight-normal`, `weight-bold`, etc.
 
 ## Configuration
 
-### Fichier `anubis.config.json`
+### `anubis.config.json` file
 
-Ce fichier définit :
+This file defines:
 
-1. **Fichiers à scanner** : `**/*.vue` et `**/*use-mastok.ts`
-2. **Utilitaires à générer** : bg, text, border, shadow, blur, smooth, rounded, etc.
-3. **Couleurs disponibles** : Toutes les couleurs avec leurs variantes light/dark
-4. **Variations** : Tailles, épaisseurs, etc. pour chaque utilitaire
+1. **Files to scan**: `**/*.vue` and `**/*use-mastok.ts`
+2. **Utilities to generate**: bg, text, border, shadow, blur, smooth, rounded, etc.
+3. **Available colors**: All colors with their light/dark variants
+4. **Variations**: Sizes, thicknesses, etc. for each utility
 
-### Personnalisation des couleurs
+### Customizing colors
 
-1. Éditer **`front/anubis.config.json`** → section `"colors"` (chaque token : `{ "light": "…", "dark": "…" }`).
-2. Relancer le dev server, ou exécuter `node -e "require('anubis-ui/dist/tools/main').init()"` dans `front/`.
-3. Pour le shell uniquement (surfaces, ombres, `--q-*` Quasar) : compléter dans `front/src/css/workproba.scss`.
+1. Edit **`front/anubis.config.json`** → `"colors"` section (each token: `{ "light": "…", "dark": "…" }`).
+2. Restart the dev server, or run `node -e "require('anubis-ui/dist/tools/main').init()"` in `front/`.
+3. For shell-only changes (surfaces, shadows, Quasar `--q-*`): update `front/src/css/workproba.scss`.
 
-Le fichier `front/lib-improba/css/_colors.scss` est un legacy Mastok **non importé** au build ; ne pas l'utiliser pour Workproba.
+The `front/lib-improba/css/_colors.scss` file is legacy Mastok **not imported** at build time; do not use it for Workproba.
 
-Guide détaillé : [anubis-ui.md](./anubis-ui.md).
+Detailed guide: [anubis-ui.md](./anubis-ui.md).
 
-### Génération des classes
+### Class generation
 
-Les classes sont générées automatiquement lors du build :
+Classes are generated automatically during the build:
 
-- Anubis scanne le code source
-- Détecte les classes utilisées (ex: `bg-primary`, `text-neutral-highest`)
-- Génère uniquement les classes détectées dans `front/src/css/_anubis.scss`
+- Anubis scans the source code
+- Detects used classes (e.g. `bg-primary`, `text-neutral-highest`)
+- Generates only detected classes in `front/src/css/_anubis.scss`
 
-**Note** : Si vous ajoutez une nouvelle classe dans votre code, elle sera automatiquement générée au prochain build.
+**Note**: If you add a new class in your code, it will be automatically generated on the next build.
 
-## Intégration avec Mastok
+## Integration with Mastok
 
-Les composants **Mastok** (système de composants UI du projet) utilisent Anubis UI pour leurs styles :
+**Mastok** components (the project's UI component system) use Anubis UI for their styles:
 
-- Tous les composants Mastok (`MBtn`, `MCard`, `MChip`, etc.) utilisent les couleurs Anubis
-- Les props de couleur (`primary`, `secondary`, `danger`, etc.) correspondent aux couleurs Anubis
-- Les composants génèrent automatiquement les classes Anubis nécessaires
+- All Mastok components (`MBtn`, `MCard`, `MChip`, etc.) use Anubis colors
+- Color props (`primary`, `secondary`, `danger`, etc.) correspond to Anubis colors
+- Components automatically generate the required Anubis classes
 
-Voir [Mastok README](../front/lib-improba/components/mastok/README.md) pour plus de détails.
+See [Mastok README](../front/lib-improba/components/mastok/README.md) for more details.
 
-## Bonnes pratiques
+## Best practices
 
-### 1. Toujours utiliser Anubis
+### 1. Always use Anubis
 
-Ne pas mélanger les couleurs Anubis avec les couleurs Quasar par défaut. Cela garantit :
+Do not mix Anubis colors with default Quasar colors. This ensures:
 
-- Une cohérence visuelle dans toute l'application
-- Un support automatique du mode clair/sombre
-- Une maintenance plus facile
+- Visual consistency across the application
+- Automatic light/dark mode support
+- Easier maintenance
 
-### 2. Utiliser les variantes appropriées
+### 2. Use appropriate variants
 
-Choisissez la variante de couleur adaptée au contexte :
+Choose the color variant suited to the context:
 
-- **Arrière-plans** : Utilisez `-lower` ou `-lowest` pour les fonds
-- **Textes** : Utilisez `-highest` ou `-higher` pour un bon contraste
-- **Bordures** : Utilisez `-low` pour des bordures subtiles
-- **Éléments actifs** : Utilisez la couleur de base ou `-high`
+- **Backgrounds**: Use `-lower` or `-lowest` for backgrounds
+- **Text**: Use `-highest` or `-higher` for good contrast
+- **Borders**: Use `-low` for subtle borders
+- **Active elements**: Use the base color or `-high`
 
-### 3. Préférer les variables CSS dans les styles
+### 3. Prefer CSS variables in styles
 
-Dans les fichiers SCSS/CSS, utilisez toujours `var(--color-name)` plutôt que les valeurs hexadécimales :
+In SCSS/CSS files, always use `var(--color-name)` rather than hexadecimal values:
 
 ```scss
-// ✅ Bon
+// ✅ Good
 .my-class {
   color: var(--primary);
 }
 
-// ❌ Mauvais
+// ❌ Bad
 .my-class {
   color: #0f84cb;
 }
 ```
 
-### 4. Vérifier les contrastes
+### 4. Check contrast
 
-En mode sombre, certaines combinaisons peuvent avoir un contraste insuffisant. Testez toujours votre interface en mode clair et sombre.
+In dark mode, some combinations may have insufficient contrast. Always test your interface in both light and dark mode.
 
-### 5. Utiliser les classes utilitaires quand possible
+### 5. Use utility classes when possible
 
-Préférez les classes utilitaires dans les templates plutôt que d'écrire du CSS personnalisé :
+Prefer utility classes in templates rather than writing custom CSS:
 
 ```vue
-<!-- ✅ Bon -->
+<!-- ✅ Good -->
 <div class="bg-primary text-white rounded-md p-4">
 
-<!-- ❌ Moins bon -->
+<!-- ❌ Less good -->
 <div class="custom-card">
 ```
 
@@ -390,42 +390,42 @@ Préférez les classes utilitaires dans les templates plutôt que d'écrire du C
 }
 ```
 
-## Exemples pratiques
+## Practical examples
 
-### Carte avec style Anubis
+### Card with Anubis styling
 
 ```vue
 <template>
   <div class="bg-neutral-lower border-neutral-sm rounded-md p-4 shadow-neutral-md">
-    <h3 class="text-primary-higher weight-bold size-lg mb-2">Titre</h3>
-    <p class="text-neutral-high">Description de la carte</p>
+    <h3 class="text-primary-higher weight-bold size-lg mb-2">Title</h3>
+    <p class="text-neutral-high">Card description</p>
   </div>
 </template>
 ```
 
-### Bouton avec variantes
+### Button with variants
 
 ```vue
 <template>
-  <MBtn primary>Sauvegarder</MBtn>
-  <MBtn secondary>Annuler</MBtn>
-  <MBtn danger flat>Supprimer</MBtn>
-  <MBtn success>Valider</MBtn>
+  <MBtn primary>Save</MBtn>
+  <MBtn secondary>Cancel</MBtn>
+  <MBtn danger flat>Delete</MBtn>
+  <MBtn success>Confirm</MBtn>
 </template>
 ```
 
-### Message d'alerte
+### Alert message
 
 ```vue
 <template>
   <div class="bg-warning-lower border-warning-sm text-warning-high rounded p-4">
-    <p class="weight-bold mb-1">Attention</p>
-    <p>Cette action est irréversible.</p>
+    <p class="weight-bold mb-1">Warning</p>
+    <p>This action is irreversible.</p>
   </div>
 </template>
 ```
 
-### Tableau avec lignes alternées
+### Table with alternating rows
 
 ```vue
 <template>
@@ -444,9 +444,9 @@ Préférez les classes utilitaires dans les templates plutôt que d'écrire du C
 </template>
 ```
 
-## Migration depuis Quasar
+## Migration from Quasar
 
-Si vous avez du code existant utilisant les couleurs Quasar :
+If you have existing code using Quasar colors:
 
 | Quasar | Anubis |
 |--------|--------|
@@ -456,21 +456,20 @@ Si vous avez du code existant utilisant les couleurs Quasar :
 | `var(--q-primary)` | `var(--primary)` |
 | `text-blue-6` | `text-primary` |
 
-## Références
+## References
 
-- **[Guide Anubis UI complet](./anubis-ui.md)** — Documentation détaillée avec tous les exemples
-- **[Mastok Components](../front/lib-improba/components/mastok/README.md)** — Composants UI utilisant Anubis
-- **[Page de démonstration](../front/lib-improba/pages/demo/Anubis.vue)** — Exemples visuels dans l'application (route `demo-anubis`)
+- **[Complete Anubis UI guide](./anubis-ui.md)**, detailed documentation with all examples
+- **[Mastok Components](../front/lib-improba/components/mastok/README.md)**, UI components using Anubis
+- **[Demo page](../front/lib-improba/pages/demo/Anubis.vue)**, visual examples in the application (`demo-anubis` route)
 
-## Résumé
+## Summary
 
-- ✅ **Utiliser** : Tokens Workproba `--wp-*` pour tout CSS custom (typo, espacement, surfaces, focus)
-- ✅ **Utiliser** : Classes Anubis (`bg-primary`, `text-neutral-highest`, etc.)
-- ✅ **Utiliser** : Variables CSS Anubis (`var(--primary)`, `var(--neutral-lower)`, etc.)
-- ✅ **Utiliser** : Composants Mastok avec props de couleur
-- ❌ **Éviter** : Couleurs ou tailles en dur dans les composants Workproba
-- ❌ **Éviter** : Couleurs Quasar (`color="primary"`, `text-grey-7`, etc.)
-- ❌ **Éviter** : Valeurs hexadécimales hardcodées dans les styles
-- ❌ **Éviter** : Éditer `_anubis.scss` ou `anubis/_tokens.scss` à la main
-- ❌ **Éviter** : `lib-improba/css/_colors.scss` (legacy, non chargé)
-
+- ✅ **Use**: Workproba `--wp-*` tokens for all custom CSS (typography, spacing, surfaces, focus)
+- ✅ **Use**: Anubis classes (`bg-primary`, `text-neutral-highest`, etc.)
+- ✅ **Use**: Anubis CSS variables (`var(--primary)`, `var(--neutral-lower)`, etc.)
+- ✅ **Use**: Mastok components with color props
+- ❌ **Avoid**: Hardcoded colors or sizes in Workproba components
+- ❌ **Avoid**: Quasar colors (`color="primary"`, `text-grey-7`, etc.)
+- ❌ **Avoid**: Hardcoded hexadecimal values in styles
+- ❌ **Avoid**: Editing `_anubis.scss` or `anubis/_tokens.scss` manually
+- ❌ **Avoid**: `lib-improba/css/_colors.scss` (legacy, not loaded)

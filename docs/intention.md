@@ -1,53 +1,53 @@
 # Workproba
 
-> **Statut :** Pivot bureau local-first
-> **Date :** 11/07/2026
-> **Décideur :** Syl
+> **Status:** Local-first desktop pivot
+> **Date:** 11/07/2026
+> **Decision maker:** Syl
 
-## Intention
+## Intent
 
-Construire **Workproba**, un équivalent « maison » de **Claude Cowork**, destiné en priorité à des **utilisateurs non-codeurs**, dans le contexte Improba. Application bureau (macOS, Linux, Windows) : l'utilisateur ouvre un dossier projet, l'Imp (agent) manipule les documents en place, exécute du code sous le capot et s'appuie sur une mémoire indexée localement.
+Build **Workproba**, an in-house equivalent of **Claude Cowork**, aimed primarily at **non-coder users**, in the Improba context. Desktop application (macOS, Linux, Windows): the user opens a project folder, the Imp (agent) manipulates documents in place, runs code under the hood, and relies on locally indexed memory.
 
-## Décision produit
+## Product decision
 
-**Application bureau Tauri 2**, local-first. Voir [desktop.md](./desktop.md).
+**Tauri 2 desktop application**, local-first. See [desktop.md](./desktop.md).
 
-## Objectifs produit
+## Product goals
 
-- Bureau multi-OS : macOS (`.dmg`), Linux (`.AppImage`, `.deb`), Windows (`.msi`).
-- Dossier local = workspace (pas d'upload).
-- Chat agent léché, cartes d'action en langage humain, streaming SSE.
-- Mémoire locale : RAG par projet + souvenirs explicites user (global) et project (workspace).
-- Plugin Personas : simulation de regards métiers (avis, réunion, discussion).
-- Versions automatiques avant modification de fichiers.
-- Souveraineté LLM : Ollama, vLLM, Mistral cloud, URLs changeables.
+- Multi-OS desktop: macOS (`.dmg`), Linux (`.AppImage`, `.deb`), Windows (`.msi`).
+- Local folder = workspace (no upload).
+- Polished agent chat, human-language action cards, SSE streaming.
+- Local memory: RAG per project + explicit user (global) and project (workspace) memories.
+- Personas plugin: simulated professional perspectives (opinion, meeting, discussion).
+- Automatic versions before file modifications.
+- LLM sovereignty: Ollama, vLLM, Mistral cloud, changeable URLs.
 
-## Non-objectifs (V1 bureau)
+## Non-goals (desktop initial release)
 
-- Produit web principal.
-- IDE / éditeur de code.
-- Code arbitraire utilisateur.
-- Sync cloud obligatoire.
+- Primary web product.
+- IDE / code editor.
+- Arbitrary user code.
+- Mandatory cloud sync.
 
 ## Stack
 
-- **Coque** : Tauri 2 (Rust) — `desktop/`
-- **UI** : Quasar 2 + Vue 3 + Anubis — `front/`
-- **IA** : Python 3.12 + FastAPI sidecar — `services/ai/`
-- **Données** : SQLite + `.workproba/` par workspace + `{app_data}/user/` pour la mémoire globale
-- **Cloud (optionnel, archivé)** : voir `legacy/`
+- **Shell**: Tauri 2 (Rust): `desktop/`
+- **UI**: Quasar 2 + Vue 3 + Anubis: `front/`
+- **AI**: Python 3.12 + FastAPI sidecar: `services/ai/`
+- **Data**: SQLite + `.workproba/` per workspace + `{app_data}/user/` for global memory
+- **Cloud (optional, archived)**: see `legacy/`
 
-## Phasage
+## Phasing
 
-1. Scaffold Tauri + commandes dossier
-2. Front : mode bureau, open folder
-3. Python sidecar local (port 8765)
-4. RAG local, extraction, versions
-5. V2 : mémoire scopée, plugins (personas), pièces jointes, aperçu documents
-6. Packaging multi-OS
-7. Sync cloud optionnelle
+1. Tauri scaffold + folder commands
+2. Front: desktop mode, open folder
+3. Local Python sidecar (port 8765)
+4. Local RAG, extraction, versions
+5. Scoped memory, plugins (personas), attachments, document preview
+6. Multi-OS packaging
+7. Optional cloud sync
 
-## Voir aussi
+## See also
 
 - [desktop.md](./desktop.md)
 - [memory.md](./memory.md)

@@ -1,61 +1,61 @@
-# Design system Workproba
+# Workproba Design System
 
-Document de convergence, synthèse du débat entre **Inès** (lead designer) et **Léa** (UX strategist). Voir `lea-ux.md` pour la proposition UX détaillée et les parcours.
+Convergence document, synthesis of the debate between **Inès** (lead designer) and **Léa** (UX strategist). See `lea-ux.md` for the detailed UX proposal and flows.
 
-Ce document est la source de vérité pour l'implémentation UI.
+This document is the source of truth for UI implementation.
 
-## 0. Décisions d'arbitrage (convergence)
+## 0. Trade-off decisions (convergence)
 
-| # | Arbitrage | Décision | Raison |
+| # | Trade-off | Decision | Reason |
 |---|---|---|---|
-| 1 | Sidebar unique à deux niveaux vs deux panneaux | **Sidebar unique** (switcher transient de workspaces + liste conversations dédiée) | Moins de surfaces à scanner pour un non-codeur ; repère stable = workspace actif en tête |
-| 2 | Badge de session arbre (vert "nouveau" / orange "modifié") | **Simplifié à un signal unique** : un point cyan "touché pendant la session", tooltip donne le détail (créé/modifié) | Réduit la charge visuelle ; le détail reste accessible au survol |
-| 3 | Palette de commandes `Cmd/Ctrl+K` | **Phase 2** (pas au premier lancement) | Garder le premier lancement sobre ; on l'ajoutera comme aide à la découverte |
-| 4 | Hauteur de ligne arbre | **26 px** | Compromis densité/respiration pour non-codeurs |
-| 5 | Sidebar gauche masquable | **Non** (repliable en rail 56px d'icônes, jamais totalement cachée) | C'est le repère stable (Léa) |
-| 6 | Panneau fichiers droit | **Repliable** (`Cmd/Ctrl+B`), état mémorisé par workspace | Petit écrans 13" |
+| 1 | Single two-level sidebar vs two panels | **Single sidebar** (transient workspace switcher + dedicated conversations list) | Fewer surfaces to scan for a non-coder; stable anchor = active workspace at the top |
+| 2 | Tree session badge (green "new" / orange "modified") | **Simplified to a single signal**: a cyan dot "touched during session", tooltip gives detail (created/modified) | Reduces visual load; detail remains accessible on hover |
+| 3 | `Cmd/Ctrl+K` command palette | **Future release** (not at first launch) | Keep first launch sober; we'll add it as a discovery aid |
+| 4 | Tree row height | **26 px** | Density/breathing room compromise for non-coders |
+| 5 | Left sidebar hideable | **No** (collapsible to 56px icon rail, never fully hidden) | It's the stable anchor (Léa) |
+| 6 | Right files panel | **Collapsible** (`Cmd/Ctrl+B`), state remembered per workspace | Small 13" screens |
 
-## 1. Palette (tokens Anubis)
+## 1. Palette (Anubis tokens)
 
-L'identité Improba sert d'**accent et de branding**, pas de fond de chat. Le chat se lit en mode clair sobre. Bleu canard `#203D52` = branding + états actifs ; cyan `#3ECFD9` = accent d'action / focus / "travaille" ; or `#FFCC49` et violet `#B077DD` = signaux secondaires (RAG, badges).
+Improba identity serves as **accent and branding**, not chat background. Chat reads in sober light mode. Teal blue `#203D52` = branding + active states; cyan `#3ECFD9` = action / focus / "working" accent; gold `#FFCC49` and violet `#B077DD` = secondary signals (RAG, badges).
 
-### Mode clair (défaut)
+### Light mode (default)
 
 ```scss
-// Fond & surfaces
---bg:            #F6F7F9;  // fond app, derrière les panneaux
---surface:       #FFFFFF;  // panneaux, cartes, sidebar
---surface-2:     #F0F2F5;  // hover, zones imbriquées
---surface-3:     #E6EAEE;  // pressé, diviseurs épais
+// Background & surfaces
+--bg:            #F6F7F9;  // app background, behind panels
+--surface:       #FFFFFF;  // panels, cards, sidebar
+--surface-2:     #F0F2F5;  // hover, nested areas
+--surface-3:     #E6EAEE;  // pressed, thick dividers
 
-// Texte
---text:          #1C2A36;  // principal (canard très foncé, lisible)
---text-muted:    #5B6B7B;  // secondaire, meta, chemins
---text-faint:    #8A99A8;  // filigrane, placeholders
+// Text
+--text:          #1C2A36;  // main (very dark teal, readable)
+--text-muted:    #5B6B7B;  // secondary, meta, paths
+--text-faint:    #8A99A8;  // watermark, placeholders
 
-// Bordures
+// Borders
 --border:        #E4E8ED;
 --border-strong: #D2D9E0;
 
-// Marque & accents
---primary:       #203D52;  // bleu canard : header actif, workspace actif, lien
---primary-soft:  #E8EEF2;  // fond actif workspace (canard très dilué)
---accent:        #2BB5C2;  // cyan action (contraste AA sur blanc)
---accent-strong: #3ECFD9;  // cyan plein : hover, streaming
---accent-soft:   #DCF6F7;  // fond focus / badge session
+// Brand & accents
+--primary:       #203D52;  // teal blue: active header, active workspace, link
+--primary-soft:  #E8EEF2;  // active workspace background (very diluted teal)
+--accent:        #2BB5C2;  // action cyan (AA contrast on white)
+--accent-strong: #3ECFD9;  // full cyan: hover, streaming
+--accent-soft:   #DCF6F7;  // focus / session badge background
 
---gold:          #E0A93A;  // or AA sur blanc : "modifié"
+--gold:          #E0A93A;  // gold AA on white: "modified"
 --gold-soft:     #FFF3D6;
---violet:        #9A63C7;  // violet AA sur blanc : RAG, "créé"
+--violet:        #9A63C7;  // violet AA on white: RAG, "created"
 --violet-soft:   #F0E4FA;
 
-// Sémantique
+// Semantic
 --success:       #2E9E74;
 --danger:        #D64545;
 --danger-soft:   #FBE6E6;
 --warning:       var(--gold);
 
-// Neutres Anubis (échelle) -> mapper sur surface/text ci-dessus
+// Anubis neutrals (scale) -> map to surface/text above
 --neutral-lowest:  #FFFFFF;
 --neutral-lower:   #F6F7F9;
 --neutral-low:     #F0F2F5;
@@ -65,10 +65,10 @@ L'identité Improba sert d'**accent et de branding**, pas de fond de chat. Le ch
 --neutral-highest: #1C2A36;
 ```
 
-### Mode sombre
+### Dark mode
 
 ```scss
---bg:            #131F28;  // canard très foncé, pas noir pur
+--bg:            #131F28;  // very dark teal, not pure black
 --surface:       #1B2C38;
 --surface-2:     #23384A;
 --surface-3:     #2C4254;
@@ -77,7 +77,7 @@ L'identité Improba sert d'**accent et de branding**, pas de fond de chat. Le ch
 --text-faint:    #6E8195;
 --border:        #2C4254;
 --border-strong: #3A5266;
---primary:       #3ECFD9;  // cyan devient primaire en sombre (plus lisible)
+--primary:       #3ECFD9;  // cyan becomes primary in dark (more readable)
 --primary-soft:  #1E3A44;
 --accent:        #3ECFD9;
 --accent-strong: #5DE2EB;
@@ -95,88 +95,88 @@ L'identité Improba sert d'**accent et de branding**, pas de fond de chat. Le ch
 --neutral-highest:#E8EEF2;
 ```
 
-## 2. Typographie
+## 2. Typography
 
-- **UI / titres / body** : `Varela Round` (charger la webfont ; fallback `Inter`, `system-ui`, `sans-serif`). Varela Round n'a que 400 ; on simule le "700" via `font-weight: 700` avec fallback `Inter` 700 pour les titres car Varela Round n'a pas de bold natif. Alternative : `Quicksand` (bold available, même esprit arrondi) pour les titres. **Décision** : body en Varela Round 400, titres en `Quicksand` 600/700 (arrondi, graspable, a un vrai bold). Fallbacks `Varela Round, system-ui`.
-- **Code / diff / chemins** : `JetBrains Mono`, fallback `ui-monospace, SFMono-Regular, Menlo, monospace`.
+- **UI / titles / body**: `Varela Round` (load the webfont; fallback `Inter`, `system-ui`, `sans-serif`). Varela Round only has 400; we simulate "700" via `font-weight: 700` with `Inter` 700 fallback for titles since Varela Round has no native bold. Alternative: `Quicksand` (bold available, same rounded feel) for titles. **Decision**: body in Varela Round 400, titles in `Quicksand` 600/700 (rounded, graspable, has real bold). Fallbacks `Varela Round, system-ui`.
+- **Code / diff / paths**: `JetBrains Mono`, fallback `ui-monospace, SFMono-Regular, Menlo, monospace`.
 
-Échelle :
+Scale:
 
-| Rôle | Taille | Weight | Police |
+| Role | Size | Weight | Font |
 |---|---|---|---|
 | display (onboarding) | 2rem / 32px | 700 | Quicksand |
-| h1 (titre workspace) | 1.4rem / 22px | 700 | Quicksand |
+| h1 (workspace title) | 1.4rem / 22px | 700 | Quicksand |
 | h2 | 1.15rem / 18px | 700 | Quicksand |
-| h3 (section sidebar) | 0.8125rem / 13px | 700, uppercase, letter-spacing 0.06em | Quicksand |
+| h3 (sidebar section) | 0.8125rem / 13px | 700, uppercase, letter-spacing 0.06em | Quicksand |
 | body (chat) | 0.9375rem / 15px | 400 | Varela Round, line-height 1.6 |
-| meta (dates, chemins) | 0.8125rem / 13px | 500 | Varela Round |
+| meta (dates, paths) | 0.8125rem / 13px | 500 | Varela Round |
 | code | 0.85rem / 13.6px | 400 | JetBrains Mono |
 
-Rayons : `--r-sm: 8px`, `--r-md: 12px`, `--r-lg: 16px`, `--r-pill: 999px`. Ombres douces : `--shadow-1: 0 1px 2px rgba(28,42,54,0.06)`, `--shadow-2: 0 6px 24px rgba(28,42,54,0.10)`.
+Radii: `--r-sm: 8px`, `--r-md: 12px`, `--r-lg: 16px`, `--r-pill: 999px`. Soft shadows: `--shadow-1: 0 1px 2px rgba(28,42,54,0.06)`, `--shadow-2: 0 6px 24px rgba(28,42,54,0.10)`.
 
-## 3. Mise en page 3 colonnes
+## 3. Three-column layout
 
 ```
 +---------------------------------------------------------------+
 | Title bar Tauri (40px) : [logo Workproba]  ·  {workspace}  ·  [theme] |
 +----------+--------------------------------------+--------------+
-| Sidebar  |              Centre                  |   Fichiers   |
-| 268px    |  (chat, max-width 760px centré)      |   320px      |
-| rail 56  |                                      |   repliable  |
-| repliable|                                      |   Cmd/Ctrl+B |
+| Sidebar  |              Center                  |   Files      |
+| 268px    |  (chat, max-width 760px centered)    |   320px      |
+| rail 56  |                                      |   collapsible|
+| collapsible|                                    |   Cmd/Ctrl+B |
 +----------+--------------------------------------+--------------+
 ```
 
-- **Sidebar gauche** : 268px (min 240, max 320). Repliable en rail d'icônes 56px (jamais totalement cachée). Contient, de haut en bas : en-tête workspace actif + switcher transient ; section "Conversations" (nouvelle conversation + liste groupée par date) ; pied statut sidecar.
-- **Centre** : fluide, `min-width 480px`. Surface de chat centrée, `max-width 760px`, marges généreuses (48px latéraux desktop). Zone de saisie ancrée en bas, `max-width 760px` alignée au chat.
-- **Fichiers droite** : 320px (min 240, max 400). Repliable, état mémorisé par workspace. Barre de filtre en tête, arbre virtualisé dessous, pied = barre d'indexation (si gros dossier).
-- **États vides** : voir `lea-ux.md` §3 (toujours une action, jamais un "vide").
+- **Left sidebar**: 268px (min 240, max 320). Collapsible to 56px icon rail (never fully hidden). Contains, top to bottom: active workspace header + transient switcher; "Conversations" section (new conversation + list grouped by date); sidecar status footer.
+- **Center**: fluid, `min-width 480px`. Centered chat surface, `max-width 760px`, generous margins (48px side on desktop). Input area anchored at bottom, `max-width 760px` aligned with chat.
+- **Right files**: 320px (min 240, max 400). Collapsible, state remembered per workspace. Filter bar at top, virtualized tree below, footer = indexing bar (if large folder).
+- **Empty states**: see `lea-ux.md` §3 (always an action, never "empty").
 
-Responsive webview desktop : sous 1100px, le panneau fichiers se replie automatiquement (raccourci pour le rouvrir). Sous 820px, la sidebar passe en rail 56px.
+Responsive desktop webview: below 1100px, the files panel auto-collapses (shortcut to reopen). Below 820px, sidebar switches to 56px rail.
 
-## 4. Composants clés (à créer/styliser sur Quasar)
+## 4. Key components (to create/style on Quasar)
 
-### 4.1 `WorkprobaTitleBar` (barre de titre fenêtre, custom decoration Tauri)
-40px, fond `--surface` + bordure basse `--border`. Gauche : logotype "Workproba" en Quicksand 700, couleur `--primary` (clair) / `--accent` (sombre). Centre : nom du workspace + chemin tronqué, `--text-muted`. Droite : toggle thème + boutons fenêtre (reduce/min/close via Tauri `window` API). Zone de drag fenêtre (`data-tauri-drag-region`).
+### 4.1 `WorkprobaTitleBar` (window title bar, custom Tauri decoration)
+40px, `--surface` background + bottom `--border`. Left: "Workproba" logotype in Quicksand 700, `--primary` color (light) / `--accent` (dark). Center: workspace name + truncated path, `--text-muted`. Right: theme toggle + window buttons (reduce/min/close via Tauri `window` API). Window drag zone (`data-tauri-drag-region`).
 
-### 4.2 `WorkspaceSidebar` (gauche)
-- **En-tête workspace actif** : carte `--surface-2`, rayon `--r-md`, padding 10px 12px. Icône dossier (Lucide `folder`, couleur `--accent`), nom (Quicksand 700, 1 line ellipsis), chemin tronqué (meta, `--text-faint`). Chevron `chevron-down` indique "cliquez pour switcher". Au clic : menu transient (`q-menu`) listant les workspaces récents (icône + nom + chemin tronqué), item actif surligné `--accent-soft` + liseré gauche `--accent`, et une entrée `+ Ouvrir un autre dossier…`.
-- **Section Conversations** : titre h3 "CONVERSATIONS" + bouton icône "Nouvelle conversation" (`message-square-plus`) à droite. Liste scrollable, groupée par date (labels h3 "Aujourd'hui", "Cette semaine", "Plus ancien"). Item : padding 8px 10px, rayon `--r-sm`, titre 1 line ellipsis, date meta en dessous. Hover `--surface-2`. Actif `--accent-soft` + texte `--text` + liseré gauche 3px `--accent`. Pendant le streaming : point cyan pulsant à gauche du titre.
-- **Pied statut** : 1 ligne, icône point (cyan connecté / gris idle / cyan pulse "travaille"), libellé meta.
+### 4.2 `WorkspaceSidebar` (left)
+- **Active workspace header**: `--surface-2` card, `--r-md` radius, 10px 12px padding. Folder icon (Lucide `folder`, `--accent` color), name (Quicksand 700, 1 line ellipsis), truncated path (meta, `--text-faint`). `chevron-down` indicates "click to switch". On click: transient menu (`q-menu`) listing recent workspaces (icon + name + truncated path), active item highlighted `--accent-soft` + left `--accent` border, and a `+ Open another folder…` entry.
+- **Conversations section**: h3 title "CONVERSATIONS" + icon button "New conversation" (`message-square-plus`) on the right. Scrollable list, grouped by date (h3 labels "Today", "This week", "Older"). Item: 8px 10px padding, `--r-sm` radius, 1 line ellipsis title, date meta below. Hover `--surface-2`. Active `--accent-soft` + `--text` + 3px left `--accent` border. During streaming: pulsing cyan dot left of title.
+- **Status footer**: 1 line, dot icon (cyan connected / gray idle / cyan pulse "working"), meta label.
 
-### 4.3 `ChatSurface` (centre)
-Reprise de `front/src/components/chat/` existant, restylé : bulles pleine largeur (pas de bulles flottantes, façon Claude), avatar assistant petit format (sigle "W" Improba sur pastille `--accent-soft`), messages user alignés avec fond `--surface-2` rayon `--r-lg`. Cartes tool-calls repliables style "fichier lu" / "fichier modifié" (libellés humains de Léa). Sources RAG : pastilles violet `--violet`. Zone de saisie : textarea auto-extensible, rayon `--r-lg`, bordure `--border`, focus `--accent`. Bouton "Envoyer" primaire `--accent`, devient "Arrêter" (icône `square`) pendant le streaming. Statut streaming au-dessus du message : "L'agent réfléchit…" / "L'agent lit `x`…".
+### 4.3 `ChatSurface` (center)
+Reuse of existing `front/src/components/chat/`, restyled: full-width bubbles (not floating bubbles, Claude style), small assistant avatar (Improba "W" monogram on `--accent-soft` pill), user messages aligned with `--surface-2` background `--r-lg` radius. Collapsible tool-call cards in "file read" / "file modified" style (Léa's human labels). RAG sources: `--violet` violet pills. Input area: auto-expanding textarea, `--r-lg` radius, `--border` border, `--accent` focus. "Send" primary button `--accent`, becomes "Stop" (`square` icon) during streaming. Streaming status above message: "The agent is thinking…" / "The agent is reading `x`…".
 
-### 4.4 `FileExplorer` (droite)
-- **Barre de filtre** : input avec icône `search` (Lucide), placeholder "Filtrer les fichiers…", `Cmd/Ctrl+P` focus. Toujours visible.
-- **Arbre virtualisé** : `vue-virtual-scroller` `RecycleScroller`, hauteur de ligne **26px**, profondeur par padding gauche `depth * 16px` (pas de DOM imbriqué). Dossiers d'abord, puis fichiers, tri insensible à la casse. Icônes Lucide par type (`folder`, `file-text`, `file-code`, `file-image`, `file-spreadsheet`, `file-pdf`…). Chevron `chevron-right`/`chevron-down` sur les dossiers (clic = expand/collapse, pas sur le label).
-- **Point de session** : pastille cyan `--accent` 6px à droite du nœud si touché pendant la session (signal unique, tooltip "créé" / "modifié"). Dépliage auto + surlignage `--accent-soft` fade-out 3s.
-- **Actions** : double-clic label = ouvrir dans l'OS (Tauri `open`). Clic droit = menu "Révéler dans le Finder/Explorer", "Ouvrir". Bouton "Révéler" au survol.
-- **ARIA** : `role="tree"`, `treeitem`, navigation clavier `↑/↓/→/←/Entrée`.
-- **Pied indexation** : barre fine + libellé "Indexation de N fichiers…" pendant l'index init.
+### 4.4 `FileExplorer` (right)
+- **Filter bar**: input with `search` icon (Lucide), placeholder "Filter files…", `Cmd/Ctrl+P` focus. Always visible.
+- **Virtualized tree**: `vue-virtual-scroller` `RecycleScroller`, row height **26px**, depth via left padding `depth * 16px` (no nested DOM). Directories first, then files, case-insensitive sort. Lucide icons by type (`folder`, `file-text`, `file-code`, `file-image`, `file-spreadsheet`, `file-pdf`…). `chevron-right`/`chevron-down` on directories (click = expand/collapse, not on label).
+- **Session dot**: `--accent` cyan 6px pill right of node if touched during session (single signal, tooltip "created" / "modified"). Auto-expand + `--accent-soft` highlight fade-out 3s.
+- **Actions**: double-click label = open in OS (Tauri `open`). Right-click = "Reveal in Finder/Explorer", "Open" menu. "Reveal" button on hover.
+- **ARIA**: `role="tree"`, `treeitem`, keyboard navigation `↑/↓/→/←/Enter`.
+- **Indexing footer**: thin bar + "Indexing N files…" label during initial index.
 
-### 4.5 Micro-interactions (respiration Improba)
-- Transitions : `transition: 180ms cubic-bezier(0.4, 0, 0.2, 1)` sur hover/active.
-- "Souffle" : le statut "travaille" pulse `opacity 0.6 → 1` sur 1.6s ease-in-out.
-- Apparition message assistant : fade + translateY 4px sur 220ms.
-- Dépliage arbre : rotation chevron 150ms, slide-down enfants 180ms.
-- Pas de clignotement, pas de saut. Tout est doux.
+### 4.5 Micro-interactions (Improba breathing)
+- Transitions: `transition: 180ms cubic-bezier(0.4, 0, 0.2, 1)` on hover/active.
+- "Breath": "working" status pulses `opacity 0.6 → 1` over 1.6s ease-in-out.
+- Assistant message appearance: fade + translateY 4px over 220ms.
+- Tree expand: chevron rotation 150ms, children slide-down 180ms.
+- No blinking, no jumps. Everything is smooth.
 
-## 5. Touche d'âme Improba
+## 5. Improba soul touch
 
-- **Formes arrondies généreuses** (`--r-lg` 16px sur cartes et saisie, `--r-pill` sur badges/statuts).
-- **Cyan = souffle** : l'unique couleur qui "respire" (pulse streaming, focus, point de session). Le reste est neutre. Une seule couleur vive, jamais éparpillée.
-- **Respiration** : margins latéraux 48px, paddings généreux, line-height 1.6, beaucoup d'air blanc.
-- **Logotype mini** en barre de titre + sigle "W" assistant : repère de marque discret mais constant.
-- **Titre fenêtre natif** : "Workproba — {workspace}" (premier mot = marque dans la barre des tâches OS).
+- **Generous rounded shapes** (`--r-lg` 16px on cards and input, `--r-pill` on badges/status).
+- **Cyan = breath**: the only color that "breathes" (streaming pulse, focus, session dot). The rest is neutral. One vivid color, never scattered.
+- **Breathing room**: 48px side margins, generous padding, line-height 1.6, lots of white space.
+- **Mini logotype** in title bar + assistant "W" monogram: discrete but constant brand anchor.
+- **Native window title**: "Workproba, {workspace}" (first word = brand in OS taskbar).
 
-## 6. Plan d'implémentation
+## 6. Implementation plan
 
-1. **Tokens design** : `front/src/css/workproba-tokens.scss` (variables light/dark) + import global. Chargement webfonts Varela Round + Quicksand + JetBrains Mono.
-2. **Layout 3 colonnes** : `front/src/layouts/WorkprobaLayout.vue` (remplace `StandardLayout` pour la cible desktop) + `WorkprobaTitleBar.vue`.
-3. **Sidebar gauche** : `WorkspaceSidebar.vue` + `WorkspaceSwitcher.vue` + `ConversationList.vue` (branché sur `workspaceSession` + `useProject`).
-4. **Centre chat** : rebrancher `ChatView` existant dans le nouveau layout + restyle.
-5. **FileExplorer droite** : `FileExplorer.vue` + `useFileTree` (store) + watcher Rust (`desktop/src-tauri/src/commands/fs_watch.rs`, crate `notify`).
-6. **États vides & onboarding** : écran premier lancement, états arbre vide / sidecar injoignable.
+1. **Design tokens**: `front/src/css/workproba-tokens.scss` (light/dark variables) + global import. Load Varela Round + Quicksand + JetBrains Mono webfonts.
+2. **Three-column layout**: `front/src/layouts/WorkprobaLayout.vue` (replaces `StandardLayout` for desktop target) + `WorkprobaTitleBar.vue`.
+3. **Left sidebar**: `WorkspaceSidebar.vue` + `WorkspaceSwitcher.vue` + `ConversationList.vue` (wired to `workspaceSession` + `useProject`).
+4. **Center chat**: rewire existing `ChatView` in the new layout + restyle.
+5. **Right FileExplorer**: `FileExplorer.vue` + `useFileTree` (store) + Rust watcher (`desktop/src-tauri/src/commands/fs_watch.rs`, `notify` crate).
+6. **Empty states & onboarding**: first launch screen, empty tree / unreachable sidecar states.
 
-Le watcher FS Rust (étape 5) est le morceau le plus technique : nouveau module Rust + événements Tauri + store front + debounce 150ms + réconciliation partielle.
+The Rust FS watcher (step 5) is the most technical piece: new Rust module + Tauri events + frontend store + 150ms debounce + partial reconciliation.

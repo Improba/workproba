@@ -1,29 +1,29 @@
-# Plugins Workproba (V2)
+# Workproba plugins
 
-> **Dernière mise à jour :** 11/07/2026
+> **Last updated:** 11/07/2026
 
-Workproba V2 étend le cœur agent par un **système de plugins** : outils agent, endpoints HTTP, emplacements UI et stockage namespacé. Le registre côté sidecar (`services/ai/app/plugins/registry.py`) est aligné avec la persistance Tauri (`desktop/src-tauri/src/commands/plugins.rs`).
+Workproba extends the agent core with a **plugin system**: agent tools, HTTP endpoints, UI slots, and namespaced storage. The sidecar registry (`services/ai/app/plugins/registry.py`) is aligned with Tauri persistence (`desktop/src-tauri/src/commands/plugins.rs`).
 
-## Plugins builtin
+## Builtin plugins
 
-| ID | Activé par défaut | Rôle |
+| ID | Enabled by default | Role |
 |---|---|---|
-| `workproba.personas` | oui | Personas métiers (avis, réunion, discussion) |
-| `workproba.projet` | non | Projets internes, publication d'artefacts |
-| `workproba.browser` | non | Navigation web automatisée (expérimental) |
-| `workproba.cloud` | non | Sync cloud optionnelle (expérimental) |
+| `workproba.personas` | yes | Professional personas (opinion, meeting, discussion) |
+| `workproba.projet` | no | Internal projects, artifact publishing |
+| `workproba.browser` | no | Automated web browsing (experimental) |
+| `workproba.cloud` | no | Optional cloud sync (experimental) |
 
-L'activation effective dépend des réglages utilisateur (`active_plugins` dans les settings Tauri). Un preset enterprise peut restreindre la liste (`plugins_allowed`).
+Effective activation depends on user settings (`active_plugins` in Tauri settings). An enterprise preset can restrict the list (`plugins_allowed`).
 
-## Données plugin
+## Plugin data
 
-Chaque plugin stocke ses données sous :
+Each plugin stores its data under:
 
 ```
 {app_data}/plugins/{plugin_id}/
 ```
 
-Exemple personas :
+Personas example:
 
 ```
 {app_data}/plugins/workproba.personas/
@@ -32,48 +32,48 @@ Exemple personas :
 └── discussions/{discussion_id}/messages.json
 ```
 
-## Intégration UI
+## UI integration
 
-| Emplacement | Fichiers clés | Usage |
+| Slot | Key files | Usage |
 |---|---|---|
-| Panneau droit | `RightPanel.vue` | Onglet Personas, onglets plugins dynamiques (`usePluginSlots`) |
-| Compositeur chat | `ChatView.vue` | Menu « + » : pièces jointes + actions personas |
-| Side chat | `SideChatPanel.vue`, `PersonasSideChat.vue` | Discussion / avis en panneau latéral (`Ctrl+Shift+L`) |
-| Actions partagées | `usePersonasActions.ts` | Bascule vers une session chat puis déclenche l'action |
+| Right panel | `RightPanel.vue` | Personas tab, dynamic plugin tabs (`usePluginSlots`) |
+| Chat composer | `ChatView.vue` | "+" menu: attachments + personas actions |
+| Side chat | `SideChatPanel.vue`, `PersonasSideChat.vue` | Discussion / opinion in side panel (`Ctrl+Shift+L`) |
+| Shared actions | `usePersonasActions.ts` | Switch to a chat session then trigger the action |
 
-Raccourcis utiles : `Ctrl+B` (panneau droit), `Ctrl+Shift+L` (side chat).
+Useful shortcuts: `Ctrl+B` (right panel), `Ctrl+Shift+L` (side chat).
 
-## Plugin Personas (`workproba.personas`)
+## Personas plugin (`workproba.personas`)
 
 ### Concept
 
-Simuler des **regards métiers complémentaires** sur un sujet : RH, juriste, DAF, ingénieur, etc. Le set builtin **Improba** (`id: default`) est fourni en code et non éditable. Des sets personnalisés peuvent être créés via l'API.
+Simulate **complementary professional perspectives** on a topic: HR, legal, CFO, engineer, etc. The builtin **Improba** set (`id: default`) is provided in code and is not editable. Custom sets can be created via the API.
 
-### Limites
+### Limits
 
-| Paramètre | Valeur |
+| Parameter | Value |
 |---|---|
-| Personas max par session | 5 |
-| Rounds réunion max | 5 |
-| Rounds réunion par défaut | 3 |
+| Max personas per session | 5 |
+| Max meeting rounds | 5 |
+| Default meeting rounds | 3 |
 
 ### Modes
 
-| Mode | Endpoint SSE | Description |
+| Mode | SSE endpoint | Description |
 |---|---|---|
-| Avis | `POST /plugins/personas/ask` | Chaque persona donne son opinion |
-| Réunion | `POST /plugins/personas/meeting` | Simulation multi-tours |
-| Discussion | `POST /plugins/personas/discuss` | Échange guidé multi-personas |
+| Opinion | `POST /plugins/personas/ask` | Each persona gives their opinion |
+| Meeting | `POST /plugins/personas/meeting` | Multi-turn simulation |
+| Discussion | `POST /plugins/personas/discuss` | Guided multi-persona exchange |
 
-Paramètre optionnel `include_memory` + `workspace_data_dir` : enrichit le contexte via la recherche mémoire projet (`search_combined`).
+Optional parameter `include_memory` + `workspace_data_dir`: enriches context via project memory search (`search_combined`).
 
-### Outils agent
+### Agent tools
 
-Si le plugin est actif : `ask_personas`, `simulate_meeting`.
+If the plugin is active: `ask_personas`, `simulate_meeting`.
 
-### Endpoints CRUD
+### CRUD endpoints
 
-| Méthode | Route |
+| Method | Route |
 |---|---|
 | GET/POST | `/plugins/personas/sets` |
 | DELETE | `/plugins/personas/sets/{set_id}` |
@@ -81,27 +81,27 @@ Si le plugin est actif : `ask_personas`, `simulate_meeting`.
 | GET | `/plugins/personas/discussions`, `/plugins/personas/discussions/{id}` |
 | POST | `/plugins/personas/estimate-cost` |
 
-### Flux UX typique
+### Typical UX flow
 
-1. **Depuis le compositeur** : menu « + » → action personas → bascule sur une session chat → `ChatPage` exécute l'action via `usePersonasNavigation`.
-2. **Depuis le panneau droit** : onglet Personas → choix du set et de l'action → `usePersonasActions` assure la navigation.
-3. **Reprise** : identifiants de réunion/discussion stockés en `sessionStorage` pour relancer ou reprendre.
+1. **From the composer**: "+" menu → personas action → switch to a chat session → `ChatPage` runs the action via `usePersonasNavigation`.
+2. **From the right panel**: Personas tab → choose set and action → `usePersonasActions` handles navigation.
+3. **Resume**: meeting/discussion identifiers stored in `sessionStorage` to relaunch or resume.
 
-## Plugin Projet (`workproba.projet`)
+## Project plugin (`workproba.projet`)
 
-Gestion de projets internes et publication d'artefacts depuis l'explorateur ou l'aperçu document.
+Internal project management and artifact publishing from the explorer or document preview.
 
-Endpoints principaux : `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins/projet/artefacts`.
+Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins/projet/artefacts`.
 
-## Plugins expérimentaux
+## Experimental plugins
 
-- **Browser** : `/plugins/browser/navigate`, `/snapshot`, `/action`, `/close`, `/status`
-- **Cloud** : `/plugins/cloud/status`, `/config`, `/sync`
+- **Browser**: `/plugins/browser/navigate`, `/snapshot`, `/action`, `/close`, `/status`
+- **Cloud**: `/plugins/cloud/status`, `/config`, `/sync`
 
-Désactivés par défaut ; réservés au dev et aux presets avancés.
+Disabled by default; reserved for dev and advanced presets.
 
-## Voir aussi
+## See also
 
-- [memory.md](./memory.md) — mémoire scopée (utilisée par personas avec `include_memory`)
-- [architecture.md](./architecture.md) — shell UI (sidebar, panneau droit)
-- [services/ai/README.md](../services/ai/README.md) — catalogue complet des endpoints
+- [memory.md](./memory.md): scoped memory (used by personas with `include_memory`)
+- [architecture.md](./architecture.md): UI shell (sidebar, right panel)
+- [services/ai/README.md](../services/ai/README.md): full endpoint catalog

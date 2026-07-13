@@ -1,57 +1,57 @@
 # Workproba Desktop
 
-> **Statut :** Décision produit — pivot bureau
-> **Dernière mise à jour :** 11/07/2026
+> **Status:** Product decision: desktop pivot
+> **Last updated:** 11/07/2026
 
-## Décision
+## Decision
 
-Workproba devient une **application bureau local-first** (type Claude Cowork), multi-plateforme :
+Workproba becomes a **local-first desktop application** (Claude Cowork style), multi-platform:
 
-| OS | Formats cibles |
+| OS | Target formats |
 |---|---|
 | macOS | `.app`, `.dmg` |
 | Linux | `.deb`, `.rpm`, `.AppImage` |
 | Windows | `.msi`, `.exe` (NSIS) |
 
-Technologie retenue : **Tauri 2** (coque Rust légère + webview système + UI Quasar existante).
+Chosen technology: **Tauri 2** (lightweight Rust shell + system webview + existing Quasar UI).
 
-L'agent IA reste en **Python** (sidecar). Le Rust ne remplace pas Python : il fournit le pont natif (filesystem, fenêtre, permissions, packaging).
+The AI agent remains in **Python** (sidecar). Rust does not replace Python: it provides the native bridge (filesystem, window, permissions, packaging).
 
-## Métaphore produit (non-codeurs)
+## Product metaphor (non-coders)
 
-L'utilisateur ouvre **un dossier projet** sur son disque. L'Imp (agent) travaille dedans :
+The user opens **a project folder** on their disk. The Imp (agent) works inside it:
 
-- lit et modifie Word, Excel, PDF ;
-- exécute du code **sous le capot** dans un sandbox subprocess local ;
-- s'appuie sur une **mémoire** indexée à partir des documents du dossier.
+- reads and modifies Word, Excel, PDF;
+- runs code **under the hood** in a local subprocess sandbox;
+- relies on **memory** indexed from folder documents.
 
-Concepts UI principaux :
+Main UI concepts:
 
-| Concept affiché | Signification |
+| Displayed concept | Meaning |
 |---|---|
-| **Dossier** | Le projet client (filesystem local) |
-| **Conversation** | L'échange avec l'Imp |
-| **Mémoire** | Ce que l'outil sait du dossier (RAG projet + souvenirs user/projet) |
-| **Personas** | Regards métiers simulés (plugin V2, avis / réunion / discussion) |
+| **Folder** | The client project (local filesystem) |
+| **Conversation** | Exchange with the Imp |
+| **Memory** | What the tool knows about the folder (project RAG + user/project memories) |
+| **Personas** | Simulated professional perspectives (plugin: opinion / meeting / discussion) |
 
-## Architecture bureau
+## Desktop architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Quasar + Anubis (webview Tauri)                            │
-│  chat · fichiers · résultats                                │
+│  Quasar + Anubis (Tauri webview)                            │
+│  chat · files · results                                     │
 └──────────────┬──────────────────────────┬───────────────────┘
                │ fetch SSE                  │ invoke() Tauri
                ▼                            ▼
 ┌──────────────────────────┐    ┌─────────────────────────────┐
 │  Python sidecar          │    │  Tauri / Rust               │
-│  127.0.0.1:8765          │    │  dossier · open_path · etc. │
+│  127.0.0.1:8765          │    │  folder · open_path · etc.  │
 │  agent · RAG · sandbox   │    └──────────────┬──────────────┘
 └──────────────┬───────────┘                   │ read/write
                │                                ▼
                ▼                    ┌─────────────────────────────┐
-┌──────────────────────────┐       │  Dossier projet utilisateur │
-│  LLM (Ollama/vLLM/…)     │       │  Dossier projet utilisateur │
+┌──────────────────────────┐       │  User project folder        │
+│  LLM (Ollama/vLLM/…)     │       │  User project folder        │
 └──────────────────────────┘       └─────────────────────────────┘
                │
                ▼
@@ -61,11 +61,11 @@ Concepts UI principaux :
 └──────────────────────────┘
 ```
 
-Le chat **ne passe pas par Rust** : la webview Quasar appelle directement le sidecar Python en HTTP/SSE. Tauri intervient pour le filesystem natif (ouvrir dossier, lister fichiers, ouvrir un document).
+Chat **does not go through Rust**: the Quasar webview calls the Python sidecar directly over HTTP/SSE. Tauri handles native filesystem (open folder, list files, open a document).
 
-### Stockage par workspace
+### Per-workspace storage
 
-Les métadonnées Workproba vivent dans le **dossier applicatif**, pas dans le dossier client. Voir [workspace-storage.md](./workspace-storage.md).
+Workproba metadata lives in the **application folder**, not in the client folder. See [workspace-storage.md](./workspace-storage.md).
 
 ```
 {app_data}/workspaces/{workspace_id}/.workproba/
@@ -73,107 +73,107 @@ Les métadonnées Workproba vivent dans le **dossier applicatif**, pas dans le d
 ├── conversations/
 ├── versions/
 ├── attachments/
-└── memory.db          # RAG projet + souvenirs explicites
+└── memory.db          # project RAG + explicit memories
 
-{app_data}/user/memory.db   # souvenirs utilisateur globaux
-{app_data}/plugins/         # données plugins (personas, …)
+{app_data}/user/memory.db   # global user memories
+{app_data}/plugins/         # plugin data (personas, …)
 ```
 
-## Flux d'un message (bureau)
+## Message flow (desktop)
 
 ```
 [Quasar webview] --HTTP SSE--> [Python sidecar :8765]
        │
-       └── invoke Tauri (dossier, open_path) — hors chemin chat
+       └── invoke Tauri (folder, open_path): outside chat path
 ```
 
-1. L'utilisateur sélectionne un dossier projet (dialogue Tauri).
-2. Tauri enregistre le workspace (ID stable + chemin) ; le front garde le chemin et `workspace_id`.
-3. L'utilisateur envoie un message dans le chat.
-4. Quasar appelle `POST http://127.0.0.1:8765/agent/turn` (SSE direct). Le payload
-   embarque la surcharge **modèle + niveau de raisonnement** de la conversation
-   (persistée en session), clampée contre les capacités du modèle.
-5. Python exécute la loop agent : LLM, tools fichier, recherche locale, sandbox subprocess.
-6. Les événements SSE sont affichés dans le chat (tokens, raisonnement avec spinner,
-   appels d'outil) ; les sessions sont persistées dans `{app_data}/workspaces/{id}/.workproba/conversations/`.
+1. The user selects a project folder (Tauri dialog).
+2. Tauri registers the workspace (stable ID + path); the front keeps the path and `workspace_id`.
+3. The user sends a message in chat.
+4. Quasar calls `POST http://127.0.0.1:8765/agent/turn` (direct SSE). The payload
+   includes the conversation **model + reasoning level** override
+   (persisted in session), clamped against model capabilities.
+5. Python runs the agent loop: LLM, file tools, local search, subprocess sandbox.
+6. SSE events are shown in chat (tokens, reasoning with spinner,
+   tool calls); sessions are persisted in `{app_data}/workspaces/{id}/.workproba/conversations/`.
 
-**Pas de serveur web** dans le chemin produit. L'ancien stack NestJS est dans `legacy/`.
+**No web server** in the product path. The former NestJS stack is in `legacy/`.
 
-## Rôles par couche
+## Roles by layer
 
-| Couche | Langage | Rôle |
+| Layer | Language | Role |
 |---|---|---|
-| UI | TypeScript / Quasar | Chat, fichiers, résultats, onboarding |
-| Coque bureau | Rust / Tauri | Fenêtre, OS APIs, filesystem, packaging |
-| Cœur IA | Python / FastAPI | Agent loop, extraction, RAG, sandbox subprocess |
-| Données locales | `{app_data}/workspaces/{id}/.workproba/` | Sessions, versions, mémoire |
-| Cloud (archivé) | `legacy/` | Ancien stack NestJS |
+| UI | TypeScript / Quasar | Chat, files, results, onboarding |
+| Desktop shell | Rust / Tauri | Window, OS APIs, filesystem, packaging |
+| AI core | Python / FastAPI | Agent loop, extraction, RAG, subprocess sandbox |
+| Local data | `{app_data}/workspaces/{id}/.workproba/` | Sessions, versions, memory |
+| Cloud (archived) | `legacy/` | Former NestJS stack |
 
-## Sécurité et confiance (UX)
+## Security and trust (UX)
 
-- **Mode prudent** (défaut, phase ultérieure) : confirmation avant modification.
-- **Versions automatiques** : copie dans `.workproba/versions/` avant écriture (Python `LocalProjectClient`).
-- **Périmètre** : l'agent ne sort pas du dossier projet.
-- **Sandbox** : subprocess Python local, sans réseau, timeout configurable.
-- **Sidecar** : joignable sur loopback uniquement (`127.0.0.1`, `::1`).
+- **Cautious mode** (default, later phase): confirmation before modification.
+- **Automatic versions**: copy to `.workproba/versions/` before write (Python `LocalProjectClient`).
+- **Scope**: the agent does not leave the project folder.
+- **Sandbox**: local Python subprocess, no network, configurable timeout.
+- **Sidecar**: reachable on loopback only (`127.0.0.1`, `::1`).
 
-## Packaging Python (sidecar)
+## Python packaging (sidecar)
 
-En production : PyInstaller → binaire `workproba-ai-<triple>` dans `desktop/src-tauri/binaries/`, référencé par `bundle.externalBin`.
+In production: PyInstaller → `workproba-ai-<triple>` binary in `desktop/src-tauri/binaries/`, referenced by `bundle.externalBin`.
 
-En développement : `make dev-ai` ou `services/ai/run_dev.sh` (port `8765`).
+In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
-## Phasage
+## Phasing
 
-| Phase | Statut | Contenu |
+| Phase | Status | Content |
 |---|---|---|
-| **A** | Fait | Scaffold Tauri, commandes dossier, doc |
-| **B** | Fait | UI open folder, liste fichiers, sessions locales |
-| **C** | Fait | SSE direct Python, `LocalProjectClient`, sandbox subprocess |
-| **D** | Fait | RAG SQLite, extraction Office, monitoring sidecar |
-| **D+** | Fait | Mémoire scopée user/projet, plugins V2 (personas), pièces jointes, aperçu documents, audit |
-| **E** | À faire | Packaging multi-OS + PyInstaller sidecar |
-| **F** | À faire | Sync cloud optionnelle (NestJS) |
+| **A** | Done | Tauri scaffold, folder commands, docs |
+| **B** | Done | Open folder UI, file list, local sessions |
+| **C** | Done | Direct Python SSE, `LocalProjectClient`, subprocess sandbox |
+| **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
+| **D+** | Done | Scoped user/project memory, plugins (personas), attachments, document preview, audit |
+| **E** | To do | Multi-OS packaging + PyInstaller sidecar |
+| **F** | To do | Optional cloud sync (NestJS) |
 
-### Phase D — validation
+### Phase D: validation
 
-- **Sidecar (Python)** : chat streaming, outils fichier, RAG, mémoire scopée, plugins personas. Suite pytest : voir [testing.md](./testing.md) (`pytest -q` pour le décompte actuel).
-- **Coque Rust** : spawn sidecar venv-aware + `ai_sidecar_status` + `protocol-asset` pour aperçu images. `cargo check` OK.
-- **Front** : `WorkprobaLayout` (sidebar, panneau droit, side chat), `useSidecarHealth`, plugin personas intégré au compositeur.
-- **Run desktop end-to-end** : `make dev`, ouvrir un dossier, tester chat, mémoire, personas, aperçu document.
+- **Sidecar (Python)**: streaming chat, file tools, RAG, scoped memory, personas plugins. pytest suite: see [testing.md](./testing.md) (`pytest -q` for current count).
+- **Rust shell**: venv-aware sidecar spawn + `ai_sidecar_status` + `protocol-asset` for image preview. `cargo check` OK.
+- **Front**: `WorkprobaLayout` (sidebar, right panel, side chat), `useSidecarHealth`, personas plugin integrated in composer.
+- **End-to-end desktop run**: `make dev`, open a folder, test chat, memory, personas, document preview.
 
-## Reste à faire
+## Remaining work
 
-### Produit (phases E & F)
+### Product (phases E & F)
 
-- **Phase E — Packaging multi-OS** : PyInstaller du sidecar (`workproba-ai-<triple>` dans `desktop/src-tauri/binaries/`, référencé par `bundle.externalBin`) ; build `.dmg`/`.app` (macOS), `.deb`/`.rpm`/`.AppImage` (Linux), `.msi`/`.exe` NSIS (Windows) ; CI de build par triple.
-- **Phase F — Sync cloud optionnelle** : réutilisation du stack NestJS archivé (`legacy/`) pour synchronisation optionnelle des workspaces.
+- **Phase E: Multi-OS packaging**: PyInstaller sidecar (`workproba-ai-<triple>` in `desktop/src-tauri/binaries/`, referenced by `bundle.externalBin`); build `.dmg`/`.app` (macOS), `.deb`/`.rpm`/`.AppImage` (Linux), `.msi`/`.exe` NSIS (Windows); CI build per triple.
+- **Phase F: Optional cloud sync**: reuse archived NestJS stack (`legacy/`) for optional workspace sync.
 
-### Fonctionnel (hors V1, à prioriser)
+### Functional (beyond initial release, to prioritize)
 
-- **OCR / PDFs scannés** : `LocalExtractor` gère PDF texte (pdfplumber), Word/Excel/PowerPoint. OCR (Docling et/ou Mistral OCR) non implémenté — requis pour PDFs scannés et images. Décision utilisateur déjà actée (« Docling pour l'OCR ») : intégrer Docling comme extracteur lourd avec repli Mistral OCR.
-- **Durable (Temporal/Inngest)** : reporté. La loop agent actuelle est synchrone (un tour SSE). Pas de reprise/persistance de workflow long en cas de crash. À réintroduire si des tâches longues (indexation gros corpus, traitements par lots) le justifient.
-- **Mode prudent** : confirmation avant modification de fichiers (défaut futur). Actuellement les versions automatiques (`.workproba/versions/`) sont la seule garde-fou.
+- **OCR / scanned PDFs**: `LocalExtractor` handles text PDF (pdfplumber), Word/Excel/PowerPoint. OCR (Docling and/or Mistral OCR) not implemented: required for scanned PDFs and images. User decision already made ("Docling for OCR"): integrate Docling as heavy extractor with Mistral OCR fallback.
+- **Durable (Temporal/Inngest)**: deferred. Current agent loop is synchronous (one SSE turn). No long workflow resume/persistence on crash. Reintroduce if long tasks (large corpus indexing, batch processing) justify it.
+- **Cautious mode**: confirmation before file modification (future default). Currently automatic versions (`.workproba/versions/`) are the only safeguard.
 
-### Qualité / intégration
+### Quality / integration
 
-- **Run desktop e2e sur machine avec affichage** : valider le tour de chat réel dans la webview (streaming, badge sidecar, rendu des tool calls). Le sidecar est validé en live hors webview.
-- **Tests front préexistants** : `pages-smoke.spec.ts` et `ssr-paths.spec.ts` référencent des pages absentes (`SpaShell.vue`, `ErrorRouteNotAuthorized.vue`) ; à corriger ou supprimer. `layouts.spec.ts` (`StandardLayout` lib-improba) en échec.
-- **CI** : aucune CI sur le pivot bureau. À mettre en place avec la phase E (`cargo check`, `pytest -q`, `yarn test:unit`, `yarn build`).
-- **Lint front** : 7 erreurs préexistantes dans `lib-improba/` (non introduites par le sidecar).
+- **Desktop e2e run on machine with display**: validate real chat turn in webview (streaming, sidecar badge, tool call rendering). Sidecar is validated live outside webview.
+- **Pre-existing front tests**: `pages-smoke.spec.ts` and `ssr-paths.spec.ts` reference missing pages (`SpaShell.vue`, `ErrorRouteNotAuthorized.vue`); fix or remove. `layouts.spec.ts` (`StandardLayout` lib-improba) failing.
+- **CI**: no CI on desktop pivot. Set up with phase E (`cargo check`, `pytest -q`, `yarn test:unit`, `yarn build`).
+- **Front lint**: 7 pre-existing errors in `lib-improba/` (not introduced by sidecar).
 
-## Développement local
+## Local development
 
 ```bash
-make dev          # recommandé : sidecar + Tauri/Quasar
-# ou
+make dev          # recommended: sidecar + Tauri/Quasar
+# or
 make dev-ai       # terminal 1
 make dev-desktop  # terminal 2
 ```
 
-Rebuild et hot reload (front HMR, Rust recompile + redémarre la fenêtre, Python `--reload` via `dev-ai`) : voir [desktop/README.md § Rebuild et hot reload](../desktop/README.md#rebuild-et-hot-reload).
+Rebuild and hot reload (front HMR, Rust recompile + window restart, Python `--reload` via `dev-ai`): see [desktop/README.md § Rebuild and hot reload](../desktop/README.md#rebuild-and-hot-reload).
 
-## Voir aussi
+## See also
 
 - [architecture.md](./architecture.md)
 - [memory.md](./memory.md)

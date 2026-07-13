@@ -1,115 +1,115 @@
 # Workproba Desktop
 
-Coque bureau **Tauri 2** d'Workproba, ciblant **macOS**, **Linux** et **Windows**.
+**Tauri 2** desktop shell for Workproba, targeting **macOS**, **Linux**, and **Windows**.
 
-L'UI réutilise le front **Quasar** (`../front/`) en webview. Le cœur IA reste en **Python** (`../services/ai/`) lancé en sidecar. Le Rust ne porte que le pont natif (fenêtre, dialogue de dossier, permissions OS, cycle de vie du sidecar).
+The UI reuses the **Quasar** front (`../front/`) in a webview. The AI core remains in **Python** (`../services/ai/`) launched as a sidecar. Rust only provides the native bridge (window, folder dialog, OS permissions, sidecar lifecycle).
 
-## Prérequis
+## Prerequisites
 
-| Outil | Version | Usage |
+| Tool | Version | Usage |
 |---|---|---|
-| Rust | ≥ 1.77 | Coque Tauri (`src-tauri/`) |
-| Node.js | ≥ 22.22 (24 recommandé) | CLI Tauri + build Quasar (vitest 4 requiert Node ≥ 22.22) |
-| Yarn | via front | Dev server Quasar sur le port `5053` |
-| Dépendances OS Linux | webkit2gtk, etc. | Voir [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) |
+| Rust | ≥ 1.77 | Tauri shell (`src-tauri/`) |
+| Node.js | ≥ 22.22 (24 recommended) | Tauri CLI + Quasar build (vitest 4 requires Node ≥ 22.22) |
+| Yarn | via front | Quasar dev server on port `5053` |
+| Linux OS deps | webkit2gtk, etc. | See [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) |
 
-Sur Linux (Debian/Ubuntu) :
+On Linux (Debian/Ubuntu):
 
 ```bash
 sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
 
-## Développement
+## Development
 
-### Une seule commande (recommandé)
+### Single command (recommended)
 
-Depuis la racine `workproba/` :
+From the `workproba/` root:
 
 ```bash
-make dev      # ou : yarn dev
+make dev      # or: yarn dev
 ```
 
-Démarre le sidecar Python, attend qu'il soit sain (`/health` sur `127.0.0.1:8765`), puis lance `tauri dev` qui démarre lui-même Quasar via `beforeDevCommand`. Un `Ctrl+C` arrête proprement les deux services. Logs sidecar : `tail -f .dev-ai.log` à la racine.
+Starts the Python sidecar, waits until it is healthy (`/health` on `127.0.0.1:8765`), then runs `tauri dev` which starts Quasar itself via `beforeDevCommand`. A single `Ctrl+C` cleanly stops both services. Sidecar logs: `tail -f .dev-ai.log` at the root.
 
-Variantes : `yarn dev:ai-only`, `yarn dev:no-ai`, `make dev-ai`, `make dev-desktop`.
+Variants: `yarn dev:ai-only`, `yarn dev:no-ai`, `make dev-ai`, `make dev-desktop`.
 
-### Deux terminaux (méthode historique)
+### Two terminals (legacy method)
 
-Depuis la racine `workproba/` :
+From the `workproba/` root:
 
 ```bash
-make dev-ai        # sidecar Python (port 8765)
+make dev-ai        # Python sidecar (port 8765)
 make dev-desktop   # Tauri + Quasar (port 5053)
 ```
 
-Ou depuis `desktop/` :
+Or from `desktop/`:
 
 ```bash
 yarn dev
 ```
 
-Cette commande :
-1. démarre Quasar (`../front`, port `5053`) via `beforeDevCommand` ;
-2. compile la coque Rust (`src-tauri/`, mode debug) ;
-3. lance la fenêtre Tauri pointant sur `http://localhost:5053`.
+This command:
+1. starts Quasar (`../front`, port `5053`) via `beforeDevCommand`;
+2. compiles the Rust shell (`src-tauri/`, debug mode);
+3. launches the Tauri window pointing at `http://localhost:5053`.
 
-Le service Python IA doit être lancé séparément en dev (voir ci-dessous).
+The Python AI service must be started separately in dev (see below).
 
-### Rebuild et hot reload
+### Rebuild and hot reload
 
-`make dev-desktop` exécute `tauri dev`, qui intègre le watch Rust (pas besoin de `cargo watch` à part).
+`make dev-desktop` runs `tauri dev`, which includes Rust watch (no separate `cargo watch` needed).
 
-| Zone modifiée | Rebuild Rust ? | Hot reload |
+| Modified area | Rust rebuild? | Hot reload |
 |---|---|---|
-| `front/` (Vue, TS, CSS) | non | oui (HMR Quasar) |
-| `desktop/src-tauri/` (Rust) | oui (incrémental Cargo) | non : recompile et **redémarre la fenêtre** |
-| `services/ai/` (Python) | non | oui si lancé via `make dev-ai` (`uvicorn --reload`) |
+| `front/` (Vue, TS, CSS) | no | yes (Quasar HMR) |
+| `desktop/src-tauri/` (Rust) | yes (incremental Cargo) | no: recompiles and **restarts the window** |
+| `services/ai/` (Python) | no | yes if launched via `make dev-ai` (`uvicorn --reload`) |
 
-Points utiles :
+Useful notes:
 
-- **Premier lancement** : compilation Rust complète, potentiellement longue. Les builds suivants sont incrémentaux.
-- **Rust** : pas de hot reload in-process. Tauri surveille les `.rs` et relance l'app après recompilation. L'état de la fenêtre (dossier ouvert, etc.) est perdu au redémarrage.
-- **Frontend** : la webview charge le dev server Quasar ; les changements Vue/TS se reflètent sans redémarrer Tauri.
-- **Python** : indépendant de `make dev-desktop`. Lancer `make dev-ai` dans un autre terminal.
+- **First launch**: full Rust compilation, potentially long. Subsequent builds are incremental.
+- **Rust**: no in-process hot reload. Tauri watches `.rs` files and relaunches the app after recompilation. Window state (open folder, etc.) is lost on restart.
+- **Frontend**: the webview loads the Quasar dev server; Vue/TS changes reflect without restarting Tauri.
+- **Python**: independent of `make dev-desktop`. Run `make dev-ai` in another terminal.
 
-### Service Python (dev)
+### Python service (dev)
 
 ```bash
 cd ../services/ai && ./run_dev.sh
-# ou : make dev-ai (depuis la racine workproba/)
+# or: make dev-ai (from workproba root)
 ```
 
-Le chat appelle le sidecar Python **directement** en HTTP (`127.0.0.1:8765`), sans passer par Rust.
+Chat calls the Python sidecar **directly** over HTTP (`127.0.0.1:8765`), without going through Rust.
 
-En dev, Tauri tente aussi de **démarrer automatiquement** le sidecar (`try_spawn_dev_uvicorn`) : il utilise en priorité `services/ai/.venv/bin/python -m uvicorn`, puis `services/ai/.venv/bin/uvicorn`, avec repli sur `python3 -m uvicorn` système. La commande `ai_sidecar_status` fait un test de liveness TCP sur `127.0.0.1:8765` et alimente le badge de santé du front (`useSidecarHealth`).
+In dev, Tauri also tries to **start the sidecar automatically** (`try_spawn_dev_uvicorn`): it prefers `services/ai/.venv/bin/python -m uvicorn`, then `services/ai/.venv/bin/uvicorn`, with fallback to system `python3 -m uvicorn`. The `ai_sidecar_status` command runs a TCP liveness check on `127.0.0.1:8765` and feeds the front health badge (`useSidecarHealth`).
 
-## Build multi-plateforme
+## Multi-platform build
 
 ```bash
 yarn build
 ```
 
-Cibles configurées : `deb`, `rpm`, `appimage`, `msi`, `nsis`, `dmg`, `app`.
+Configured targets: `deb`, `rpm`, `appimage`, `msi`, `nsis`, `dmg`, `app`.
 
-Le packaging du sidecar Python (`workproba-ai`) sera ajouté via `externalBin` une fois le binaire PyInstaller prêt pour chaque triple (`x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, etc.).
+Python sidecar packaging (`workproba-ai`) will be added via `externalBin` once the PyInstaller binary is ready for each triple (`x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, etc.).
 
-## Commandes Tauri exposées au front
+## Tauri commands exposed to the front
 
-| Commande | Rôle |
+| Command | Role |
 |---|---|
-| `pick_project_folder` | Dialogue natif « Ouvrir un dossier » |
-| `set_active_project_path` | Active un dossier, enregistre le workspace (`WorkspaceInfo`) |
-| `get_active_project_path` | Retourne le dossier actif |
-| `get_workspace_data_dir` | Chemin `.workproba` système pour un dossier |
-| `list_workspaces` | Liste les workspaces connus |
-| `list_conversations` / `save_conversation` | Sessions chat sur disque |
-| `list_documents` | Liste les fichiers du projet (hors dotfiles) |
-| `open_path` | Ouvre un fichier ou dossier avec l'application OS |
-| `restore_last_project_path` | Restaure le dernier dossier ouvert (persisté app data) |
-| `start_ai_sidecar` | Démarre le binaire Python empaqueté (prod) |
-| `ai_sidecar_status` | Liveness TCP du sidecar (`127.0.0.1:8765`) pour le badge de santé du front |
+| `pick_project_folder` | Native "Open folder" dialog |
+| `set_active_project_path` | Activates a folder, registers the workspace (`WorkspaceInfo`) |
+| `get_active_project_path` | Returns the active folder |
+| `get_workspace_data_dir` | System `.workproba` path for a folder |
+| `list_workspaces` | Lists known workspaces |
+| `list_conversations` / `save_conversation` | Chat sessions on disk |
+| `list_documents` | Lists project files (excluding dotfiles) |
+| `open_path` | Opens a file or folder with the OS default app |
+| `restore_last_project_path` | Restores the last opened folder (persisted app data) |
+| `start_ai_sidecar` | Starts the packaged Python binary (prod) |
+| `ai_sidecar_status` | Sidecar TCP liveness (`127.0.0.1:8765`) for the front health badge |
 
-Appel depuis Quasar :
+Call from Quasar:
 
 ```typescript
 import { invoke } from '@tauri-apps/api/core';
@@ -126,15 +126,15 @@ desktop/
 │   ├── src/
 │   │   ├── main.rs
 │   │   ├── lib.rs
-│   │   ├── commands/project.rs   # filesystem + dossier projet
-│   │   └── sidecar.rs            # lancement Python
-│   ├── binaries/                 # sidecars empaquetés (build CI)
+│   │   ├── commands/project.rs   # filesystem + project folder
+│   │   └── sidecar.rs            # Python launch
+│   ├── binaries/                 # packaged sidecars (CI build)
 │   ├── capabilities/
 │   └── tauri.conf.json
 └── README.md
 ```
 
-## Voir aussi
+## See also
 
-- [docs/desktop.md](../docs/desktop.md) : architecture bureau complète
-- [docs/architecture.md](../docs/architecture.md) : vue d'ensemble produit
+- [docs/desktop.md](../docs/desktop.md): full desktop architecture
+- [docs/architecture.md](../docs/architecture.md): product overview

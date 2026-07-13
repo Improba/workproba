@@ -1,31 +1,31 @@
-# Tests e2e desktop (WebdriverIO + Tauri)
+# Desktop e2e tests (WebdriverIO + Tauri)
 
-Smoke e2e de la coque bureau Tauri via le fournisseur WebDriver **embedded**.
-Valide le parcours critique dans la webview native (démarrage, shell, badge sidecar)
-sur **Linux, Windows et macOS**, sans driver externe.
+Tauri desktop shell smoke e2e via the **embedded** WebDriver provider.
+Validates the critical path in the native webview (startup, shell, sidecar badge)
+on **Linux, Windows, and macOS**, without an external driver.
 
-## Stratégie
+## Strategy
 
-Ce smoke est la couche la plus haute d'une stratégie en tiers :
+This smoke is the top layer of a three-tier strategy:
 
-1. **Front web** (Playwright, `front/`) — UI/flux sans webview.
-2. **Front <-> sidecar** (Playwright, `front/playwright.sidecar.config.ts`) — badge + SSE sans webview.
-3. **Sidecar Python** (`services/ai/` pytest) — logique agent hors webview.
-4. **Coque Rust** (`src-tauri/` `cargo test`) — liveness sidecar, helpers.
-5. **Desktop complet** (ici, WebdriverIO) — un seul scénario critique dans la webview, par OS.
+1. **Web front** (Playwright, `front/`): UI/flows without webview.
+2. **Front <-> sidecar** (Playwright, `front/playwright.sidecar.config.ts`): badge + SSE without webview.
+3. **Python sidecar** (`services/ai/` pytest): agent logic outside webview.
+4. **Rust shell** (`src-tauri/` `cargo test`): sidecar liveness, helpers.
+5. **Full desktop** (here, WebdriverIO): one critical scenario in the webview, per OS.
 
-On garde cette couche volontairement mince : un échec ici ne doit pas être bruité
-par des problèmes déjà couverts par les tiers 1 à 4.
+We keep this layer intentionally thin: a failure here should not be noisy
+from issues already covered by tiers 1 to 4.
 
-## Prérequis
+## Prerequisites
 
-### 1. Plugin Rust WebDriver (debug only)
+### 1. Rust WebDriver plugin (debug only)
 
 ```bash
 cd src-tauri && cargo add tauri-plugin-wdio-webdriver
 ```
 
-Dans `src-tauri/src/lib.rs`, rendre le builder conditionnel :
+In `src-tauri/src/lib.rs`, make the builder conditional:
 
 ```rust
 pub fn run() {
@@ -46,15 +46,15 @@ pub fn run() {
 }
 ```
 
-> Le plugin n'est inclus qu'en debug : les builds release ne sont pas alourdis.
+> The plugin is included only in debug: release builds are not burdened.
 
-### 2. Builder l'app
+### 2. Build the app
 
 ```bash
-yarn build:debug     # binaire : src-tauri/target/debug/workproba-desktop
+yarn build:debug     # binary: src-tauri/target/debug/workproba-desktop
 ```
 
-## Lancement
+## Running
 
 ```bash
 yarn test:e2e
@@ -62,21 +62,21 @@ yarn test:e2e
 # Linux headless
 xvfb-run -a yarn test:e2e
 
-# Binaire explicite (ex: release)
+# Explicit binary (e.g. release)
 APP_BINARY=../src-tauri/target/release/workproba-desktop yarn test:e2e
 ```
 
-## CI cross-platform
+## Cross-platform CI
 
-Matrice GitHub Actions :
+GitHub Actions matrix:
 
-| OS        | Runner           | Particularité                        |
+| OS        | Runner           | Notes                                |
 |-----------|------------------|--------------------------------------|
 | Linux     | `ubuntu-latest`  | `xvfb-run -a`                        |
-| Windows   | `windows-latest` | aucune (`APP_BINARY=...\.exe`)       |
-| macOS     | `macos-latest`   | aucune (embedded natif via WKWebView) |
+| Windows   | `windows-latest` | none (`APP_BINARY=...\.exe`)       |
+| macOS     | `macos-latest`   | none (native embedded via WKWebView) |
 
-Extrait :
+Excerpt:
 
 ```yaml
 strategy:
@@ -91,14 +91,14 @@ steps:
   - run: yarn test:e2e
     shell: bash
     env:
-      # Sur Linux, encapsuler avec xvfb via un wrapper si headless.
+      # On Linux, wrap with xvfb via a wrapper if headless.
       APP_BINARY: ${{ runner.os == 'Windows' && '../src-tauri/target/debug/workproba-desktop.exe' || '../src-tauri/target/debug/workproba-desktop' }}
 ```
 
 ## Notes
 
-- Le LLM Mistral n'est pas mocké ici. Pour un tour de chat complet et stable en CI,
-  prévoir un mode « fake streaming » côté sidecar (à définir), ou limiter le smoke au
-  badge sidecar (cas actuel).
-- Le fournisseur `embedded` évite `tauri-driver`, `webkit2gtk-driver` et Edge WebDriver.
-  Alternative : `driverProvider: 'external'` (Windows/Linux uniquement).
+- Mistral LLM is not mocked here. For a full stable chat turn in CI,
+  plan for a "fake streaming" mode on the sidecar side (TBD), or limit the smoke to the
+  sidecar badge (current case).
+- The `embedded` provider avoids `tauri-driver`, `webkit2gtk-driver`, and Edge WebDriver.
+  Alternative: `driverProvider: 'external'` (Windows/Linux only).

@@ -1,112 +1,109 @@
-# Stockage par workspace
+# Per-workspace storage
 
-> **Dernière mise à jour :** 11/07/2026
+> **Last updated:** 11/07/2026
 
-## Principe
+## Principle
 
-Un **workspace** = un dossier utilisateur sur le disque (ex. `~/Clients/Dupont_2026/`).
+A **workspace** = a user folder on disk (e.g. `~/Clients/Dupont_2026/`).
 
-Les **fichiers métier** restent dans ce dossier, intacts. Les **métadonnées Workproba** (conversations, versions, mémoire RAG et souvenirs projet) vivent dans un répertoire applicatif dédié, **pas** dans le dossier client. Certaines données sont **globales utilisateur** (mémoire user, profil, plugins).
+**Business files** stay in that folder, untouched. **Workproba metadata** (conversations, versions, project RAG memory and project memories) lives in a dedicated application directory, **not** in the client folder. Some data is **global user** data (user memory, profile, plugins).
 
-Ce modèle suit **Claude Cowork** (métadonnées dans Application Support, fichiers utilisateur en place) et évite les pièges de **Cursor** (hash du chemin → perte d’historique au renommage).
+This model follows **Claude Cowork** (metadata in Application Support, user files in place) and avoids **Cursor** pitfalls (path hash → lost history on rename).
 
-## Arborescence
+## Layout
 
 ```
-# Fichiers utilisateur (inchangés)
+# User files (unchanged)
 ~/Clients/Dupont_2026/
 ├── Rapport.docx
 └── Tableau_CA.xlsx
 
-# Métadonnées Workproba (dossier système)
+# Workproba metadata (system folder)
 ~/.local/share/fr.improba.workproba/          # Linux
 ~/Library/Application Support/fr.improba.workproba/   # macOS
 %LOCALAPPDATA%/fr.improba.workproba/          # Windows
-├── registry.json                           # index des workspaces connus
-├── last-project.json                       # dernier dossier ouvert
-├── settings.json                           # réglages app (providers LLM, plugins actifs)
+├── registry.json                           # index of known workspaces
+├── last-project.json                       # last opened folder
+├── settings.json                           # app settings (LLM providers, active plugins)
 ├── user/
-│   └── memory.db                           # souvenirs explicites globaux (scope user)
+│   └── memory.db                           # global explicit memories (user scope)
 ├── plugins/
-│   └── workproba.personas/                 # données plugin (sets, réunions, discussions)
+│   └── workproba.personas/                 # plugin data (sets, meetings, discussions)
 ├── audit/
-│   ├── audit.jsonl                         # journal d'audit local
-│   └── config.json                         # rétention, activation
+│   ├── audit.jsonl                         # local audit log
+│   └── config.json                         # retention, activation
 └── workspaces/
     └── ws_a1b2c3d4.../
         └── .workproba/
-            ├── manifest.json               # chemin dossier, titre, dates
-            ├── config.json                 # instructions projet (phase ultérieure)
+            ├── manifest.json               # folder path, title, dates
+            ├── config.json                 # project instructions (later phase)
             ├── conversations/
-            │   └── sess_....json           # une session = un fichier JSON
-            ├── versions/                   # snapshots avant modification IA
-            ├── attachments/                # pièces jointes chat par session
-            └── memory.db                   # RAG projet + souvenirs explicites (scope project)
+            │   └── sess_....json           # one session = one JSON file
+            ├── versions/                   # snapshots before AI modification
+            ├── attachments/                # chat attachments per session
+            └── memory.db                   # project RAG + explicit memories (project scope)
 ```
 
-## Identification stable
+## Stable identification
 
-| Champ | Rôle |
+| Field | Role |
 |---|---|
-| `workspace_id` | UUID stable (`ws_…`), ne change pas si le dossier est renommé |
-| `folder_path` | Chemin actuel du dossier (mis à jour à chaque ouverture) |
-| `folder_path_normalized` | Chemin canonique pour retrouver le workspace après renommage partiel |
+| `workspace_id` | Stable UUID (`ws_…`), unchanged if the folder is renamed |
+| `folder_path` | Current folder path (updated on each open) |
+| `folder_path_normalized` | Canonical path to find the workspace after partial rename |
 
-À l’ouverture d’un dossier : lookup par chemin canonique → réutilisation de l’ID existant ou création d’un nouveau workspace.
+On folder open: lookup by canonical path → reuse existing ID or create a new workspace.
 
-## Répartition des responsabilités
+## Responsibility split
 
-| Donnée | Emplacement | Accès |
+| Data | Location | Access |
 |---|---|---|
-| Documents Office/PDF | Dossier utilisateur | Tauri (liste, open) + Python (read/write) |
-| Conversations | `.workproba/conversations/` (système) | Tauri → front Quasar |
-| Versions fichier | `.workproba/versions/` (système) | Python sidecar |
-| Pièces jointes chat | `.workproba/attachments/` (système) | Python sidecar |
-| Mémoire projet (RAG + explicite) | `.workproba/memory.db` (système) | Python sidecar |
-| Mémoire utilisateur (explicite) | `{app_data}/user/memory.db` | Python sidecar |
-| Données plugins | `{app_data}/plugins/{plugin_id}/` | Python sidecar + Tauri settings |
-| Journal d'audit | `{app_data}/audit/` | Python sidecar |
-| Registre projets | `registry.json` | Tauri |
+| Office/PDF documents | User folder | Tauri (list, open) + Python (read/write) |
+| Conversations | `.workproba/conversations/` (system) | Tauri → Quasar front |
+| File versions | `.workproba/versions/` (system) | Python sidecar |
+| Chat attachments | `.workproba/attachments/` (system) | Python sidecar |
+| Project memory (RAG + explicit) | `.workproba/memory.db` (system) | Python sidecar |
+| User memory (explicit) | `{app_data}/user/memory.db` | Python sidecar |
+| Plugin data | `{app_data}/plugins/{plugin_id}/` | Python sidecar + Tauri settings |
+| Audit log | `{app_data}/audit/` | Python sidecar |
+| Project registry | `registry.json` | Tauri |
 
-Le sidecar Python reçoit `workspace_data_dir` dans les payloads agent et mémoire pour écrire au bon endroit. Voir [memory.md](./memory.md) pour le détail des scopes.
+The Python sidecar receives `workspace_data_dir` in agent and memory payloads to write to the right place. See [memory.md](./memory.md) for scope details.
 
-## Schéma d'une session (`conversations/sess_….json`)
+## Session schema (`conversations/sess_….json`)
 
-Une session = un fichier JSON, lu/écrit via les commandes Tauri
+One session = one JSON file, read/written via Tauri commands
 (`list_conversations`, `get_conversation`, `save_conversation`).
 
-| Champ | Rôle |
+| Field | Role |
 |---|---|
-| `id` | Identifiant de session (`sess_…`) |
-| `title` | Titre affiché (auto, première question) |
-| `messages` | Liste des messages (rôles `user`/`assistant`, `parts` ordonnés texte/raisonnement/outil) |
-| `reasoningEffort` | Niveau de raisonnement choisi pour la conversation (`none`/`low`/`medium`/`high`) |
-| `model` | Modèle LLM choisi pour la conversation (surcharge du modèle par défaut du provider) |
-| `createdAt` / `updatedAt` | Horodatages |
+| `id` | Session identifier (`sess_…`) |
+| `title` | Display title (auto, first question) |
+| `messages` | Message list (roles `user`/`assistant`, ordered `parts` text/reasoning/tool) |
+| `reasoningEffort` | Reasoning level chosen for the conversation (`none`/`low`/`medium`/`high`) |
+| `model` | LLM model chosen for the conversation (overrides provider default) |
+| `createdAt` / `updatedAt` | Timestamps |
 
-`reasoningEffort` et `model` sont **persistés par session** : restaurés à
-l'ouverture s'ils restent applicables au provider actif, sinon repli sur le modèle
-par défaut du provider. La persistance est **debouncée** et atomique
-(`persistSession` sauve `messages` + `reasoningEffort` + `model` en une seule
-écriture) pour éviter les courses lors du streaming. `model` est optionnel
-(`#[serde(default, skip_serializing_if)]`) pour rester lisible par les versions
-antérieures.
+`reasoningEffort` and `model` are **persisted per session**: restored on open if still applicable to the active provider, otherwise fallback to the provider default model. Persistence is **debounced** and atomic
+(`persistSession` saves `messages` + `reasoningEffort` + `model` in a single
+write) to avoid races during streaming. `model` is optional
+(`#[serde(default, skip_serializing_if)]`) to remain readable by older versions.
 
-Voir aussi [architecture.md § Modèle et raisonnement par conversation](./architecture.md#modèle-et-raisonnement-par-conversation).
+See also [architecture.md § Model and reasoning per conversation](./architecture.md#model-and-reasoning-per-conversation).
 
-## Migration V1
+## Initial release migration
 
-Les sessions stockées en `localStorage` (`workproba:sessions:{path}`) sont **importées automatiquement** au premier accès d’un workspace, puis supprimées du navigateur.
+Sessions stored in `localStorage` (`workproba:sessions:{path}`) are **imported automatically** on first access to a workspace, then removed from the browser.
 
-## Comparaison concurrence
+## Competitive comparison
 
-| Outil | Fichiers utilisateur | Métadonnées app |
+| Tool | User files | App metadata |
 |---|---|---|
-| **Claude Cowork** | Dossier local monté tel quel | `Application Support/Claude-3p/` |
-| **Cursor** | `.cursor/` = config seulement | `workspaceStorage/{hash}/` (fragile au déplacement) |
-| **Workproba** | Dossier client sans pollution | `{app_data}/workspaces/{uuid}/.workproba/` |
+| **Claude Cowork** | Local folder mounted as-is | `Application Support/Claude-3p/` |
+| **Cursor** | `.cursor/` = config only | `workspaceStorage/{hash}/` (fragile on move) |
+| **Workproba** | Client folder without pollution | `{app_data}/workspaces/{uuid}/.workproba/` |
 
-## Voir aussi
+## See also
 
 - [desktop.md](./desktop.md)
 - [architecture.md](./architecture.md)

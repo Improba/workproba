@@ -1,141 +1,141 @@
 # Workproba AI Core
 
-Sidecar Python de l'application bureau Workproba : loop agent, providers LLM, extraction, RAG, mémoire scopée, plugins, sandbox subprocess.
+Python sidecar for the Workproba desktop application: agent loop, LLM providers, extraction, RAG, scoped memory, plugins, subprocess sandbox.
 
-Écoute sur `127.0.0.1:8765` (loopback uniquement en production).
+Listens on `127.0.0.1:8765` (loopback only in production).
 
-## Développement
+## Development
 
 ```bash
 ./run_dev.sh
-# ou depuis la racine : make dev-ai
-# ou tout-en-un : make dev
+# or from root: make dev-ai
+# or all-in-one: make dev
 ```
 
-## Sécurité
+## Security
 
-La plupart des endpoints exigent le header `X-Internal-Secret` (valeur `INTERNAL_SECRET` côté sidecar, `DESKTOP_INTERNAL_SECRET` côté front). Les flux SSE agent et personas sont accessibles sur loopback sans secret.
+Most endpoints require the `X-Internal-Secret` header (value `INTERNAL_SECRET` on the sidecar, `DESKTOP_INTERNAL_SECRET` on the front). Agent and personas SSE flows are accessible on loopback without a secret.
 
 ## Endpoints
 
-### Santé et capacités
+### Health and capabilities
 
-| Méthode | Route | Secret | Rôle |
+| Method | Route | Secret | Role |
 |---|---|---|---|
-| GET | `/health` | non | Santé du sidecar |
-| GET | `/capabilities` | oui | Capacités sidecar (plugins, OCR, …) |
+| GET | `/health` | no | Sidecar health |
+| GET | `/capabilities` | yes | Sidecar capabilities (plugins, OCR, …) |
 
-### LLM et utilitaires
+### LLM and utilities
 
-| Méthode | Route | Secret | Rôle |
+| Method | Route | Secret | Role |
 |---|---|---|---|
-| POST | `/llm/test` | oui | Test connexion provider |
-| POST | `/llm/sets/test` | oui | Test jeu de providers (chat + embeddings) |
-| POST | `/util/title` | oui | Génération titre de conversation |
-| POST | `/util/summarize` | oui | Résumé de texte |
+| POST | `/llm/test` | yes | Provider connection test |
+| POST | `/llm/sets/test` | yes | Provider set test (chat + embeddings) |
+| POST | `/util/title` | yes | Conversation title generation |
+| POST | `/util/summarize` | yes | Text summarization |
 
 ### Agent
 
-| Méthode | Route | Secret | Rôle |
+| Method | Route | Secret | Role |
 |---|---|---|---|
-| POST | `/agent/turn` | non (SSE loopback) | Tour agent, flux SSE |
-| POST | `/agent/confirm` | oui | Confirmation action sensible |
-| POST | `/agent/plan/approve` | oui | Approbation plan agent |
-| POST | `/agent/index-workspace` | oui | Indexation RAG bulk du dossier projet |
-| POST | `/agent/reprocess-attachment` | oui | Reprocess OCR/vision d'une pièce jointe |
+| POST | `/agent/turn` | no (SSE loopback) | Agent turn, SSE stream |
+| POST | `/agent/confirm` | yes | Sensitive action confirmation |
+| POST | `/agent/plan/approve` | yes | Agent plan approval |
+| POST | `/agent/index-workspace` | yes | Bulk project folder RAG indexing |
+| POST | `/agent/reprocess-attachment` | yes | Reprocess attachment OCR/vision |
 
-### Documents et versions
+### Documents and versions
 
-| Méthode | Route | Secret | Rôle |
+| Method | Route | Secret | Role |
 |---|---|---|---|
-| GET | `/documents/preview` | oui | Aperçu HTML/texte d'un fichier |
-| POST | `/documents/preview-change` | oui | Diff avant écriture |
-| GET | `/versions` | oui | Liste versions d'un fichier |
-| POST | `/versions/restore` | oui | Restauration d'une version |
+| GET | `/documents/preview` | yes | File HTML/text preview |
+| POST | `/documents/preview-change` | yes | Diff before write |
+| GET | `/versions` | yes | List file versions |
+| POST | `/versions/restore` | yes | Restore a version |
 
-### Mémoire
+### Memory
 
-Scopes `user` (global) et `project` (workspace). Voir [docs/memory.md](../../docs/memory.md).
+Scopes `user` (global) and `project` (workspace). See [docs/memory.md](../../docs/memory.md).
 
-| Méthode | Route | Secret | Rôle |
+| Method | Route | Secret | Role |
 |---|---|---|---|
-| GET | `/memory/items` | oui | Liste souvenirs explicites |
-| GET | `/memory/search` | oui | Recherche (RAG + explicite sur project) |
-| POST | `/memory/add` | oui | Ajout manuel |
-| POST | `/memory/forget` | oui | Suppression par id |
-| DELETE | `/memory` | oui | Effacement (conversations, mémoires, tout) |
+| GET | `/memory/items` | yes | List explicit memories |
+| GET | `/memory/search` | yes | Search (RAG + explicit on project) |
+| POST | `/memory/add` | yes | Manual add |
+| POST | `/memory/forget` | yes | Delete by id |
+| DELETE | `/memory` | yes | Wipe (conversations, memories, all) |
 
-### Plugin Personas (`workproba.personas`)
+### Personas plugin (`workproba.personas`)
 
-| Méthode | Route | Secret | Rôle |
+| Method | Route | Secret | Role |
 |---|---|---|---|
-| GET/POST | `/plugins/personas/sets` | oui | Liste / création sets |
-| DELETE | `/plugins/personas/sets/{set_id}` | oui | Suppression set custom |
-| POST | `/plugins/personas/ask` | non (SSE) | Avis par persona |
-| POST | `/plugins/personas/meeting` | non (SSE) | Réunion simulée |
-| POST | `/plugins/personas/discuss` | non (SSE) | Discussion multi-tours |
-| POST | `/plugins/personas/estimate-cost` | oui | Estimation coût tokens |
-| GET | `/plugins/personas/meetings` | oui | Historique réunions |
-| GET | `/plugins/personas/meetings/{id}` | oui | Détail réunion |
-| GET | `/plugins/personas/discussions` | oui | Historique discussions |
-| GET | `/plugins/personas/discussions/{id}` | oui | Détail discussion |
+| GET/POST | `/plugins/personas/sets` | yes | List / create sets |
+| DELETE | `/plugins/personas/sets/{set_id}` | yes | Delete custom set |
+| POST | `/plugins/personas/ask` | no (SSE) | Opinion per persona |
+| POST | `/plugins/personas/meeting` | no (SSE) | Simulated meeting |
+| POST | `/plugins/personas/discuss` | no (SSE) | Multi-turn discussion |
+| POST | `/plugins/personas/estimate-cost` | yes | Token cost estimate |
+| GET | `/plugins/personas/meetings` | yes | Meeting history |
+| GET | `/plugins/personas/meetings/{id}` | yes | Meeting detail |
+| GET | `/plugins/personas/discussions` | yes | Discussion history |
+| GET | `/plugins/personas/discussions/{id}` | yes | Discussion detail |
 
-### Plugin Projet (`workproba.projet`)
+### Project plugin (`workproba.projet`)
 
-| Méthode | Route | Secret | Rôle |
+| Method | Route | Secret | Role |
 |---|---|---|---|
-| GET/POST | `/plugins/projet/projects` | oui | Projets internes |
-| POST | `/plugins/projet/publish` | oui | Publication artefact |
-| GET | `/plugins/projet/artefacts` | oui | Liste artefacts |
+| GET/POST | `/plugins/projet/projects` | yes | Internal projects |
+| POST | `/plugins/projet/publish` | yes | Publish artifact |
+| GET | `/plugins/projet/artefacts` | yes | List artifacts |
 
-### Plugins expérimentaux
+### Experimental plugins
 
-| Plugin | Routes principales |
+| Plugin | Main routes |
 |---|---|
 | Browser | `/plugins/browser/navigate`, `/snapshot`, `/action`, `/close`, `/status` |
 | Cloud | `/plugins/cloud/status`, `/config`, `/sync` |
 
 ### Audit
 
-| Méthode | Route | Secret | Rôle |
+| Method | Route | Secret | Role |
 |---|---|---|---|
-| GET | `/audit` | oui | Entrées journal |
-| GET | `/audit/export` | oui | Export CSV |
-| GET/POST | `/audit/config` | oui | Configuration rétention |
+| GET | `/audit` | yes | Log entries |
+| GET | `/audit/export` | yes | CSV export |
+| GET/POST | `/audit/config` | yes | Retention configuration |
 
-## Indexation RAG du workspace
+## Workspace RAG indexing
 
-`POST /agent/index-workspace` parcourt le dossier projet, extrait le texte des fichiers éligibles (texte + Office : PDF/DOCX/XLSX/PPTX) et les indexe dans le `RagStore` du workspace (`memory.db`, scope project). Dossiers sensibles (`.git`, `node_modules`, …) et chemins interdits (`.env`, …) ignorés. Bornes : `INDEX_MAX_FILES` / `INDEX_MAX_FILE_BYTES` / `INDEX_MAX_TOTAL_CHARS`. Si le RAG est désactivé (pas de modèle d'embedding), renvoie `enabled=false` sans erreur.
+`POST /agent/index-workspace` walks the project folder, extracts text from eligible files (text + Office: PDF/DOCX/XLSX/PPTX) and indexes them in the workspace `RagStore` (`memory.db`, project scope). Sensitive folders (`.git`, `node_modules`, …) and forbidden paths (`.env`, …) are ignored. Limits: `INDEX_MAX_FILES` / `INDEX_MAX_FILE_BYTES` / `INDEX_MAX_TOTAL_CHARS`. If RAG is disabled (no embedding model), returns `enabled=false` without error.
 
-## Outils agent
+## Agent tools
 
-Outillage de base : lecture/écriture documents, recherche KB, sandbox, versions, etc.
+Base tooling: document read/write, KB search, sandbox, versions, etc.
 
-Outillage mémoire : `remember` (scope user/project), injection automatique via `memory_prompt`.
+Memory tooling: `remember` (user/project scope), automatic injection via `memory_prompt`.
 
-Outillage plugins (si actifs) : `ask_personas`, `simulate_meeting` (personas), outils projet/browser/cloud selon manifest.
+Plugin tooling (if active): `ask_personas`, `simulate_meeting` (personas), project/browser/cloud tools per manifest.
 
-Registre : `app/plugins/registry.py`.
+Registry: `app/plugins/registry.py`.
 
 ## Variables
 
-Voir `.env.example`.
+See `.env.example`.
 
 ## Tests
 
 ```bash
-# Suite hors-ligne (déterministe, via TestModel — pas de LLM requis)
+# Offline suite (deterministic, via TestModel: no LLM required)
 .venv/bin/pytest -q
 
-# Tests live contre Mistral (réseau + clé requis)
+# Live tests against Mistral (network + key required)
 WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 ```
 
-Couverture : agent, mémoire scopée, plugins, documents, audit, attachments, RAG, HTTP SSE. Voir [docs/testing.md](../../docs/testing.md).
+Coverage: agent, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE. See [docs/testing.md](../../docs/testing.md).
 
-## Limites actuelles
+## Current limits
 
-- Agent : [Pydantic AI](https://ai.pydantic.dev/) (modèles natifs). Routage via `OpenAIChatModel` + `AnthropicModel`.
-- Embeddings RAG : LiteLLM (`litellm.aembedding`). Désactivé si `LLM_EMBEDDING_MODEL` vide → repli recherche substring.
-- Extraction : PDF texte, Word, Excel, PowerPoint. OCR / PDFs scannés hors scope V1.
-- Durable (Temporal/Inngest) : reporté.
+- Agent: [Pydantic AI](https://ai.pydantic.dev/) (native models). Routing via `OpenAIChatModel` + `AnthropicModel`.
+- RAG embeddings: LiteLLM (`litellm.aembedding`). Disabled if `LLM_EMBEDDING_MODEL` is empty → substring search fallback.
+- Extraction: text PDF, Word, Excel, PowerPoint. OCR / scanned PDFs out of initial scope.
+- Durable (Temporal/Inngest): deferred.

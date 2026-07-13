@@ -1,114 +1,114 @@
 # Workproba
 
-L'IA se fragmente : un copilote par logiciel, des contextes qui ne se recoupent pas, des fonctionnalités isolées dans chaque suite. Notre conviction : elle devrait d'abord être **une interface de travail personnelle**, centrée sur la personne, connectée à ses dossiers et outils, plutôt qu'embarquée dans chacun d'eux.
+AI is fragmenting: a copilot in every app, contexts that never overlap, features siloed inside each suite. Our conviction is that it should first be **a personal work interface**, centered on the person, connected to their folders and tools, rather than embedded in each one of them.
 
-**Workproba** est une application bureau (**macOS, Linux, Windows**) qui incarne ce principe. Vous ouvrez un dossier projet sur votre poste ; l'assistant travaille directement sur vos fichiers (Word, Excel, PDF), indexe et mémorise le contexte localement, et s'appuie sur le **provider LLM de votre choix** (Ollama, Mistral, OpenAI, etc.). Vos documents et votre mémoire restent sur la machine ; le contexte pertinent transite vers le modèle à chaque échange, selon la configuration retenue.
+**Workproba** is a desktop application (**macOS, Linux, Windows**) that embodies this principle. You open a project folder on your machine; the assistant works directly on your files (Word, Excel, PDF), indexes and remembers context locally, and relies on the **LLM provider of your choice** (Ollama, Mistral, OpenAI, etc.). Your documents and memory stay on the machine; relevant context is sent to the model on each exchange, according to your configuration.
 
-*Application bureau local-first. Fichiers et mémoire locaux, providers LLM configurables.*
+*Local-first desktop app. Local files and memory, configurable LLM providers.*
 
-## Aperçu
+## Preview
 
-| Mode clair | Mode sombre |
+| Light mode | Dark mode |
 |---|---|
-| ![Workproba en mode clair, chat, personas et workspace](./docs/images/workproba-light-mode.jpg) | ![Workproba en mode sombre, chat, fichiers et workspace](./docs/images/workproba-dark-mode.jpg) |
+| ![Workproba in light mode, chat, personas and workspace](./docs/images/workproba-light-mode.jpg) | ![Workproba in dark mode, chat, files and workspace](./docs/images/workproba-dark-mode.jpg) |
 
-## Fonctionnalités
+## Features
 
-- **Chat agent** : streaming SSE, modèle et raisonnement par conversation, pièces jointes, menu compositeur « + »
-- **Mémoire scopée** : souvenirs utilisateur globaux + souvenirs projet, RAG local, outil agent `remember`
-- **Plugin Personas** : avis métiers, réunions simulées, discussions (set Improba builtin)
-- **Workspace** : sidebar workspaces/conversations, panneau droit (fichiers, aperçu, personas), side chat
-- **Documents** : aperçu HTML/texte via sidecar, images via protocol-asset Tauri, versions avant écriture
-- **Plugins** : projet, browser, cloud (extensibles, activables dans les réglages)
+- **Agent chat**: SSE streaming, model and reasoning per conversation, attachments, composite "+" menu
+- **Scoped memory**: global user memories + project memories, local RAG, agent `remember` tool
+- **Personas plugin**: professional perspectives, simulated meetings, discussions (Improba builtin set)
+- **Workspace**: workspaces/conversations sidebar, right panel (files, preview, personas), side chat
+- **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write
+- **Plugins**: project, browser, cloud (extensible, activatable in settings)
 
-## Licence
+## License
 
-Workproba est distribué sous **double licence** : usage personnel et éducatif gratuit ([WPEL](./LICENSE)), usage entreprise et institutionnel sur licence commerciale.
+Workproba is distributed under a **dual license**: free personal and educational use ([WPEL](./LICENSE)), commercial license for enterprise and institutional use.
 
-Voir [LICENSING.md](./LICENSING.md) pour le guide complet, la FAQ et les contacts.
+See [LICENSING.md](./LICENSING.md) for the full guide, FAQ, and contacts.
 
-## Première installation
+## First-time installation
 
-Téléchargez l'installateur pour votre système (Windows, macOS ou Linux) sur la page **Releases** du dépôt. Les installateurs ne sont pas encore signés numériquement : Windows et macOS affichent un avertissement au premier lancement. C'est normal.
+Download the installer for your system (Windows, macOS, or Linux) from the repository **Releases** page. Installers are not yet digitally signed: Windows and macOS show a security warning on first launch. This is expected.
 
-Guide pas à pas (SmartScreen, Gatekeeper, `.deb`, AppImage, désinstallation) : **[docs/installateurs.md](./docs/installateurs.md)**.
+Step-by-step guide (SmartScreen, Gatekeeper, `.deb`, AppImage, uninstall): **[docs/installateurs.md](./docs/installateurs.md)**.
 
 ## Documentation
 
-- [docs/installateurs.md](./docs/installateurs.md) : installation (grand public)
-- [docs/intention.md](./docs/intention.md) : cadrage produit
-- [docs/desktop.md](./docs/desktop.md) : architecture bureau
-- [docs/architecture.md](./docs/architecture.md) : vue technique
-- [docs/memory.md](./docs/memory.md) : mémoire user/projet et RAG
-- [docs/plugins.md](./docs/plugins.md) : plugins (personas, projet, …)
-- [docs/workspace-storage.md](./docs/workspace-storage.md) : stockage par workspace
-- [docs/README.md](./docs/README.md) : index complet de la documentation
-- [desktop/README.md](./desktop/README.md) : développement Tauri
-- [services/ai/README.md](./services/ai/README.md) : API sidecar Python
+- [docs/installateurs.md](./docs/installateurs.md): installation (end users)
+- [docs/intention.md](./docs/intention.md): product framing
+- [docs/desktop.md](./docs/desktop.md): desktop architecture
+- [docs/architecture.md](./docs/architecture.md): technical overview
+- [docs/memory.md](./docs/memory.md): user/project memory and RAG
+- [docs/plugins.md](./docs/plugins.md): plugins (personas, project, …)
+- [docs/workspace-storage.md](./docs/workspace-storage.md): per-workspace storage
+- [docs/README.md](./docs/README.md): full documentation index
+- [desktop/README.md](./desktop/README.md): Tauri development
+- [services/ai/README.md](./services/ai/README.md): Python sidecar API
 
 ## Structure
 
 ```
 workproba/
-├── desktop/          # Coque Tauri (produit)
-├── front/            # UI Quasar (webview)
-├── services/ai/      # Sidecar Python IA
+├── desktop/          # Tauri shell (product)
+├── front/            # Quasar UI (webview)
+├── services/ai/      # Python AI sidecar
 ├── docs/
 ├── scripts/
-└── legacy/           # Ancien stack web (archivé, non utilisé)
+└── legacy/           # Former web stack (archived, unused)
 ```
 
-## Démarrage
+## Getting started
 
-### Prérequis
+### Prerequisites
 
-- Rust ≥ 1.77, Node.js ≥ 22.22 (24 recommandé pour vitest 4 / build Quasar), Yarn
+- Rust ≥ 1.77, Node.js ≥ 22.22 (24 recommended for vitest 4 / Quasar build), Yarn
 - Python 3.12 + uvicorn
-- Dépendances OS Tauri : voir [desktop/README.md](./desktop/README.md)
+- Tauri OS dependencies: see [desktop/README.md](./desktop/README.md)
 
-### Développement
+### Development
 
-#### Une seule commande (recommandé)
+#### Single command (recommended)
 
-Démarre le sidecar Python, attend qu'il soit sain (`/health`), puis lance Tauri qui démarre lui-même Quasar. Un seul `Ctrl+C` arrête proprement les deux.
-
-```bash
-make dev          # ou : yarn dev
-```
-
-Variantes :
+Starts the Python sidecar, waits until it is healthy (`/health`), then launches Tauri which starts Quasar itself. A single `Ctrl+C` cleanly stops both.
 
 ```bash
-make dev-ai       # sidecar Python seul
-make dev-desktop  # Tauri seul (si sidecar déjà lancé ailleurs)
-yarn dev:no-ai    # desktop sans (re)démarrer le sidecar
-yarn dev:ai-only  # sidecar Python seul
+make dev          # or: yarn dev
 ```
 
-Variables d'environnement utiles :
+Variants:
 
-| Variable | Défaut | Rôle |
+```bash
+make dev-ai       # Python sidecar only
+make dev-desktop  # Tauri only (if sidecar already running elsewhere)
+yarn dev:no-ai    # desktop without (re)starting the sidecar
+yarn dev:ai-only  # Python sidecar only
+```
+
+Useful environment variables:
+
+| Variable | Default | Role |
 |---|---|---|
-| `AI_PORT` | `8765` | Port du sidecar Python |
-| `AI_HOST` | `127.0.0.1` | Host du sidecar |
-| `HEALTH_TIMEOUT_S` | `30` | Délai max d'attente de `/health` |
-| `AI_SKIP_WAIT` | `0` | `=1` pour ne pas attendre la santé du sidecar |
+| `AI_PORT` | `8765` | Python sidecar port |
+| `AI_HOST` | `127.0.0.1` | Sidecar host |
+| `HEALTH_TIMEOUT_S` | `30` | Max wait for `/health` |
+| `AI_SKIP_WAIT` | `0` | `=1` to skip sidecar health wait |
 
-Logs du sidecar : `tail -f .dev-ai.log` à la racine.
+Sidecar logs: `tail -f .dev-ai.log` at the repository root.
 
-#### Deux terminaux (méthode historique)
+#### Two terminals (legacy method)
 
 ```bash
-# Terminal 1 — sidecar Python (:8765)
+# Terminal 1: Python sidecar (:8765)
 make dev-ai
 
-# Terminal 2 — Tauri + Quasar (:5053)
+# Terminal 2: Tauri + Quasar (:5053)
 make dev-desktop
 ```
 
-Ou : `bash scripts/dev.sh` puis `cd desktop && yarn dev`
+Or: `bash scripts/dev.sh` then `cd desktop && yarn dev`
 
-### Build installateur
+### Build installer
 
 ```bash
 cd desktop && yarn build
