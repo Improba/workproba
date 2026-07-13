@@ -164,7 +164,7 @@ const { consumeAction, pendingAction } = usePersonasNavigation();
   startMeeting,
   saveMeeting,
 } = usePersonas();
-const { openSideChat } = useSideChat();
+const { openSideChat, closeSideChat } = useSideChat();
 const { applyToolResult: applyBrowserToolResult } = useBrowser();
 
 const personasView = ref<'meeting' | null>(null);
@@ -175,6 +175,8 @@ const relaunchMeetingConfig = ref<{
   rounds: number;
 } | null>(null);
 const personasDataDir = ref<string | null>(null);
+const meetingAbort = ref<AbortController | null>(null);
+let meetingRunId = 0;
 
 const sessionReasoningOverride = ref<ReasoningEffort | null>(null);
 const sessionModelOverride = ref<string | null>(null);
@@ -338,6 +340,8 @@ watch(
     // Couper d'abord un éventuel stream en cours (changement de conversation
     // pendant une réponse) pour ne pas écrire dans la mauvaise session.
     abort();
+    closePersonasView();
+    closeSideChat();
     clearExpansionState();
 
     autoTitleStarted.value = false;
@@ -607,9 +611,16 @@ watch(pendingAction, (action) => {
 });
 
 function closePersonasView(): void {
+  abortActiveMeeting();
   personasView.value = null;
   meetingState.value = null;
   relaunchMeetingConfig.value = null;
+}
+
+function abortActiveMeeting(): void {
+  meetingRunId += 1;
+  meetingAbort.value?.abort();
+  meetingAbort.value = null;
 }
 
 function openOpinionPicker(question?: string, personaIds?: string[]): void {
@@ -640,6 +651,7 @@ function openMeetingView(): void {
     } else {
       relaunchMeetingConfig.value = null;
     }
+    abortActiveMeeting();
     personasView.value = 'meeting';
     meetingState.value = null;
   });
@@ -650,6 +662,7 @@ function onMeetingRelaunch(config: {
   topic: string;
   rounds: number;
 }): void {
+  abortActiveMeeting();
   relaunchMeetingConfig.value = config;
   meetingState.value = null;
 }
@@ -696,12 +709,10 @@ async function onMeetingStart(payload: {
   includeMemory: boolean;
   meetingId?: string | null;
 }): Promise<void> {
+  abortActiveMeeting();
+
   relaunchMeetingConfig.value = null;
-  const dir = await ensurePersonasDataDir();
-  if (!dir) {
-    Notify.create({ message: t('personas.errors.unavailable'), color: 'negative' });
-    return;
-  }
+
   meetingState.value = {
     topic: payload.topic,
     personaIds: payload.personaIds,
@@ -712,18 +723,50 @@ async function onMeetingStart(payload: {
     streaming: true,
     error: null,
   };
-  meetingState.value = await startMeeting(
+
+  const dir = await ensurePersonasDataDir();
+  if (!dir) {
+    meetingState.value = {
+      topic: payload.topic,
+      personaIds: payload.personaIds,
+      rounds: payload.rounds,
+      turns: [],
+      summary: '',
+      meetingId: payload.meetingId ?? undefined,
+      streaming: false,
+      error: 'unavailable',
+    };
+    Notify.create({ message: t('personas.errors.unavailable'), color: 'negative' });
+    return;
+  }
+
+  const runId = meetingRunId;
+  const controller = new AbortController();
+  meetingAbort.value = controller;
+
+  const result = await startMeeting(
     dir,
     payload.personaIds,
     payload.topic,
     payload.rounds,
     (state) => {
+      if (runId !== meetingRunId || controller.signal.aborted) return;
       meetingState.value = state;
     },
     activeDataDir.value,
     payload.includeMemory,
     payload.meetingId,
+    controller.signal,
   );
+
+  if (runId !== meetingRunId || controller.signal.aborted) {
+    meetingAbort.value = null;
+    return;
+  }
+
+  meetingAbort.value = null;
+  meetingState.value = result;
+
   if (meetingState.value?.error) {
     Notify.create({ message: t('personas.errors.meetingFailed'), color: 'negative' });
     return;
@@ -779,6 +822,8 @@ async function handlePersonasToolCall(
 
 onUnmounted(() => {
   abort();
+  closePersonasView();
+  closeSideChat();
   setStreaming(false);
 });
 </script>

@@ -28,7 +28,7 @@
         :show-rounds="true"
         :topic-label="t('personas.meeting.topicLabel')"
         :topic-placeholder="t('personas.meeting.topicPlaceholder')"
-        :busy="starting"
+        :busy="starting || Boolean(meetingState?.streaming)"
         :estimate-mode="'meeting'"
         :plugin-data-dir="pluginDataDir"
         :initial-persona-ids="relaunchConfig?.personaIds"
@@ -69,7 +69,8 @@
         {{ meetingState?.topic }}
       </p>
 
-      <div class="personas-meeting__turns" role="log" aria-live="polite">
+      <div class="personas-meeting__scroll">
+        <div class="personas-meeting__turns" role="log" aria-live="polite">
         <div
           v-for="(turn, index) in meetingState?.turns ?? []"
           :key="`${turn.round}-${turn.personaId}-${index}`"
@@ -101,20 +102,21 @@
         <p v-if="meetingState?.streaming" class="personas-meeting__streaming">
           {{ t('personas.meeting.inProgress') }}
         </p>
-      </div>
+        </div>
 
-      <section
-        v-if="meetingState?.summary"
-        class="personas-meeting__summary"
-        role="region"
-        :aria-label="t('personas.meeting.summaryTitle')"
-      >
-        <h2 class="personas-meeting__summary-title">
-          <Lucide name="list-checks" size="16" color="wp-gold" />
-          {{ summaryTitle }}
-        </h2>
-        <p class="personas-meeting__summary-body">{{ meetingState.summary }}</p>
-      </section>
+        <section
+          v-if="meetingState?.summary"
+          class="personas-meeting__summary"
+          role="region"
+          :aria-label="t('personas.meeting.summaryTitle')"
+        >
+          <h2 class="personas-meeting__summary-title">
+            <Lucide name="list-checks" size="16" color="wp-gold" />
+            {{ summaryTitle }}
+          </h2>
+          <p class="personas-meeting__summary-body">{{ meetingState.summary }}</p>
+        </section>
+      </div>
 
       <footer v-if="!meetingState?.streaming && !meetingState?.error" class="personas-meeting__actions">
         <button
@@ -192,6 +194,7 @@ watch(
   () => props.meetingState,
   (state) => {
     phase.value = state ? 'running' : 'config';
+    if (!state?.streaming) starting.value = false;
   },
 );
 
@@ -215,6 +218,7 @@ const meetingErrorMessage = computed(() => {
   const code = props.meetingState?.error;
   if (!code) return '';
   if (code === 'api_key_missing') return t('errors.apiKeyMissing');
+  if (code === 'unavailable') return t('personas.errors.unavailable');
   return t('personas.errors.meetingFailed');
 });
 
@@ -236,10 +240,10 @@ function onStart(payload: {
   rounds: number;
   includeMemory: boolean;
 }): void {
+  if (starting.value || props.meetingState?.streaming) return;
   starting.value = true;
   relaunchConfig.value = null;
   emit('start', payload);
-  starting.value = false;
 }
 
 const publishMarkdown = computed(() =>
@@ -329,17 +333,11 @@ function onRelaunchFromHistory(config: {
 
 .personas-meeting__room {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--wp-space-4);
-}
-
-.personas-meeting__room {
-  flex: 1;
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  padding: var(--wp-space-4);
 }
 
 .personas-meeting__error {
@@ -392,6 +390,15 @@ function onRelaunchFromHistory(config: {
   text-transform: uppercase;
   letter-spacing: 0.05em;
   margin-bottom: var(--wp-space-1);
+}
+
+.personas-meeting__scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-3);
 }
 
 .personas-meeting__turns {

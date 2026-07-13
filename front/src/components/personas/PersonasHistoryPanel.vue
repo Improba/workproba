@@ -87,7 +87,7 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import {
@@ -120,7 +120,7 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
-const { listMeetings, listDiscussions, syncHistory } = usePersonas();
+const { listMeetings, listDiscussions, syncHistory, historyVersion } = usePersonas();
 
 const expanded = ref(props.defaultExpanded);
 const meetings = ref(listMeetings());
@@ -195,6 +195,10 @@ function onSelectDiscussion(discussion: StoredDiscussion): void {
 }
 
 defineExpose({ refresh: refreshLists, refreshFromBack });
+
+watch(historyVersion, () => {
+  refreshLists();
+});
 
 onMounted(() => {
   void refreshFromBack();

@@ -742,6 +742,7 @@ export default {
       discussFailed: 'La discussion a échoué. Réessayez plus tard.',
       meetingFailed: 'La réunion a échoué. Réessayez plus tard.',
       loadFailed: 'Impossible de charger les personas. Vérifiez votre connexion.',
+      personasUnavailable: 'Certains profils ne sont plus disponibles et ont été retirés.',
     },
     history: {
       title: 'Historique',

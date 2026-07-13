@@ -273,6 +273,7 @@ function toggle(id: string): void {
 }
 
 function onConfirm(): void {
+  if (props.busy) return;
   if (props.estimateMode && estimate.value?.warning && !confirmStep.value) {
     confirmStep.value = true;
     return;

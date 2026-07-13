@@ -182,6 +182,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
 import PersonasConfidentialityHint from '@components/personas/PersonasConfidentialityHint.vue';
@@ -287,7 +288,11 @@ async function saveSetEditor(): Promise<void> {
   const selected = builtinPersonas.value.filter((p) =>
     setEditorPersonaIds.value.includes(p.id),
   );
-  if (!setEditorName.value.trim() || selected.length === 0 || !props.pluginDataDir) return;
+  if (!setEditorName.value.trim() || selected.length === 0) return;
+  if (!props.pluginDataDir) {
+    Notify.create({ message: t('personas.errors.unavailable'), color: 'negative' });
+    return;
+  }
   const id = editingSet.value?.id ?? `custom_${Date.now()}`;
   await saveCustomSet(props.pluginDataDir, {
     id,

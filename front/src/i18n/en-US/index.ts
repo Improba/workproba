@@ -743,6 +743,7 @@ export default {
       discussFailed: 'The discussion failed. Try again later.',
       meetingFailed: 'The meeting failed. Try again later.',
       loadFailed: 'Could not load personas. Check your connection.',
+      personasUnavailable: 'Some profiles are no longer available and were removed.',
     },
     history: {
       title: 'History',

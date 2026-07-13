@@ -98,6 +98,7 @@ const sets = ref<PersonaSet[]>([]);
 const activeSetId = ref<string | null>(readActiveSetId());
 const loading = ref(false);
 const loadError = ref<string | null>(null);
+const historyVersion = ref(0);
 
 const activeSet = computed(() => {
   if (!sets.value.length) return null;
@@ -123,6 +124,7 @@ export interface UsePersonasReturn {
   selectablePersonas: ComputedRef<PersonaInfo[]>;
   loading: Ref<boolean>;
   loadError: Ref<string | null>;
+  historyVersion: Ref<number>;
   refresh: (pluginDataDir: string) => Promise<void>;
   setActiveSet: (setId: string) => void;
   askOpinion: (
@@ -142,6 +144,7 @@ export interface UsePersonasReturn {
     workspaceDataDir?: string | null,
     includeMemory?: boolean,
     meetingId?: string | null,
+    abortSignal?: AbortSignal,
   ) => Promise<MeetingState>;
   discuss: (
     pluginDataDir: string,
@@ -485,6 +488,7 @@ async function syncPersonasHistory(pluginDataDir: string): Promise<void> {
       (a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime(),
     );
     writeStorage(DISCUSSIONS_STORAGE_KEY, mergedDiscussions.slice(0, MAX_STORED_DISCUSSIONS));
+    historyVersion.value += 1;
   } catch {
     /* endpoints back absents ou réseau : garde le cache local */
   }
@@ -616,7 +620,7 @@ export function usePersonas(): UsePersonasReturn {
     if (streamError) throw streamError;
 
     card.streaming = false;
-    if (card.opinions.length > 0 && card.opinions.every((o) => !o.content.trim())) {
+    if (card.opinions.length > 0 && card.opinions.some((o) => !o.content.trim())) {
       throw new Error('ask_failed');
     }
     return card;
@@ -631,6 +635,7 @@ export function usePersonas(): UsePersonasReturn {
     workspaceDataDir?: string | null,
     includeMemory = false,
     meetingId?: string | null,
+    abortSignal?: AbortSignal,
   ): Promise<MeetingState> {
     const state: MeetingState = {
       topic,
@@ -653,6 +658,13 @@ export function usePersonas(): UsePersonasReturn {
     }
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
     const controller = new AbortController();
+    const onExternalAbort = (): void => controller.abort();
+    abortSignal?.addEventListener('abort', onExternalAbort, { once: true });
+
+    const emitUpdate = (): void => {
+      if (abortSignal?.aborted) return;
+      onUpdate?.({ ...state });
+    };
 
     try {
       await startPersonasMeeting(
@@ -668,10 +680,11 @@ export function usePersonas(): UsePersonasReturn {
           locale: locale.value,
         },
         (type, data) => {
+          if (abortSignal?.aborted) return;
           if (type === 'meeting_started') {
             const startedId = String(data.meeting_id ?? '');
             state.meetingId = startedId || state.meetingId || createMeetingId();
-            onUpdate?.({ ...state });
+            emitUpdate();
           } else if (type === 'meeting_facilitator') {
             const label = String(data.label ?? t('personas.meeting.facilitator'));
             const turn: MeetingTurn = {
@@ -684,7 +697,7 @@ export function usePersonas(): UsePersonasReturn {
               isFacilitator: true,
             };
             state.turns.push(turn);
-            onUpdate?.({ ...state, turns: [...state.turns] });
+            emitUpdate();
           } else if (type === 'meeting_turn') {
             const personaId = String(data.persona_id ?? '');
             const p = findPersona(personaId);
@@ -699,27 +712,31 @@ export function usePersonas(): UsePersonasReturn {
               isFacilitator: false,
             };
             state.turns.push(turn);
-            onUpdate?.({ ...state, turns: [...state.turns] });
+            emitUpdate();
           } else if (type === 'meeting_summary') {
             state.summary = String(data.content ?? '');
             state.summaryPersonaName = String(data.persona_name ?? '');
-            onUpdate?.({ ...state, summary: state.summary, summaryPersonaName: state.summaryPersonaName });
+            emitUpdate();
           } else if (type === 'warning') {
             showPersonasWarnings(data);
           } else if (type === 'done') {
             const doneId = String(data.meeting_id ?? '');
             if (doneId) state.meetingId = doneId;
             state.streaming = false;
-            onUpdate?.({ ...state });
+            emitUpdate();
           } else if (type === 'error') {
             state.error = String(data.code ?? data.message ?? 'meeting_error');
             state.streaming = false;
-            onUpdate?.({ ...state });
+            emitUpdate();
           }
         },
         controller.signal,
       );
     } catch (err) {
+      if (abortSignal?.aborted) {
+        state.streaming = false;
+        return state;
+      }
       state.error = err instanceof Error ? err.message : 'meeting_error';
       state.streaming = false;
       onUpdate?.({ ...state });
@@ -761,7 +778,7 @@ export function usePersonas(): UsePersonasReturn {
     let newDiscussionId = discussionId;
     let streamError: Error | null = null;
 
-    const apiHistory = messages
+    const apiHistory = history
       .filter((m) => m.role === 'user' || m.role === 'persona')
       .map((m) => ({
         role: m.role,
@@ -815,20 +832,12 @@ export function usePersonas(): UsePersonasReturn {
         controller.signal,
       );
     } catch (err) {
-      const idx = messages.findIndex((m) => m.id === userMsg.id);
-      if (idx >= 0) {
-        messages.splice(idx, 1);
-        onUpdate?.([...messages]);
-      }
+      onUpdate?.([...history]);
       throw err;
     }
 
     if (streamError) {
-      const idx = messages.findIndex((m) => m.id === userMsg.id);
-      if (idx >= 0) {
-        messages.splice(idx, 1);
-        onUpdate?.([...messages]);
-      }
+      onUpdate?.([...history]);
       throw streamError;
     }
 
@@ -878,6 +887,7 @@ export function usePersonas(): UsePersonasReturn {
     const items = listMeetings().filter((m) => m.meeting_id !== meeting.meeting_id);
     items.unshift(meeting);
     writeStorage(MEETINGS_STORAGE_KEY, items.slice(0, MAX_STORED_MEETINGS));
+    historyVersion.value += 1;
   }
 
   function listDiscussions(): StoredDiscussion[] {
@@ -896,6 +906,7 @@ export function usePersonas(): UsePersonasReturn {
     );
     items.unshift(discussion);
     writeStorage(DISCUSSIONS_STORAGE_KEY, items.slice(0, MAX_STORED_DISCUSSIONS));
+    historyVersion.value += 1;
   }
 
   function listCustomSets(): PersonaSet[] {
@@ -932,7 +943,9 @@ export function usePersonas(): UsePersonasReturn {
     const apiSets = sets.value.filter((s) => !customIds.has(s.id));
     sets.value = [...apiSets, ...items];
     if (activeSetId.value === setId) {
-      activeSetId.value = sets.value[0]?.id ?? null;
+      const fallback = sets.value[0]?.id ?? null;
+      activeSetId.value = fallback;
+      if (fallback) persistActiveSetId(fallback);
     }
   }
 
@@ -948,6 +961,7 @@ export function usePersonas(): UsePersonasReturn {
     selectablePersonas,
     loading,
     loadError,
+    historyVersion,
     refresh,
     setActiveSet,
     askOpinion,

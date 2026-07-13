@@ -154,7 +154,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
@@ -212,6 +212,8 @@ const publishOpen = ref(false);
 const includeMemory = ref(false);
 const pluginDataDir = ref<string | null>(null);
 const scrollRef = ref<HTMLElement | null>(null);
+const sendGeneration = ref(0);
+const pendingInit = ref(false);
 
 const selectedPersonas = computed(() =>
   selectedPersonaIds.value
@@ -232,7 +234,7 @@ const feedEmpty = computed(() =>
 );
 
 const canSend = computed(
-  () => !busy.value && draft.value.trim().length > 0 && selectedPersonaIds.value.length > 0,
+  () => !busy.value && draft.value.trim().length > 0 && selectedPersonas.value.length > 0,
 );
 
 const publishMarkdown = computed(() =>
@@ -272,7 +274,7 @@ function onAnotherOpinion(entry: { question: string; card: PersonasOpinionCardTy
 }
 
 function onToDiscussion(card: PersonasOpinionCardType): void {
-  const ids = card.opinions.map((o) => o.personaId);
+  const ids = filterKnownPersonaIds(card.opinions.map((o) => o.personaId));
   selectedPersonaIds.value = ids;
   mode.value = 'discussion';
   discussionMessages.value = [
@@ -306,17 +308,22 @@ async function ensureDataDir(): Promise<string | null> {
 
 async function onSend(): Promise<void> {
   const text = draft.value.trim();
-  if (!text || selectedPersonaIds.value.length === 0) return;
+  if (!text || selectedPersonaIds.value.length === 0 || busy.value) return;
+
+  busy.value = true;
+  const gen = ++sendGeneration.value;
+  const savedDraft = text;
+  draft.value = '';
 
   const dir = await ensureDataDir();
   if (!dir) {
+    draft.value = savedDraft;
+    busy.value = false;
     Notify.create({ message: t('personas.errors.unavailable'), color: 'negative' });
     return;
   }
 
-  const savedDraft = text;
-  draft.value = '';
-  busy.value = true;
+  if (gen !== sendGeneration.value) return;
 
   try {
     if (mode.value === 'avis') {
@@ -342,6 +349,7 @@ async function onSend(): Promise<void> {
         discussionId.value,
         discussionMessages.value,
         (msgs) => {
+          if (gen !== sendGeneration.value) return;
           discussionMessages.value = msgs;
         },
         activeDataDir.value,
@@ -360,6 +368,7 @@ async function onSend(): Promise<void> {
       }
     }
   } catch {
+    if (gen !== sendGeneration.value) return;
     draft.value = savedDraft;
     Notify.create({
       message:
@@ -369,8 +378,14 @@ async function onSend(): Promise<void> {
       color: 'negative',
     });
   } finally {
-    busy.value = false;
+    if (gen === sendGeneration.value) {
+      busy.value = false;
+    }
   }
+}
+
+function filterKnownPersonaIds(ids: string[]): string[] {
+  return ids.filter((id) => findPersona(id) != null);
 }
 
 function resetFeedState(): void {
@@ -378,10 +393,15 @@ function resetFeedState(): void {
   discussionMessages.value = [];
   discussionId.value = null;
   draft.value = '';
-  busy.value = false;
 }
 
 function applySideChatInitial(): void {
+  if (busy.value) {
+    pendingInit.value = true;
+    return;
+  }
+  pendingInit.value = false;
+
   const initial = consumeInitial();
   const hasPayload =
     initial.mode != null
@@ -391,12 +411,24 @@ function applySideChatInitial(): void {
     || initial.resume != null;
   if (!hasPayload) return;
 
+  sendGeneration.value += 1;
   resetFeedState();
 
   if (initial.resume) {
+    const knownIds = filterKnownPersonaIds(initial.resume.personaIds);
+    if (knownIds.length < initial.resume.personaIds.length) {
+      Notify.create({
+        message: t('personas.errors.personasUnavailable'),
+        color: 'warning',
+      });
+    }
     mode.value = 'discussion';
     discussionId.value = initial.resume.discussionId;
-    selectedPersonaIds.value = [...initial.resume.personaIds];
+    selectedPersonaIds.value = knownIds.length > 0 ? knownIds : filterKnownPersonaIds(
+      initial.resume.messages
+        .map((m) => m.personaId)
+        .filter((id): id is string => Boolean(id)),
+    );
     discussionMessages.value = initial.resume.messages.map((m) => ({ ...m }));
     return;
   }
@@ -404,7 +436,7 @@ function applySideChatInitial(): void {
   if (initial.mode === 'avis' || initial.mode === 'discussion') {
     mode.value = initial.mode;
   }
-  selectedPersonaIds.value = [...initial.personaIds];
+  selectedPersonaIds.value = filterKnownPersonaIds(initial.personaIds);
   if (initial.draft) {
     draft.value = initial.draft;
   }
@@ -425,6 +457,20 @@ function applySideChatInitial(): void {
 
 watch(launchToken, () => {
   applySideChatInitial();
+});
+
+watch(busy, (isBusy) => {
+  if (!isBusy && pendingInit.value) {
+    applySideChatInitial();
+  }
+});
+
+onUnmounted(() => {
+  sendGeneration.value += 1;
+  if (pendingInit.value) {
+    consumeInitial();
+    pendingInit.value = false;
+  }
 });
 
 onMounted(async () => {
