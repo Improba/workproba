@@ -273,14 +273,20 @@ export function applyCompactionToMessages(
   data: ChatStreamCompactionData,
 ): void {
   const droppedCount = Number(data.dropped_count ?? 0) || 0;
+  if (droppedCount <= 0 && !data.summary?.trim()) return;
+
   const prefix = messages.slice(0, -2);
   const drop = Math.min(droppedCount, prefix.length);
   const priorCompaction = prefix.find((m) => m.messageKind === 'compaction');
   const kept = prefix.slice(drop);
   const tail = messages.slice(-2);
-  const next = [...kept, ...tail];
-
   const summary = data.summary?.trim() ?? '';
+
+  const keptWithoutCompaction = summary
+    ? kept.filter((message) => message.messageKind !== 'compaction')
+    : kept;
+  const next = [...keptWithoutCompaction, ...tail];
+
   if (summary) {
     const prefixI18n = t('chat.compactionContentPrefix');
     next.unshift({

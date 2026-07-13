@@ -233,6 +233,44 @@ def test_estimate_documents_overhead() -> None:
     assert estimate_documents_overhead([]) == 0
 
 
+def test_estimate_documents_overhead_counts_base64() -> None:
+    docs = [
+        DocumentReference(
+            id="att-1",
+            name="image.png",
+            mime_type="image/png",
+            content_base64="A" * 4000,
+            metadata={"source": "chat-attachment"},
+        )
+    ]
+    without_base64 = DocumentReference(
+        id="att-1",
+        name="image.png",
+        mime_type="image/png",
+        size_bytes=3000,
+        metadata={"source": "chat-attachment"},
+    )
+    assert estimate_documents_overhead(docs) > estimate_documents_overhead(
+        [without_base64]
+    )
+
+
+def test_extract_prior_summary_accepts_front_persisted_format() -> None:
+    """Le format persisté par le front doit être reconnu pour le résumé incrémental."""
+    from app.agent.compaction import _extract_prior_summary
+
+    prefix = t("fr", "utility.compaction_summary_prefix")
+    # Même format que applyCompactionToMessages : prefixI18n + summary
+    front_content = f"{prefix}\n\nDécision persistée côté client"
+    message = ChatMessage(role="system", content=front_content)
+
+    prior, prior_msg, remaining = _extract_prior_summary([message], "fr")
+
+    assert prior == "Décision persistée côté client"
+    assert prior_msg == message
+    assert remaining == []
+
+
 async def test_compact_history_too_few_messages_returns_original() -> None:
     history = _history(COMPACT_MIN_HISTORY - 1, content="x" * 200)
 

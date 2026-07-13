@@ -665,6 +665,40 @@ describe('useChatStream — feedbacks', () => {
     expect(messages[1].id).toBe('cur-u');
   });
 
+  it('applyCompactionToMessages remplace un résumé antérieur quand un nouveau arrive', () => {
+    const priorSummary: ChatMessage = {
+      id: 'prior-sum',
+      role: 'system',
+      content: 'Résumé des échanges précédents :\n\nAncien',
+      messageKind: 'compaction',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+    const messages: ChatMessage[] = [
+      priorSummary,
+      { id: 'm1', role: 'user', content: 'msg 1', createdAt: '2026-01-01T00:00:01.000Z' },
+      { id: 'm2', role: 'assistant', content: 'msg 2', createdAt: '2026-01-01T00:00:02.000Z' },
+      { id: 'cur-u', role: 'user', content: 'tour', createdAt: '2026-01-01T00:00:03.000Z' },
+      {
+        id: 'cur-a',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        createdAt: '2026-01-01T00:00:04.000Z',
+      },
+    ];
+
+    applyCompactionToMessages(messages, {
+      dropped_count: 1,
+      kept_count: 0,
+      summary: 'Nouveau résumé',
+      truncated: false,
+    });
+
+    expect(messages.filter((m) => m.messageKind === 'compaction')).toHaveLength(1);
+    expect(messages[0].content).toContain('Nouveau résumé');
+    expect(messages[0].id).not.toBe('prior-sum');
+  });
+
   it('applyStreamEvent crée un ChatThinkingPart via les events unitaires', () => {
     const messages: ChatMessage[] = [
       {

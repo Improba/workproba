@@ -71,7 +71,9 @@ def estimate_documents_overhead(documents: list[DocumentReference]) -> int:
         total_chars += len(doc.mime_type or "")
         total_chars += len(str(doc.metadata.get("relativePath", "")))
         total_chars += len(str(doc.metadata.get("kind", "")))
-        if doc.size_bytes is not None:
+        if doc.content_base64:
+            total_chars += len(doc.content_base64)
+        elif doc.size_bytes is not None:
             total_chars += len(str(doc.size_bytes))
     return max(total_chars // 4, 0)
 
