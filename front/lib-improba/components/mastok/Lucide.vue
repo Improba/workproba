@@ -34,8 +34,9 @@
 <template>
   <component
     :is="iconComponent"
-    :stroke="`var(--${props.color})`"
     :size="calculatedSize"
+    :style="{ color: strokeColor }"
+    stroke="currentColor"
     :class="{ 'q-mr-sm': props.label }"
   />
   <span v-if="props.label" v-html="label" />
@@ -44,6 +45,13 @@
 <script setup lang="ts">
 import * as icons from 'lucide-vue-next';
 import { computed } from 'vue';
+
+/** Noms historiques → tokens Workproba réellement définis dans workproba.scss */
+const COLOR_ALIASES: Record<string, string> = {
+  'text-muted': 'wp-text-muted',
+  'text-faint': 'wp-text-faint',
+  text: 'wp-text',
+};
 const props = defineProps({
   name: {
     type: String,
@@ -65,6 +73,11 @@ const props = defineProps({
     type: String
   }
 })
+
+const strokeColor = computed(() => {
+  const token = COLOR_ALIASES[props.color] ?? props.color;
+  return `var(--${token})`;
+});
 
 const calculatedSize = computed(() => {
   switch (props.size) {

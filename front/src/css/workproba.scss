@@ -1,12 +1,12 @@
 /**
- * Workproba — brand override (Improba)
- * Surcharge les variables CSS Anubis (--primary, --accent, --neutral-*, etc.)
- * avec la palette Improba, et ajoute des tokens Workproba dédiés.
- * Chargé APRÈS _anubis.scss pour gagner la cascade à spécificité égale.
+ * Workproba — tokens shell (surcouche Anubis)
  *
- * Identité Improba : bleu canard #203D52, cyan #3ECFD9, or #FFCC49, violet #B077DD.
- * Le chat se lit en mode clair sobre ; le bleu canard = branding + états actifs,
- * le cyan = accent d'action / focus / "travaille".
+ * Palette Anubis (primary, accent, neutral, sémantique) :
+ *   front/anubis.config.json → anubis/_tokens.scss → _anubis.scss
+ *   Documentation : docs/anubis-ui.md
+ *
+ * Ce fichier ne redéfinit que les tokens Workproba (--wp-*) et Quasar (--q-*).
+ * Pour changer les couleurs de marque, éditer anubis.config.json puis relancer le dev server.
  */
 
 /* Webfonts embarquées (offline Tauri) via @fontsource */
@@ -66,126 +66,92 @@
   --wp-violet: #b077dd;
 
   body.body--light {
-    /* Surfaces */
-    --neutral-lowest: #ffffff;
-    --neutral-lower: #f6f7f9;
-    --neutral-low: #f0f2f5;
-    --neutral-medium: #c6cfd8;
-    --neutral-high: #8a99a8;
-    --neutral-higher: #5b6b7b;
-    --neutral-highest: #1c2a36;
-
-    /* Texte */
-    --text: #1c2a36;
-    --text-invert: #ffffff;
-
-    /* Marque & accents : primary = bleu canard (branding/états actifs) */
-    --primary: #203d52;
-    --primary-lowest: #eef2f5;
-    --primary-lower: #dde6ec;
-    --primary-low: #b9c8d4;
-    --primary-medium: #203d52;
-    --primary-high: #1b3346;
-    --primary-higher: #142634;
-    --primary-highest: #0d1a24;
-
-    /* accent = cyan (action / focus / streaming) */
-    --accent: #2bb5c2;
-    --accent-lowest: #dcf6f7;
-    --accent-lower: #c4eaec;
-    --accent-low: #8fdde4;
-    --accent-medium: #2bb5c2;
-    --accent-high: #1f95a1;
-    --accent-higher: #17727b;
-    --accent-highest: #0e484f;
-
-    /* Sémantique (alignées sur la marque) */
-    --success: #2e9e74;
-    --danger: #d64545;
-    --warning: #e0a93a;
-
-    /* Tokens Workproba dédiés */
-    --wp-bg: #f6f7f9;
-    --wp-surface: #ffffff;
-    --wp-surface-2: #f0f2f5;
-    --wp-surface-3: #e6eaee;
-    --wp-border: #e4e8ed;
-    --wp-border-strong: #d2d9e0;
-    --wp-text: #1c2a36;
-    --wp-text-muted: #5b6b7b;
-    --wp-text-faint: #8a99a8;
+    --wp-bg: var(--neutral-lower);
+    --wp-surface: var(--neutral-lowest);
+    --wp-surface-2: var(--neutral-low);
+    --wp-surface-3: #ebe6de;
+    --wp-border: #e0dbd2;
+    --wp-border-strong: #cfc8bc;
+    --wp-text: var(--text);
+    --wp-text-muted: var(--neutral-higher);
+    --wp-text-faint: var(--neutral-high);
+    --text-muted: var(--wp-text-muted);
+    --text-faint: var(--wp-text-faint);
     --wp-primary: var(--primary);
-    --wp-primary-soft: #e8eef2;
+    --wp-primary-soft: var(--primary-lowest);
     --wp-accent: var(--accent);
-    --wp-accent-strong: #3ecfd9;
-    --wp-accent-soft: #dcf6f7;
+    --wp-accent-strong: var(--accent-high);
+    --wp-accent-soft: var(--accent-lowest);
+    --wp-selection: var(--primary);
+    --wp-selection-soft: var(--primary-lowest);
+    --wp-user-bubble-bg: var(--primary-lowest);
+    --wp-user-bubble-text: var(--primary);
+    --wp-user-bubble-border: var(--primary-low);
     --wp-gold: #e0a93a;
     --wp-gold-soft: #fff3d6;
     --wp-violet: #9a63c7;
     --wp-violet-soft: #f0e4fa;
     --wp-success: var(--success);
     --wp-danger: var(--danger);
-    --wp-danger-soft: #fbe6e6;
-    --wp-focus-ring: #1f95a1;
+    --wp-danger-soft: var(--danger-lowest);
+    --wp-focus-ring: var(--accent-high);
+    --wp-shadow-1: 0 1px 2px rgba(42, 38, 32, 0.06);
+    --wp-shadow-2: 0 6px 20px rgba(42, 38, 32, 0.08);
+
+    --q-primary: var(--primary);
+    --q-secondary: var(--neutral-higher);
+    --q-accent: var(--accent);
+    --q-positive: var(--success);
+    --q-negative: var(--danger);
+    --q-info: #3ecfd9;
+    --q-warning: var(--warning);
+    --q-dark: var(--neutral-highest);
+    --q-dark-page: var(--neutral-lower);
   }
 
   body.body--dark {
-    --neutral-lowest: #131f28;
-    --neutral-lower: #1b2c38;
-    --neutral-low: #23384a;
-    --neutral-medium: #3a5266;
-    --neutral-high: #6e8195;
-    --neutral-higher: #9fb0c0;
-    --neutral-highest: #e8eef2;
-
-    --text: #e8eef2;
-    --text-invert: #131f28;
-
-    /* En sombre, le cyan devient primaire (plus lisible que le canard) */
-    --primary: #3ecfd9;
-    --primary-lowest: #1e3a44;
-    --primary-lower: #234654;
-    --primary-low: #2c6272;
-    --primary-medium: #3ecfd9;
-    --primary-high: #5de2eb;
-    --primary-higher: #8ee9f0;
-    --primary-highest: #dcf6f7;
-
-    --accent: #3ecfd9;
-    --accent-lowest: #1e3a44;
-    --accent-lower: #234654;
-    --accent-low: #2c6272;
-    --accent-medium: #3ecfd9;
-    --accent-high: #5de2eb;
-    --accent-higher: #8ee9f0;
-    --accent-highest: #dcf6f7;
-
-    --success: #25e2b3;
-    --danger: #f17a78;
-    --warning: #ffcc49;
-
-    --wp-bg: #131f28;
-    --wp-surface: #1b2c38;
-    --wp-surface-2: #23384a;
-    --wp-surface-3: #2c4254;
-    --wp-border: #2c4254;
-    --wp-border-strong: #3a5266;
-    --wp-text: #e8eef2;
-    --wp-text-muted: #9fb0c0;
-    --wp-text-faint: #6e8195;
+    --wp-bg: var(--neutral-lowest);
+    --wp-surface: var(--neutral-lower);
+    --wp-surface-2: var(--neutral-low);
+    --wp-surface-3: #35322e;
+    --wp-border: #3a3733;
+    --wp-border-strong: var(--neutral-medium);
+    --wp-text: var(--text);
+    --wp-text-muted: var(--neutral-higher);
+    --wp-text-faint: var(--neutral-high);
+    --text-muted: var(--wp-text-muted);
+    --text-faint: var(--wp-text-faint);
     --wp-primary: var(--primary);
-    --wp-primary-soft: #1e3a44;
+    --wp-primary-soft: var(--primary-lower);
     --wp-accent: var(--accent);
-    --wp-accent-strong: #5de2eb;
-    --wp-accent-soft: #1e3a44;
+    --wp-accent-strong: var(--accent-high);
+    --wp-accent-soft: var(--accent-lower);
+    --wp-selection: var(--accent);
+    --wp-selection-soft: var(--accent-lower);
+    --wp-user-bubble-bg: var(--primary-lower);
+    --wp-user-bubble-text: var(--text);
+    --wp-user-bubble-border: var(--primary-low);
     --wp-gold: #ffcc49;
-    --wp-gold-soft: #3a2f12;
+    --wp-gold-soft: var(--primary-lower);
     --wp-violet: #c99bed;
-    --wp-violet-soft: #2e1f44;
+    --wp-violet-soft: #2e2438;
     --wp-success: var(--success);
     --wp-danger: var(--danger);
-    --wp-danger-soft: #3a1f20;
-    --wp-focus-ring: #5de2eb;
+    --wp-danger-soft: var(--danger-lower);
+    --wp-focus-ring: var(--accent-high);
+
+    --wp-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28);
+    --wp-shadow-2: 0 6px 24px rgba(0, 0, 0, 0.42);
+
+    --q-primary: var(--primary);
+    --q-secondary: var(--secondary);
+    --q-accent: var(--accent);
+    --q-positive: var(--success);
+    --q-negative: var(--danger);
+    --q-info: #3ecfd9;
+    --q-warning: var(--warning);
+    --q-dark: var(--neutral-lowest);
+    --q-dark-page: var(--neutral-lowest);
   }
 }
 

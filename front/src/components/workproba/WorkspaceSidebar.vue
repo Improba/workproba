@@ -10,7 +10,7 @@
           :title="t('common.openFolderEllipsis')"
           @click="onOpenFolder"
         >
-          <Lucide name="folder-plus" size="15" color="accent" />
+          <Lucide name="folder-plus" size="15" color="wp-text-muted" />
         </button>
       </div>
 
@@ -52,7 +52,7 @@
               :title="ws.folderPath"
               @click="onActivate(ws)"
             >
-              <Lucide name="folder" size="16" color="accent" />
+              <Lucide name="folder" size="16" color="wp-text-muted" />
               <span class="wp-ws__name">{{ ws.title || basename(ws.folderPath) }}</span>
             </button>
 
@@ -63,7 +63,7 @@
               :title="t('common.newConversation')"
               @click.stop="onNewConversation"
             >
-              <Lucide name="message-square-plus" size="14" color="text" />
+              <Lucide name="message-square-plus" size="14" color="wp-text-muted" />
             </button>
           </div>
 
@@ -199,14 +199,14 @@
     <!-- Mode rail replié -->
     <div v-else class="wp-sidebar__rail">
       <button class="wp-rail-btn" :title="t('shell.spacesTitle')" @click="$emit('expand')">
-        <Lucide name="folder" size="18" color="accent" />
+        <Lucide name="folder" size="18" color="wp-text-muted" />
       </button>
       <button
         class="wp-rail-btn"
         :title="t('common.openFolderEllipsis')"
         @click="onOpenFolder"
       >
-        <Lucide name="folder-plus" size="18" color="accent" />
+        <Lucide name="folder-plus" size="18" color="wp-text-muted" />
       </button>
       <button
         class="wp-rail-btn"
@@ -214,7 +214,7 @@
         :disabled="!activeWorkspaceId"
         @click="onNewConversation"
       >
-        <Lucide name="message-square-plus" size="18" color="text" />
+        <Lucide name="message-square-plus" size="18" color="wp-text-muted" />
       </button>
       <div class="wp-sidebar__rail-spacer" />
       <button
@@ -229,7 +229,7 @@
         <span class="wp-sidebar__avatar wp-sidebar__avatar--sm">{{ initials }}</span>
       </button>
       <button class="wp-rail-btn" :title="t('shell.settingsModelsShort')" @click="onOpenSettings">
-        <Lucide name="settings-2" size="18" color="text" />
+        <Lucide name="settings-2" size="18" color="wp-text-muted" />
       </button>
     </div>
   </nav>
@@ -581,10 +581,12 @@ onMounted(async () => {
   background: transparent;
   border-radius: var(--wp-r-sm);
   cursor: pointer;
-  transition: background 120ms var(--wp-ease);
+  color: var(--wp-text-muted);
+  transition: background 120ms var(--wp-ease), color 120ms var(--wp-ease);
 
   &:hover {
     background: var(--wp-surface-2);
+    color: var(--wp-gold);
   }
 }
 
@@ -614,7 +616,7 @@ onMounted(async () => {
   border: none;
   border-radius: var(--wp-r-md);
   background: var(--wp-accent);
-  color: var(--wp-canard);
+  color: #ffffff;
   font-size: var(--wp-fs-sm);
   font-weight: 600;
   cursor: pointer;
@@ -638,7 +640,7 @@ onMounted(async () => {
 }
 
 .wp-ws--active > .wp-ws__row {
-  background: var(--wp-accent-soft);
+  background: var(--wp-selection-soft);
 }
 
 .wp-ws__chevron {
@@ -698,8 +700,9 @@ onMounted(async () => {
   background: transparent;
   border-radius: var(--wp-r-sm);
   cursor: pointer;
+  color: var(--wp-text-muted);
   opacity: 0;
-  transition: opacity 120ms var(--wp-ease), background 120ms var(--wp-ease);
+  transition: opacity 120ms var(--wp-ease), background 120ms var(--wp-ease), color 120ms var(--wp-ease);
 
   .wp-ws__row:hover &,
   .wp-ws--active & {
@@ -708,6 +711,7 @@ onMounted(async () => {
 
   &:hover {
     background: var(--wp-surface-2);
+    color: var(--wp-gold);
   }
 }
 
@@ -730,7 +734,7 @@ onMounted(async () => {
   border: none;
   border-radius: var(--wp-r-sm);
   background: var(--wp-accent);
-  color: var(--wp-canard);
+  color: #ffffff;
   font-size: var(--wp-fs-xs);
   font-weight: 600;
   cursor: pointer;
@@ -760,8 +764,8 @@ onMounted(async () => {
 }
 
 .wp-convo--active {
-  background: var(--wp-accent-soft);
-  border-left-color: var(--wp-accent);
+  background: var(--wp-selection-soft);
+  border-left-color: var(--wp-selection);
 
   .wp-convo__title {
     color: var(--wp-text);
@@ -778,7 +782,7 @@ onMounted(async () => {
 }
 
 .wp-convo__dot--active {
-  background: var(--wp-accent);
+  background: var(--wp-selection);
   opacity: 1;
 }
 
