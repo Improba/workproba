@@ -10,7 +10,7 @@ from pydantic_ai import Agent
 
 from app.i18n import t
 from app.llm.config import build_model, build_model_settings, resolve_llm_config
-from app.plugins.workproba_personas import manifest, storage
+from app.plugins.workproba_personas import manifest, prompts, storage
 from app.plugins.workproba_personas.storage import JsonDict, now_iso
 from app.rag.store import RagStore
 from app.schemas import ProviderSet
@@ -74,11 +74,15 @@ async def _memory_context(
     return "\n".join(lines)
 
 
-def _build_agent(settings: Any, provider_set: ProviderSet | None, locale: str) -> Agent[None, str]:
+def _build_agent(
+    settings: Any,
+    provider_set: ProviderSet | None,
+    system_prompt: str,
+) -> Agent[None, str]:
     llm_config = resolve_llm_config(None, settings, provider_set=provider_set)
     return Agent(
         build_model(llm_config),
-        system_prompt="",
+        system_prompt=system_prompt,
         output_type=str,
         model_settings=build_model_settings(llm_config),
     )
@@ -92,10 +96,32 @@ async def _run_persona_prompt(
     user_prompt: str,
     locale: str,
 ) -> str:
-    agent = _build_agent(settings, provider_set, locale)
+    full_system = prompts.build_persona_system_prompt(system_prompt, locale=locale)
+    agent = _build_agent(settings, provider_set, full_system)
     result = await agent.run(user_prompt, message_history=[], deps=None)
     output = getattr(result, "output", result)
     return output.strip() if isinstance(output, str) else str(output).strip()
+
+
+def _discuss_transcript_lines(messages: list[JsonDict], *, locale: str) -> list[str]:
+    lines: list[str] = []
+    for item in messages:
+        role = item.get("role")
+        content = str(item.get("content") or "").strip()
+        if not content:
+            continue
+        if role not in {"user", "persona"}:
+            continue
+        speaker = item.get("persona_name") if role == "persona" else None
+        lines.append(
+            prompts.format_discuss_transcript_line(
+                role=str(role),
+                content=content,
+                persona_name=str(speaker) if speaker else None,
+                locale=locale,
+            )
+        )
+    return lines
 
 
 async def generate_opinions(
@@ -115,24 +141,21 @@ async def generate_opinions(
         raise ValueError("personas_not_found")
 
     memory_text = await _memory_context(rag_store, f"{question}\n{context}", locale=locale)
+    user_prompt = prompts.build_opinion_user_prompt(
+        question=question,
+        context=context,
+        memory_text=memory_text,
+        locale=locale,
+    )
     opinions: list[JsonDict] = []
     for persona in personas:
         name = str(persona.get("name") or persona.get("id") or "")
         system_prompt = str(persona.get("system_prompt") or "")
-        user_parts = [f"Question : {question.strip()}"]
-        if context.strip():
-            user_parts.append(f"Contexte :\n{context.strip()}")
-        if memory_text:
-            user_parts.append(memory_text)
-        user_parts.append(
-            "Donne un avis structuré et concis (5 à 12 phrases). "
-            "Ne joue pas le rôle d'un assistant générique : reste dans ton persona."
-        )
         content = await _run_persona_prompt(
             settings=settings,
             provider_set=provider_set,
             system_prompt=system_prompt,
-            user_prompt=f"{system_prompt}\n\n" + "\n\n".join(user_parts),
+            user_prompt=user_prompt,
             locale=locale,
         )
         opinions.append(
@@ -170,23 +193,20 @@ async def stream_ask(
         return
 
     memory_text = await _memory_context(rag_store, f"{question}\n{context}", locale=locale)
+    user_prompt = prompts.build_opinion_user_prompt(
+        question=question,
+        context=context,
+        memory_text=memory_text,
+        locale=locale,
+    )
     for persona in personas:
         name = str(persona.get("name") or persona.get("id") or "")
         system_prompt = str(persona.get("system_prompt") or "")
-        user_parts = [f"Question : {question.strip()}"]
-        if context.strip():
-            user_parts.append(f"Contexte :\n{context.strip()}")
-        if memory_text:
-            user_parts.append(memory_text)
-        user_parts.append(
-            "Donne un avis structuré et concis (5 à 12 phrases). "
-            "Reste dans ton persona."
-        )
         content = await _run_persona_prompt(
             settings=settings,
             provider_set=provider_set,
             system_prompt=system_prompt,
-            user_prompt=f"{system_prompt}\n\n" + "\n\n".join(user_parts),
+            user_prompt=user_prompt,
             locale=locale,
         )
         yield {
@@ -266,26 +286,19 @@ async def stream_meeting(
             name = str(persona.get("name") or persona.get("id") or "")
             system_prompt = str(persona.get("system_prompt") or "")
             history = _format_meeting_history(turns)
-            user_parts = [f"Sujet de la réunion : {topic.strip()}"]
-            if context.strip():
-                user_parts.append(f"Contexte :\n{context.strip()}")
-            if memory_text:
-                user_parts.append(memory_text)
-            if history:
-                user_parts.append(f"Interventions précédentes :\n{history}")
-            if round_no == 1:
-                user_parts.append(
-                    "C'est ton premier tour de table. Donne ton point de vue initial."
-                )
-            else:
-                user_parts.append(
-                    "Réagis aux interventions précédentes et approfondis ton point de vue."
-                )
+            user_prompt = prompts.build_meeting_user_prompt(
+                topic=topic,
+                context=context,
+                memory_text=memory_text,
+                history=history,
+                round_no=round_no,
+                locale=locale,
+            )
             content = await _run_persona_prompt(
                 settings=settings,
                 provider_set=provider_set,
                 system_prompt=system_prompt,
-                user_prompt=f"{system_prompt}\n\n" + "\n\n".join(user_parts),
+                user_prompt=user_prompt,
                 locale=locale,
             )
             turn = {
@@ -300,9 +313,6 @@ async def stream_meeting(
             turns.append(turn)
             yield {"type": "meeting_turn", "meeting_id": resolved_meeting_id, **turn}
 
-    # La synthèse est produite par un facilitateur neutre (pas par un persona
-    # métier) pour ne pas biaiser le résumé vers un domaine. Le dernier persona
-    # de la sélection sert de « rapporteur » côté attribution (cosmétique).
     synthesizer = personas[-1]
     yield {
         "type": "meeting_facilitator",
@@ -310,22 +320,18 @@ async def stream_meeting(
         "round": 0,
         "label": t(locale, "personas.meeting.facilitator.synthesis"),
     }
-    summary_system = (
-        "Tu es un facilitateur de réunion neutre. Tu produis une synthèse "
-        "structurée et factuelle des échanges, sans privilégier un domaine "
-        "métier particulier."
-    )
-    summary_prompt = (
-        f"Sujet : {topic.strip()}\n\n"
-        f"Tour de table :\n{_format_meeting_history(turns)}\n\n"
-        "Produis une synthèse structurée : points clés par persona, convergences, "
-        "divergences et recommandations."
+    summary_system = prompts.build_facilitator_system_prompt(locale=locale)
+    meeting_history = _format_meeting_history(turns)
+    summary_user = prompts.build_facilitator_synthesis_prompt(
+        topic=topic,
+        history=meeting_history,
+        locale=locale,
     )
     summary = await _run_persona_prompt(
         settings=settings,
         provider_set=provider_set,
         system_prompt=summary_system,
-        user_prompt=f"{summary_system}\n\n{summary_prompt}",
+        user_prompt=summary_user,
         locale=locale,
     )
     transcript = {
@@ -361,6 +367,7 @@ async def stream_discuss(
     message: str,
     history: list[JsonDict],
     discussion_id: str | None,
+    context: str = "",
     settings: Any,
     provider_set: ProviderSet | None,
     locale: str,
@@ -389,32 +396,25 @@ async def stream_discuss(
 
     memory_text = ""
     if include_memory:
-        memory_text = await _memory_context(rag_store, message, locale=locale)
+        memory_text = await _memory_context(rag_store, f"{message}\n{context}", locale=locale)
     responses: list[JsonDict] = []
+    working_messages = list(messages)
 
     for persona in personas:
         name = str(persona.get("name") or persona.get("id") or "")
         system_prompt = str(persona.get("system_prompt") or "")
-        transcript_lines: list[str] = []
-        for item in messages:
-            role = item.get("role")
-            content = str(item.get("content") or "").strip()
-            if not content:
-                continue
-            if role == "user":
-                transcript_lines.append(f"Utilisateur : {content}")
-            elif role == "persona":
-                speaker = item.get("persona_name") or item.get("persona_id") or "Persona"
-                transcript_lines.append(f"{speaker} : {content}")
-        user_parts = ["Conversation en cours :\n" + "\n".join(transcript_lines)]
-        if memory_text:
-            user_parts.append(memory_text)
-        user_parts.append("Réponds au dernier message de l'utilisateur, dans ton style.")
+        transcript_lines = _discuss_transcript_lines(working_messages, locale=locale)
+        user_prompt = prompts.build_discuss_user_prompt(
+            transcript_lines=transcript_lines,
+            context=context,
+            memory_text=memory_text,
+            locale=locale,
+        )
         content = await _run_persona_prompt(
             settings=settings,
             provider_set=provider_set,
             system_prompt=system_prompt,
-            user_prompt=f"{system_prompt}\n\n" + "\n\n".join(user_parts),
+            user_prompt=user_prompt,
             locale=locale,
         )
         entry = {
@@ -428,6 +428,7 @@ async def stream_discuss(
             "created_at": now_iso(),
         }
         responses.append(entry)
+        working_messages.append(entry)
         yield {
             "type": "discuss_message",
             "discussion_id": disc_id,

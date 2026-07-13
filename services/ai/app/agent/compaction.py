@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from typing import Any
 
 from app.config import Settings
@@ -7,6 +8,7 @@ from app.llm.utility import summarize_conversation
 from app.schemas import (
     ChatMessage,
     CompactionEvent,
+    DocumentReference,
     LLMProviderConfig,
     UtilitySummarizeRequest,
 )
@@ -34,6 +36,68 @@ def estimate_history_tokens(history: list[ChatMessage]) -> int:
     return max(total_chars // 4, 0)
 
 
+def estimate_memory_overhead(
+    data_dir: str | Path | None,
+    *,
+    max_per_scope: int = 64,
+) -> int:
+    """Estime le coût token des souvenirs persistés (user + project)."""
+    if data_dir is None:
+        return 0
+
+    from app.memory_stores import open_memory_store_for_scope
+
+    workspace_data_dir = Path(data_dir).expanduser().resolve()
+    total_chars = 0
+    for scope in ("user", "project"):
+        try:
+            store = open_memory_store_for_scope(scope, workspace_data_dir)
+        except Exception:
+            continue
+        try:
+            items = store.list_memories()[:max_per_scope]
+        finally:
+            store.close()
+        for item in items:
+            total_chars += len(str(item.get("content", "")))
+    return max(total_chars // 4, 0)
+
+
+def estimate_documents_overhead(documents: list[DocumentReference]) -> int:
+    """Estime le coût token de l'inventaire documents transmis au tour."""
+    total_chars = 0
+    for doc in documents:
+        total_chars += len(doc.id) + len(doc.name)
+        total_chars += len(doc.mime_type or "")
+        total_chars += len(str(doc.metadata.get("relativePath", "")))
+        total_chars += len(str(doc.metadata.get("kind", "")))
+        if doc.size_bytes is not None:
+            total_chars += len(str(doc.size_bytes))
+    return max(total_chars // 4, 0)
+
+
+def _extract_prior_summary(
+    old: list[ChatMessage],
+    locale: str,
+) -> tuple[str | None, ChatMessage | None, list[ChatMessage]]:
+    """Détecte un résumé incrémental en tête de `old` et le retire de la liste."""
+    if not old:
+        return None, None, old
+
+    first = old[0]
+    if first.role != "system":
+        return None, None, old
+
+    prefix = t(locale, "utility.compaction_summary_prefix")
+    content = (first.content or "").strip()
+    if not content.startswith(prefix):
+        return None, None, old
+
+    body = content[len(prefix) :].strip()
+    prior_summary = body or None
+    return prior_summary, first, old[1:]
+
+
 async def compact_history_if_needed(
     history: list[ChatMessage],
     context_window: int | None,
@@ -41,6 +105,8 @@ async def compact_history_if_needed(
     chat_config: LLMProviderConfig | None,
     settings: Settings | Any,
     locale: str = DEFAULT_LOCALE,
+    *,
+    overhead_tokens: int = 0,
 ) -> tuple[list[ChatMessage], CompactionEvent | None]:
     keep_last = settings.compaction_keep_messages
     min_history = settings.compaction_min_history
@@ -51,7 +117,7 @@ async def compact_history_if_needed(
     if not context_window or not auto_compact or len(history) < min_history:
         return history, None
 
-    estimate = estimate_history_tokens(history)
+    estimate = estimate_history_tokens(history) + overhead_tokens
     if estimate < int(threshold * context_window):
         return history, None
 
@@ -60,12 +126,18 @@ async def compact_history_if_needed(
     if len(old) < min_old:
         return history, None
 
+    prior_summary, prior_summary_msg, old_for_summary = _extract_prior_summary(
+        old,
+        locale,
+    )
+
     try:
         req = UtilitySummarizeRequest(
-            messages=old,
+            messages=old_for_summary,
             llm_provider_config=chat_config,
             utility_llm_config=None,
             focus=t(locale, "utility.compaction_focus"),
+            prior_summary=prior_summary,
             locale=locale,
         )
         resp = await summarize_conversation(req, settings)
@@ -83,11 +155,16 @@ async def compact_history_if_needed(
                 summary_tokens=resp.input_tokens,
                 truncated=False,
                 summary_failed=False,
+                summary=resp.summary,
             ),
         )
     except Exception:
         # Fallback : conserver les N derniers messages intermédiaires plutôt que tout jeter.
         intermediate = old[-fallback_keep:] if fallback_keep > 0 else []
+        if prior_summary_msg is not None:
+            intermediate = [prior_summary_msg] + [
+                message for message in intermediate if message is not prior_summary_msg
+            ]
         kept = intermediate + recent
         return (
             kept,
@@ -97,5 +174,6 @@ async def compact_history_if_needed(
                 summary_tokens=None,
                 truncated=True,
                 summary_failed=True,
+                summary=None,
             ),
         )

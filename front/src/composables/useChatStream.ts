@@ -7,6 +7,7 @@ import type {
   ChatMessagePart,
   ChatPlanStep,
   ChatProposedPlan,
+  ChatStreamCompactionData,
   ChatStreamEvent,
   ChatToolCall,
   ChatUsage,
@@ -228,6 +229,9 @@ export function mapPythonSseEvent(
             data.summary_tokens ?? data.summaryTokens,
           ),
           truncated: Boolean(data.truncated ?? false),
+          summary:
+            data.summary != null ? String(data.summary) : null,
+          summary_failed: Boolean(data.summary_failed ?? data.summaryFailed ?? false),
         },
       };
     case 'error':
@@ -261,6 +265,44 @@ function createMessageId(): string {
 
 function createPartId(): string {
   return `part_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/** Applique la compaction côté client : retire les anciens messages et insère le résumé. */
+export function applyCompactionToMessages(
+  messages: ChatMessage[],
+  data: ChatStreamCompactionData,
+): void {
+  const droppedCount = Number(data.dropped_count ?? 0) || 0;
+  const prefix = messages.slice(0, -2);
+  const drop = Math.min(droppedCount, prefix.length);
+  const kept = prefix.slice(drop);
+  const tail = messages.slice(-2);
+  const next = [...kept, ...tail];
+
+  const summary = data.summary?.trim() ?? '';
+  if (summary) {
+    const prefixI18n = t('chat.compactionContentPrefix');
+    next.unshift({
+      id: createMessageId(),
+      role: 'system',
+      content: `${prefixI18n}${summary}`,
+      messageKind: 'compaction',
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  messages.splice(0, messages.length, ...next);
+}
+
+function compactionInfoFromEvent(data: ChatStreamCompactionData): ChatCompactionInfo {
+  return {
+    droppedCount: Number(data.dropped_count ?? 0) || 0,
+    keptCount: Number(data.kept_count ?? 0) || 0,
+    summaryTokens: parseOptionalInt(data.summary_tokens),
+    truncated: Boolean(data.truncated ?? false),
+    summary: data.summary ?? null,
+    summaryFailed: Boolean(data.summary_failed ?? false),
+  };
 }
 
 /** Reconstruit des `parts` ordonnées pour un message legacy sans parts. */
@@ -785,12 +827,8 @@ export function useChatStream(
 
   function applyEvent(event: ChatStreamEvent): void {
     if (event.type === 'compaction') {
-      lastCompaction.value = {
-        droppedCount: Number(event.data.dropped_count ?? 0) || 0,
-        keptCount: Number(event.data.kept_count ?? 0) || 0,
-        summaryTokens: parseOptionalInt(event.data.summary_tokens),
-        truncated: Boolean(event.data.truncated ?? false),
-      };
+      applyCompactionToMessages(messages.value, event.data);
+      lastCompaction.value = compactionInfoFromEvent(event.data);
       return;
     }
     if (event.type === 'turn_start') {

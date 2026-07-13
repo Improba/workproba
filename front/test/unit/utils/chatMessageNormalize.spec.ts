@@ -39,11 +39,28 @@ describe('chatMessageNormalize', () => {
   it('normalise un tableau mixte valide / invalide', () => {
     const messages = normalizeChatMessages([
       { id: 'ok', role: 'user', content: 'hi', createdAt: '2026-01-01T00:00:00.000Z' },
-      { id: 'bad', role: 'system', content: 'nope' },
+      { id: 'bad', role: 'bot', content: 'nope' },
       'not-an-object',
     ]);
 
     expect(messages).toHaveLength(1);
     expect(messages[0].id).toBe('ok');
+  });
+
+  it('accepte le rôle system et persiste messageKind compaction', () => {
+    const normalized = normalizeChatMessage({
+      id: 'sys1',
+      role: 'system',
+      content: 'Résumé',
+      messageKind: 'compaction',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(normalized).toMatchObject({
+      id: 'sys1',
+      role: 'system',
+      content: 'Résumé',
+      messageKind: 'compaction',
+    });
   });
 });

@@ -403,6 +403,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "pour la suite du travail."
             ),
             "compaction_summary_prefix": "Résumé des échanges précédents :",
+            "compaction_prior_summary": "Résumé précédent à enrichir :\n{summary}",
         },
     },
     "en": {
@@ -727,6 +728,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "continuing the work."
             ),
             "compaction_summary_prefix": "Summary of previous exchanges:",
+            "compaction_prior_summary": "Previous summary to extend:\n{summary}",
         },
     },
 }

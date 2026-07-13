@@ -9,9 +9,13 @@ python-pptx
 pydantic
 pydantic-ai
 pydantic-settings
+reportlab
 sqlite-vec
 sse-starlette
 uvicorn[standard]
+
+[browser]
+playwright>=1.49
 
 [dev]
 pytest>=8

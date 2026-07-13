@@ -49,14 +49,20 @@ vi.mock('@composables/useProject', () => ({
   }),
 }));
 
+const initialPayload = ref({
+  personaIds: ['p1'],
+  mode: 'avis' as const,
+  draft: '',
+  discussionSeed: null as string | null,
+  conversationContext: '',
+  autoAsk: false,
+  resume: null as null,
+});
+
 vi.mock('@composables/useSideChat', () => ({
   useSideChat: () => ({
-    consumeInitial: () => ({
-      personaIds: ['p1'],
-      mode: 'avis' as const,
-      draft: '',
-      discussionSeed: null,
-    }),
+    consumeInitial: () => ({ ...initialPayload.value }),
+    peekInitial: () => ({ ...initialPayload.value }),
     launchToken: ref(0),
   }),
 }));
@@ -68,6 +74,15 @@ vi.mock('quasar', () => ({
 describe('PersonasSideChat', () => {
   beforeEach(() => {
     askOpinion.mockClear();
+    initialPayload.value = {
+      personaIds: ['p1'],
+      mode: 'avis',
+      draft: '',
+      discussionSeed: null,
+      conversationContext: '',
+      autoAsk: false,
+      resume: null,
+    };
   });
 
   it('affiche le composant et bascule le placeholder selon le mode', async () => {
@@ -125,6 +140,43 @@ describe('PersonasSideChat', () => {
       ['p1'],
       'Quel avis ?',
       undefined,
+      '/tmp/workspace',
+      false,
+    );
+  });
+
+  it('auto-demande l\'avis avec le contexte quand autoAsk est activé', async () => {
+    initialPayload.value = {
+      personaIds: ['p1'],
+      mode: 'avis',
+      draft: '',
+      discussionSeed: null,
+      conversationContext: 'Utilisateur : Bonjour',
+      autoAsk: true,
+      resume: null,
+    };
+
+    mount(PersonasSideChat, {
+      props: { pluginId: 'workproba.personas' },
+      global: {
+        stubs: {
+          Lucide: true,
+          PersonaAvatar: true,
+          PersonasOpinionCard: true,
+          PersonasPicker: true,
+          PersonasConfidentialityHint: true,
+          PublishToProjectDialog: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    expect(askOpinion).toHaveBeenCalledWith(
+      '/tmp/personas',
+      ['p1'],
+      'Quel est ton avis sur notre échange en cours ?',
+      'Utilisateur : Bonjour',
       '/tmp/workspace',
       false,
     );

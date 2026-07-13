@@ -143,6 +143,11 @@ def _summary_prompt(req: UtilitySummarizeRequest, locale: str) -> str:
     focus = (req.focus or "").strip()
     if focus:
         parts.append(t(locale, "utility.focus_prefix", focus=focus))
+    prior_summary = (req.prior_summary or "").strip()
+    if prior_summary:
+        parts.append(
+            t(locale, "utility.compaction_prior_summary", summary=prior_summary)
+        )
     parts.append(t(locale, "utility.transcript_label"))
     parts.append(_format_transcript(req.messages, locale))
     return "\n\n".join(parts)

@@ -16,7 +16,11 @@ from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 from starlette.responses import JSONResponse, Response
 
-from app.agent.compaction import compact_history_if_needed
+from app.agent.compaction import (
+    compact_history_if_needed,
+    estimate_documents_overhead,
+    estimate_memory_overhead,
+)
 from app.agent.confirmation import confirmation_registry
 from app.agent.loop import AgentLoop
 from app.agent.plan import plan_registry
@@ -400,6 +404,11 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
             )
             compaction_event: CompactionEvent | None = None
             if payload.context_window and payload.auto_compact:
+                overhead = (
+                    settings.compaction_static_overhead
+                    + estimate_memory_overhead(payload.workspace_data_dir)
+                    + estimate_documents_overhead(payload.documents)
+                )
                 payload.history, compaction_event = await compact_history_if_needed(
                     payload.history,
                     payload.context_window,
@@ -407,6 +416,7 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                     llm_config,
                     settings,
                     locale=payload.locale,
+                    overhead_tokens=overhead,
                 )
             model = build_model(llm_config)
             agent = build_agent(
@@ -1067,6 +1077,7 @@ class PersonasDiscussRequest(BaseModel):
     message: str
     history: list[dict[str, Any]] = Field(default_factory=list)
     discussion_id: str | None = None
+    context: str = ""
     provider_set: ProviderSet | None = None
     locale: str = "fr"
     workspace_data_dir: str | None = None
@@ -1347,6 +1358,7 @@ async def personas_discuss(
         message=payload.message,
         history=payload.history,
         discussion_id=payload.discussion_id,
+        context=payload.context,
         settings=settings,
         provider_set=payload.provider_set,
         locale=locale,

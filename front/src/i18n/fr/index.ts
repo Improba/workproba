@@ -257,6 +257,9 @@ export default {
       chartPrompt: 'Extrais les montants du CA Q2 et fais-moi un graphique',
     },
     roleYou: 'Vous',
+    compactionSummary: 'Résumé de conversation',
+    compactionContentPrefix: 'Résumé des échanges précédents :\n\n',
+    toolResultTruncated: '(résultat tronqué)',
     page: {
       metaSep: '·',
       generating: 'Génération…',
@@ -734,6 +737,8 @@ export default {
         discussion: 'Écrivez à la persona…',
       },
       empty: 'Aucun échange pour l\'instant.',
+      defaultOpinionQuestion: 'Quel est ton avis sur notre échange en cours ?',
+      defaultDiscussionQuestion: 'Que penses-tu de notre échange en cours ?',
       unavailable: 'Les personas ne sont pas disponibles.',
     },
     errors: {

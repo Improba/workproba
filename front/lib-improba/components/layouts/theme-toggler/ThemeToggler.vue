@@ -1,59 +1,77 @@
 <template>
-  <q-toggle
-    class="q-pa-none wp-theme-toggle"
-    :modelValue="!theme.quasar.dark.isActive"
-    @update:modelValue="theme.methods.setTheme(!$event)"
-    size="md"
-    color="accent"
-    checkedIcon="light_mode"
-    uncheckedIcon="brightness_2"
-    :label="i18n.t('theme')"
-    left-label
-    aria-label="Basculer le thème clair/sombre"
-    title="Basculer le thème clair/sombre"
-  />
+  <button
+    type="button"
+    class="wp-theme-toggle"
+    :aria-label="ariaLabel"
+    :title="ariaLabel"
+    @click="onToggle"
+  >
+    <Lucide :name="isLight ? 'sun' : 'moon'" size="14" color="accent" />
+    <span class="wp-theme-toggle__label">{{ i18n.t('theme') }}</span>
+  </button>
 </template>
 
-<script lang="ts">
-import { defineComponent, reactive, watch, onMounted } from 'vue';
+<script setup lang="ts">
+import { computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useQuasar } from 'quasar';
+import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useTheme } from 'src/../lib-improba/composables/use-theme';
 
-export default defineComponent({
-  setup() {
-    const quasar = useQuasar();
-    const theme = useTheme(quasar);
-    const i18n = useI18n();
-    const state = reactive({});
+const quasar = useQuasar();
+const theme = useTheme(quasar);
+const i18n = useI18n();
 
-    const methods = {
-      init() {
-        theme.methods.init();
-      },
-    };
+const isLight = computed(() => !quasar.dark.isActive);
 
-    onMounted(() => {
-      methods.init();
-    });
+const ariaLabel = computed(() =>
+  isLight.value
+    ? 'Basculer vers le thème sombre'
+    : 'Basculer vers le thème clair',
+);
 
-    return {
-      i18n,
-      theme,
-    };
-  },
-});
-</script>
-<style scoped lang="scss">
-.wp-theme-toggle :deep(.q-toggle__label) {
-  font-size: var(--wp-fs-xs);
-  color: var(--wp-text-muted);
-  font-family: var(--wp-font-ui);
+function onToggle() {
+  theme.methods.setTheme(isLight.value);
 }
 
-.wp-theme-toggle:focus-within :deep(.q-toggle__inner) {
-  outline: 2px solid var(--wp-focus-ring);
-  outline-offset: var(--wp-focus-offset);
+onMounted(() => {
+  theme.methods.init();
+});
+</script>
+
+<style scoped lang="scss">
+.wp-theme-toggle {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px;
+  margin: 0;
+  border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-sm);
+  background: var(--wp-accent-soft);
+  cursor: pointer;
+  font-family: var(--wp-font-ui);
+  transition:
+    background 120ms var(--wp-ease),
+    border-color 120ms var(--wp-ease);
+
+  &:hover {
+    background: var(--wp-surface);
+    border-color: var(--wp-border-strong);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--wp-focus-ring);
+    outline-offset: var(--wp-focus-offset);
+  }
+}
+
+.wp-theme-toggle__label {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--wp-text-muted);
+  white-space: nowrap;
 }
 </style>

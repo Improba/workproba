@@ -5,9 +5,24 @@
     :class="{
       'chat-message--user': message.role === 'user',
       'chat-message--assistant': message.role === 'assistant',
+      'chat-message--compaction': isCompactionMessage,
     }"
     :aria-labelledby="`chat-message-role-${message.id}`"
   >
+    <div
+      v-if="isCompactionMessage"
+      class="chat-message__compaction-card"
+      role="note"
+      :aria-label="t('chat.compactionSummary')"
+    >
+      <header class="chat-message__compaction-header">
+        <Lucide name="archive" size="14" color="wp-text-muted" />
+        <span class="chat-message__compaction-title">{{ t('chat.compactionSummary') }}</span>
+      </header>
+      <p class="chat-message__compaction-body">{{ compactionBody }}</p>
+    </div>
+
+    <template v-else>
     <header class="chat-message__header">
       <div class="chat-message__avatar" aria-hidden="true">
         <Lucide
@@ -145,6 +160,7 @@
         </div>
       </div>
     </div>
+    </template>
   </article>
 </template>
 
@@ -211,9 +227,22 @@ function openOpinionPublish(): void {
   opinionPublishOpen.value = true;
 }
 
-const roleLabel = computed(() =>
-  props.message.role === 'user' ? t('chat.roleYou') : t('chat.roleAssistant'),
+const roleLabel = computed(() => {
+  if (props.message.role === 'user') return t('chat.roleYou');
+  if (props.message.role === 'system') return t('chat.compactionSummary');
+  return t('chat.roleAssistant');
+});
+
+const isCompactionMessage = computed(
+  () =>
+    props.message.messageKind === 'compaction' || props.message.role === 'system',
 );
+
+const compactionBody = computed(() => {
+  const prefix = t('chat.compactionContentPrefix');
+  const content = props.message.content ?? '';
+  return content.startsWith(prefix) ? content.slice(prefix.length) : content;
+});
 
 /**
  * Segments ordonnés à rendre. Si le message dispose de `parts` (messages
@@ -285,11 +314,48 @@ function toolCallById(id: string): ChatToolCall | undefined {
 }
 
 .chat-message--user {
-  background: var(--wp-surface-2);
+  background: var(--wp-user-bubble-bg);
+  border-bottom-color: var(--wp-user-bubble-border);
 }
 
 .chat-message--assistant {
   background: transparent;
+}
+
+.chat-message--compaction {
+  background: var(--wp-surface-2);
+  border-bottom-color: var(--wp-border);
+}
+
+.chat-message__compaction-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-surface-3);
+  color: var(--wp-text-muted);
+  font-size: var(--wp-fs-sm);
+}
+
+.chat-message__compaction-header {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+}
+
+.chat-message__compaction-title {
+  font-weight: 600;
+  color: var(--wp-text-muted);
+}
+
+.chat-message__compaction-body {
+  margin: 0;
+  line-height: var(--wp-lh-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--wp-text);
 }
 
 .chat-message__header {

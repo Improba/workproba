@@ -883,7 +883,7 @@ onUnmounted(() => {
   border: none;
   border-radius: var(--wp-r-pill);
   background: var(--wp-accent);
-  color: var(--wp-canard);
+  color: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;

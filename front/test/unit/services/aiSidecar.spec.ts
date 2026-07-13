@@ -4,6 +4,8 @@ import {
   fetchDocumentPreview,
   isSafeRelativePath,
   resolveUiMode,
+  truncateToolResult,
+  MAX_TOOL_RESULT_HISTORY_CHARS,
 } from '@services/aiSidecar';
 
 describe('aiSidecar payload', () => {
@@ -167,6 +169,79 @@ describe('aiSidecar payload', () => {
     );
     expect(payload.settings_locked).toBe(true);
     expect(payload.permissions_network).toBe(false);
+  });
+
+  it('buildAgentTurnPayload inclut tool_calls et messages tool tronqués', () => {
+    const longResult = 'x'.repeat(MAX_TOOL_RESULT_HISTORY_CHARS + 500);
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'Je lis le fichier',
+          thinking: 'analyse en cours',
+          toolCalls: [
+            {
+              id: 'tc1',
+              name: 'read_document',
+              status: 'success',
+              args: { document_id: 'a.txt' },
+              result: longResult,
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      [],
+    );
+
+    expect(payload.history).toHaveLength(2);
+    expect(payload.history[0]).toMatchObject({
+      role: 'assistant',
+      thinking: 'analyse en cours',
+      tool_calls: [
+        { id: 'tc1', name: 'read_document', arguments: { document_id: 'a.txt' } },
+      ],
+    });
+    expect(payload.history[1]).toMatchObject({
+      role: 'tool',
+      tool_call_id: 'tc1',
+    });
+    expect(payload.history[1].content).toBe(truncateToolResult(longResult));
+    expect(payload.history[1].content!.length).toBe(MAX_TOOL_RESULT_HISTORY_CHARS + 1);
+  });
+
+  it('buildAgentTurnPayload inclut les messages system (résumé compaction)', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [
+        {
+          id: 'sum',
+          role: 'system',
+          content: 'Résumé des échanges précédents :\n\nDécision conservée',
+          messageKind: 'compaction',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'suite',
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+      ],
+      [],
+    );
+
+    expect(payload.history[0]).toMatchObject({
+      role: 'system',
+      content: 'Résumé des échanges précédents :\n\nDécision conservée',
+    });
+    expect(payload.history[1]).toMatchObject({ role: 'user', content: 'suite' });
   });
 });
 

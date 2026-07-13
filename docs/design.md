@@ -19,9 +19,9 @@ Workproba ajoute par-dessus un système de tokens dédiés **`--wp-*`** (défini
 
 | Couche | Usage |
 |--------|-------|
-| **`--wp-*`** | Système unique pour le **CSS custom** des composants Workproba (chrome, chat, settings, dialogs) |
-| **Anubis** (`--primary`, `--neutral-*`, classes `bg-*` / `text-*`) | Classes utilitaires générées et couleurs de base Mastok/Quasar |
-| **Quasar** | Composants structurels uniquement ; pas de couleurs/tailles en dur |
+| **`--wp-*`** | Alias sémantiques du **shell** Workproba (surfaces, bordures, typo, focus) — définis dans `workproba.scss`, souvent mappés sur Anubis (`var(--neutral-lower)`, etc.) |
+| **Anubis** (`--primary`, `--neutral-*`, classes `bg-*` / `text-*`) | **Source de vérité palette** via `anubis.config.json` → `_anubis.scss` |
+| **Quasar** | Composants structurels ; couleurs via `--q-*` synchronisées dans `workproba.scss` |
 
 **Règle de contribution** : tout style custom dans un composant Workproba passe par les tokens `--wp-*`. Pas de couleur ni de taille en dur (`#203d52`, `14px`, etc.) dans les fichiers `.vue` / `.scss` des composants.
 
@@ -40,14 +40,14 @@ Workproba ajoute par-dessus un système de tokens dédiés **`--wp-*`** (défini
 | `--wp-lh-normal` | 1.5 | Corps de texte |
 | `--wp-lh-relaxed` | 1.65 | Paragraphes aérés |
 | `--wp-font-ui` | Varela Round, … | Police interface |
-| `--wp-font-head` | Quicksand, … | Police titres |
+| `--wp-font-head` | Inter, … | Titres et chat |
 | `--wp-font-mono` | JetBrains Mono, … | Code, raccourcis clavier |
 
 ### Focus clavier
 
 | Token | Rôle |
 |-------|------|
-| `--wp-focus-ring` | Couleur de l'anneau `:focus-visible` (cyan accent, adapté clair/sombre) |
+| `--wp-focus-ring` | Anneau `:focus-visible` — `var(--accent-high)` (cyan clair, or sombre) |
 | `--wp-focus-offset` | Décalage de l'outline (2px) |
 
 Appliqué globalement sur `.wp-shell` pour titlebar, sidebar, explorateur, composer et boutons.
@@ -70,8 +70,8 @@ Les tokens `--wp-space-1` à `--wp-space-6` définissent l'échelle d'espacement
 | `--wp-surface`, `--wp-surface-2`, `--wp-surface-3` | Cartes, panneaux, zones surélevées |
 | `--wp-border`, `--wp-border-strong` | Séparateurs et contours |
 | `--wp-text`, `--wp-text-muted`, `--wp-text-faint` | Hiérarchie de texte |
-| `--wp-primary`, `--wp-primary-soft` | Branding bleu canard |
-| `--wp-accent`, `--wp-accent-strong`, `--wp-accent-soft` | Actions, focus, streaming |
+| `--wp-primary`, `--wp-primary-soft` | Branding : canard (clair) / or (sombre), via `var(--primary)` |
+| `--wp-accent`, `--wp-accent-strong`, `--wp-accent-soft` | Actions, focus, onglets actifs : cyan (clair) / or (sombre) |
 | `--wp-canard`, `--wp-cyan`, `--wp-gold`, `--wp-violet` | Accents de marque Improba (stables entre thèmes) |
 | `--wp-success`, `--wp-danger`, `--wp-danger-soft` | États sémantiques |
 | `--wp-r-sm` … `--wp-r-pill` | Rayons de bordure |
@@ -80,7 +80,8 @@ Les tokens `--wp-space-1` à `--wp-space-6` définissent l'échelle d'espacement
 
 ### Fichier source
 
-Tous ces tokens sont déclarés et surchargés (thème clair/sombre, densité) dans `front/src/css/workproba.scss`, chargé **après** `_anubis.scss` pour gagner la cascade.
+- **Palette** (`--primary`, `--neutral-*`, sémantique) : `front/anubis.config.json` → génère `_anubis.scss`. Voir [anubis-ui.md](./anubis-ui.md).
+- **Shell** (`--wp-*`, typo, densité, `--q-*`) : `front/src/css/workproba.scss`, chargé **après** `_anubis.scss`.
 
 ## Anubis UI
 
@@ -97,11 +98,11 @@ Anubis UI est une bibliothèque CSS qui génère automatiquement des classes uti
 
 Anubis UI est intégré via :
 
-- **Package npm** : `anubis-ui@^1.3.1` (déclaré dans `front/package.json`)
+- **Package npm** : `anubis-ui@^1.4.4` (déclaré dans `front/package.json`)
 - **Plugin Vite** : Configuré dans `front/quasar.config.js` via `anubis.plugin`
-- **Configuration** : `front/anubis.config.json` définit les couleurs et utilitaires
-- **Styles générés** : `front/src/css/_anubis.scss` (généré automatiquement)
-- **Définitions de couleurs** : `front/lib-improba/css/_colors.scss` (définitions SCSS)
+- **Configuration couleurs** : `front/anubis.config.json` (section `"colors"`) — **source de vérité**
+- **Styles générés** : `front/src/css/_anubis.scss`, `front/src/css/anubis/_tokens.scss` (ne pas éditer à la main)
+- **Tokens shell** : `front/src/css/workproba.scss` (`--wp-*`, `--q-*` uniquement)
 
 ### Fonctionnement
 
@@ -151,41 +152,28 @@ Les couleurs s'adaptent automatiquement au thème :
 
 Les variantes sont inversées intelligemment : par exemple, `neutral-lowest` est blanc en mode clair et très foncé en mode sombre, garantissant toujours un bon contraste.
 
-### Exemples de couleurs
+### Exemples de couleurs (Workproba)
 
-```scss
-// Primary (bleu)
-primary: #0f84cb (light) / #1a94db (dark)
-primary-lowest: #f0f8ff (light) / #082a3f (dark)
-primary-lower: #e1f2ff (light) / #0a5a8a (dark)
-primary-low: #b3d9ff (light) / #0e6b9a (dark)
-primary-medium: #0f84cb (light) / #1a94db (dark)
-primary-high: #0c6ba3 (light) / #b3d9ff (dark)
-primary-higher: #094a7a (light) / #e1f2ff (dark)
-primary-highest: #082a3f (light) / #f0f8ff (dark)
+Valeurs définies dans `front/anubis.config.json` :
 
-// Neutral (gris)
-neutral: #64748b (identique en light et dark)
-neutral-lowest: #ffffff (light) / #0f172a (dark)
-neutral-lower: #f1f5f9 (light) / #1e293b (dark)
-neutral-low: #cbd5e1 (light) / #475569 (dark)
-neutral-medium: #64748b
-neutral-high: #475569 (light) / #cbd5e1 (dark)
-neutral-higher: #1e293b (light) / #f1f5f9 (dark)
-neutral-highest: #141e57 (light) / #ffffff (dark)
+```text
+// Clair — canard + cyan
+primary:       #203d52 / —
+accent:        #2bb5c2 / —
+neutral-lowest: #ffffff / —
+text:          #1c2a36 / —
 
-// Success (vert)
-success: #00c99e (light) / #25e2b3 (dark)
-// ... variantes similaires
-
-// Danger (rouge)
-danger: #e64d4b (light) / #f17a78 (dark)
-// ... variantes similaires
-
-// Warning (orange/ambre)
-warning: #ff9a00 (light) / #ffbd1b (dark)
-// ... variantes similaires
+// Sombre — Charbon chaud + or
+primary:       — / #e0a93a
+accent:        — / #e0a93a
+neutral-lowest: — / #161514
+neutral-lower:  — / #1f1e1c
+text:          — / #eceae6
+text-link:     — / #ffcc49
+success:       — / #4ade80
 ```
+
+Liste complète et procédure de modification : [anubis-ui.md](./anubis-ui.md).
 
 ## Utilisation
 
@@ -314,16 +302,13 @@ Ce fichier définit :
 
 ### Personnalisation des couleurs
 
-Les couleurs sont définies dans deux endroits :
+1. Éditer **`front/anubis.config.json`** → section `"colors"` (chaque token : `{ "light": "…", "dark": "…" }`).
+2. Relancer le dev server, ou exécuter `node -e "require('anubis-ui/dist/tools/main').init()"` dans `front/`.
+3. Pour le shell uniquement (surfaces, ombres, `--q-*` Quasar) : compléter dans `front/src/css/workproba.scss`.
 
-1. **`front/lib-improba/css/_colors.scss`** : Définitions SCSS avec mixins
-2. **`front/anubis.config.json`** : Configuration JSON pour Anubis
+Le fichier `front/lib-improba/css/_colors.scss` est un legacy Mastok **non importé** au build ; ne pas l'utiliser pour Workproba.
 
-Pour modifier une couleur :
-
-1. Éditez `front/lib-improba/css/_colors.scss` pour changer les valeurs SCSS
-2. Éditez `front/anubis.config.json` pour synchroniser les valeurs JSON
-3. Régénérez les classes via le build (`yarn dev` ou `yarn build`)
+Guide détaillé : [anubis-ui.md](./anubis-ui.md).
 
 ### Génération des classes
 
@@ -486,5 +471,6 @@ Si vous avez du code existant utilisant les couleurs Quasar :
 - ❌ **Éviter** : Couleurs ou tailles en dur dans les composants Workproba
 - ❌ **Éviter** : Couleurs Quasar (`color="primary"`, `text-grey-7`, etc.)
 - ❌ **Éviter** : Valeurs hexadécimales hardcodées dans les styles
-- ❌ **Éviter** : Variables Quasar (`var(--q-primary)`, etc.)
+- ❌ **Éviter** : Éditer `_anubis.scss` ou `anubis/_tokens.scss` à la main
+- ❌ **Éviter** : `lib-improba/css/_colors.scss` (legacy, non chargé)
 

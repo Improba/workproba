@@ -238,6 +238,7 @@ class UtilitySummarizeRequest(BaseModel):
     llm_provider_config: LLMProviderConfig | None = None
     utility_llm_config: LLMProviderConfig | None = None
     focus: str | None = None
+    prior_summary: str | None = None
     locale: Locale = "fr"
 
     @field_validator("locale", mode="before")
@@ -357,6 +358,7 @@ class CompactionEvent(BaseModel):
     summary_tokens: int | None = None
     truncated: bool = False
     summary_failed: bool = False
+    summary: str | None = None
 
 
 class TurnStartEvent(BaseModel):

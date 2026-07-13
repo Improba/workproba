@@ -12,10 +12,13 @@ import app.auth as authmod
 import app.main as mainmod
 from app.agent.compaction import (
     compact_history_if_needed,
+    estimate_documents_overhead,
     estimate_history_tokens,
+    estimate_memory_overhead,
 )
 from app.config import get_settings
-from app.schemas import ChatMessage, UtilitySummarizeResponse
+from app.i18n import t
+from app.schemas import ChatMessage, DocumentReference, UtilitySummarizeRequest, UtilitySummarizeResponse
 
 COMPACT_KEEP_LAST = get_settings().compaction_keep_messages
 COMPACT_MIN_HISTORY = get_settings().compaction_min_history
@@ -109,6 +112,125 @@ async def test_compact_history_summarizes_old_messages(
     assert event.dropped_count == len(history) - COMPACT_KEEP_LAST
     assert event.truncated is False
     assert event.summary_tokens == 42
+    assert event.summary == "Décision conservée"
+
+
+async def test_compact_history_overhead_triggers_compaction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    history = _history(COMPACT_MIN_HISTORY, content="short")
+
+    async def fake_summarize(*_args: Any, **_kwargs: Any) -> UtilitySummarizeResponse:
+        return UtilitySummarizeResponse(summary="ok", input_tokens=1, output_tokens=1)
+
+    monkeypatch.setattr(compactionmod, "summarize_conversation", fake_summarize)
+
+    compacted, event = await compact_history_if_needed(
+        history,
+        context_window=10_000,
+        auto_compact=True,
+        chat_config=None,
+        settings=get_settings(),
+        overhead_tokens=10_000,
+    )
+
+    assert event is not None
+    assert compacted[0].role == "system"
+
+
+async def test_compact_history_prior_summary_incremental(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prefix = t("fr", "utility.compaction_summary_prefix")
+    prior = ChatMessage(
+        role="system",
+        content=f"{prefix}\n\nAncien résumé conservé",
+    )
+    history = [prior] + _history(9, content="x" * 80)
+    captured: dict[str, UtilitySummarizeRequest | None] = {"req": None}
+
+    async def fake_summarize(
+        req: UtilitySummarizeRequest, *_args: Any, **_kwargs: Any
+    ) -> UtilitySummarizeResponse:
+        captured["req"] = req
+        return UtilitySummarizeResponse(
+            summary="Résumé enrichi",
+            input_tokens=10,
+            output_tokens=5,
+        )
+
+    monkeypatch.setattr(compactionmod, "summarize_conversation", fake_summarize)
+
+    compacted, event = await compact_history_if_needed(
+        history,
+        context_window=100,
+        auto_compact=True,
+        chat_config=None,
+        settings=get_settings(),
+    )
+
+    assert captured["req"] is not None
+    assert captured["req"].prior_summary == "Ancien résumé conservé"
+    assert len(captured["req"].messages) == len(history) - COMPACT_KEEP_LAST - 1
+    assert event is not None
+    assert event.summary == "Résumé enrichi"
+    assert "Résumé enrichi" in (compacted[0].content or "")
+
+
+async def test_compact_history_prior_summary_preserved_on_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prefix = t("fr", "utility.compaction_summary_prefix")
+    prior = ChatMessage(
+        role="system",
+        content=f"{prefix}\n\nAncien résumé conservé",
+    )
+    history = [prior] + _history(9, content="x" * 80)
+
+    async def fail_summarize(*_args: Any, **_kwargs: Any) -> UtilitySummarizeResponse:
+        raise RuntimeError("network down")
+
+    monkeypatch.setattr(compactionmod, "summarize_conversation", fail_summarize)
+
+    compacted, event = await compact_history_if_needed(
+        history,
+        context_window=100,
+        auto_compact=True,
+        chat_config=None,
+        settings=get_settings(),
+    )
+
+    assert event is not None
+    assert event.summary_failed is True
+    assert event.summary is None
+    assert compacted[0] == prior
+
+
+def test_estimate_memory_overhead(tmp_path) -> None:
+    from app.memory_stores import open_memory_store_for_scope
+
+    store = open_memory_store_for_scope("project", tmp_path)
+    try:
+        store.add_memory(content="souvenir test", source="test")
+    finally:
+        store.close()
+
+    overhead = estimate_memory_overhead(tmp_path)
+    assert overhead > 0
+
+
+def test_estimate_documents_overhead() -> None:
+    docs = [
+        DocumentReference(
+            id="doc-1",
+            name="rapport.pdf",
+            mime_type="application/pdf",
+            size_bytes=1024,
+            metadata={"relativePath": "docs/rapport.pdf", "kind": "pdf"},
+        )
+    ]
+    assert estimate_documents_overhead(docs) > 0
+    assert estimate_documents_overhead([]) == 0
 
 
 async def test_compact_history_too_few_messages_returns_original() -> None:
@@ -210,3 +332,4 @@ def test_agent_turn_emits_compaction_event_first(
     assert events[1][1]["kept_count"] == COMPACT_KEEP_LAST
     assert events[1][1]["summary_tokens"] == 42
     assert events[1][1]["truncated"] is False
+    assert events[1][1]["summary"] == "Décision conservée"

@@ -136,7 +136,9 @@ import {
   meetingStateToStored,
   type MeetingState,
 } from '@composables/usePersonas';
+import { formatMainChatContext } from '@utils/mainChatContext';
 import { useSideChat } from '@composables/useSideChat';
+import { useMainChatContext } from '@composables/useMainChatContext';
 import { useBrowser } from '@composables/useBrowser';
 
 const route = useRoute();
@@ -165,6 +167,7 @@ const { consumeAction, pendingAction } = usePersonasNavigation();
   saveMeeting,
 } = usePersonas();
 const { openSideChat, closeSideChat } = useSideChat();
+const { setMessages: syncMainChatContext } = useMainChatContext();
 const { applyToolResult: applyBrowserToolResult } = useBrowser();
 
 const personasView = ref<'meeting' | null>(null);
@@ -577,6 +580,14 @@ watch(isPersonasPluginActive, () => {
   void loadPersonasIfNeeded();
 }, { immediate: true });
 
+watch(
+  messages,
+  (items) => {
+    syncMainChatContext(items, sessionId.value);
+  },
+  { deep: true, immediate: true },
+);
+
 function applyPersonasNavigation(): void {
   const payload = consumeAction();
   if (!payload) return;
@@ -589,6 +600,7 @@ function applyPersonasNavigation(): void {
         openSideChat(PERSONAS_PLUGIN_ID, {
           mode: 'discussion',
           personaIds: resume.personaIds,
+          conversationContext: buildConversationContext(),
           resume,
         });
       });
@@ -608,7 +620,7 @@ watch(
 
 watch(pendingAction, (action) => {
   if (action) applyPersonasNavigation();
-});
+}, { immediate: true });
 
 function closePersonasView(): void {
   abortActiveMeeting();
@@ -623,12 +635,22 @@ function abortActiveMeeting(): void {
   meetingAbort.value = null;
 }
 
-function openOpinionPicker(question?: string, personaIds?: string[]): void {
+function buildConversationContext(): string {
+  return formatMainChatContext(messages.value, { locale: locale.value });
+}
+
+function openOpinionPicker(
+  question?: string,
+  personaIds?: string[],
+  options?: { autoAsk?: boolean },
+): void {
   void loadPersonasIfNeeded().then(() => {
     openSideChat(PERSONAS_PLUGIN_ID, {
       mode: 'avis',
       draft: question,
       personaIds: personaIds ?? [],
+      conversationContext: buildConversationContext(),
+      autoAsk: options?.autoAsk ?? (personaIds?.length ?? 0) > 0,
     });
   });
 }
@@ -672,6 +694,7 @@ function openDiscussionView(personaIds?: string[]): void {
     openSideChat(PERSONAS_PLUGIN_ID, {
       mode: 'discussion',
       personaIds: personaIds ?? [],
+      conversationContext: buildConversationContext(),
     });
   });
 }
@@ -683,6 +706,7 @@ function openDiscussionFromOpinion(card: PersonasOpinionCard): void {
       mode: 'discussion',
       personaIds: ids,
       discussionSeed: card.question,
+      conversationContext: buildConversationContext(),
     });
   });
 }
@@ -757,6 +781,7 @@ async function onMeetingStart(payload: {
     payload.includeMemory,
     payload.meetingId,
     controller.signal,
+    buildConversationContext(),
   );
 
   if (runId !== meetingRunId || controller.signal.aborted) {

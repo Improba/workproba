@@ -43,9 +43,12 @@ def register_personas_tools(agent: Agent[Any, str]) -> None:
         Returns structured opinions for inline display in the chat.
 
         Args:
-            persona_ids: Persona identifiers (e.g. "01" for Sylvie).
+            persona_ids: Persona identifiers (e.g. "01" for RH).
             question: Subject or question for the personas.
-            context: Optional extra context (document excerpt, draft, etc.).
+            context: Relevant excerpt from the current conversation, attached
+                documents, or draft. Always pass a concise summary of what the
+                user and assistant already discussed when the opinion relates
+                to the ongoing chat.
         """
         locale = ctx.deps.context.locale
         plugin_data_dir = _plugin_data_dir(ctx)

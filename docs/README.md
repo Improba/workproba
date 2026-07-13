@@ -21,8 +21,8 @@ Index de la documentation du projet **Workproba** — assistant de travail sur d
 
 ## Design & UI
 
-- **[design.md](./design.md)** — Système de design Workproba
-- **[anubis-ui.md](./anubis-ui.md)** — Framework CSS Anubis UI, couleurs, utilitaires
+- **[design.md](./design.md)** — Système de design Workproba (tokens `--wp-*`, typo, densité)
+- **[anubis-ui.md](./anubis-ui.md)** — Palette Anubis, thèmes clair / Charbon chaud, `anubis.config.json`
 
 ## Tests
 

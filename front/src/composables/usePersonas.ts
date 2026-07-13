@@ -145,6 +145,7 @@ export interface UsePersonasReturn {
     includeMemory?: boolean,
     meetingId?: string | null,
     abortSignal?: AbortSignal,
+    context?: string,
   ) => Promise<MeetingState>;
   discuss: (
     pluginDataDir: string,
@@ -155,6 +156,7 @@ export interface UsePersonasReturn {
     onUpdate?: (messages: DiscussionMessage[]) => void,
     workspaceDataDir?: string | null,
     includeMemory?: boolean,
+    context?: string,
   ) => Promise<{ discussionId: string | null; messages: DiscussionMessage[] }>;
   estimateCost: (
     pluginDataDir: string,
@@ -636,6 +638,7 @@ export function usePersonas(): UsePersonasReturn {
     includeMemory = false,
     meetingId?: string | null,
     abortSignal?: AbortSignal,
+    context?: string,
   ): Promise<MeetingState> {
     const state: MeetingState = {
       topic,
@@ -674,6 +677,7 @@ export function usePersonas(): UsePersonasReturn {
           topic,
           rounds: Math.min(rounds, 5),
           meetingId: state.meetingId ?? meetingId ?? undefined,
+          context,
           workspaceDataDir,
           includeMemory,
           providerSet: providerSetPayload,
@@ -758,6 +762,7 @@ export function usePersonas(): UsePersonasReturn {
     onUpdate?: (messages: DiscussionMessage[]) => void,
     workspaceDataDir?: string | null,
     includeMemory = false,
+    context?: string,
   ): Promise<{ discussionId: string | null; messages: DiscussionMessage[] }> {
     const providerSet = buildContextProviderSet();
     if (!ensureProviderSetChatReady(providerSet)) {
@@ -797,6 +802,7 @@ export function usePersonas(): UsePersonasReturn {
           discussionId,
           workspaceDataDir,
           includeMemory,
+          context,
           providerSet: providerSetPayload,
           locale: locale.value,
         },

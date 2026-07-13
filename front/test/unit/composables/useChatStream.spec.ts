@@ -39,7 +39,7 @@ vi.mock('@composables/useAppSettings', () => ({
   }),
 }));
 
-import { useChatStream, mapPythonSseEvent, applyStreamEvent, applyAttachmentStatusEvent, mergeLlmConfigsWithSessionReasoning, type UseChatStreamReturn } from '@composables/useChatStream';
+import { useChatStream, mapPythonSseEvent, applyStreamEvent, applyCompactionToMessages, applyAttachmentStatusEvent, mergeLlmConfigsWithSessionReasoning, type UseChatStreamReturn } from '@composables/useChatStream';
 import type { ChatMessage } from '#types';
 
 /** Construit une Response SSE dont le body émet `events` puis ferme le flux. */
@@ -583,6 +583,52 @@ describe('useChatStream — feedbacks', () => {
 
     expect(api.error.value).toBeNull();
     unmount();
+  });
+
+  it('mappe compaction avec summary et summary_failed', () => {
+    const mapped = mapPythonSseEvent({
+      type: 'compaction',
+      data: {
+        dropped_count: 3,
+        kept_count: 5,
+        summary: 'Résumé condensé',
+        summary_failed: false,
+        truncated: false,
+      },
+    });
+    expect(mapped?.type).toBe('compaction');
+    expect(mapped?.data.summary).toBe('Résumé condensé');
+    expect(mapped?.data.summary_failed).toBe(false);
+  });
+
+  it('applyCompactionToMessages réduit les messages et insère un résumé system', () => {
+    const messages: ChatMessage[] = [
+      { id: 'old', role: 'user', content: 'ancien 1', createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'old2', role: 'assistant', content: 'ancien 2', createdAt: '2026-01-01T00:00:01.000Z' },
+      { id: 'cur-u', role: 'user', content: 'tour courant', createdAt: '2026-01-01T00:00:02.000Z' },
+      {
+        id: 'cur-a',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        createdAt: '2026-01-01T00:00:03.000Z',
+      },
+    ];
+
+    applyCompactionToMessages(messages, {
+      dropped_count: 2,
+      kept_count: 0,
+      summary: 'Contexte condensé',
+      truncated: false,
+    });
+
+    expect(messages).toHaveLength(3);
+    expect(messages[0].role).toBe('system');
+    expect(messages[0].messageKind).toBe('compaction');
+    expect(messages[0].content).toContain('Contexte condensé');
+    expect(messages[0].content).toContain('Résumé des échanges précédents :');
+    expect(messages[1].id).toBe('cur-u');
+    expect(messages[2].id).toBe('cur-a');
   });
 
   it('applyStreamEvent crée un ChatThinkingPart via les events unitaires', () => {

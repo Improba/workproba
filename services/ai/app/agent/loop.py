@@ -243,6 +243,7 @@ class AgentLoop:
             code_execute=request.code_execute,
             audit_retention_days=request.audit_retention_days,
             audit_enabled=request.audit_enabled,
+            last_user_query=request.message,
         )
         deps = ToolDeps(
             context=context,

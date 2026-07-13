@@ -16,6 +16,8 @@ const initialPersonaIds = ref<string[]>([]);
 const initialMode = ref<'avis' | 'discussion' | null>(null);
 const initialDraft = ref('');
 const initialDiscussionSeed = ref<string | null>(null);
+const initialConversationContext = ref('');
+const initialAutoAsk = ref(false);
 const initialResume = ref<{
   discussionId: string;
   personaIds: string[];
@@ -64,6 +66,8 @@ export interface UseSideChatReturn {
       personaIds?: string[];
       draft?: string;
       discussionSeed?: string;
+      conversationContext?: string;
+      autoAsk?: boolean;
       resume?: SideChatResumePayload;
     },
   ) => void;
@@ -73,6 +77,17 @@ export interface UseSideChatReturn {
     mode: 'avis' | 'discussion' | null;
     draft: string;
     discussionSeed: string | null;
+    conversationContext: string;
+    autoAsk: boolean;
+    resume: SideChatResumePayload | null;
+  };
+  peekInitial: () => {
+    personaIds: string[];
+    mode: 'avis' | 'discussion' | null;
+    draft: string;
+    discussionSeed: string | null;
+    conversationContext: string;
+    autoAsk: boolean;
     resume: SideChatResumePayload | null;
   };
   launchToken: Readonly<Ref<number>>;
@@ -86,6 +101,8 @@ export function resetSideChatStateForTests(): void {
   initialMode.value = null;
   initialDraft.value = '';
   initialDiscussionSeed.value = null;
+  initialConversationContext.value = '';
+  initialAutoAsk.value = false;
   initialResume.value = null;
   launchToken.value = 0;
 }
@@ -112,6 +129,8 @@ export function useSideChat(): UseSideChatReturn {
       personaIds?: string[];
       draft?: string;
       discussionSeed?: string;
+      conversationContext?: string;
+      autoAsk?: boolean;
       resume?: SideChatResumePayload;
     },
   ): void {
@@ -134,6 +153,14 @@ export function useSideChat(): UseSideChatReturn {
       initialDiscussionSeed.value = opts.discussionSeed;
       hasPayload = true;
     }
+    if (opts?.conversationContext !== undefined) {
+      initialConversationContext.value = opts.conversationContext;
+      hasPayload = true;
+    }
+    if (opts?.autoAsk !== undefined) {
+      initialAutoAsk.value = opts.autoAsk;
+      hasPayload = true;
+    }
     if (opts?.resume !== undefined) {
       initialResume.value = {
         discussionId: opts.resume.discussionId,
@@ -143,6 +170,12 @@ export function useSideChat(): UseSideChatReturn {
       hasPayload = true;
     }
     if (hasPayload) {
+      if (opts?.conversationContext === undefined) {
+        initialConversationContext.value = '';
+      }
+      if (opts?.autoAsk === undefined) {
+        initialAutoAsk.value = false;
+      }
       launchToken.value += 1;
     }
   }
@@ -151,11 +184,39 @@ export function useSideChat(): UseSideChatReturn {
     open.value = false;
   }
 
+  function peekInitial(): {
+    personaIds: string[];
+    mode: 'avis' | 'discussion' | null;
+    draft: string;
+    discussionSeed: string | null;
+    conversationContext: string;
+    autoAsk: boolean;
+    resume: SideChatResumePayload | null;
+  } {
+    return {
+      personaIds: [...initialPersonaIds.value],
+      mode: initialMode.value,
+      draft: initialDraft.value,
+      discussionSeed: initialDiscussionSeed.value,
+      conversationContext: initialConversationContext.value,
+      autoAsk: initialAutoAsk.value,
+      resume: initialResume.value
+        ? {
+            discussionId: initialResume.value.discussionId,
+            personaIds: [...initialResume.value.personaIds],
+            messages: initialResume.value.messages.map((m) => ({ ...m })),
+          }
+        : null,
+    };
+  }
+
   function consumeInitial(): {
     personaIds: string[];
     mode: 'avis' | 'discussion' | null;
     draft: string;
     discussionSeed: string | null;
+    conversationContext: string;
+    autoAsk: boolean;
     resume: SideChatResumePayload | null;
   } {
     const result = {
@@ -163,6 +224,8 @@ export function useSideChat(): UseSideChatReturn {
       mode: initialMode.value,
       draft: initialDraft.value,
       discussionSeed: initialDiscussionSeed.value,
+      conversationContext: initialConversationContext.value,
+      autoAsk: initialAutoAsk.value,
       resume: initialResume.value
         ? {
             discussionId: initialResume.value.discussionId,
@@ -175,6 +238,8 @@ export function useSideChat(): UseSideChatReturn {
     initialMode.value = null;
     initialDraft.value = '';
     initialDiscussionSeed.value = null;
+    initialConversationContext.value = '';
+    initialAutoAsk.value = false;
     initialResume.value = null;
     return result;
   }
@@ -185,6 +250,7 @@ export function useSideChat(): UseSideChatReturn {
     openSideChat,
     closeSideChat,
     consumeInitial,
+    peekInitial,
     launchToken: readonly(launchToken),
     hasSideChat,
   };

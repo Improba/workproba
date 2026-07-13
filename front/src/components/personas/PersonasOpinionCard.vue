@@ -42,9 +42,12 @@
             </span>
           </div>
         </header>
-        <p class="personas-opinion-card__content">
-          {{ opinion.content || (opinion.streaming ? t('personas.opinion.waiting') : '') }}
-        </p>
+        <MessageTextPart
+          v-if="opinion.content || opinion.streaming"
+          class="personas-opinion-card__content"
+          :content="opinion.content || (opinion.streaming ? t('personas.opinion.waiting') : '')"
+          :streaming="!!opinion.streaming"
+        />
         <p
           v-if="opinion.memoryCited"
           class="personas-opinion-card__memory"
@@ -89,6 +92,7 @@ import { ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
+import MessageTextPart from '@components/chat/MessageTextPart.vue';
 import type { PersonasOpinionCard } from '#types';
 
 defineProps<{
@@ -198,12 +202,34 @@ const expanded = ref(true);
 }
 
 .personas-opinion-card__content {
-  margin: 0;
   font-family: var(--wp-font-chat, var(--wp-font-ui));
   font-size: var(--wp-fs-sm);
   line-height: var(--wp-lh-relaxed);
   color: var(--wp-text);
-  white-space: pre-wrap;
+
+  :deep(.chat-message__markdown) {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+
+  :deep(p) {
+    margin: 0 0 0.5rem;
+  }
+
+  :deep(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.25rem 0 0.5rem 1.1rem;
+  }
+
+  :deep(strong) {
+    font-weight: 700;
+  }
 }
 
 .personas-opinion-card__memory {

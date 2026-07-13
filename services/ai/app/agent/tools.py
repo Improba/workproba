@@ -57,6 +57,7 @@ class ToolContext:
     code_execute: bool = True
     audit_retention_days: int | None = None
     audit_enabled: bool | None = None
+    last_user_query: str = ""
 
 
 @dataclass
@@ -287,6 +288,8 @@ def build_agent(
         niveau, sans outil de lecture explicite. La persistance est assurée par
         deux bases SQLite distinctes ouvertes sans embeddings (souvenirs only).
         """
+        from app.agent.memory_ranking import dedupe_memories_keep_order, rank_memories_by_query
+        from app.config import get_settings
         from app.memory_stores import open_memory_store_for_scope
 
         data_dir = ctx.deps.context.workspace_data_dir
@@ -294,27 +297,56 @@ def build_agent(
         if data_dir is None:
             return ""
 
-        def _format(scope: str, header_key: str) -> str:
+        settings = get_settings()
+        topk = settings.memory_prompt_topk
+        recent_floor = settings.memory_prompt_recent_floor
+        query = ctx.deps.context.last_user_query
+
+        def _collect(scope: str) -> list[dict]:
             try:
                 store = open_memory_store_for_scope(scope, data_dir)
             except Exception:
-                return ""
+                return []
             try:
-                items = store.list_memories()
+                return [
+                    {**item, "_scope": scope}
+                    for item in store.list_memories()
+                ]
             finally:
                 store.close()
-            if not items:
+
+        tagged = dedupe_memories_keep_order(_collect("user") + _collect("project"))
+        if not tagged:
+            return ""
+
+        chronological = list(reversed(tagged))
+        recent = chronological[-recent_floor:] if recent_floor > 0 else []
+        remaining_k = max(0, topk - len(recent))
+        ranked = rank_memories_by_query(chronological, query, remaining_k)
+        recent_keys = {
+            str(item.get("content", "")).strip().lower() for item in recent
+        }
+        selected = recent + [
+            item
+            for item in ranked
+            if str(item.get("content", "")).strip().lower() not in recent_keys
+        ]
+        selected = selected[:topk]
+
+        def _format(header_key: str, scope: str) -> str:
+            scope_items = [item for item in selected if item.get("_scope") == scope]
+            if not scope_items:
                 return ""
             lines = [t(locale, header_key)]
-            for item in items[:64]:
+            for item in scope_items:
                 content = str(item.get("content", "")).strip().replace("\n", " ")
                 if not content:
                     continue
                 lines.append(f"- {content}")
-            return "\n".join(lines)
+            return "\n".join(lines) if len(lines) > 1 else ""
 
-        user_block = _format("user", "memory.agent_user_header")
-        project_block = _format("project", "memory.agent_project_header")
+        user_block = _format("memory.agent_user_header", "user")
+        project_block = _format("memory.agent_project_header", "project")
         if not user_block and not project_block:
             return ""
         return f"{user_block}\n{project_block}".strip()

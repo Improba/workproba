@@ -96,6 +96,22 @@ class Settings(BaseSettings):
         ge=0,
         validation_alias="COMPACTION_FALLBACK_KEEP_MESSAGES",
     )
+    compaction_static_overhead: int = Field(
+        default=1500,
+        ge=0,
+        validation_alias="COMPACTION_STATIC_OVERHEAD",
+    )
+    memory_prompt_topk: int = Field(
+        default=12,
+        ge=1,
+        le=64,
+        validation_alias="MEMORY_PROMPT_TOPK",
+    )
+    memory_prompt_recent_floor: int = Field(
+        default=3,
+        ge=0,
+        validation_alias="MEMORY_PROMPT_RECENT_FLOOR",
+    )
 
     # Bornes d'entrée sur /agent/turn.
     max_history_messages: int = Field(

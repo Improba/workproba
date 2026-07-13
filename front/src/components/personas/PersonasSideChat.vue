@@ -57,7 +57,10 @@
       </header>
 
       <div ref="scrollRef" class="personas-side-chat__feed" role="log" aria-live="polite">
-        <p v-if="feedEmpty" class="personas-side-chat__empty">
+        <p v-if="feedEmpty && busy" class="personas-side-chat__empty">
+          {{ t('common.inProgress') }}
+        </p>
+        <p v-else-if="feedEmpty" class="personas-side-chat__empty">
           {{ t('personas.sideChat.empty') }}
         </p>
 
@@ -101,9 +104,11 @@
                 {{ msg.personaRole }}
               </span>
             </header>
-            <p class="personas-side-chat__content">
-              {{ msg.content }}<span v-if="msg.streaming">{{ t('personas.discussion.streaming') }}</span>
-            </p>
+            <MessageTextPart
+              class="personas-side-chat__content"
+              :content="msg.content"
+              :streaming="!!msg.streaming"
+            />
           </article>
         </template>
       </div>
@@ -162,6 +167,7 @@ import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
 import PersonasOpinionCard from '@components/personas/PersonasOpinionCard.vue';
 import PersonasPicker from '@components/personas/PersonasPicker.vue';
 import PersonasConfidentialityHint from '@components/personas/PersonasConfidentialityHint.vue';
+import MessageTextPart from '@components/chat/MessageTextPart.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import { useProject } from '@composables/useProject';
@@ -196,7 +202,7 @@ const {
 } = usePersonas();
 const { getPluginDataDir, isPersonasPluginActive, isProjetPluginActive } = usePlugins();
 const { activeDataDir } = useProject();
-const { consumeInitial, launchToken } = useSideChat();
+const { consumeInitial, peekInitial, launchToken } = useSideChat();
 
 const mode = ref<'avis' | 'discussion'>('avis');
 const selectedPersonaIds = ref<string[]>([]);
@@ -214,6 +220,23 @@ const pluginDataDir = ref<string | null>(null);
 const scrollRef = ref<HTMLElement | null>(null);
 const sendGeneration = ref(0);
 const pendingInit = ref(false);
+const conversationContext = ref('');
+const pendingAutoAsk = ref(false);
+const deferredPersonaIds = ref<string[]>([]);
+
+type SideChatInitialPayload = ReturnType<typeof peekInitial>;
+
+function hasInitialPayload(initial: SideChatInitialPayload): boolean {
+  return (
+    initial.mode != null
+    || initial.personaIds.length > 0
+    || initial.draft.length > 0
+    || initial.discussionSeed != null
+    || initial.conversationContext.length > 0
+    || initial.autoAsk
+    || initial.resume != null
+  );
+}
 
 const selectedPersonas = computed(() =>
   selectedPersonaIds.value
@@ -306,24 +329,22 @@ async function ensureDataDir(): Promise<string | null> {
   }
 }
 
-async function onSend(): Promise<void> {
-  const text = draft.value.trim();
-  if (!text || selectedPersonaIds.value.length === 0 || busy.value) return;
+async function sendMessage(text: string): Promise<boolean> {
+  if (!text || selectedPersonaIds.value.length === 0 || busy.value) return false;
 
   busy.value = true;
   const gen = ++sendGeneration.value;
-  const savedDraft = text;
-  draft.value = '';
 
   const dir = await ensureDataDir();
   if (!dir) {
-    draft.value = savedDraft;
     busy.value = false;
     Notify.create({ message: t('personas.errors.unavailable'), color: 'negative' });
-    return;
+    return false;
   }
 
-  if (gen !== sendGeneration.value) return;
+  if (gen !== sendGeneration.value) return false;
+
+  const context = conversationContext.value.trim() || undefined;
 
   try {
     if (mode.value === 'avis') {
@@ -331,7 +352,7 @@ async function onSend(): Promise<void> {
         dir,
         selectedPersonaIds.value,
         text,
-        undefined,
+        context,
         activeDataDir.value,
         includeMemory.value,
       );
@@ -354,6 +375,7 @@ async function onSend(): Promise<void> {
         },
         activeDataDir.value,
         includeMemory.value,
+        context,
       );
       discussionId.value = result.discussionId;
       discussionMessages.value = result.messages;
@@ -367,9 +389,9 @@ async function onSend(): Promise<void> {
         );
       }
     }
+    return true;
   } catch {
-    if (gen !== sendGeneration.value) return;
-    draft.value = savedDraft;
+    if (gen !== sendGeneration.value) return false;
     Notify.create({
       message:
         mode.value === 'avis'
@@ -377,11 +399,60 @@ async function onSend(): Promise<void> {
           : t('personas.errors.discussFailed'),
       color: 'negative',
     });
+    return false;
   } finally {
     if (gen === sendGeneration.value) {
       busy.value = false;
     }
   }
+}
+
+async function onSend(): Promise<void> {
+  const text = draft.value.trim();
+  if (!text || selectedPersonaIds.value.length === 0 || busy.value) return;
+
+  const savedDraft = text;
+  draft.value = '';
+  const ok = await sendMessage(savedDraft);
+  if (!ok) {
+    draft.value = savedDraft;
+  }
+}
+
+async function maybeAutoAsk(): Promise<void> {
+  if (!pendingAutoAsk.value || busy.value) return;
+  if (mode.value !== 'avis' && mode.value !== 'discussion') {
+    pendingAutoAsk.value = false;
+    deferredPersonaIds.value = [];
+    return;
+  }
+
+  if (selectedPersonaIds.value.length === 0) {
+    if (deferredPersonaIds.value.length > 0) {
+      await ensurePersonasReady();
+      selectedPersonaIds.value = filterKnownPersonaIds(deferredPersonaIds.value);
+    }
+  }
+
+  if (selectedPersonaIds.value.length === 0) {
+    return;
+  }
+
+  pendingAutoAsk.value = false;
+  deferredPersonaIds.value = [];
+  const defaultQuestion = mode.value === 'discussion'
+    ? t('personas.sideChat.defaultDiscussionQuestion')
+    : t('personas.sideChat.defaultOpinionQuestion');
+  const question = draft.value.trim() || defaultQuestion;
+  draft.value = '';
+  await sendMessage(question);
+}
+
+async function ensurePersonasReady(): Promise<void> {
+  const dir = await ensureDataDir();
+  if (!dir) return;
+  if (!loading.value && selectablePersonas.value.length > 0) return;
+  await refresh(dir);
 }
 
 function filterKnownPersonaIds(ids: string[]): string[] {
@@ -393,27 +464,12 @@ function resetFeedState(): void {
   discussionMessages.value = [];
   discussionId.value = null;
   draft.value = '';
+  conversationContext.value = '';
+  pendingAutoAsk.value = false;
+  deferredPersonaIds.value = [];
 }
 
-function applySideChatInitial(): void {
-  if (busy.value) {
-    pendingInit.value = true;
-    return;
-  }
-  pendingInit.value = false;
-
-  const initial = consumeInitial();
-  const hasPayload =
-    initial.mode != null
-    || initial.personaIds.length > 0
-    || initial.draft.length > 0
-    || initial.discussionSeed != null
-    || initial.resume != null;
-  if (!hasPayload) return;
-
-  sendGeneration.value += 1;
-  resetFeedState();
-
+function applyInitialPayload(initial: SideChatInitialPayload): void {
   if (initial.resume) {
     const knownIds = filterKnownPersonaIds(initial.resume.personaIds);
     if (knownIds.length < initial.resume.personaIds.length) {
@@ -436,7 +492,7 @@ function applySideChatInitial(): void {
   if (initial.mode === 'avis' || initial.mode === 'discussion') {
     mode.value = initial.mode;
   }
-  selectedPersonaIds.value = filterKnownPersonaIds(initial.personaIds);
+  conversationContext.value = initial.conversationContext;
   if (initial.draft) {
     draft.value = initial.draft;
   }
@@ -453,15 +509,49 @@ function applySideChatInitial(): void {
     discussionMessages.value = [];
     discussionId.value = null;
   }
+
+  const knownIds = filterKnownPersonaIds(initial.personaIds);
+  selectedPersonaIds.value = knownIds;
+  if (initial.autoAsk) {
+    pendingAutoAsk.value = true;
+    deferredPersonaIds.value = knownIds.length > 0 ? [] : [...initial.personaIds];
+  }
+}
+
+function applySideChatInitial(): void {
+  if (busy.value) {
+    pendingInit.value = true;
+    return;
+  }
+  pendingInit.value = false;
+
+  const peeked = peekInitial();
+  if (!hasInitialPayload(peeked)) return;
+
+  sendGeneration.value += 1;
+  busy.value = false;
+  resetFeedState();
+
+  const initial = consumeInitial();
+  applyInitialPayload(initial);
+  void maybeAutoAsk();
 }
 
 watch(launchToken, () => {
   applySideChatInitial();
 });
 
+watch([loading, selectablePersonas], () => {
+  if (pendingAutoAsk.value && !busy.value) {
+    void maybeAutoAsk();
+  }
+});
+
 watch(busy, (isBusy) => {
   if (!isBusy && pendingInit.value) {
     applySideChatInitial();
+  } else if (!isBusy && pendingAutoAsk.value) {
+    void maybeAutoAsk();
   }
 });
 
@@ -477,6 +567,9 @@ onMounted(async () => {
   const dir = await ensureDataDir();
   if (dir) await refresh(dir);
   applySideChatInitial();
+  if (pendingAutoAsk.value) {
+    void maybeAutoAsk();
+  }
 });
 
 defineExpose({ close: () => emit('close') });
@@ -647,11 +740,29 @@ defineExpose({ close: () => emit('close') });
 }
 
 .personas-side-chat__content {
-  margin: 0;
   font-size: var(--wp-fs-sm);
   line-height: var(--wp-lh-normal);
   color: var(--wp-text);
-  white-space: pre-wrap;
+
+  :deep(.chat-message__markdown) {
+    font-family: inherit;
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+
+  :deep(p) {
+    margin: 0 0 0.5rem;
+  }
+
+  :deep(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    margin: 0.25rem 0 0.5rem 1.1rem;
+  }
 }
 
 .personas-side-chat__composer {

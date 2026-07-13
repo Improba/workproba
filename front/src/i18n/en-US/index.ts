@@ -258,6 +258,9 @@ export default {
       chartPrompt: 'Extract Q2 revenue amounts and make me a chart',
     },
     roleYou: 'You',
+    compactionSummary: 'Conversation summary',
+    compactionContentPrefix: 'Summary of previous exchanges:\n\n',
+    toolResultTruncated: '(result truncated)',
     page: {
       metaSep: '·',
       generating: 'Generating…',
@@ -735,6 +738,8 @@ export default {
         discussion: 'Write to the persona…',
       },
       empty: 'No exchanges yet.',
+      defaultOpinionQuestion: 'What is your opinion on our current conversation?',
+      defaultDiscussionQuestion: 'What do you think about our current conversation?',
       unavailable: 'Personas are not available.',
     },
     errors: {

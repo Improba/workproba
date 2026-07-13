@@ -1,4 +1,4 @@
-export type ChatMessageRole = 'user' | 'assistant';
+export type ChatMessageRole = 'user' | 'assistant' | 'system';
 
 export type ToolCallStatus =
   | 'pending'
@@ -168,6 +168,8 @@ export interface ChatMessage {
   id: string;
   parentId?: string | null;
   role: ChatMessageRole;
+  /** Nature spéciale du message (ex. résumé de compaction). */
+  messageKind?: 'compaction';
   content: string;
   toolCalls?: ChatToolCall[];
   /** Segments ordonnés (texte + appels d'outil) pour le rendu interleaved. */
@@ -296,6 +298,8 @@ export interface ChatCompactionInfo {
   keptCount: number;
   summaryTokens: number | null;
   truncated: boolean;
+  summary?: string | null;
+  summaryFailed?: boolean;
 }
 
 export interface ChatStreamDoneData {
@@ -310,6 +314,8 @@ export interface ChatStreamCompactionData {
   kept_count: number;
   summary_tokens?: number | null;
   truncated?: boolean;
+  summary?: string | null;
+  summary_failed?: boolean;
 }
 
 export interface ChatStreamPlanProposedData {

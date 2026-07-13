@@ -303,8 +303,8 @@ defineExpose({
   }
 
   &--active {
-    color: var(--wp-accent);
-    border-bottom-color: var(--wp-accent);
+    color: var(--wp-selection);
+    border-bottom-color: var(--wp-selection);
     font-weight: 600;
   }
 }

@@ -1,200 +1,226 @@
-# Guide Anubis UI
+# Guide Anubis UI — couleurs et thèmes Workproba
 
-Anubis UI est le framework CSS personnalisé utilisé dans ce projet. Il fournit un système de couleurs cohérent, des classes utilitaires et un support pour le mode clair/sombre.
+Anubis UI est le framework CSS du front Workproba. Il fournit les variables `--primary`, `--accent`, `--neutral-*`, les classes utilitaires (`bg-primary`, `text-accent`…) et le support clair / sombre via `body.body--light` et `body.body--dark`.
 
-## Vue d'ensemble
+## Architecture des couleurs
 
-Anubis UI est intégré via le package npm `anubis-ui` et configuré dans `front/anubis.config.json`. Les styles sont définis dans `front/lib-improba/css/_colors.scss` et générés automatiquement lors du build.
+Trois couches, une seule source de vérité pour la palette :
 
-## Système de couleurs
-
-### Couleurs principales
-
-Anubis UI définit plusieurs palettes de couleurs avec des variantes :
-
-- **Primary** : Couleur principale de l'application (bleu par défaut)
-- **Secondary** : Couleur secondaire (bleu-gris par défaut)
-- **Neutral** : Couleurs neutres pour les arrière-plans et bordures
-- **Success** : Vert pour les actions réussies
-- **Danger** : Rouge pour les erreurs et actions destructives
-- **Warning** : Ambre/Orange pour les avertissements
-
-### Variantes de couleurs
-
-Chaque couleur a plusieurs variantes :
-
-- `-lowest` : La plus claire
-- `-lower` : Très claire
-- `-low` : Claire
-- `-medium` : Couleur de base (sans suffixe)
-- `-high` : Foncée
-- `-higher` : Très foncée
-- `-highest` : La plus foncée
-
-### Support light/dark mode
-
-Les couleurs Anubis s'adaptent automatiquement au mode clair/sombre via les variables CSS.
-
-## Utilisation
-
-### Dans les templates Vue
-
-**✅ À FAIRE** : Utiliser les classes Anubis
-
-```vue
-<template>
-  <div class="text-primary bg-neutral-lower">
-    <q-btn class="bg-primary text-white">Action</q-btn>
-    <p class="text-warning">Attention</p>
-  </div>
-</template>
+```
+anubis.config.json          ← éditer les couleurs ici
+        │
+        ▼  (plugin Vite au démarrage / build)
+anubis/_tokens.scss         ← tokens SCSS ($primary-dark, …)
+_anubis.scss                ← variables CSS + classes utilitaires générées
+        │
+        ▼
+workproba.scss              ← tokens shell --wp-* et sync Quasar --q-*
+        │
+        ▼
+Composants .vue             ← var(--wp-*) dans le shell, var(--primary) / classes Anubis ailleurs
 ```
 
-**❌ À ÉVITER** : Utiliser les couleurs Quasar par défaut
+| Fichier | Rôle | Éditable à la main ? |
+|---------|------|----------------------|
+| `front/anubis.config.json` | Palette complète `{ light, dark }` par token | **Oui** — c'est la source |
+| `front/src/css/anubis/_tokens.scss` | Généré depuis la config | Non |
+| `front/src/css/_anubis.scss` | Variables CSS + classes détectées dans le code | Non |
+| `front/src/css/workproba.scss` | Tokens `--wp-*`, ombres, typo, `--q-*` Quasar | Oui (shell uniquement) |
+| `front/lib-improba/css/_colors.scss` | Ancien système Mastok (bleu générique) | **Non utilisé** au build |
 
-```vue
-<template>
-  <!-- Ne pas utiliser -->
-  <q-btn color="primary">Action</q-btn>
-  <p class="text-grey-7">Texte</p>
-</template>
+Ordre de chargement CSS (`quasar.config.js`) :
+
+```js
+css: ['app.scss', '_anubis.scss', 'workproba.scss'],
 ```
 
-### Dans les styles SCSS/CSS
+`workproba.scss` est chargé en dernier : il ne redéfinit plus la palette Anubis, seulement les alias sémantiques du shell.
 
-**✅ À FAIRE** : Utiliser les variables CSS Anubis
+## Palettes Workproba
+
+### Mode clair — « Papier »
+
+| Rôle | Token | Valeur |
+|------|-------|--------|
+| Branding / sélections | `primary` | `#203d52` (bleu canard) |
+| Action / focus / envoi | `accent` | `#2bb5c2` (cyan) |
+| Fond application | `neutral-lower` | `#faf8f5` |
+| Surface carte | `neutral-lowest` | `#fffcf8` |
+| Texte principal | `text` | `#1e2a32` |
+| Succès / danger / warning | `success` / `danger` / `warning` | `#2e9e74` / `#d64545` / `#e0a93a` |
+
+### Mode sombre — « Charbon chaud »
+
+| Rôle | Token | Valeur |
+|------|-------|--------|
+| Accent principal (or) | `primary`, `accent` | `#e0a93a` / `#ffcc49` (high) |
+| Fond | `neutral-lowest` | `#161514` |
+| Surfaces | `neutral-lower` → `neutral-low` | `#1f1e1c` → `#2a2825` |
+| Texte | `text` | `#eceae6` |
+| Liens | `text-link` | `#ffcc49` |
+| Succès | `success` | `#4ade80` |
+
+Le cyan (`--wp-cyan`) reste disponible comme accent de marque stable (`:root`) mais n'est plus l'accent principal en sombre.
+
+## Modifier une couleur
+
+### 1. Palette Anubis (cas général)
+
+Éditer `front/anubis.config.json`, section `"colors"` :
+
+```json
+"primary": { "light": "#203d52", "dark": "#e0a93a" },
+"neutral-lowest": { "light": "#ffffff", "dark": "#161514" }
+```
+
+Chaque entrée doit avoir `light` et `dark`. Si la section `"colors"` est présente dans `anubis.config.json`, elle **remplace entièrement** la palette par défaut du package `anubis-ui` (pas de merge partiel).
+
+### 2. Régénérer les fichiers Anubis
+
+Au prochain `yarn dev` / `yarn build`, le plugin Anubis régénère `_tokens.scss` et `_anubis.scss`.
+
+Régénération manuelle sans lancer Vite :
+
+```bash
+cd front
+node -e "require('anubis-ui/dist/tools/main').init()"
+```
+
+### 3. Tokens shell Workproba (`--wp-*`)
+
+Pour des besoins spécifiques au chrome (surface-3, bordures fines, violet personas, ombres sombres), éditer `front/src/css/workproba.scss`.
+
+Exemple : le shell mappe les surfaces sur Anubis en sombre :
 
 ```scss
-.my-component {
-  color: var(--primary);
-  background-color: var(--neutral-lower);
-  border-color: var(--warning);
+body.body--dark {
+  --wp-bg: var(--neutral-lowest);
+  --wp-surface: var(--neutral-lower);
+  --wp-surface-2: var(--neutral-low);
+  --wp-surface-3: #35322e;  /* pas d'équivalent exact dans l'échelle neutral */
+  --wp-accent: var(--accent);
 }
 ```
 
-**❌ À ÉVITER** : Utiliser les variables Quasar
+Ne pas dupliquer ici toute la palette : préférer `var(--primary)` et consorts.
+
+### 4. Composants Quasar (`q-btn`, `q-toggle`)
+
+Quasar utilise `--q-primary`, etc. Ces variables sont synchronisées dans `workproba.scss` à partir des tokens Anubis :
 
 ```scss
-.my-component {
-  // Ne pas utiliser
-  color: var(--q-primary);
-  background-color: var(--q-grey-2);
+body.body--dark {
+  --q-primary: var(--primary);
+  --q-accent: var(--accent);
+  --q-dark-page: var(--neutral-lowest);
 }
 ```
 
-### Classes utilitaires disponibles
+## Bascule clair / sombre
 
-#### Couleurs de texte
+Le toggle appelle `quasar.dark.set(isDark)`, ce qui pose `body.body--light` ou `body.body--dark` sur `<body>`. Anubis expose alors les bonnes valeurs pour chaque variable CSS.
 
-- `text-primary`, `text-primary-low`, `text-primary-high`, etc.
-- `text-secondary`, `text-secondary-low`, etc.
-- `text-neutral`, `text-neutral-low`, etc.
-- `text-success`, `text-danger`, `text-warning`
-- `text-text`, `text-text-invert`, `text-text-link`
+Fichiers concernés :
 
-#### Couleurs de fond
+- `front/lib-improba/composables/use-theme.ts`
+- `front/lib-improba/components/layouts/theme-toggler/ThemeToggler.vue`
+- `front/src/components/workproba/WorkprobaTitleBar.vue` (toggle dans la titlebar)
 
-- `bg-primary`, `bg-primary-lowest`, `bg-primary-lower`, etc.
-- `bg-secondary`, `bg-neutral-lower`, etc.
-- `bg-success`, `bg-danger`, `bg-warning`
+Persistance utilisateur : prévue côté API (`preferDarkTheme`), pas encore active ; le défaut vient de `DEFAULT_COLOR_MODE` (`.env`).
 
-#### Bordures
+## Utilisation dans le code
 
-- `border-primary`, `border-primary-xs`, `border-primary-sm`, etc.
-- `border-neutral`, `border-success`, etc.
+### Shell Workproba (sidebar, titlebar, chat, fichiers)
 
-#### Ombres
-
-- `shadow-primary`, `shadow-primary-xs`, `shadow-primary-sm`, etc.
-
-## Configuration
-
-### Fichier de configuration
-
-Le fichier `front/anubis.config.json` définit :
-
-- Les fichiers à scanner pour la génération des classes
-- Les utilitaires à générer (bg, text, border, shadow, etc.)
-- Les variations disponibles (xs, sm, md, lg, xl, etc.)
-
-### Personnalisation des couleurs
-
-Les couleurs de base sont définies dans `front/lib-improba/css/_colors.scss` :
+Utiliser les tokens `--wp-*` :
 
 ```scss
-$blue-500: #0f84cb;
-$green-500: #00c99e;
-// etc.
+.wp-panel {
+  background: var(--wp-surface);
+  border: 1px solid var(--wp-border);
+  color: var(--wp-text);
+}
+
+.wp-tab--active {
+  color: var(--wp-accent);
+  border-bottom-color: var(--wp-accent);
+}
 ```
 
-Pour modifier les couleurs, éditez ce fichier et régénérez les classes via le build.
+### Chat, legacy Mastok, classes utilitaires
 
-## Exemples pratiques
-
-### Bouton avec style Anubis
+Variables Anubis ou classes générées :
 
 ```vue
 <template>
-  <q-btn 
-    class="bg-primary text-white"
-    label="Valider"
-  />
+  <div class="bg-neutral-high text-neutral-lowest">Toast</div>
+  <Lucide name="rotate-ccw" color="primary" />
 </template>
 ```
 
-### Carte avec bordures et ombre
-
-```vue
-<template>
-  <div class="bg-neutral-lower border-neutral-sm shadow-neutral-md rounded-lg p-4">
-    Contenu de la carte
-  </div>
-</template>
+```scss
+.bubble-user {
+  background: var(--primary);
+}
 ```
 
-### Message d'alerte
+`Lucide` (Mastok) lit `var(--${color})` → `color="primary"` utilise `--primary`.
 
-```vue
-<template>
-  <div class="bg-warning-lower border-warning text-warning-high p-4 rounded">
-    <p class="text-warning">Attention : action irréversible</p>
-  </div>
-</template>
-```
+### À éviter
 
-### Tableau avec lignes alternées
+- Couleurs hex en dur dans les `.vue` du shell (`#161514`, `#e0a93a`)
+- Modifier `anubis/_tokens.scss` ou `_anubis.scss` à la main (écrasés au build)
+- Compter sur `lib-improba/css/_colors.scss` (non importé)
+- Mélanger `text-grey-7` Quasar avec la palette Anubis
 
-```vue
-<template>
-  <div class="bg-neutral-lower">
-    <div 
-      v-for="item in items" 
-      :key="item.id"
-      class="border-neutral-xs p-2"
-    >
-      {{ item.name }}
-    </div>
-  </div>
-</template>
-```
+## Échelle des variantes
 
-## Migration depuis Quasar
+Chaque couleur dispose de 7 niveaux :
 
-Si vous avez du code existant utilisant les couleurs Quasar :
+| Suffixe | Usage typique |
+|---------|---------------|
+| `-lowest` | Fond le plus profond (sombre) ou le plus clair (clair) |
+| `-lower` | Surface secondaire |
+| `-low` | Bordures légères, hover |
+| *(base)* / `-medium` | Couleur principale |
+| `-high` | Accent fort, focus ring |
+| `-higher` | Texte secondaire |
+| `-highest` | Texte principal contrasté |
 
-1. Remplacer `color="primary"` par `class="bg-primary text-white"`
-2. Remplacer `text-grey-7` par `text-neutral-high`
-3. Remplacer `var(--q-primary)` par `var(--primary)` dans les styles
-4. Utiliser `bg-neutral-lower` au lieu de `bg-grey-1`
+En sombre charbon, `neutral-lowest` = fond `#161514`, `neutral-highest` = texte `#eceae6`.
 
-## Référence complète
+## Configuration Anubis (hors couleurs)
 
-Pour voir tous les composants et styles disponibles, consultez la page de démonstration Anubis UI dans l'application (route `demo-anubis`).
+`front/anubis.config.json` définit aussi :
 
-## Bonnes pratiques
+- **`files.targets`** : fichiers scannés pour détecter les classes (`**/*.vue`, `**/*use-mastok.ts`)
+- **`utilities`** : préfixes générés (`bg`, `text`, `border`, `shadow`, `rounded`, `size`, `weight`…)
 
-1. **Toujours utiliser Anubis** : Ne pas mélanger avec les couleurs Quasar
-2. **Cohérence** : Utiliser les mêmes variantes de couleurs dans toute l'application
-3. **Accessibilité** : Vérifier les contrastes, surtout en mode sombre
-4. **Variables CSS** : Préférer les variables dans les styles plutôt que les valeurs hexadécimales
+Les classes doivent être **écrites explicitement** dans le code (pas de `` `bg-${color}` `` dynamique). Utiliser `force` dans la config si une classe doit exister sans être détectée.
 
+## Fichiers générés par Anubis
+
+| Fichier | Contenu |
+|---------|---------|
+| `src/css/_anubis.scss` | `@include setRootColors(...)` + classes utilitaires |
+| `src/css/anubis/_mixins.scss` | Mixin `setRootColors` |
+| `src/css/anubis/_tokens.scss` | `$primary`, `$primary-dark`, … |
+| `src/css/anubis/_overrides.scss` | Overrides Quasar SCSS depuis utilitaires (souvent vide) |
+
+## Références
+
+- [design.md](./design.md) — tokens `--wp-*`, typo, densité, focus
+- [design/design-system.md](./design/design-system.md) — maquettes chrome et parcours UX
+- Page démo in-app : route `demo-anubis`
+- Package : `anubis-ui@^1.4.4` — README dans `node_modules/anubis-ui`
+
+## Résumé
+
+| Besoin | Où agir |
+|--------|---------|
+| Changer primary, accent, neutrals, sémantique | `anubis.config.json` → régénérer |
+| Surface shell, bordure fine, ombre sombre | `workproba.scss` (`--wp-*`) |
+| Boutons Quasar | `workproba.scss` (`--q-*`) ou tokens Anubis |
+| Classe utilitaire nouvelle | L'écrire dans un `.vue`, rebuild Anubis |
+| CSS custom composant shell | `var(--wp-*)` |
+| CSS custom chat / Mastok | `var(--primary)` ou classes `bg-*` / `text-*` |

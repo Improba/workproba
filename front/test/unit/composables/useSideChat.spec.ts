@@ -54,6 +54,8 @@ describe('useSideChat', () => {
       mode: 'discussion',
       draft: '',
       discussionSeed: null,
+      conversationContext: '',
+      autoAsk: false,
       resume: null,
     });
     expect(consumeInitial()).toEqual({
@@ -61,6 +63,8 @@ describe('useSideChat', () => {
       mode: null,
       draft: '',
       discussionSeed: null,
+      conversationContext: '',
+      autoAsk: false,
       resume: null,
     });
   });
@@ -101,6 +105,42 @@ describe('useSideChat', () => {
     expect(sideChatOpen.value).toBe(false);
   });
 
+  it('conserve conversationContext et autoAsk dans consumeInitial', () => {
+    const { openSideChat, consumeInitial } = useSideChat();
+
+    openSideChat('workproba.personas', {
+      mode: 'avis',
+      personaIds: ['p1'],
+      conversationContext: 'Utilisateur : Bonjour',
+      autoAsk: true,
+    });
+
+    expect(consumeInitial()).toEqual({
+      personaIds: ['p1'],
+      mode: 'avis',
+      draft: '',
+      discussionSeed: null,
+      conversationContext: 'Utilisateur : Bonjour',
+      autoAsk: true,
+      resume: null,
+    });
+  });
+
+  it('peekInitial lit sans consommer', () => {
+    const { openSideChat, peekInitial, consumeInitial } = useSideChat();
+
+    openSideChat('workproba.personas', {
+      mode: 'avis',
+      personaIds: ['p1'],
+      autoAsk: true,
+    });
+
+    expect(peekInitial().personaIds).toEqual(['p1']);
+    expect(peekInitial().autoAsk).toBe(true);
+    consumeInitial();
+    expect(peekInitial().personaIds).toEqual([]);
+  });
+
   it('openSideChat sans mode conserve les valeurs initiales', () => {
     const { openSideChat, consumeInitial } = useSideChat();
     openSideChat('workproba.personas', { mode: 'discussion', personaIds: ['p1'] });
@@ -110,6 +150,8 @@ describe('useSideChat', () => {
       mode: 'discussion',
       draft: '',
       discussionSeed: null,
+      conversationContext: '',
+      autoAsk: false,
       resume: null,
     });
   });

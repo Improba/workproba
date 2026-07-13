@@ -28,6 +28,12 @@ export interface AgentTurnPayload {
     role: 'user' | 'assistant' | 'system' | 'tool';
     content: string | null;
     thinking?: string | null;
+    tool_calls?: Array<{
+      id: string;
+      name: string;
+      arguments: Record<string, unknown>;
+    }>;
+    tool_call_id?: string;
   }>;
   message: string;
   llm_provider_config?: LlmConfigPayload | null;
@@ -133,19 +139,62 @@ function toSummaryMessages(messages: ChatMessage[]): Array<{
     });
 }
 
-function toPythonHistory(messages: ChatMessage[]): AgentTurnPayload['history'] {
-  return messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
-    .map((m) => {
-      const entry: AgentTurnPayload['history'][number] = {
-        role: m.role,
-        content: m.content || null,
-      };
-      if (m.role === 'assistant' && m.thinking) {
-        entry.thinking = m.thinking;
-      }
-      return entry;
-    });
+export const MAX_TOOL_RESULT_HISTORY_CHARS = 2000;
+
+export function truncateToolResult(content: string): string {
+  if (content.length <= MAX_TOOL_RESULT_HISTORY_CHARS) return content;
+  return `${content.slice(0, MAX_TOOL_RESULT_HISTORY_CHARS)}…`;
+}
+
+function toolResultToString(result: unknown): string {
+  if (result == null) return '';
+  if (typeof result === 'string') return result;
+  try {
+    return JSON.stringify(result);
+  } catch {
+    return String(result);
+  }
+}
+
+export function toPythonHistory(messages: ChatMessage[]): AgentTurnPayload['history'] {
+  const history: AgentTurnPayload['history'] = [];
+
+  for (const m of messages) {
+    if (m.role === 'user') {
+      history.push({ role: 'user', content: m.content || null });
+      continue;
+    }
+    if (m.role === 'system') {
+      history.push({ role: 'system', content: m.content || null });
+      continue;
+    }
+    if (m.role !== 'assistant') continue;
+
+    const entry: AgentTurnPayload['history'][number] = {
+      role: 'assistant',
+      content: m.content || null,
+    };
+    if (m.thinking) entry.thinking = m.thinking;
+    if (m.toolCalls?.length) {
+      entry.tool_calls = m.toolCalls.map((tc) => ({
+        id: tc.id,
+        name: tc.name,
+        arguments: tc.args ?? {},
+      }));
+    }
+    history.push(entry);
+
+    for (const tc of m.toolCalls ?? []) {
+      if (tc.result === undefined) continue;
+      history.push({
+        role: 'tool',
+        content: truncateToolResult(toolResultToString(tc.result)),
+        tool_call_id: tc.id,
+      });
+    }
+  }
+
+  return history;
 }
 
 export function buildAgentTurnPayload(
@@ -1059,6 +1108,7 @@ export interface StartPersonasMeetingPayload {
   topic: string;
   rounds?: number;
   meetingId?: string | null;
+  context?: string;
   workspaceDataDir?: string | null;
   includeMemory?: boolean;
   providerSet?: Record<string, unknown> | null;
@@ -1079,6 +1129,7 @@ export async function startPersonasMeeting(
       topic: payload.topic,
       rounds: payload.rounds ?? 3,
       meeting_id: payload.meetingId ?? undefined,
+      context: payload.context ?? '',
       workspace_data_dir: payload.workspaceDataDir ?? undefined,
       include_memory: payload.includeMemory ?? false,
       provider_set: payload.providerSet ?? null,
@@ -1103,6 +1154,7 @@ export interface DiscussWithPersonasPayload {
     persona_name?: string;
   }>;
   discussionId?: string | null;
+  context?: string;
   workspaceDataDir?: string | null;
   includeMemory?: boolean;
   providerSet?: Record<string, unknown> | null;
@@ -1123,6 +1175,7 @@ export async function discussWithPersonas(
       message: payload.message,
       history: payload.history ?? [],
       discussion_id: payload.discussionId ?? null,
+      context: payload.context ?? '',
       workspace_data_dir: payload.workspaceDataDir ?? undefined,
       include_memory: payload.includeMemory ?? false,
       provider_set: payload.providerSet ?? null,

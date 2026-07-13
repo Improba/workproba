@@ -437,8 +437,54 @@ async def test_stream_discuss_with_include_memory_uses_rag(plugin_dir: Path) -> 
             include_memory=True,
         )
     ]
-    assert captured_queries == ["Question mémoire ?"]
+    assert captured_queries[0].startswith("Question mémoire ?")
     assert any(event["type"] == "discuss_message" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_stream_discuss_injects_main_conversation_context(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured_system: list[str] = []
+    captured_user: list[str] = []
+
+    async def fake_run(
+        *,
+        settings: Any,
+        provider_set: Any,
+        system_prompt: str,
+        user_prompt: str,
+        locale: str,
+    ) -> str:
+        _ = (settings, provider_set, locale)
+        captured_system.append(system_prompt)
+        captured_user.append(user_prompt)
+        return "Réponse simulée."
+
+    monkeypatch.setattr(orchestrator, "_run_persona_prompt", fake_run)
+
+    events = [
+        event
+        async for event in orchestrator.stream_discuss(
+            plugin_data_dir=plugin_dir,
+            persona_ids=["04"],
+            message="Que penses-tu ?",
+            history=[],
+            discussion_id=None,
+            context="Utilisateur : Je fais mon CV\nAssistant : D'accord",
+            settings=object(),
+            provider_set=None,
+            locale="fr",
+        )
+    ]
+    assert any(event["type"] == "done" for event in events)
+    assert captured_system
+    assert captured_user
+    assert "ingénieur" in captured_system[0].lower()
+    assert "<untrusted>" in captured_user[0]
+    assert "Je fais mon CV" in captured_user[0]
+    assert "Priorité" in captured_user[0]
 
 
 def test_list_and_get_meetings(plugin_dir: Path) -> None:
