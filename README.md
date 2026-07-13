@@ -12,7 +12,7 @@ L'IA se fragmente : un copilote par logiciel, des contextes qui ne se recoupent 
 |---|---|
 | ![Workproba en mode clair, chat, personas et workspace](./docs/images/workproba-light-mode.jpg) | ![Workproba en mode sombre, chat, fichiers et workspace](./docs/images/workproba-dark-mode.jpg) |
 
-## Fonctionnalités (V2)
+## Fonctionnalités
 
 - **Chat agent** : streaming SSE, modèle et raisonnement par conversation, pièces jointes, menu compositeur « + »
 - **Mémoire scopée** : souvenirs utilisateur globaux + souvenirs projet, RAG local, outil agent `remember`
@@ -29,7 +29,7 @@ Voir [LICENSING.md](./LICENSING.md) pour le guide complet, la FAQ et les contact
 
 ## Première installation
 
-Téléchargez l'installateur pour votre système (Windows, macOS ou Linux) sur la page **Releases** du dépôt. En V2, les installateurs ne sont pas encore signés numériquement : Windows et macOS affichent un avertissement au premier lancement. C'est normal.
+Téléchargez l'installateur pour votre système (Windows, macOS ou Linux) sur la page **Releases** du dépôt. Les installateurs ne sont pas encore signés numériquement : Windows et macOS affichent un avertissement au premier lancement. C'est normal.
 
 Guide pas à pas (SmartScreen, Gatekeeper, `.deb`, AppImage, désinstallation) : **[docs/installateurs.md](./docs/installateurs.md)**.
 
@@ -40,7 +40,7 @@ Guide pas à pas (SmartScreen, Gatekeeper, `.deb`, AppImage, désinstallation) :
 - [docs/desktop.md](./docs/desktop.md) : architecture bureau
 - [docs/architecture.md](./docs/architecture.md) : vue technique
 - [docs/memory.md](./docs/memory.md) : mémoire user/projet et RAG
-- [docs/plugins.md](./docs/plugins.md) : plugins V2 (personas, projet, …)
+- [docs/plugins.md](./docs/plugins.md) : plugins (personas, projet, …)
 - [docs/workspace-storage.md](./docs/workspace-storage.md) : stockage par workspace
 - [docs/README.md](./docs/README.md) : index complet de la documentation
 - [desktop/README.md](./desktop/README.md) : développement Tauri
