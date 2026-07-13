@@ -1,16 +1,16 @@
 # Workproba
 
-Notre conviction : l'IA ne devrait pas être un bouton de plus dans Word, Excel, Gmail ou un CRM. Elle devrait vivre comme une **interface personnelle** (ou professionnelle, mais centrée sur une personne) : une application bureau qui vous accompagne, connaît votre contexte, retient ce qui compte pour vous, et se **connecte** à vos dossiers et outils sans être enfermée dans l'un d'eux.
+L'IA est partout aujourd'hui : un copilote dans Word, un assistant dans Gmail, une fonctionnalité de plus dans chaque logiciel. Nous pensons qu'elle devrait surtout être **votre interface de travail** : une application bureau qui vous connaît, retient ce qui compte pour vous, et agit sur **vos** fichiers et dossiers, sans être enfermée dans un seul outil.
 
-**Workproba** porte cette ambition. Assistant de travail **local-first** sur **macOS, Linux et Windows** (Tauri) : vous ouvrez un dossier projet, un agent manipule Word, Excel et PDF sur place, avec mémoire locale et sandbox technique sous le capot. Pensé pour des utilisateurs non-codeurs, dans le contexte Improba, sur le modèle d'un Claude Cowork maison.
+**Workproba** est cet assistant. Vous ouvrez un dossier sur votre ordinateur (un projet, un dossier client, vos documents) et vous travaillez avec lui comme avec un collègue : rédiger, organiser, analyser, modifier Word, Excel ou PDF directement sur place. Disponible sur **macOS, Linux et Windows**. Vos données restent chez vous.
 
-*Local-first desktop AI cowork assistant. Tauri, RAG, Python sidecar, Vue/Quasar UI.*
+*Assistant de travail IA local. Application bureau, mémoire personnelle, connexion à vos fichiers.*
 
 ## Aperçu
 
 | Mode clair | Mode sombre |
 |---|---|
-| ![Workproba en mode clair — chat, personas et workspace](./docs/images/workproba-light-mode.jpg) | ![Workproba en mode sombre — chat, fichiers et workspace](./docs/images/workproba-dark-mode.jpg) |
+| ![Workproba en mode clair, chat, personas et workspace](./docs/images/workproba-light-mode.jpg) | ![Workproba en mode sombre, chat, fichiers et workspace](./docs/images/workproba-dark-mode.jpg) |
 
 ## Fonctionnalités (V2)
 
