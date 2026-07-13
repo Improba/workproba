@@ -275,6 +275,7 @@ export function applyCompactionToMessages(
   const droppedCount = Number(data.dropped_count ?? 0) || 0;
   const prefix = messages.slice(0, -2);
   const drop = Math.min(droppedCount, prefix.length);
+  const priorCompaction = prefix.find((m) => m.messageKind === 'compaction');
   const kept = prefix.slice(drop);
   const tail = messages.slice(-2);
   const next = [...kept, ...tail];
@@ -289,6 +290,12 @@ export function applyCompactionToMessages(
       messageKind: 'compaction',
       createdAt: new Date().toISOString(),
     });
+  } else if (
+    priorCompaction &&
+    !next.some((message) => message.id === priorCompaction.id)
+  ) {
+    // Fallback serveur sans nouveau résumé : conserver le résumé antérieur en tête.
+    next.unshift(priorCompaction);
   }
 
   messages.splice(0, messages.length, ...next);
