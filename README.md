@@ -1,10 +1,10 @@
 # Workproba
 
-L'IA est partout aujourd'hui : un copilote dans Word, un assistant dans Gmail, une fonctionnalité de plus dans chaque logiciel. Nous pensons qu'elle devrait surtout être **votre interface de travail** : une application bureau qui vous connaît, retient ce qui compte pour vous, et agit sur **vos** fichiers et dossiers, sans être enfermée dans un seul outil.
+L'IA se fragmente : un copilote par logiciel, des contextes qui ne se recoupent pas, des fonctionnalités isolées dans chaque suite. Notre conviction : elle devrait d'abord être **une interface de travail personnelle**, centrée sur la personne, connectée à ses dossiers et outils, plutôt qu'embarquée dans chacun d'eux.
 
-**Workproba** est cet assistant. Vous ouvrez un dossier sur votre ordinateur (un projet, un dossier client, vos documents) et vous travaillez avec lui comme avec un collègue : rédiger, organiser, analyser, modifier Word, Excel ou PDF directement sur place. Disponible sur **macOS, Linux et Windows**. Vos données restent chez vous.
+**Workproba** est une application bureau (**macOS, Linux, Windows**) qui incarne ce principe. Vous ouvrez un dossier projet sur votre poste ; l'assistant travaille directement sur vos fichiers (Word, Excel, PDF), indexe et mémorise le contexte localement, et s'appuie sur le **provider LLM de votre choix** (Ollama, Mistral, OpenAI, etc.). Vos documents et votre mémoire restent sur la machine ; le contexte pertinent transite vers le modèle à chaque échange, selon la configuration retenue.
 
-*Assistant de travail IA local. Application bureau, mémoire personnelle, connexion à vos fichiers.*
+*Application bureau local-first. Fichiers et mémoire locaux, providers LLM configurables.*
 
 ## Aperçu
 
