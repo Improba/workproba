@@ -1,8 +1,16 @@
 # Workproba
 
-**Workproba** est un assistant de travail sur dossier local, type Claude Cowork, pour utilisateurs non-codeurs dans le contexte Improba. Application bureau **macOS, Linux, Windows** (Tauri) : l'utilisateur ouvre un dossier projet, l'Imp manipule Word/Excel/PDF en place, avec mémoire locale et sandbox sous le capot.
+Notre conviction : l'IA ne devrait pas être un bouton de plus dans Word, Excel, Gmail ou un CRM. Elle devrait vivre comme une **interface personnelle** (ou professionnelle, mais centrée sur une personne) : une application bureau qui vous accompagne, connaît votre contexte, retient ce qui compte pour vous, et se **connecte** à vos dossiers et outils sans être enfermée dans l'un d'eux.
 
-*Local-first desktop AI cowork assistant — Tauri, RAG, Python sidecar, Vue/Quasar UI.*
+**Workproba** porte cette ambition. Assistant de travail **local-first** sur **macOS, Linux et Windows** (Tauri) : vous ouvrez un dossier projet, un agent manipule Word, Excel et PDF sur place, avec mémoire locale et sandbox technique sous le capot. Pensé pour des utilisateurs non-codeurs, dans le contexte Improba, sur le modèle d'un Claude Cowork maison.
+
+*Local-first desktop AI cowork assistant. Tauri, RAG, Python sidecar, Vue/Quasar UI.*
+
+## Aperçu
+
+| Mode clair | Mode sombre |
+|---|---|
+| ![Workproba en mode clair — chat, personas et workspace](./docs/images/workproba-light-mode.jpg) | ![Workproba en mode sombre — chat, fichiers et workspace](./docs/images/workproba-dark-mode.jpg) |
 
 ## Fonctionnalités (V2)
 
