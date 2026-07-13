@@ -662,11 +662,14 @@ export default {
     },
     panel: {
       title: 'Personas',
+      chooseTitle: 'Who would you like to consult?',
+      chooseLead: 'Pick someone, then ask your question.',
+      talkToPersona: 'Chat with {name}',
+      askTheirOpinion: 'Their opinion',
+      viewProfile: 'Profile',
+      customizeTitle: 'Customize',
       setsTitle: 'Persona sets',
       personaCount: '{count} persona(s)',
-      personasTitle: 'Active personas',
-      actionsTitle: 'Start',
-      sessionCostTitle: 'Session costs',
       sessionCostSummary: '≈ {calls} recorded AI exchanges',
     },
     confidentiality: {
@@ -738,6 +741,8 @@ export default {
       unavailable: 'Personas are not available right now.',
       askFailed: 'Could not get the opinion. Try again later.',
       discussFailed: 'The discussion failed. Try again later.',
+      meetingFailed: 'The meeting failed. Try again later.',
+      loadFailed: 'Could not load personas. Check your connection.',
     },
     history: {
       title: 'History',

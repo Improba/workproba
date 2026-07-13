@@ -32,7 +32,6 @@ vi.mock('@composables/usePersonasActions', () => ({
     askOpinion: vi.fn(),
     startMeeting: vi.fn(),
     discuss: vi.fn(),
-    viewMeeting: vi.fn(),
     relaunchMeeting: vi.fn(),
     resumeDiscussion: vi.fn(),
   }),

@@ -41,25 +41,38 @@ describe('useSideChat', () => {
   });
 
   it('consumeInitial retourne les valeurs initiales puis les réinitialise', () => {
-    const { openSideChat, consumeInitial } = useSideChat();
+    const { openSideChat, consumeInitial, launchToken } = useSideChat();
 
     openSideChat('workproba.personas', {
       mode: 'discussion',
       personaIds: ['p1', 'p2'],
     });
 
+    expect(launchToken.value).toBe(1);
     expect(consumeInitial()).toEqual({
       personaIds: ['p1', 'p2'],
       mode: 'discussion',
       draft: '',
       discussionSeed: null,
+      resume: null,
     });
     expect(consumeInitial()).toEqual({
       personaIds: [],
       mode: null,
       draft: '',
       discussionSeed: null,
+      resume: null,
     });
+  });
+
+  it('incrémente launchToken à chaque ouverture avec payload', () => {
+    const { openSideChat, launchToken } = useSideChat();
+
+    openSideChat('workproba.personas', { mode: 'avis', personaIds: ['p1'] });
+    expect(launchToken.value).toBe(1);
+
+    openSideChat('workproba.personas', { mode: 'discussion', personaIds: ['p2'] });
+    expect(launchToken.value).toBe(2);
   });
 
   it('hasSideChat reflète la présence de panneaux side_chat', () => {
@@ -97,6 +110,7 @@ describe('useSideChat', () => {
       mode: 'discussion',
       draft: '',
       discussionSeed: null,
+      resume: null,
     });
   });
 

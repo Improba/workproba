@@ -96,7 +96,6 @@
         @ask-opinion="onAskOpinion"
         @meeting="onStartMeeting"
         @discuss="onDiscuss"
-        @view-meeting="onViewMeeting"
         @relaunch-meeting="onRelaunchMeeting"
         @resume-discussion="onResumeDiscussion"
       />
@@ -150,7 +149,6 @@ const {
   askOpinion,
   startMeeting,
   discuss,
-  viewMeeting,
   relaunchMeeting,
   resumeDiscussion,
 } = usePersonasActions();
@@ -211,20 +209,16 @@ function onPersonasTab(): void {
   void ensurePersonasDataDir();
 }
 
-function onAskOpinion(): void {
-  void askOpinion();
+function onAskOpinion(personaIds: string[]): void {
+  void askOpinion(personaIds);
 }
 
 function onStartMeeting(): void {
   void startMeeting();
 }
 
-function onDiscuss(): void {
-  void discuss();
-}
-
-function onViewMeeting(meeting: { persona_ids: string[]; topic: string; rounds?: number }): void {
-  viewMeeting(meeting);
+function onDiscuss(personaIds: string[]): void {
+  void discuss(personaIds);
 }
 
 function onRelaunchMeeting(config: { personaIds: string[]; topic: string; rounds: number }): void {

@@ -103,17 +103,18 @@ const props = withDefaults(
     selectedMeetingId?: string | null;
     selectedDiscussionId?: string | null;
     pluginDataDir?: string | null;
+    defaultExpanded?: boolean;
   }>(),
   {
     mode: 'all',
     selectedMeetingId: null,
     selectedDiscussionId: null,
     pluginDataDir: null,
+    defaultExpanded: true,
   },
 );
 
 const emit = defineEmits<{
-  'view-meeting': [meeting: StoredMeeting];
   'relaunch-meeting': [config: { personaIds: string[]; topic: string; rounds: number }];
   'resume-discussion': [payload: { discussionId: string; personaIds: string[]; messages: DiscussionMessage[] }];
 }>();
@@ -121,7 +122,7 @@ const emit = defineEmits<{
 const { t, locale } = useI18n();
 const { listMeetings, listDiscussions, syncHistory } = usePersonas();
 
-const expanded = ref(true);
+const expanded = ref(props.defaultExpanded);
 const meetings = ref(listMeetings());
 const discussions = ref(listDiscussions());
 const viewingTranscript = ref<{ title: string; body: string } | null>(null);
@@ -144,7 +145,6 @@ function onRelaunchMeeting(meeting: StoredMeeting): void {
     topic: meeting.topic,
     rounds: meeting.rounds ?? 3,
   });
-  emit('view-meeting', meeting);
 }
 
 function formatDate(iso: string): string {
@@ -174,7 +174,6 @@ function onSelectMeeting(meeting: StoredMeeting): void {
     title: meeting.topic,
     body: meeting.transcript,
   };
-  emit('view-meeting', meeting);
 }
 
 function onSelectDiscussion(discussion: StoredDiscussion): void {

@@ -15,7 +15,6 @@
         ref="historyRef"
         mode="meeting"
         :plugin-data-dir="pluginDataDir"
-        @view-meeting="onViewMeeting"
         @relaunch-meeting="onRelaunchFromHistory"
       />
       <PersonasPicker
@@ -42,6 +41,14 @@
 
     <!-- Tour de table -->
     <section v-else class="personas-meeting__room">
+      <div
+        v-if="meetingState?.error"
+        class="personas-meeting__error"
+        role="alert"
+      >
+        {{ meetingErrorMessage }}
+      </div>
+
       <div class="personas-meeting__round-table">
         <div
           v-for="pid in meetingPersonaIds"
@@ -109,7 +116,7 @@
         <p class="personas-meeting__summary-body">{{ meetingState.summary }}</p>
       </section>
 
-      <footer v-if="!meetingState?.streaming" class="personas-meeting__actions">
+      <footer v-if="!meetingState?.streaming && !meetingState?.error" class="personas-meeting__actions">
         <button
           v-if="projetPluginActive"
           type="button"
@@ -145,7 +152,7 @@ import PersonasPicker from '@components/personas/PersonasPicker.vue';
 import PersonasHistoryPanel from '@components/personas/PersonasHistoryPanel.vue';
 import PersonasConfidentialityHint from '@components/personas/PersonasConfidentialityHint.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
-import { formatMeetingMarkdown, type MeetingState, type StoredMeeting } from '@composables/usePersonas';
+import { formatMeetingMarkdown, usePersonas, type MeetingState } from '@composables/usePersonas';
 import type { PersonaInfo } from '@services/aiSidecar';
 
 const props = defineProps<{
@@ -167,6 +174,7 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
+const { findPersona } = usePersonas();
 
 const phase = ref<'config' | 'running'>(props.meetingState ? 'running' : 'config');
 const starting = ref(false);
@@ -183,7 +191,7 @@ const meetingPersonaIds = computed(
 watch(
   () => props.meetingState,
   (state) => {
-    if (state) phase.value = 'running';
+    phase.value = state ? 'running' : 'config';
   },
 );
 
@@ -203,16 +211,23 @@ const summaryTitle = computed(() => {
   return t('personas.meeting.summaryTitle');
 });
 
+const meetingErrorMessage = computed(() => {
+  const code = props.meetingState?.error;
+  if (!code) return '';
+  if (code === 'api_key_missing') return t('errors.apiKeyMissing');
+  return t('personas.errors.meetingFailed');
+});
+
 function personaName(id: string): string {
-  return props.personas.find((p) => p.id === id)?.name ?? id;
+  return findPersona(id)?.name ?? id;
 }
 
 function personaColor(id: string): string {
-  return props.personas.find((p) => p.id === id)?.avatar_color ?? 'var(--wp-gold)';
+  return findPersona(id)?.avatar_color ?? 'var(--wp-gold)';
 }
 
 function personaIcon(id: string): string | undefined {
-  return props.personas.find((p) => p.id === id)?.avatar_icon;
+  return findPersona(id)?.avatar_icon;
 }
 
 function onStart(payload: {
@@ -223,7 +238,6 @@ function onStart(payload: {
 }): void {
   starting.value = true;
   relaunchConfig.value = null;
-  phase.value = 'running';
   emit('start', payload);
   starting.value = false;
 }
@@ -241,14 +255,6 @@ const publishDefaultName = computed(() => {
   });
   return t('personas.publishToProjectNameMeeting', { topic, date });
 });
-
-function onViewMeeting(meeting: StoredMeeting): void {
-  onRelaunchFromHistory({
-    personaIds: meeting.persona_ids,
-    topic: meeting.topic,
-    rounds: meeting.rounds ?? 3,
-  });
-}
 
 function onRelaunchFromHistory(config: {
   personaIds: string[];
@@ -326,6 +332,24 @@ function onRelaunchFromHistory(config: {
   min-height: 0;
   overflow-y: auto;
   padding: var(--wp-space-4);
+}
+
+.personas-meeting__room {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.personas-meeting__error {
+  margin: var(--wp-space-3) var(--wp-space-4) 0;
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: 1px solid var(--wp-danger);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-danger-soft);
+  color: var(--wp-danger);
+  font-size: var(--wp-fs-sm);
 }
 
 .personas-meeting__round-table {

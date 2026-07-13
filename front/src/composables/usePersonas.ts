@@ -30,6 +30,8 @@ import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 const MEETINGS_STORAGE_KEY = 'workproba.personas.meetings';
 const DISCUSSIONS_STORAGE_KEY = 'workproba.personas.discussions';
 const CUSTOM_SETS_STORAGE_KEY = 'workproba.personas.customSets';
+const ACTIVE_SET_STORAGE_KEY = 'workproba.personas.activeSetId';
+const BUILTIN_SET_ID = 'default';
 const MAX_STORED_MEETINGS = 50;
 const MAX_STORED_DISCUSSIONS = 50;
 
@@ -93,7 +95,7 @@ export interface DiscussionMessage {
 }
 
 const sets = ref<PersonaSet[]>([]);
-const activeSetId = ref<string | null>(null);
+const activeSetId = ref<string | null>(readActiveSetId());
 const loading = ref(false);
 const loadError = ref<string | null>(null);
 
@@ -105,10 +107,20 @@ const activeSet = computed(() => {
 
 const personas = computed(() => activeSet.value?.personas ?? []);
 
+const builtinPersonas = computed(() => {
+  const builtin = sets.value.find((s) => s.id === BUILTIN_SET_ID);
+  if (builtin) return builtin.personas;
+  const customIds = new Set(readCustomSets().map((s) => s.id));
+  const nonCustom = sets.value.find((s) => !customIds.has(s.id));
+  return nonCustom?.personas ?? [];
+});
+
 export interface UsePersonasReturn {
   sets: Ref<PersonaSet[]>;
   activeSet: ComputedRef<PersonaSet | null>;
   personas: ComputedRef<PersonaInfo[]>;
+  builtinPersonas: ComputedRef<PersonaInfo[]>;
+  selectablePersonas: ComputedRef<PersonaInfo[]>;
   loading: Ref<boolean>;
   loadError: Ref<string | null>;
   refresh: (pluginDataDir: string) => Promise<void>;
@@ -157,6 +169,7 @@ export interface UsePersonasReturn {
   listCustomSets: () => PersonaSet[];
   saveCustomSet: (pluginDataDir: string, set: PersonaSet) => Promise<void>;
   deleteCustomSet: (pluginDataDir: string, setId: string) => Promise<void>;
+  findPersona: (personaId: string) => PersonaInfo | undefined;
 }
 
 function createOpinionId(): string {
@@ -185,6 +198,22 @@ function readStorage<T>(key: string): T[] {
 function writeStorage<T>(key: string, items: T[]): void {
   try {
     localStorage.setItem(key, JSON.stringify(items));
+  } catch {
+    /* quota ou mode privé */
+  }
+}
+
+function readActiveSetId(): string | null {
+  try {
+    return localStorage.getItem(ACTIVE_SET_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function persistActiveSetId(setId: string): void {
+  try {
+    localStorage.setItem(ACTIVE_SET_STORAGE_KEY, setId);
   } catch {
     /* quota ou mode privé */
   }
@@ -332,6 +361,9 @@ export function discussionMessagesToStored(
       content: m.content,
       persona_id: m.personaId,
       persona_name: m.personaName,
+      role_label: m.personaRole,
+      avatar_color: m.avatarColor,
+      avatar_icon: m.avatarIcon,
     })),
     updated_at: new Date().toISOString(),
   };
@@ -370,7 +402,13 @@ export function toolResultToOpinionCard(
 }
 
 function findPersona(personaId: string): PersonaInfo | undefined {
-  return personas.value.find((p) => p.id === personaId);
+  const inActive = personas.value.find((p) => p.id === personaId);
+  if (inActive) return inActive;
+  for (const set of sets.value) {
+    const found = set.personas.find((p) => p.id === personaId);
+    if (found) return found;
+  }
+  return undefined;
 }
 
 function readCustomSets(): PersonaSet[] {
@@ -453,9 +491,13 @@ async function syncPersonasHistory(pluginDataDir: string): Promise<void> {
 }
 
 export function usePersonas(): UsePersonasReturn {
-  const { locale, settingsLocked, permissionsNetwork } = useAppSettings();
+  const { locale, settingsLocked, permissionsNetwork, settingsMode } = useAppSettings();
   const { isPersonasPluginActive } = usePlugins();
   const { buildContextProviderSet } = useLlmSessionContext();
+
+  const selectablePersonas = computed(() =>
+    settingsMode.value === 'advanced' ? personas.value : builtinPersonas.value,
+  );
 
   async function refresh(pluginDataDir: string): Promise<void> {
     if (!isPersonasPluginActive.value) {
@@ -469,11 +511,20 @@ export function usePersonas(): UsePersonasReturn {
       sets.value = mergeSetsWithCustom(list);
       if (!activeSetId.value && sets.value.length > 0) {
         activeSetId.value = sets.value[0]?.id ?? null;
+        if (activeSetId.value) persistActiveSetId(activeSetId.value);
+      }
+      if (activeSetId.value && !sets.value.some((s) => s.id === activeSetId.value)) {
+        const fallback =
+          sets.value.find((s) => s.id === BUILTIN_SET_ID)?.id
+          ?? sets.value[0]?.id
+          ?? null;
+        activeSetId.value = fallback;
+        if (fallback) persistActiveSetId(fallback);
       }
       await syncPersonasHistory(pluginDataDir);
     } catch (err) {
       loadError.value = err instanceof Error ? err.message : 'personas_load_failed';
-      sets.value = [];
+      sets.value = mergeSetsWithCustom([]);
     } finally {
       loading.value = false;
     }
@@ -481,6 +532,7 @@ export function usePersonas(): UsePersonasReturn {
 
   function setActiveSet(setId: string): void {
     activeSetId.value = setId;
+    persistActiveSetId(setId);
   }
 
   async function askOpinion(
@@ -516,6 +568,7 @@ export function usePersonas(): UsePersonasReturn {
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
 
     const controller = new AbortController();
+    let streamError: Error | null = null;
 
     try {
       await askPersonasOpinion(
@@ -550,19 +603,22 @@ export function usePersonas(): UsePersonasReturn {
             });
           } else if (type === 'error') {
             card.streaming = false;
+            streamError = new Error(String(data.message ?? 'ask_failed'));
           }
         },
         controller.signal,
       );
-    } catch {
+    } catch (err) {
       card.streaming = false;
-      card.opinions.forEach((o) => {
-        if (!o.content) o.content = '';
-        o.streaming = false;
-      });
+      throw err;
     }
 
+    if (streamError) throw streamError;
+
     card.streaming = false;
+    if (card.opinions.length > 0 && card.opinions.every((o) => !o.content.trim())) {
+      throw new Error('ask_failed');
+    }
     return card;
   }
 
@@ -686,6 +742,11 @@ export function usePersonas(): UsePersonasReturn {
     workspaceDataDir?: string | null,
     includeMemory = false,
   ): Promise<{ discussionId: string | null; messages: DiscussionMessage[] }> {
+    const providerSet = buildContextProviderSet();
+    if (!ensureProviderSetChatReady(providerSet)) {
+      throw new Error('api_key_missing');
+    }
+
     const messages = [...history];
     const userMsg: DiscussionMessage = {
       id: createMessageId(),
@@ -695,13 +756,10 @@ export function usePersonas(): UsePersonasReturn {
     messages.push(userMsg);
     onUpdate?.([...messages]);
 
-    const providerSet = buildContextProviderSet();
-    if (!ensureProviderSetChatReady(providerSet)) {
-      throw new Error('api_key_missing');
-    }
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
     const controller = new AbortController();
     let newDiscussionId = discussionId;
+    let streamError: Error | null = null;
 
     const apiHistory = messages
       .filter((m) => m.role === 'user' || m.role === 'persona')
@@ -750,12 +808,28 @@ export function usePersonas(): UsePersonasReturn {
               if (m.streaming) m.streaming = false;
             });
             onUpdate?.([...messages]);
+          } else if (type === 'error') {
+            streamError = new Error(String(data.message ?? 'discuss_error'));
           }
         },
         controller.signal,
       );
-    } catch {
-      /* défensif : garde les messages déjà reçus */
+    } catch (err) {
+      const idx = messages.findIndex((m) => m.id === userMsg.id);
+      if (idx >= 0) {
+        messages.splice(idx, 1);
+        onUpdate?.([...messages]);
+      }
+      throw err;
+    }
+
+    if (streamError) {
+      const idx = messages.findIndex((m) => m.id === userMsg.id);
+      if (idx >= 0) {
+        messages.splice(idx, 1);
+        onUpdate?.([...messages]);
+      }
+      throw streamError;
     }
 
     messages.forEach((m) => {
@@ -870,6 +944,8 @@ export function usePersonas(): UsePersonasReturn {
     sets,
     activeSet,
     personas,
+    builtinPersonas,
+    selectablePersonas,
     loading,
     loadError,
     refresh,
@@ -888,6 +964,7 @@ export function usePersonas(): UsePersonasReturn {
     listCustomSets,
     saveCustomSet,
     deleteCustomSet,
+    findPersona,
   };
 }
 

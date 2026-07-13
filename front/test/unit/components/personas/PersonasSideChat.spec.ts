@@ -22,11 +22,13 @@ const askOpinion = vi.fn().mockResolvedValue({
 vi.mock('@composables/usePersonas', () => ({
   usePersonas: () => ({
     personas,
+    selectablePersonas: personas,
     loading: ref(false),
     refresh: vi.fn().mockResolvedValue(undefined),
     askOpinion,
     discuss: vi.fn(),
     saveDiscussion: vi.fn(),
+    findPersona: (id: string) => personas.value.find((p) => p.id === id),
   }),
   discussionMessagesToStored: vi.fn(),
   formatDiscussionMarkdown: vi.fn(() => '# Discussion'),
@@ -55,6 +57,7 @@ vi.mock('@composables/useSideChat', () => ({
       draft: '',
       discussionSeed: null,
     }),
+    launchToken: ref(0),
   }),
 }));
 

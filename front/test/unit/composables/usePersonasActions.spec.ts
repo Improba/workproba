@@ -29,9 +29,12 @@ vi.mock('@composables/usePersonasNavigation', () => ({
   }),
 }));
 
-vi.mock('@services/workspaceSession', () => ({
-  listSessions,
-  createSession,
+vi.mock('vue-i18n', () => ({
+  useI18n: () => ({ t: (key: string) => key }),
+}));
+
+vi.mock('quasar', () => ({
+  Notify: { create: vi.fn() },
 }));
 
 describe('usePersonasActions', () => {
@@ -43,30 +46,40 @@ describe('usePersonasActions', () => {
     createSession.mockResolvedValue({ id: 'session-new', title: 'New' });
   });
 
-  it('resumeDiscussion écrit sessionStorage avant requestAction', async () => {
-    const order: string[] = [];
-    const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation((key) => {
-      order.push(`setItem:${key}`);
-    });
-    requestAction.mockImplementation(() => {
-      order.push('requestAction');
-    });
-
+  it('resumeDiscussion transmet le payload resume via requestAction', async () => {
     const { usePersonasActions } = await import('@composables/usePersonasActions');
     const { resumeDiscussion } = usePersonasActions();
 
-    await resumeDiscussion({
+    const payload = {
       discussionId: 'disc-1',
       personaIds: ['p1'],
-      messages: [{ id: 'm1', role: 'user', content: 'Hello' }],
-    });
+      messages: [{ id: 'm1', role: 'user' as const, content: 'Hello' }],
+    };
 
-    expect(order).toEqual([
-      'setItem:workproba.personas.resume',
-      'requestAction',
-    ]);
-    expect(requestAction).toHaveBeenCalledWith('discuss');
-    setItemSpy.mockRestore();
+    await resumeDiscussion(payload);
+
+    expect(requestAction).toHaveBeenCalledWith('discuss', {
+      personaIds: ['p1'],
+      resume: payload,
+    });
+  });
+
+  it('discuss sans ids n\'envoie pas de personaIds', async () => {
+    const { usePersonasActions } = await import('@composables/usePersonasActions');
+    const { discuss } = usePersonasActions();
+
+    await discuss();
+
+    expect(requestAction).toHaveBeenCalledWith('discuss', undefined);
+  });
+
+  it('discuss transmet les personaIds', async () => {
+    const { usePersonasActions } = await import('@composables/usePersonasActions');
+    const { discuss } = usePersonasActions();
+
+    await discuss(['p1']);
+
+    expect(requestAction).toHaveBeenCalledWith('discuss', { personaIds: ['p1'] });
   });
 
   it('ne navigue pas quand la session chat est déjà active', async () => {
@@ -76,6 +89,20 @@ describe('usePersonasActions', () => {
     await askOpinion();
 
     expect(routerPush).not.toHaveBeenCalled();
-    expect(requestAction).toHaveBeenCalledWith('opinion');
+    expect(requestAction).toHaveBeenCalledWith('opinion', undefined);
+  });
+
+  it('n\'émet pas l\'action si aucune session chat ne peut être ouverte', async () => {
+    routeRef.value = { name: 'home', params: {} };
+    listSessions.mockResolvedValue([]);
+    createSession.mockResolvedValue(null);
+
+    const { usePersonasActions } = await import('@composables/usePersonasActions');
+    const { discuss } = usePersonasActions();
+
+    await discuss(['p1']);
+
+    expect(routerPush).not.toHaveBeenCalled();
+    expect(requestAction).not.toHaveBeenCalled();
   });
 });

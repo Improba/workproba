@@ -1,18 +1,40 @@
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
+import type { DiscussionMessage } from '@composables/usePersonas';
 
 export type PersonasNavAction = 'meeting' | 'discuss' | 'opinion';
 
-const pendingAction = ref<PersonasNavAction | null>(null);
+export interface PersonasResumePayload {
+  discussionId: string;
+  personaIds: string[];
+  messages: DiscussionMessage[];
+}
+
+export interface PersonasNavPayload {
+  action: PersonasNavAction;
+  personaIds?: string[];
+  resume?: PersonasResumePayload;
+}
+
+const pendingPayload = ref<PersonasNavPayload | null>(null);
 
 export function usePersonasNavigation() {
-  function requestAction(action: PersonasNavAction): void {
-    pendingAction.value = action;
+  const pendingAction = computed(() => pendingPayload.value?.action ?? null);
+
+  function requestAction(
+    action: PersonasNavAction,
+    opts?: { personaIds?: string[]; resume?: PersonasResumePayload },
+  ): void {
+    pendingPayload.value = {
+      action,
+      personaIds: opts?.personaIds?.length ? [...opts.personaIds] : undefined,
+      resume: opts?.resume,
+    };
   }
 
-  function consumeAction(): PersonasNavAction | null {
-    const action = pendingAction.value;
-    pendingAction.value = null;
-    return action;
+  function consumeAction(): PersonasNavPayload | null {
+    const payload = pendingPayload.value;
+    pendingPayload.value = null;
+    return payload;
   }
 
   return {

@@ -661,11 +661,14 @@ export default {
     },
     panel: {
       title: 'Personas',
+      chooseTitle: 'Qui souhaitez-vous consulter ?',
+      chooseLead: 'Choisissez une personne, puis posez votre question.',
+      talkToPersona: 'Discuter avec {name}',
+      askTheirOpinion: 'Son avis',
+      viewProfile: 'Profil',
+      customizeTitle: 'Personnaliser',
       setsTitle: 'Jeux de personas',
       personaCount: '{count} persona(s)',
-      personasTitle: 'Personas actifs',
-      actionsTitle: 'Lancer',
-      sessionCostTitle: 'Coûts de session',
       sessionCostSummary: '≈ {calls} échanges IA enregistrés',
     },
     confidentiality: {
@@ -737,6 +740,8 @@ export default {
       unavailable: 'Les personas ne sont pas disponibles pour l\'instant.',
       askFailed: 'Impossible d\'obtenir l\'avis. Réessayez plus tard.',
       discussFailed: 'La discussion a échoué. Réessayez plus tard.',
+      meetingFailed: 'La réunion a échoué. Réessayez plus tard.',
+      loadFailed: 'Impossible de charger les personas. Vérifiez votre connexion.',
     },
     history: {
       title: 'Historique',

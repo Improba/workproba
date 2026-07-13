@@ -44,7 +44,7 @@
     <section class="chat-page__body">
       <PersonasMeetingView
         v-if="personasView === 'meeting'"
-        :personas="personasList"
+        :personas="selectablePersonasList"
         :loading="personasLoading"
         :meeting-state="meetingState"
         :relaunch-config="relaunchMeetingConfig"
@@ -157,8 +157,8 @@ const { settingsMode, settingsLocked, activeChatRouting } = useAppSettings();
 const { setStreaming, setSidecarState } = useChatActivity();
 const { isPersonasPluginActive, isProjetPluginActive, getPluginDataDir } = usePlugins();
 const { consumeAction, pendingAction } = usePersonasNavigation();
-const {
-  personas: personasList,
+  const {
+  selectablePersonas: selectablePersonasList,
   loading: personasLoading,
   refresh: refreshPersonas,
   startMeeting,
@@ -574,37 +574,23 @@ watch(isPersonasPluginActive, () => {
 }, { immediate: true });
 
 function applyPersonasNavigation(): void {
-  const action = consumeAction();
-  if (!action) return;
-  if (action === 'opinion') openOpinionPicker();
+  const payload = consumeAction();
+  if (!payload) return;
+  const { action, personaIds, resume } = payload;
+  if (action === 'opinion') openOpinionPicker(undefined, personaIds);
   else if (action === 'meeting') openMeetingView();
   else if (action === 'discuss') {
-    const raw = sessionStorage.getItem('workproba.personas.resume');
-    if (raw) {
-      try {
-        const payload = JSON.parse(raw) as {
-          discussionId: string;
-          personaIds: string[];
-          messages: Array<{
-            id: string;
-            role: 'user' | 'persona';
-            content: string;
-            personaId?: string;
-            personaName?: string;
-          }>;
-        };
-        sessionStorage.removeItem('workproba.personas.resume');
-        sessionStorage.setItem('workproba.personas.resumeMessages', JSON.stringify(payload));
+    if (resume) {
+      void loadPersonasIfNeeded().then(() => {
         openSideChat(PERSONAS_PLUGIN_ID, {
           mode: 'discussion',
-          personaIds: payload.personaIds,
+          personaIds: resume.personaIds,
+          resume,
         });
-        return;
-      } catch {
-        sessionStorage.removeItem('workproba.personas.resume');
-      }
+      });
+    } else {
+      openDiscussionView(personaIds);
     }
-    openDiscussionView();
   }
 }
 
@@ -626,11 +612,12 @@ function closePersonasView(): void {
   relaunchMeetingConfig.value = null;
 }
 
-function openOpinionPicker(question?: string): void {
+function openOpinionPicker(question?: string, personaIds?: string[]): void {
   void loadPersonasIfNeeded().then(() => {
     openSideChat(PERSONAS_PLUGIN_ID, {
       mode: 'avis',
       draft: question,
+      personaIds: personaIds ?? [],
     });
   });
 }
@@ -648,7 +635,10 @@ function openMeetingView(): void {
         sessionStorage.removeItem('workproba.personas.relaunchMeeting');
       } catch {
         sessionStorage.removeItem('workproba.personas.relaunchMeeting');
+        relaunchMeetingConfig.value = null;
       }
+    } else {
+      relaunchMeetingConfig.value = null;
     }
     personasView.value = 'meeting';
     meetingState.value = null;
@@ -706,6 +696,7 @@ async function onMeetingStart(payload: {
   includeMemory: boolean;
   meetingId?: string | null;
 }): Promise<void> {
+  relaunchMeetingConfig.value = null;
   const dir = await ensurePersonasDataDir();
   if (!dir) {
     Notify.create({ message: t('personas.errors.unavailable'), color: 'negative' });
@@ -733,7 +724,11 @@ async function onMeetingStart(payload: {
     payload.includeMemory,
     payload.meetingId,
   );
-  if (meetingState.value && !meetingState.value.streaming && !meetingState.value.error) {
+  if (meetingState.value?.error) {
+    Notify.create({ message: t('personas.errors.meetingFailed'), color: 'negative' });
+    return;
+  }
+  if (meetingState.value && !meetingState.value.streaming) {
     saveMeeting(meetingStateToStored(meetingState.value));
   }
 }
@@ -744,7 +739,10 @@ async function handlePersonasToolCall(
 ): Promise<void> {
   await loadPersonasIfNeeded();
   const dir = await ensurePersonasDataDir();
-  if (!dir) return;
+  if (!dir) {
+    Notify.create({ message: t('personas.errors.unavailable'), color: 'negative' });
+    return;
+  }
 
   if (toolName === 'ask_personas') {
     const question = String(payload.args.question ?? '');

@@ -1,7 +1,16 @@
 <template>
   <div class="personas-side-chat">
-    <div v-if="!isPersonasPluginActive || personas.length === 0" class="personas-side-chat__unavailable">
-      {{ t('personas.sideChat.unavailable') }}
+    <div v-if="!isPersonasPluginActive" class="personas-side-chat__unavailable">
+      {{ t('personas.errors.unavailable') }}
+    </div>
+    <div v-else-if="loading" class="personas-side-chat__unavailable">
+      {{ t('common.loading') }}
+    </div>
+    <div v-else-if="loadError" class="personas-side-chat__unavailable">
+      {{ t('personas.errors.loadFailed') }}
+    </div>
+    <div v-else-if="selectablePersonas.length === 0" class="personas-side-chat__unavailable">
+      {{ t('personas.picker.empty') }}
     </div>
 
     <template v-else>
@@ -130,7 +139,7 @@
 
     <PersonasPicker
       v-model:open="pickerOpen"
-      :personas="personas"
+      :personas="selectablePersonas"
       :loading="loading"
       :title="t('personas.sideChat.changePersonas')"
       :confirm-label="t('personas.sideChat.changePersonas')"
@@ -175,10 +184,19 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
-const { personas, loading, refresh, askOpinion, discuss, saveDiscussion } = usePersonas();
+const {
+  selectablePersonas,
+  loading,
+  loadError,
+  refresh,
+  askOpinion,
+  discuss,
+  saveDiscussion,
+  findPersona,
+} = usePersonas();
 const { getPluginDataDir, isPersonasPluginActive, isProjetPluginActive } = usePlugins();
 const { activeDataDir } = useProject();
-const { consumeInitial } = useSideChat();
+const { consumeInitial, launchToken } = useSideChat();
 
 const mode = ref<'avis' | 'discussion'>('avis');
 const selectedPersonaIds = ref<string[]>([]);
@@ -197,7 +215,7 @@ const scrollRef = ref<HTMLElement | null>(null);
 
 const selectedPersonas = computed(() =>
   selectedPersonaIds.value
-    .map((id) => personas.value.find((p) => p.id === id))
+    .map((id) => findPersona(id))
     .filter((p): p is PersonaInfo => p != null),
 );
 
@@ -296,6 +314,7 @@ async function onSend(): Promise<void> {
     return;
   }
 
+  const savedDraft = text;
   draft.value = '';
   busy.value = true;
 
@@ -341,6 +360,7 @@ async function onSend(): Promise<void> {
       }
     }
   } catch {
+    draft.value = savedDraft;
     Notify.create({
       message:
         mode.value === 'avis'
@@ -353,17 +373,38 @@ async function onSend(): Promise<void> {
   }
 }
 
-onMounted(async () => {
-  const dir = await ensureDataDir();
-  if (dir) await refresh(dir);
+function resetFeedState(): void {
+  avisEntries.value = [];
+  discussionMessages.value = [];
+  discussionId.value = null;
+  draft.value = '';
+  busy.value = false;
+}
 
+function applySideChatInitial(): void {
   const initial = consumeInitial();
+  const hasPayload =
+    initial.mode != null
+    || initial.personaIds.length > 0
+    || initial.draft.length > 0
+    || initial.discussionSeed != null
+    || initial.resume != null;
+  if (!hasPayload) return;
+
+  resetFeedState();
+
+  if (initial.resume) {
+    mode.value = 'discussion';
+    discussionId.value = initial.resume.discussionId;
+    selectedPersonaIds.value = [...initial.resume.personaIds];
+    discussionMessages.value = initial.resume.messages.map((m) => ({ ...m }));
+    return;
+  }
+
   if (initial.mode === 'avis' || initial.mode === 'discussion') {
     mode.value = initial.mode;
   }
-  if (initial.personaIds.length > 0) {
-    selectedPersonaIds.value = initial.personaIds;
-  }
+  selectedPersonaIds.value = [...initial.personaIds];
   if (initial.draft) {
     draft.value = initial.draft;
   }
@@ -376,25 +417,20 @@ onMounted(async () => {
       },
     ];
     discussionId.value = null;
+  } else if (initial.mode === 'discussion') {
+    discussionMessages.value = [];
+    discussionId.value = null;
   }
+}
 
-  const resumeRaw = sessionStorage.getItem('workproba.personas.resumeMessages');
-  if (resumeRaw) {
-    try {
-      const payload = JSON.parse(resumeRaw) as {
-        discussionId: string;
-        personaIds: string[];
-        messages: DiscussionMessage[];
-      };
-      sessionStorage.removeItem('workproba.personas.resumeMessages');
-      mode.value = 'discussion';
-      discussionId.value = payload.discussionId;
-      selectedPersonaIds.value = payload.personaIds;
-      discussionMessages.value = payload.messages;
-    } catch {
-      sessionStorage.removeItem('workproba.personas.resumeMessages');
-    }
-  }
+watch(launchToken, () => {
+  applySideChatInitial();
+});
+
+onMounted(async () => {
+  const dir = await ensureDataDir();
+  if (dir) await refresh(dir);
+  applySideChatInitial();
 });
 
 defineExpose({ close: () => emit('close') });
