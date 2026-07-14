@@ -420,6 +420,19 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "network_access": "Accès réseau",
             "code_execute": "Exécuter du code",
             "external_send": "Envoyer à l'extérieur",
+            "headline": {
+                "default": "Je vais {effect} : {targets}",
+                "publish": "Je vais publier : {artefact} dans {project}",
+                "network_access": "Je vais accéder au réseau : {targets}",
+                "code_execute": "Je vais exécuter du code",
+                "external_send": "Je vais envoyer à l'extérieur : {targets}",
+            },
+            "protection": {
+                "preview": "Aperçu disponible avant création",
+                "version_before_modify": "Version automatique avant modification",
+                "no_network": "Aucun accès réseau",
+                "no_external_send": "Aucun envoi externe",
+            },
         },
         "work": {
             "capability": {
@@ -839,6 +852,19 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "network_access": "Network access",
             "code_execute": "Execute code",
             "external_send": "Send externally",
+            "headline": {
+                "default": "I will {effect}: {targets}",
+                "publish": "I will publish: {artefact} in {project}",
+                "network_access": "I will access the network: {targets}",
+                "code_execute": "I will execute code",
+                "external_send": "I will send externally: {targets}",
+            },
+            "protection": {
+                "preview": "Preview available",
+                "version_before_modify": "Automatic version before modification",
+                "no_network": "No network access",
+                "no_external_send": "No external send",
+            },
         },
         "work": {
             "capability": {

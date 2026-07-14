@@ -141,6 +141,8 @@ class ConfirmationGate:
                 effect=proposal.effect,
                 targets=list(proposal.targets),
                 protections=protections_to_dict(proposal.protections),
+                headline=proposal.headline,
+                protection_labels=list(proposal.protection_labels),
             ),
         )
 

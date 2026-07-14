@@ -186,6 +186,12 @@ export function mapPythonSseEvent(
           proposedPath: String(data.proposed_path ?? ''),
           humanSummary: extractHumanSummary(data),
           turnId: data.turn_id != null ? String(data.turn_id) : null,
+          effect: data.effect ?? null,
+          targets: Array.isArray(data.targets) ? data.targets : [],
+          headline: String(data.headline ?? ''),
+          protectionLabels: Array.isArray(data.protection_labels)
+            ? data.protection_labels
+            : [],
         },
       };
     case 'thinking_start':
@@ -528,6 +534,10 @@ export function applyStreamEvent(
         proposedPath: event.data.proposedPath,
         humanSummary: event.data.humanSummary.trim(),
         turnId: event.data.turnId ?? null,
+        effect: event.data.effect ?? null,
+        targets: event.data.targets ?? [],
+        headline: event.data.headline ?? '',
+        protectionLabels: event.data.protectionLabels ?? [],
       };
       assistant.pendingConfirmation = confirmation;
       onConfirmationRequest?.();

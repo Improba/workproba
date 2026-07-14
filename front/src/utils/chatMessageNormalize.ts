@@ -95,6 +95,13 @@ function normalizeConfirmation(raw: unknown): ChatConfirmation | null {
   const proposedPath = asString(raw.proposedPath).trim();
   if (!confirmationId || !toolCallId || !toolName) return null;
 
+  const protectionLabels = Array.isArray(raw.protectionLabels)
+    ? raw.protectionLabels.map((item) => asString(item)).filter(Boolean)
+    : [];
+  const targets = Array.isArray(raw.targets)
+    ? raw.targets.map((item) => asString(item)).filter(Boolean)
+    : [];
+
   return {
     confirmationId,
     toolCallId,
@@ -102,6 +109,11 @@ function normalizeConfirmation(raw: unknown): ChatConfirmation | null {
     action: raw.action === 'modify' ? 'modify' : 'create',
     proposedPath,
     humanSummary: asString(raw.humanSummary),
+    turnId: raw.turnId != null ? asString(raw.turnId) : null,
+    effect: raw.effect != null ? asString(raw.effect) : null,
+    targets,
+    headline: asString(raw.headline),
+    protectionLabels,
   };
 }
 

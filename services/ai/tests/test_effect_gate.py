@@ -11,7 +11,14 @@ from pydantic_ai import RunContext
 from pydantic_ai.models.test import TestModel
 
 from app.agent.confirmation import ConfirmationGate
-from app.agent.effects import EffectProposal, classify_effect, effect_label
+from app.agent.effects import (
+    EffectProtection,
+    EffectProposal,
+    classify_effect,
+    effect_headline,
+    effect_label,
+    protection_labels,
+)
 from app.agent.tools import ToolContext, ToolDeps, build_agent
 from app.audit import read_audit
 from app.limits import DEFAULT_LIMITS
@@ -146,6 +153,88 @@ def test_effect_label_fr_en() -> None:
     assert effect_label("network_access", "en") == "Network access"
 
 
+@pytest.mark.parametrize(
+    ("effect", "targets", "locale", "expected"),
+    [
+        ("create", ["Note.docx"], "fr", "Je vais Créer : Note.docx"),
+        ("modify", ["Rapport.xlsx"], "fr", "Je vais Modifier : Rapport.xlsx"),
+        ("publish", ["doc.pdf", "Alpha"], "fr", "Je vais publier : doc.pdf dans Alpha"),
+        ("network_access", ["pytest"], "fr", "Je vais accéder au réseau : pytest"),
+        ("code_execute", [], "fr", "Je vais exécuter du code"),
+        ("external_send", ["p1"], "fr", "Je vais envoyer à l'extérieur : p1"),
+        ("create", ["Note.docx"], "en", "I will Create: Note.docx"),
+        ("modify", ["Report.xlsx"], "en", "I will Modify: Report.xlsx"),
+        ("publish", ["doc.pdf", "Alpha"], "en", "I will publish: doc.pdf in Alpha"),
+        ("network_access", ["pytest"], "en", "I will access the network: pytest"),
+        ("code_execute", [], "en", "I will execute code"),
+        ("external_send", ["p1"], "en", "I will send externally: p1"),
+    ],
+)
+def test_effect_headline(
+    effect: str,
+    targets: list[str],
+    locale: str,
+    expected: str,
+) -> None:
+    proposal = EffectProposal(
+        effect=effect,  # type: ignore[arg-type]
+        tool_name="test",
+        targets=targets,
+    )
+    assert effect_headline(proposal, locale) == expected
+
+
+def test_protection_labels_create() -> None:
+    proposal = EffectProposal(
+        effect="create",
+        tool_name="write_docx",
+        protections=EffectProtection(
+            preview=True,
+            version_before_modify=False,
+            network_used=False,
+            external_send=False,
+        ),
+    )
+    labels = protection_labels(proposal, "fr")
+    assert labels == [
+        "Aperçu disponible avant création",
+        "Aucun accès réseau",
+        "Aucun envoi externe",
+    ]
+
+
+def test_protection_labels_modify() -> None:
+    proposal = EffectProposal(
+        effect="modify",
+        tool_name="write_docx",
+        protections=EffectProtection(
+            preview=True,
+            version_before_modify=True,
+            network_used=False,
+            external_send=False,
+        ),
+    )
+    labels = protection_labels(proposal, "fr")
+    assert "Version automatique avant modification" in labels
+    assert "Aperçu disponible avant création" in labels
+
+
+def test_protection_labels_network_access_skips_no_network() -> None:
+    proposal = EffectProposal(
+        effect="network_access",
+        tool_name="web_search",
+        protections=EffectProtection(
+            preview=False,
+            version_before_modify=False,
+            network_used=True,
+            external_send=False,
+        ),
+    )
+    labels = protection_labels(proposal, "en")
+    assert "No network access" not in labels
+    assert "No external send" in labels
+
+
 @pytest.mark.asyncio
 async def test_request_effect_emits_enriched_event() -> None:
     gate = ConfirmationGate(session_id="s1", turn_id="turn-42")
@@ -156,6 +245,12 @@ async def test_request_effect_emits_enriched_event() -> None:
         action="create",
         human_summary="Créer out.docx",
         proposed_path="out.docx",
+        headline="Je vais Créer : out.docx",
+        protection_labels=[
+            "Aperçu disponible avant création",
+            "Aucun accès réseau",
+            "Aucun envoi externe",
+        ],
     )
 
     async def approve_later() -> None:
@@ -165,6 +260,12 @@ async def test_request_effect_emits_enriched_event() -> None:
         assert event.effect == "create"
         assert event.targets == ["out.docx"]
         assert event.protections.get("preview") is False
+        assert event.headline == "Je vais Créer : out.docx"
+        assert event.protection_labels == [
+            "Aperçu disponible avant création",
+            "Aucun accès réseau",
+            "Aucun envoi externe",
+        ]
         gate.resolve(event.confirmation_id, "approve")
 
     asyncio.create_task(approve_later())

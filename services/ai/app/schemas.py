@@ -313,6 +313,8 @@ class ConfirmationRequestEvent(BaseModel):
     effect: str | None = None
     targets: list[str] = Field(default_factory=list)
     protections: dict[str, bool] = Field(default_factory=dict)
+    headline: str = ""
+    protection_labels: list[str] = Field(default_factory=list)
 
 
 class PlanStepInfo(BaseModel):

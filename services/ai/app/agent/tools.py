@@ -22,7 +22,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
 
 from app.agent.confirmation import ConfirmationGate
-from app.agent.effects import classify_effect
+from app.agent.effects import classify_effect, effect_headline, protection_labels
 from app.agent.human import build_human_summary
 from app.agent.plan import PlanGate
 from app.documents.writer import build_docx_bytes, build_pdf_bytes, build_xlsx_bytes
@@ -775,6 +775,13 @@ def build_agent(
                     f"Effet non classifiable pour l'outil d'écriture {tool_name}"
                 )
             proposal = proposal.model_copy(update={"human_summary": human_summary})
+            locale = deps.context.locale
+            proposal = proposal.model_copy(
+                update={
+                    "headline": effect_headline(proposal, locale),
+                    "protection_labels": protection_labels(proposal, locale),
+                }
+            )
             approved = await gate.request_effect(
                 tool_call_id=ctx.tool_call_id or "",
                 proposal=proposal,

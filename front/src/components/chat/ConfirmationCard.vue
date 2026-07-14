@@ -5,24 +5,43 @@
     role="region"
     :aria-label="t('chat.confirmationRegion')"
   >
-    <p
-      v-if="customSummaryHtml"
-      class="confirmation-card__summary"
-      v-html="customSummaryHtml"
-    />
-    <i18n-t
-      v-else
-      keypath="chat.confirmationSummary"
-      tag="p"
-      class="confirmation-card__summary"
-    >
-      <template #verb>
-        <strong>{{ confirmationVerb }}</strong>
-      </template>
-      <template #file>
-        <strong class="confirmation-card__file">{{ confirmationFile }}</strong>
-      </template>
-    </i18n-t>
+    <template v-if="hasEffectHeadline">
+      <p class="confirmation-card__headline">
+        <strong>{{ confirmation.headline }}</strong>
+      </p>
+      <ul
+        v-if="confirmation.protectionLabels?.length"
+        class="confirmation-card__protections"
+        data-testid="confirmation-protections"
+      >
+        <li
+          v-for="(label, index) in confirmation.protectionLabels"
+          :key="`${index}-${label}`"
+        >
+          {{ label }}
+        </li>
+      </ul>
+    </template>
+    <template v-else>
+      <p
+        v-if="customSummaryHtml"
+        class="confirmation-card__summary"
+        v-html="customSummaryHtml"
+      />
+      <i18n-t
+        v-else
+        keypath="chat.confirmationSummary"
+        tag="p"
+        class="confirmation-card__summary"
+      >
+        <template #verb>
+          <strong>{{ confirmationVerb }}</strong>
+        </template>
+        <template #file>
+          <strong class="confirmation-card__file">{{ confirmationFile }}</strong>
+        </template>
+      </i18n-t>
+    </template>
 
     <div class="confirmation-card__actions">
       <button
@@ -101,6 +120,10 @@ const canPreview = computed(
     proposedContent.value !== null,
 );
 
+const hasEffectHeadline = computed(() =>
+  Boolean(props.confirmation.headline?.trim()),
+);
+
 function escapeHtml(text: string): string {
   return text
     .replace(/&/g, '&amp;')
@@ -152,6 +175,7 @@ const customSummaryHtml = computed(() => {
   box-shadow: var(--wp-shadow-1);
 }
 
+.confirmation-card__headline,
 .confirmation-card__summary {
   margin: 0 0 0.75rem;
   font-size: var(--wp-fs-base);
@@ -166,6 +190,19 @@ const customSummaryHtml = computed(() => {
   :deep(.confirmation-card__file) {
     font-family: var(--wp-font-mono, ui-monospace, monospace);
     font-weight: 600;
+  }
+}
+
+.confirmation-card__protections {
+  margin: 0 0 0.75rem;
+  padding-left: 1.1rem;
+  font-size: var(--wp-fs-sm, 0.875rem);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-text-muted, var(--wp-text));
+  opacity: 0.9;
+
+  li + li {
+    margin-top: 0.2rem;
   }
 }
 

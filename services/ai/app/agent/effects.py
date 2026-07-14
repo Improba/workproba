@@ -69,6 +69,8 @@ class EffectProposal(BaseModel):
     protections: EffectProtection = Field(default_factory=EffectProtection)
     human_summary: str = ""
     proposed_path: str = ""
+    headline: str = ""
+    protection_labels: list[str] = Field(default_factory=list)
 
 
 def _normalize_relative_path(file_path: str) -> str:
@@ -114,6 +116,55 @@ def protections_to_dict(protections: EffectProtection) -> dict[str, bool]:
 def effect_label(effect: EffectType, locale: str) -> str:
     """Libellé localisé d'un type d'effet."""
     return t(locale, f"effect.{effect}")
+
+
+_NETWORK_EFFECTS = frozenset({"network_access", "external_send"})
+
+
+def _join_targets(targets: list[str]) -> str:
+    return ", ".join(value for value in targets if value)
+
+
+def effect_headline(proposal: EffectProposal, locale: str) -> str:
+    """Phrase localisée orientée effet pour la carte de confirmation."""
+    effect = proposal.effect
+    targets = _join_targets(proposal.targets)
+
+    if effect == "publish":
+        artefact = proposal.targets[0] if proposal.targets else ""
+        project = proposal.targets[1] if len(proposal.targets) > 1 else ""
+        return t(
+            locale,
+            "effect.headline.publish",
+            artefact=artefact,
+            project=project,
+        )
+    if effect == "network_access":
+        return t(locale, "effect.headline.network_access", targets=targets)
+    if effect == "code_execute":
+        return t(locale, "effect.headline.code_execute")
+    if effect == "external_send":
+        return t(locale, "effect.headline.external_send", targets=targets)
+
+    label = effect_label(effect, locale)
+    return t(locale, "effect.headline.default", effect=label, targets=targets)
+
+
+def protection_labels(proposal: EffectProposal, locale: str) -> list[str]:
+    """Phrases localisées décrivant les protections actives ou absentes."""
+    labels: list[str] = []
+    protections = proposal.protections
+
+    if protections.preview:
+        labels.append(t(locale, "effect.protection.preview"))
+    if protections.version_before_modify:
+        labels.append(t(locale, "effect.protection.version_before_modify"))
+    if not protections.network_used and proposal.effect not in _NETWORK_EFFECTS:
+        labels.append(t(locale, "effect.protection.no_network"))
+    if not protections.external_send:
+        labels.append(t(locale, "effect.protection.no_external_send"))
+
+    return labels
 
 
 def classify_effect(

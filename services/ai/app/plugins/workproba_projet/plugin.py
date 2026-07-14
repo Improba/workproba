@@ -8,7 +8,7 @@ from typing import Any
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
 
-from app.agent.effects import classify_effect
+from app.agent.effects import classify_effect, effect_headline, protection_labels
 from app.agent.human import build_human_summary
 from app.agent.tools import ToolDeps
 from app.i18n import t
@@ -128,6 +128,12 @@ def register_projet_tools(agent: Agent[ToolDeps, str]) -> None:
             if proposal is None:
                 raise ModelRetry("Effet non classifiable pour publish_artifact")
             proposal = proposal.model_copy(update={"human_summary": human_summary})
+            proposal = proposal.model_copy(
+                update={
+                    "headline": effect_headline(proposal, locale),
+                    "protection_labels": protection_labels(proposal, locale),
+                }
+            )
             approved = await gate.request_effect(
                 tool_call_id=ctx.tool_call_id or "",
                 proposal=proposal,

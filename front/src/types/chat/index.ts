@@ -16,6 +16,10 @@ export interface ChatConfirmation {
   humanSummary: string;
   /** Identifiant de tour backend, pour isoler la confirmation (résolution fine). */
   turnId?: string | null;
+  effect?: string | null;
+  targets?: string[];
+  headline?: string;
+  protectionLabels?: string[];
 }
 
 export interface ChatPlanStep {
@@ -281,6 +285,10 @@ export interface ChatStreamConfirmationRequestData {
   proposedPath: string;
   humanSummary: string;
   turnId?: string | null;
+  effect?: string | null;
+  targets?: string[];
+  headline?: string;
+  protectionLabels?: string[];
 }
 
 export interface ChatStreamErrorData {

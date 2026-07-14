@@ -404,6 +404,10 @@ describe('useChatStream — feedbacks', () => {
         action: 'create',
         proposed_path: 'contrat_dupont.docx',
         human_summary: 'Je vais créer contrat_dupont.docx',
+        effect: 'create',
+        targets: ['contrat_dupont.docx'],
+        headline: 'Je vais Créer : contrat_dupont.docx',
+        protection_labels: ['Aperçu disponible avant création'],
       },
     });
     expect(mapped.type).toBe('confirmation_request');
@@ -412,6 +416,10 @@ describe('useChatStream — feedbacks', () => {
     expect(mapped.data.action).toBe('create');
     expect(mapped.data.proposedPath).toBe('contrat_dupont.docx');
     expect(mapped.data.humanSummary).toBe('Je vais créer contrat_dupont.docx');
+    expect(mapped.data.effect).toBe('create');
+    expect(mapped.data.targets).toEqual(['contrat_dupont.docx']);
+    expect(mapped.data.headline).toBe('Je vais Créer : contrat_dupont.docx');
+    expect(mapped.data.protectionLabels).toEqual(['Aperçu disponible avant création']);
   });
 
   it('mappe turn_start et propage turn_id jusqu\'au confirm', async () => {
