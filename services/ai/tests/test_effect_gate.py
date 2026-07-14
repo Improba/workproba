@@ -8,9 +8,16 @@ from typing import Any
 
 import pytest
 from pydantic_ai import RunContext
+from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.models.test import TestModel
 
-from app.agent.confirmation import ConfirmationGate
+from app.agent.confirmation import (
+    APPROVAL_DENIED_MARKER,
+    APPROVAL_TIMEOUT_MARKER,
+    ApprovalOutcome,
+    ConfirmationGate,
+    approval_gate_retry_kind,
+)
 from app.agent.effects import (
     EffectProtection,
     EffectProposal,
@@ -30,6 +37,12 @@ from app.schemas import ConfirmationRequestEvent
 from conftest import FakeProjectClient
 
 
+def test_approval_gate_retry_kind_detects_denied_and_timeout() -> None:
+    assert approval_gate_retry_kind(f"{APPROVAL_DENIED_MARKER} refus") == "denied"
+    assert approval_gate_retry_kind(f"{APPROVAL_TIMEOUT_MARKER} expiré") == "timeout"
+    assert approval_gate_retry_kind("erreur sandbox") is None
+
+
 class RecordingGate(ConfirmationGate):
     """Gate qui enregistre les appels request_effect et approuve par défaut."""
 
@@ -45,11 +58,11 @@ class RecordingGate(ConfirmationGate):
         proposal: EffectProposal,
         audit_app_data_dir: Path | None = None,
         audit_enabled: bool | None = None,
-    ) -> bool:
+    ) -> ApprovalOutcome:
         self.effect_calls.append(proposal)
         if not self.auto_approve:
-            return False
-        return True
+            return "denied"
+        return "approved"
 
 
 def _deps(
@@ -321,11 +334,11 @@ async def test_request_effect_emits_enriched_event() -> None:
 
     asyncio.create_task(approve_later())
     approved = await gate.request_effect(tool_call_id="tc1", proposal=proposal)
-    assert approved is True
+    assert approved == "approved"
 
 
 @pytest.mark.asyncio
-async def test_request_effect_deny_returns_false() -> None:
+async def test_request_effect_deny_returns_denied() -> None:
     gate = ConfirmationGate(session_id="s1", turn_id="t1")
     proposal = EffectProposal(
         effect="publish",
@@ -344,7 +357,7 @@ async def test_request_effect_deny_returns_false() -> None:
 
     asyncio.create_task(deny_later())
     approved = await gate.request_effect(tool_call_id="tc1", proposal=proposal)
-    assert approved is False
+    assert approved == "denied"
 
 
 @pytest.mark.asyncio
@@ -368,7 +381,7 @@ async def test_request_write_legacy_defaults() -> None:
         proposed_path="note.md",
         human_summary="Créer note.md",
     )
-    assert approved is True
+    assert approved == "approved"
 
 
 def test_audit_on_request_effect(tmp_path: Path) -> None:
@@ -475,7 +488,7 @@ async def test_request_effect_timeout_writes_audit(
         audit_app_data_dir=app_data,
         audit_enabled=True,
     )
-    assert approved is False
+    assert approved == "timeout"
 
     entries, _ = read_audit(app_data)
     events = [entry["event"] for entry in entries]
@@ -512,7 +525,7 @@ def test_request_effect_deny_writes_audit(tmp_path: Path) -> None:
             audit_app_data_dir=app_data,
             audit_enabled=True,
         )
-        assert approved is False
+        assert approved == "denied"
 
     asyncio.run(run())
 
@@ -553,7 +566,7 @@ def test_multi_file_same_work_id_audit(tmp_path: Path) -> None:
                 audit_app_data_dir=app_data,
                 audit_enabled=True,
             )
-            assert approved is True
+            assert approved == "approved"
 
     asyncio.run(run())
 
@@ -656,6 +669,26 @@ async def test_publish_artifact_calls_request_effect(
 
     assert len(gate.effect_calls) == 1
     assert gate.effect_calls[0].effect == "publish"
+
+
+@pytest.mark.asyncio
+async def test_write_tool_denied_raises_model_retry(tmp_path: Path) -> None:
+    gate = RecordingGate()
+    gate.auto_approve = False
+    deps = _deps(project_root=tmp_path, gate=gate)
+    agent = build_agent(TestModel())
+    tool = agent._function_toolset.tools["generate_document"]
+    ctx = _ctx(deps)
+
+    with pytest.raises(ModelRetry) as exc_info:
+        await tool.function(
+            ctx,
+            name="note.md",
+            mime_type="text/markdown",
+            content_markdown="# Hi",
+        )
+
+    assert APPROVAL_DENIED_MARKER in str(exc_info.value)
 
 
 @pytest.mark.asyncio

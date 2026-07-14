@@ -302,6 +302,21 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "les écritures tant que le plan n'est pas approuvé. Pour les tâches "
                 "simples (une lecture, une reformulation), agis directement."
             ),
+            "approval_gate_prompt": (
+                "Les outils d'écriture (documents, fichiers, publication) exigent "
+                "l'approbation explicite de l'utilisateur. Si l'utilisateur refuse "
+                "ou laisse expirer la confirmation, n'insiste pas pour répéter la "
+                "même action : informe l'utilisateur et propose une alternative "
+                "(lecture, brouillon, reformulation)."
+            ),
+            "approval_denied_retry": (
+                "L'utilisateur a refusé cette action. N'insiste pas pour répéter "
+                "la même écriture. Explique brièvement et propose une alternative."
+            ),
+            "approval_timeout_retry": (
+                "La confirmation a expiré sans réponse. N'insiste pas pour répéter "
+                "la même écriture. Informe l'utilisateur et propose une alternative."
+            ),
         },
         "plan": {
             "title": "Plan proposé",
@@ -737,6 +752,20 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "with the planned steps (tool, summary, target file) and a rationale. "
                 "Do not perform writes until the plan is approved. For simple tasks "
                 "(a read, a rewrite), act directly."
+            ),
+            "approval_gate_prompt": (
+                "Write tools (documents, files, publishing) require explicit user "
+                "approval. If the user denies or lets the confirmation expire, do not "
+                "insist on repeating the same action: inform the user and suggest an "
+                "alternative (read-only review, draft, reformulation)."
+            ),
+            "approval_denied_retry": (
+                "The user denied this action. Do not insist on repeating the same "
+                "write. Briefly explain and suggest an alternative."
+            ),
+            "approval_timeout_retry": (
+                "The confirmation expired without a response. Do not insist on "
+                "repeating the same write. Inform the user and suggest an alternative."
             ),
         },
         "plan": {

@@ -7,9 +7,10 @@ from pathlib import Path
 
 import pytest
 from pydantic_ai import RunContext
+from pydantic_ai.exceptions import ModelRetry
 from pydantic_ai.models.test import TestModel
 
-from app.agent.confirmation import ConfirmationGate
+from app.agent.confirmation import APPROVAL_DENIED_MARKER, ConfirmationGate
 from app.agent.human import build_human_summary
 from app.agent.tools import ToolDeps, ToolContext, build_agent
 from app.limits import DEFAULT_LIMITS
@@ -171,13 +172,14 @@ async def test_publish_artifact_requires_confirmation(
             gate.resolve(cid, "deny")
 
     asyncio.create_task(deny_later())
-    result = await tool.function(
-        ctx,
-        project_id=project["id"],
-        name="rapport.docx",
-        source_path="rapport.docx",
-    )
-    assert result.get("cancelled") is True
+    with pytest.raises(ModelRetry) as exc_info:
+        await tool.function(
+            ctx,
+            project_id=project["id"],
+            name="rapport.docx",
+            source_path="rapport.docx",
+        )
+    assert APPROVAL_DENIED_MARKER in str(exc_info.value)
 
 
 @pytest.mark.asyncio

@@ -46,8 +46,8 @@ describe('ConfirmationCard', () => {
     expect(protections[1].text()).toBe('Aucun accès réseau');
     expect(wrapper.find('.confirmation-card__summary').exists()).toBe(false);
 
-    expect(wrapper.find('.confirmation-card__btn--deny').exists()).toBe(true);
-    expect(wrapper.find('.confirmation-card__btn--approve').exists()).toBe(true);
+    expect(wrapper.find('.confirmation-card__btn--deny').text()).toBe('Refuser');
+    expect(wrapper.find('.confirmation-card__btn--approve').text()).toBe('Approuver');
     wrapper.unmount();
   });
 

@@ -12,7 +12,7 @@ from pydantic_ai.models.test import TestModel
 
 import app.auth as authmod
 import app.main as mainmod
-from app.agent.confirmation import ConfirmationGate, confirmation_registry
+from app.agent.confirmation import APPROVAL_DENIED_MARKER, ConfirmationGate, confirmation_registry
 from app.agent.loop import AgentLoop
 from app.agent.tools import build_agent
 from app.capabilities import Capabilities, detect_capabilities
@@ -236,10 +236,7 @@ async def test_confirmation_deny_cancels_without_write(tmp_path: Path) -> None:
     assert len(results) == 1
     result = results[0]
     assert result.is_error is True
-    assert result.result == {
-        "cancelled": True,
-        "message": "Action annulée par l'utilisateur",
-    }
+    assert APPROVAL_DENIED_MARKER in str(result.result)
     assert result.human_summary == "Action annulée"
 
     contributions = [

@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from pydantic_ai.exceptions import ModelRetry
+
 from app.agent.effects import EffectProposal, protections_to_dict
 from app.agent.work_events import audit_details_with_work_id, work_id_for_turn
 from app.audit import log_event
@@ -15,8 +17,36 @@ from app.i18n import t
 from app.schemas import AgentEvent, ConfirmationRequestEvent, ErrorEvent
 
 ConfirmationDecision = Literal["approve", "deny"]
+ApprovalOutcome = Literal["approved", "denied", "timeout"]
+APPROVAL_DENIED_MARKER = "workproba:approval_denied"
+APPROVAL_TIMEOUT_MARKER = "workproba:approval_timeout"
 
 CONFIRMATION_TIMEOUT_SECONDS = 300.0
+
+
+def approval_denied_retry(locale: str, *, timeout: bool = False) -> ModelRetry:
+    if timeout:
+        return ModelRetry(
+            f"{APPROVAL_TIMEOUT_MARKER} {t(locale, 'tools.approval_timeout_retry')}"
+        )
+    return ModelRetry(
+        f"{APPROVAL_DENIED_MARKER} {t(locale, 'tools.approval_denied_retry')}"
+    )
+
+
+def approval_gate_retry_kind(content: object) -> Literal["denied", "timeout"] | None:
+    text = str(content or "")
+    if APPROVAL_DENIED_MARKER in text:
+        return "denied"
+    if APPROVAL_TIMEOUT_MARKER in text:
+        return "timeout"
+    return None
+
+
+def raise_unless_approved(outcome: ApprovalOutcome, locale: str) -> None:
+    if outcome == "approved":
+        return
+    raise approval_denied_retry(locale, timeout=(outcome == "timeout"))
 
 
 @dataclass
@@ -70,8 +100,8 @@ class ConfirmationGate:
         action: Literal["create", "modify"],
         proposed_path: str,
         human_summary: str,
-    ) -> bool:
-        """Émet confirmation_request et attend approve/deny. Retourne True si approuvé."""
+    ) -> ApprovalOutcome:
+        """Émet confirmation_request et attend approve/deny."""
         async with self._lock:
             confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
             pending = _PendingConfirmation(
@@ -94,7 +124,11 @@ class ConfirmationGate:
                     human_summary=human_summary,
                 ),
             )
-            return decision == "approve"
+            if decision == "approve":
+                return "approved"
+            if decision == "deny":
+                return "denied"
+            return "timeout"
 
     async def request_effect(
         self,
@@ -103,7 +137,7 @@ class ConfirmationGate:
         proposal: EffectProposal,
         audit_app_data_dir: Path | None = None,
         audit_enabled: bool | None = None,
-    ) -> bool:
+    ) -> ApprovalOutcome:
         """Émet confirmation_request enrichi et attend approve/deny."""
         async with self._lock:
             confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
@@ -162,7 +196,11 @@ class ConfirmationGate:
                     enabled=audit_enabled,
                 )
 
-            return decision == "approve"
+            if decision == "approve":
+                return "approved"
+            if decision == "deny":
+                return "denied"
+            return "timeout"
 
     def resolve(self, confirmation_id: str, decision: ConfirmationDecision) -> bool:
         pending = self._pending.get(confirmation_id)

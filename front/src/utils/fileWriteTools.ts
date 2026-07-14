@@ -18,6 +18,7 @@ export function extractProposedContent(
   const candidates = [
     args.proposed_content,
     args.content,
+    args.content_markdown,
     args.new_content,
     args.text,
     args.body,

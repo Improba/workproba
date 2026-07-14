@@ -21,7 +21,7 @@ from typing import Any, Literal
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
 
-from app.agent.confirmation import ConfirmationGate
+from app.agent.confirmation import ConfirmationGate, raise_unless_approved
 from app.agent.effects import classify_effect, effect_headline, protection_labels
 from app.agent.human import build_human_summary
 from app.agent.plan import PlanGate
@@ -379,6 +379,10 @@ def build_agent(
     @agent.system_prompt
     def plan_mode_instruction(ctx: RunContext[ToolDeps]) -> str:
         return t(ctx.deps.context.locale, "tools.plan_mode_prompt")
+
+    @agent.system_prompt
+    def approval_gate_instruction(ctx: RunContext[ToolDeps]) -> str:
+        return t(ctx.deps.context.locale, "tools.approval_gate_prompt")
 
     @agent.system_prompt
     def memory_prompt(ctx: RunContext[ToolDeps]) -> str:
@@ -782,20 +786,13 @@ def build_agent(
                     "protection_labels": protection_labels(proposal, locale),
                 }
             )
-            approved = await gate.request_effect(
+            outcome = await gate.request_effect(
                 tool_call_id=ctx.tool_call_id or "",
                 proposal=proposal,
                 audit_app_data_dir=deps.context.workspace_data_dir,
                 audit_enabled=deps.context.audit_enabled,
             )
-            if not approved:
-                return {
-                    "cancelled": True,
-                    "message": t(
-                        deps.context.locale,
-                        "tools.action_cancelled_by_user",
-                    ),
-                }
+            raise_unless_approved(outcome, deps.context.locale)
 
         content_base64 = base64.b64encode(content).decode("ascii")
         try:

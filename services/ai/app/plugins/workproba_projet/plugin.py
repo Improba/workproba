@@ -10,6 +10,7 @@ from pydantic_ai.exceptions import ModelRetry
 
 from app.agent.effects import classify_effect, effect_headline, protection_labels
 from app.agent.human import build_human_summary
+from app.agent.confirmation import raise_unless_approved
 from app.agent.tools import ToolDeps
 from app.i18n import t
 from app.plugins.workproba_projet import storage
@@ -134,17 +135,13 @@ def register_projet_tools(agent: Agent[ToolDeps, str]) -> None:
                     "protection_labels": protection_labels(proposal, locale),
                 }
             )
-            approved = await gate.request_effect(
+            outcome = await gate.request_effect(
                 tool_call_id=ctx.tool_call_id or "",
                 proposal=proposal,
                 audit_app_data_dir=deps.context.workspace_data_dir,
                 audit_enabled=deps.context.audit_enabled,
             )
-            if not approved:
-                return {
-                    "cancelled": True,
-                    "message": t(locale, "tools.action_cancelled_by_user"),
-                }
+            raise_unless_approved(outcome, locale)
 
         workspace_root = _workspace_root(ctx) if has_source else None
         try:

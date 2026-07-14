@@ -3,7 +3,9 @@ import {
   buildToolCallDetails,
   durationLabel,
   statusLabel,
+  toolCallStatusLabel,
 } from '@utils/toolCallDetails';
+import { isWriteApprovalCancelled } from '@utils/approvalGate';
 import type { ChatToolCall } from '#types';
 
 function tc(over: Partial<ChatToolCall> = {}): ChatToolCall {
@@ -63,6 +65,52 @@ describe('buildToolCallDetails', () => {
     );
     expect(d.target).toContain('claude-meylan.md');
     expect(d.location).toContain('assets');
+  });
+
+  it('indique une création annulée après refus de confirmation', () => {
+    const d = buildToolCallDetails(
+      tc({
+        name: 'generate_document',
+        args: { name: 'note.md' },
+        status: 'error',
+        result: {
+          content: 'workproba:approval_denied Action refusée par l’utilisateur.',
+        },
+      }),
+    );
+    expect(d.outcome).toBe('Création annulée');
+    expect(
+      isWriteApprovalCancelled(
+        { content: 'workproba:approval_denied refus' },
+        'error',
+      ),
+    ).toBe(true);
+  });
+
+  it('indique une création annulée pour publish_artifact refusé', () => {
+    const d = buildToolCallDetails(
+      tc({
+        name: 'publish_artifact',
+        args: { name: 'rapport.docx', project: 'Alpha' },
+        status: 'error',
+        humanSummary: 'Action annulée',
+        result: { content: 'workproba:approval_denied refus' },
+      }),
+    );
+    expect(d.outcome).toBe('Création annulée');
+    expect(d.rows.find((r) => r.label === 'Statut')?.value).toBe('Annulé');
+  });
+
+  it('libelle le statut annulé pour un timeout de confirmation', () => {
+    expect(
+      toolCallStatusLabel(
+        tc({
+          name: 'write_docx',
+          status: 'error',
+          humanSummary: "La confirmation a expiré. Relancez l'action si nécessaire.",
+        }),
+      ),
+    ).toBe('Annulé');
   });
 
   it('expose toujours le statut et la durée dans les rows', () => {

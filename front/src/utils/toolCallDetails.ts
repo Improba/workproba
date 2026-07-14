@@ -1,4 +1,5 @@
 import type { ChatToolCall } from '#types';
+import { isApprovalGateCancelledToolCall, isWriteApprovalCancelled } from './approvalGate';
 import { t } from './i18nT';
 
 /**
@@ -203,14 +204,25 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
       }
       if (result && typeof result === 'object') {
         const r = result as Record<string, unknown>;
-        if (r.cancelled) outcome = t('toolCalls.creationCancelled');
-        else if (toolCall.status === 'success') outcome = t('toolCalls.documentSaved');
+        if (r.cancelled || isWriteApprovalCancelled(result, toolCall.status)) {
+          outcome = t('toolCalls.creationCancelled');
+        } else if (toolCall.status === 'success') outcome = t('toolCalls.documentSaved');
+      } else if (isWriteApprovalCancelled(result, toolCall.status)) {
+        outcome = t('toolCalls.creationCancelled');
       }
       break;
     }
     default: {
       target = toolCall.humanSummary || undefined;
     }
+  }
+
+  if (
+    !outcome &&
+    ['write_docx', 'write_xlsx', 'write_pdf', 'publish_artifact'].includes(toolCall.name) &&
+    isWriteApprovalCancelled(result, toolCall.status)
+  ) {
+    outcome = t('toolCalls.creationCancelled');
   }
 
   if (target) rows.push({ label: t('common.action'), value: target });
@@ -220,9 +232,16 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
   const dur = durationLabel(toolCall);
   if (dur) rows.push({ label: t('common.duration'), value: dur });
 
-  rows.push({ label: t('common.status'), value: statusLabel(toolCall.status) });
+  rows.push({ label: t('common.status'), value: toolCallStatusLabel(toolCall) });
 
   return { target, location, outcome, rows };
+}
+
+export function toolCallStatusLabel(toolCall: ChatToolCall): string {
+  if (isApprovalGateCancelledToolCall(toolCall)) {
+    return t('toolCalls.statusCancelled');
+  }
+  return statusLabel(toolCall.status);
 }
 
 export function statusLabel(status: ChatToolCall['status']): string {

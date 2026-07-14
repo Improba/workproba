@@ -37,7 +37,11 @@ from pydantic_ai.messages import (
 from pydantic_ai.usage import UsageLimits
 
 from app.agent.attachments import build_user_prompt, process_inline_attachments
-from app.agent.confirmation import ConfirmationGate, confirmation_registry
+from app.agent.confirmation import (
+    approval_gate_retry_kind,
+    ConfirmationGate,
+    confirmation_registry,
+)
 from app.agent.human import build_human_summary
 from app.agent.plan import PlanGate, plan_registry
 from app.agent.tools import ToolContext, ToolDeps
@@ -509,15 +513,15 @@ class AgentLoop:
                     arguments = pending_arguments.pop(tool_call_id, {})
                     result = coerce_tool_result(getattr(part, "content", None))
                     is_error = isinstance(part, RetryPromptPart)
-                    if tool_name in {
-                        "generate_document",
-                        "write_docx",
-                        "write_xlsx",
-                        "write_pdf",
-                        "publish_artifact",
-                    } and result.get("cancelled"):
-                        is_error = True
+                    approval_retry = (
+                        approval_gate_retry_kind(getattr(part, "content", None))
+                        if is_error
+                        else None
+                    )
+                    if approval_retry == "denied":
                         human_summary = t(locale, "loop.action_cancelled")
+                    elif approval_retry == "timeout":
+                        human_summary = t(locale, "loop.confirmation_timeout")
                     elif tool_name == "propose_plan" and result.get("cancelled"):
                         is_error = True
                         human_summary = t(locale, "plan.denied")
@@ -543,7 +547,7 @@ class AgentLoop:
                         is_error=is_error,
                         human_summary=human_summary,
                     )
-                    if result.get("cancelled"):
+                    if approval_retry is not None or result.get("cancelled"):
                         contribution_status = "cancelled"
                     elif is_error:
                         contribution_status = "failed"

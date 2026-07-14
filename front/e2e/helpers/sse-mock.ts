@@ -119,8 +119,8 @@ export async function installConfirmationSseMock(
                     tool_call_id: tcId,
                     tool_name: 'generate_document',
                     result: {
-                      cancelled: true,
-                      message: "Action annulée par l'utilisateur",
+                      content:
+                        "workproba:approval_denied L'utilisateur a refusé cette action.",
                     },
                     is_error: true,
                     human_summary: 'Action annulée',

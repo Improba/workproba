@@ -71,7 +71,7 @@
         :aria-label="t('chat.confirmationRefuse')"
         @click="emit('cancel')"
       >
-        {{ busy ? t('common.inProgress') : t('chat.plan.refuse') }}
+        {{ busy ? t('common.inProgress') : t('chat.confirmationDeny') }}
       </button>
       <button
         type="button"
@@ -80,7 +80,7 @@
         :aria-label="t('chat.confirmationApprove')"
         @click="emit('approve')"
       >
-        {{ busy ? t('common.inProgress') : t('chat.plan.approve') }}
+        {{ busy ? t('common.inProgress') : t('chat.confirmationApproveShort') }}
       </button>
     </div>
 

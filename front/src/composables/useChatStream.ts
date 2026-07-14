@@ -660,6 +660,7 @@ export function applyStreamEvent(
           const tool = assistant.toolCalls?.find((t) => t.id === pending.toolCallId);
           if (tool) {
             tool.status = 'error';
+            tool.endedAt = Date.now();
             tool.humanSummary = localizeAgentError('confirmation_timeout', '');
           }
           assistant.pendingConfirmation = null;

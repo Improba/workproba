@@ -27,10 +27,10 @@ test.describe('T-D3e scénario Sylvie (confirmation et restauration)', () => {
     const confirmation = page.getByTestId('confirmation-card');
     await expect(confirmation).toBeVisible({ timeout: 15_000 });
     await expect(confirmation).toContainText('Je vais créer');
-    await expect(confirmation.getByRole('button', { name: 'Annuler' })).toBeVisible();
-    await expect(confirmation.getByRole('button', { name: 'Continuer' })).toBeVisible();
+    await expect(confirmation.getByRole('button', { name: 'Refuser' })).toBeVisible();
+    await expect(confirmation.getByRole('button', { name: 'Approuver' })).toBeVisible();
 
-    await confirmation.getByRole('button', { name: 'Continuer' }).click();
+    await confirmation.getByRole('button', { name: 'Approuver' }).click();
 
     await expect(confirmation).toBeHidden({ timeout: 10_000 });
 
@@ -64,7 +64,7 @@ test.describe('T-D3e scénario Sylvie (confirmation et restauration)', () => {
     const confirmation = page.getByTestId('confirmation-card');
     await expect(confirmation).toBeVisible({ timeout: 15_000 });
 
-    await confirmation.getByRole('button', { name: 'Annuler' }).click();
+    await confirmation.getByRole('button', { name: 'Refuser' }).click();
 
     await expect(confirmation).toBeHidden({ timeout: 10_000 });
     await expect(page.getByTestId('restore-banner')).toHaveCount(0);

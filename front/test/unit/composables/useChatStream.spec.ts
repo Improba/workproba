@@ -376,6 +376,52 @@ describe('useChatStream — feedbacks', () => {
     expect(assistant.pendingConfirmation).toBeNull();
     expect(assistant.toolCalls?.[0]?.status).toBe('error');
     expect(assistant.toolCalls?.[0]?.humanSummary).toContain('expiré');
+    expect(assistant.toolCalls?.[0]?.endedAt).toBeTypeOf('number');
+  });
+
+  it('refus de confirmation via tool_call_result : statut error et résumé annulé', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        toolCalls: [
+          {
+            id: 'tc_1',
+            name: 'generate_document',
+            status: 'awaiting_confirmation',
+            startedAt: 1000,
+          },
+        ],
+        pendingConfirmation: {
+          confirmationId: 'cf_1',
+          toolCallId: 'tc_1',
+          toolName: 'generate_document',
+          action: 'create',
+          proposedPath: 'note.md',
+          humanSummary: 'Je vais créer note.md',
+        },
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'tc_1',
+        name: 'generate_document',
+        result: { content: 'workproba:approval_denied Action refusée.' },
+        error: true,
+        status: 'error',
+        humanSummary: 'Action annulée',
+      },
+    });
+
+    const assistant = messages[0];
+    expect(assistant.pendingConfirmation).toBeNull();
+    expect(assistant.toolCalls?.[0]?.status).toBe('error');
+    expect(assistant.toolCalls?.[0]?.humanSummary).toBe('Action annulée');
+    expect(assistant.toolCalls?.[0]?.endedAt).toBeTypeOf('number');
   });
 
   it('internal_error garde le comportement terminal sur error SSE', () => {

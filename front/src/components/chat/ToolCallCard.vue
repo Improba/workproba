@@ -102,7 +102,7 @@ import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useToolCallExpansion } from '@composables/useToolCallExpansion';
 import { fallbackHumanLabel } from '@utils/toolCallHumanLabel';
-import { buildToolCallDetails, statusLabel as statusLabelFn } from '@utils/toolCallDetails';
+import { buildToolCallDetails, durationLabel, toolCallStatusLabel } from '@utils/toolCallDetails';
 import type { ChatToolCall } from '#types';
 
 const props = defineProps<{
@@ -148,7 +148,7 @@ const humanLabel = computed(() => {
 
 const details = computed(() => buildToolCallDetails(props.toolCall));
 
-const statusLabel = computed(() => statusLabelFn(props.toolCall.status));
+const statusLabel = computed(() => toolCallStatusLabel(props.toolCall));
 
 const formattedArgs = computed(() =>
   JSON.stringify(props.toolCall.args ?? {}, null, 2),
