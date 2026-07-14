@@ -1,13 +1,13 @@
 <template>
   <button
     type="button"
-    class="open-folder-btn"
+    class="open-space-btn"
     :disabled="loading"
     @click="emit('click')"
   >
-    <Lucide name="folder-open" size="sm" color="text-invert" />
+    <Lucide name="layers" size="sm" color="text-invert" />
     <span>{{ displayLabel }}</span>
-    <q-spinner v-if="loading" size="18px" class="open-folder-btn__spinner" />
+    <q-spinner v-if="loading" size="18px" class="open-space-btn__spinner" />
   </button>
 </template>
 
@@ -32,11 +32,11 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const displayLabel = computed(() => props.label ?? t('common.openFolder'));
+const displayLabel = computed(() => props.label ?? t('common.openSpace'));
 </script>
 
 <style scoped lang="scss">
-.open-folder-btn {
+.open-space-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -63,7 +63,7 @@ const displayLabel = computed(() => props.label ?? t('common.openFolder'));
   }
 }
 
-.open-folder-btn__spinner {
+.open-space-btn__spinner {
   color: var(--text-invert);
 }
 </style>

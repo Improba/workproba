@@ -138,6 +138,14 @@ fn workspace_title(folder_path: &Path) -> String {
         .to_string()
 }
 
+fn normalize_workspace_title(title: &str) -> Result<String, String> {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        return Err("Le nom de l'espace ne peut pas être vide.".to_string());
+    }
+    Ok(trimmed.to_string())
+}
+
 pub fn normalize_folder_path(path: &Path) -> Result<String, String> {
     fs::canonicalize(path)
         .map_err(|error| format!("Impossible de résoudre le chemin : {error}"))
@@ -265,6 +273,30 @@ pub fn list_workspaces(app: &AppHandle) -> Result<Vec<WorkspaceInfo>, String> {
         .collect();
     workspaces.sort_by(|left, right| right.last_opened_at.cmp(&left.last_opened_at));
     Ok(workspaces)
+}
+
+pub fn update_workspace_title(
+    app: &AppHandle,
+    workspace_id: &str,
+    title: &str,
+) -> Result<WorkspaceInfo, String> {
+    let trimmed = normalize_workspace_title(title)?;
+
+    let mut registry = load_registry(app)?;
+    let entry = registry
+        .workspaces
+        .iter_mut()
+        .find(|entry| entry.id == workspace_id)
+        .ok_or_else(|| format!("Espace introuvable : {workspace_id}"))?;
+
+    entry.title = trimmed.to_string();
+    let entry_snapshot = entry.clone();
+    let data_dir = workspace_data_dir(app, workspace_id)?;
+    if data_dir.is_dir() {
+        write_manifest(&data_dir, &entry_snapshot)?;
+    }
+    save_registry(app, &registry)?;
+    entry_to_info(app, &entry_snapshot)
 }
 
 pub fn get_workspace_data_dir_for_folder(
@@ -438,5 +470,15 @@ mod workspace_store_tests {
         assert!(spaces.is_dir());
 
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn normalize_workspace_title_trims_and_rejects_empty() {
+        assert_eq!(
+            normalize_workspace_title("  Client Dupont  ").expect("trim"),
+            "Client Dupont"
+        );
+        assert!(normalize_workspace_title("   ").is_err());
+        assert!(normalize_workspace_title("").is_err());
     }
 }

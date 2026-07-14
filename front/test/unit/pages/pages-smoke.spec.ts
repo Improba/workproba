@@ -14,7 +14,8 @@ vi.mock('@composables/useProject', () => ({
     activeWorkspaceId: ref<string | null>(null),
     loading: ref(false),
     error: ref<string | null>(null),
-    openFolder: vi.fn(),
+    openSpace: vi.fn(),
+    workspaceTitle: ref<string | null>(null),
   }),
 }));
 
@@ -59,13 +60,13 @@ describe('pages smoke tests', () => {
     expect(wrapper.find('.router-view-stub').exists()).toBe(true);
   });
 
-  it('Home affiche l\'onboarding quand aucun dossier n\'est ouvert', async () => {
+  it('Home affiche l\'onboarding quand aucun espace n\'est ouvert', async () => {
     const { default: HomePage } = await HomeModule();
 
     const wrapper = shallowMount(HomePage, {
       global: {
         stubs: {
-          OpenFolderButton: { template: '<button class="open-folder" />' },
+          OpenSpaceButton: { template: '<button class="open-space" />' },
           StartPrompts: true,
           Lucide: true,
           'q-dialog': { template: '<div><slot /></div>' },
@@ -76,7 +77,7 @@ describe('pages smoke tests', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('Bienvenue sur Workproba');
-    expect(wrapper.find('.open-folder').exists()).toBe(true);
+    expect(wrapper.find('.open-space').exists()).toBe(true);
   });
 
   it('ErrorNotFound affiche le contenu 404', () => {

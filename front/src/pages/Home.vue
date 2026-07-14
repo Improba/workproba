@@ -66,14 +66,14 @@
         <li class="home-page__step">
           <span class="home-page__step-badge">{{ t('home.stepBadge', { n: 1 }) }}</span>
           <span class="home-page__step-icon" aria-hidden="true">
-            <Lucide name="folder-open" size="22" color="wp-accent" />
+            <Lucide name="layers" size="22" color="wp-accent" />
           </span>
           <div class="home-page__step-body">
             <p class="home-page__step-title">{{ t('home.step1Title') }}</p>
             <p class="home-page__step-text">
               {{ t('home.step1Text') }}
             </p>
-            <OpenFolderButton :loading="loading" @click="openFolder" />
+            <OpenSpaceButton :loading="loading" @click="openSpace" />
           </div>
         </li>
 
@@ -120,21 +120,23 @@
       <p class="home-page__lead">
         {{ t('home.openSpaceLead') }}
       </p>
-      <OpenFolderButton :loading="loading" @click="openFolder" />
+      <OpenSpaceButton :loading="loading" @click="openSpace" />
       <p v-if="error" class="home-page__error">{{ error }}</p>
     </section>
 
     <section v-else class="home-page__workspace">
       <header class="home-page__header">
         <div class="home-page__header-text">
-          <h1 class="home-page__title">{{ t('home.spaceTitle') }}</h1>
-          <p class="home-page__path" :title="activePath ?? undefined">{{ activePath }}</p>
+          <h1 class="home-page__title">{{ workspaceTitle || t('home.spaceTitle') }}</h1>
+          <p class="home-page__path" :title="activePath ?? undefined">
+            {{ activePath ? t('shell.spacePathHint', { path: activePath }) : '' }}
+          </p>
         </div>
         <div class="home-page__actions">
-          <OpenFolderButton
+          <OpenSpaceButton
             :loading="loading"
-            :label="t('common.changeFolder')"
-            @click="openFolder"
+            :label="t('common.changeSpace')"
+            @click="openSpace"
           />
           <button
             type="button"
@@ -197,7 +199,7 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import OpenFolderButton from '@components/workspace/OpenFolderButton.vue';
+import OpenSpaceButton from '@components/workspace/OpenSpaceButton.vue';
 import StartPrompts from '@components/chat/StartPrompts.vue';
 import { useAppSettings } from '@composables/useAppSettings';
 import { useUserProfile } from '@composables/useUserProfile';
@@ -212,9 +214,10 @@ const { t, locale } = useI18n();
 const {
   activePath,
   activeWorkspaceId,
+  workspaceTitle,
   loading,
   error,
-  openFolder,
+  openSpace,
 } = useProject();
 
 const { onboardingDone, loaded: settingsLoaded, setOnboardingDone } = useAppSettings();

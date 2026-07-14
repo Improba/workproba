@@ -6,6 +6,7 @@ import {
   pickProjectFolder,
   restoreLastProjectPath,
   setActiveProjectPath,
+  updateWorkspaceTitle,
   type LocalDocumentEntry,
   type WorkspaceInfo,
 } from './useDesktop';
@@ -55,8 +56,9 @@ export interface UseProjectReturn {
   documents: Ref<LocalDocumentEntry[]>;
   loading: Ref<boolean>;
   error: Ref<string | null>;
-  openFolder: () => Promise<void>;
+  openSpace: () => Promise<void>;
   switchWorkspace: (folderPath: string) => Promise<void>;
+  renameSpace: (workspaceId: string, title: string) => Promise<WorkspaceInfo>;
   refreshDocuments: () => Promise<void>;
   initFromStoredPath: () => Promise<void>;
 }
@@ -88,7 +90,7 @@ export function useProject(): UseProjectReturn {
     await refreshDocuments();
   }
 
-  async function openFolder(): Promise<void> {
+  async function openSpace(): Promise<void> {
     loading.value = true;
     error.value = null;
 
@@ -100,7 +102,7 @@ export function useProject(): UseProjectReturn {
       await activateWorkspace(workspace);
     } catch (err) {
       error.value =
-        err instanceof Error ? err.message : t('errors.openFolderFailed');
+        err instanceof Error ? err.message : t('errors.openSpaceFailed');
     } finally {
       loading.value = false;
     }
@@ -118,6 +120,14 @@ export function useProject(): UseProjectReturn {
     } finally {
       loading.value = false;
     }
+  }
+
+  async function renameSpace(workspaceId: string, title: string): Promise<WorkspaceInfo> {
+    const updated = await updateWorkspaceTitle(workspaceId, title);
+    if (activeWorkspaceId.value === workspaceId) {
+      workspaceTitle.value = updated.title;
+    }
+    return updated;
   }
 
   async function initFromStoredPath(): Promise<void> {
@@ -159,8 +169,9 @@ export function useProject(): UseProjectReturn {
     documents,
     loading,
     error,
-    openFolder,
+    openSpace,
     switchWorkspace,
+    renameSpace,
     refreshDocuments,
     initFromStoredPath,
   };

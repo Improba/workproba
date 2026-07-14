@@ -1,16 +1,16 @@
 <template>
   <nav class="wp-sidebar" :class="{ 'wp-sidebar--rail': rail }">
     <div v-if="!rail" class="wp-sidebar__inner">
-      <!-- En-tête : Espaces + ouvrir un dossier -->
+      <!-- En-tête : Espaces -->
       <div class="wp-sidebar__topbar">
         <span class="wp-sidebar__brand">{{ t('shell.spaces') }}</span>
         <button
           type="button"
           class="wp-sidebar__icon-btn"
-          :title="t('common.openFolderEllipsis')"
-          @click="onOpenFolder"
+          :title="t('common.openSpaceEllipsis')"
+          @click="onOpenSpace"
         >
-          <Lucide name="folder-plus" size="15" color="wp-text-muted" />
+          <Lucide name="layers" size="15" color="wp-text-muted" />
         </button>
       </div>
 
@@ -18,9 +18,9 @@
       <div class="wp-sidebar__tree">
         <div v-if="recentWorkspaces.length === 0" class="wp-sidebar__empty">
           <p>{{ t('shell.noSpaces') }}</p>
-          <button type="button" class="wp-sidebar__new-cta" @click="onOpenFolder">
+          <button type="button" class="wp-sidebar__new-cta" @click="onOpenSpace">
             <Lucide name="plus" size="16" color="wp-canard" />
-            {{ t('common.openFolder') }}
+            {{ t('common.openSpace') }}
           </button>
         </div>
 
@@ -49,17 +49,26 @@
             <button
               type="button"
               class="wp-ws__label"
-              :title="ws.folderPath"
+              :title="t('shell.spacePathHint', { path: ws.folderPath })"
               @click="onActivate(ws)"
             >
-              <Lucide name="folder" size="16" color="wp-text-muted" />
+              <Lucide name="layers" size="16" color="wp-text-muted" />
               <span class="wp-ws__name">{{ ws.title || basename(ws.folderPath) }}</span>
+            </button>
+
+            <button
+              type="button"
+              class="wp-ws__action"
+              :title="t('shell.renameSpace')"
+              @click.stop="openRenameDialog(ws)"
+            >
+              <Lucide name="pencil" size="13" color="wp-text-muted" />
             </button>
 
             <button
               v-if="ws.id === activeWorkspaceId"
               type="button"
-              class="wp-ws__new"
+              class="wp-ws__action"
               :title="t('common.newConversation')"
               @click.stop="onNewConversation"
             >
@@ -178,6 +187,48 @@
         </div>
       </q-dialog>
 
+      <q-dialog v-model="renameDialogOpen">
+        <div class="wp-profile-dialog">
+          <header class="wp-profile-dialog__head">
+            <span class="wp-profile-dialog__title">{{ t('shell.renameSpaceTitle') }}</span>
+            <button
+              type="button"
+              class="wp-profile-dialog__close"
+              :aria-label="t('common.close')"
+              @click="renameDialogOpen = false"
+            >
+              <Lucide name="x" size="16" color="text-muted" />
+            </button>
+          </header>
+          <p v-if="renameTarget" class="wp-rename-dialog__hint">
+            {{ t('shell.spacePathHint', { path: renameTarget.folderPath }) }}
+          </p>
+          <div class="wp-profile-dialog__field">
+            <label for="wp-rename-space">{{ t('shell.renameSpaceTitle') }}</label>
+            <input
+              id="wp-rename-space"
+              v-model="renameTitleDraft"
+              type="text"
+              :placeholder="t('shell.renameSpacePlaceholder')"
+              @keydown.enter.prevent="onSaveRename"
+            />
+          </div>
+          <footer class="wp-profile-dialog__foot">
+            <button type="button" class="wp-profile-dialog__btn" @click="renameDialogOpen = false">
+              {{ t('common.cancel') }}
+            </button>
+            <button
+              type="button"
+              class="wp-profile-dialog__btn wp-profile-dialog__btn--primary"
+              :disabled="!renameTitleDraft.trim() || renameSaving"
+              @click="onSaveRename"
+            >
+              {{ t('common.save') }}
+            </button>
+          </footer>
+        </div>
+      </q-dialog>
+
       <q-dialog v-model="memoryDialogOpen">
         <div class="wp-memory-dialog">
           <header class="wp-memory-dialog__head">
@@ -199,14 +250,14 @@
     <!-- Mode rail replié -->
     <div v-else class="wp-sidebar__rail">
       <button class="wp-rail-btn" :title="t('shell.spacesTitle')" @click="$emit('expand')">
-        <Lucide name="folder" size="18" color="wp-text-muted" />
+        <Lucide name="layers" size="18" color="wp-text-muted" />
       </button>
       <button
         class="wp-rail-btn"
-        :title="t('common.openFolderEllipsis')"
-        @click="onOpenFolder"
+        :title="t('common.openSpaceEllipsis')"
+        @click="onOpenSpace"
       >
-        <Lucide name="folder-plus" size="18" color="wp-text-muted" />
+        <Lucide name="layers" size="18" color="wp-text-muted" />
       </button>
       <button
         class="wp-rail-btn"
@@ -267,8 +318,9 @@ const {
   activePath,
   activeWorkspaceId,
   activeDataDir,
-  openFolder,
+  openSpace,
   switchWorkspace,
+  renameSpace,
   initFromStoredPath,
 } = useProject();
 
@@ -284,6 +336,10 @@ const currentSessionId = computed(() => String(route.params.id ?? ''));
 
 const { profile, initials, save: saveProfile } = useUserProfile();
 const profileDialogOpen = ref(false);
+const renameDialogOpen = ref(false);
+const renameTarget = ref<WorkspaceInfo | null>(null);
+const renameTitleDraft = ref('');
+const renameSaving = ref(false);
 const memoryDialogOpen = ref(false);
 const memoryDialogKey = ref(0);
 const profileNameDraft = ref(profile.value.name);
@@ -435,11 +491,41 @@ async function onActivate(ws: WorkspaceInfo): Promise<void> {
   await switchWorkspace(ws.folderPath);
 }
 
-async function onOpenFolder(): Promise<void> {
-  await openFolder();
+async function onOpenSpace(): Promise<void> {
+  await openSpace();
   await refreshWorkspaces();
   const id = activeWorkspaceId.value;
   if (id) expanded[id] = true;
+}
+
+function openRenameDialog(ws: WorkspaceInfo): void {
+  renameTarget.value = ws;
+  renameTitleDraft.value = ws.title || basename(ws.folderPath);
+  renameDialogOpen.value = true;
+}
+
+async function onSaveRename(): Promise<void> {
+  const target = renameTarget.value;
+  const title = renameTitleDraft.value.trim();
+  if (!target || !title) return;
+
+  renameSaving.value = true;
+  try {
+    const updated = await renameSpace(target.id, title);
+    const index = recentWorkspaces.value.findIndex((ws) => ws.id === updated.id);
+    if (index >= 0) {
+      recentWorkspaces.value[index] = updated;
+    }
+    renameDialogOpen.value = false;
+    Notify.create({ message: t('shell.renameSpaceSaved'), color: 'dark', timeout: 1500 });
+  } catch (err) {
+    Notify.create({
+      message: err instanceof Error ? err.message : t('shell.renameSpaceFailed'),
+      classes: 'bg-danger text-white',
+    });
+  } finally {
+    renameSaving.value = false;
+  }
 }
 
 async function onNewConversation(): Promise<void> {
@@ -689,7 +775,7 @@ onMounted(async () => {
   color: var(--wp-text);
 }
 
-.wp-ws__new {
+.wp-ws__action {
   flex: none;
   width: 22px;
   height: 22px;
@@ -713,6 +799,13 @@ onMounted(async () => {
     background: var(--wp-surface-2);
     color: var(--wp-gold);
   }
+}
+
+.wp-rename-dialog__hint {
+  margin: 0 0 var(--wp-space-3);
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
+  word-break: break-all;
 }
 
 /* Sessions imbriquées */

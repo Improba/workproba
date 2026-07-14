@@ -182,6 +182,15 @@ pub fn list_workspaces(app: AppHandle) -> Result<Vec<WorkspaceInfo>, String> {
 }
 
 #[tauri::command]
+pub fn update_workspace_title(
+    app: AppHandle,
+    workspace_id: String,
+    title: String,
+) -> Result<WorkspaceInfo, String> {
+    workspace_store::update_workspace_title(&app, &workspace_id, &title)
+}
+
+#[tauri::command]
 pub fn list_conversations(
     app: AppHandle,
     workspace_id: String,

@@ -62,6 +62,16 @@ export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
   return tauriInvoke<WorkspaceInfo[]>('list_workspaces');
 }
 
+export async function updateWorkspaceTitle(
+  workspaceId: string,
+  title: string,
+): Promise<WorkspaceInfo> {
+  if (!isDesktopApp()) {
+    throw new Error('updateWorkspaceTitle nécessite l’application bureau Tauri');
+  }
+  return tauriInvoke<WorkspaceInfo>('update_workspace_title', { workspaceId, title });
+}
+
 export async function listLocalDocuments(
   projectPath: string,
 ): Promise<LocalDocumentEntry[]> {
