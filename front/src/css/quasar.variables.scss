@@ -1,27 +1,20 @@
 @use "anubis/_overrides.scss";
 @use "anubis/_tokens.scss";
-// Quasar SCSS (& Sass) Variables
-// --------------------------------------------------
-// To customize the look and feel of this app, you can override
-// the Sass/SCSS variables found in Quasar's source Sass/SCSS files.
 
-// Check documentation for full list of Quasar variables
+// Quasar compile-time SCSS ($primary, $accent on q-btn, etc.).
+// Values come from Anubis tokens (generated from anubis.config.json).
+// Runtime light/dark: CSS vars --primary / --accent + --q-* sync in workproba.scss.
 
-// Your own variables (that are declared here) and Quasar's own
-// ones will be available out of the box in your .vue/.scss/.sass files
+$dark: tokens.$neutral-lowest-dark;
+$dark-page: tokens.$neutral-lowest-dark;
 
-// It's highly recommended to change the default colors
-// to match your app's branding.
-// Tip: Use the "Theme Builder" on Quasar's documentation website.
-
-$dark: #161514;
-$dark-page: #161514;
-
-$primary: #203d52;
-$positive: #4ade80;
-$negative: #e87878;
-$info: #3ecfd9;
-$warning: #e0a93a;
+$primary: tokens.$primary-light;
+$secondary: tokens.$secondary-light;
+$accent: tokens.$accent-light;
+$positive: tokens.$success-light;
+$negative: tokens.$danger-light;
+$info: #3ecfd9; // brand cyan, no Anubis token
+$warning: tokens.$warning-light;
 
 $h1: (
   size: 2rem,
