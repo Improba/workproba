@@ -94,8 +94,12 @@ Workproba metadata lives in the **application folder**, not in the client folder
    includes the conversation **model + reasoning level** override
    (persisted in session), clamped against model capabilities.
 5. Python runs the agent loop: LLM, file tools, local search, subprocess sandbox.
-6. SSE events are shown in chat (tokens, reasoning with spinner,
-   tool calls); sessions are persisted in `{app_data}/spaces/{id}/.workproba/conversations/`.
+6. Before sensitive actions (file write, publish, network, code execution), the sidecar
+   emits `confirmation_request` (effect-oriented headline + protections). The user approves
+   or denies in `ConfirmationCard`; the front calls `POST /agent/confirm`. On deny or
+   timeout, the model receives a `ModelRetry` and can adapt.
+7. SSE events are shown in chat (tokens, reasoning with spinner, tool calls, `work_*`
+   business events); sessions are persisted in `{app_data}/spaces/{id}/.workproba/conversations/`.
 
 **No web server** in the product path. The former NestJS stack is in `legacy/`.
 
@@ -111,11 +115,18 @@ Workproba metadata lives in the **application folder**, not in the client folder
 
 ## Security and trust (UX)
 
-- **Cautious mode** (default, later phase): confirmation before modification.
-- **Automatic versions**: copy to `.workproba/versions/` before write (Python `LocalProjectClient`).
+- **Human Approval Gate (effect-oriented)**: before file writes, publishing, network access,
+  code execution, or external sync, the agent pauses and shows a confirmation card in human
+  language (e.g. "I will modify: Budget_2026.xlsx") with active safeguards (preview,
+  automatic version, no network). Implemented in `app/agent/effects.py` +
+  `ConfirmationGate.request_effect()`; UI: `ConfirmationCard.vue`. See
+  [architecture.md § Human approval](./architecture.md#human-approval-and-work-events).
+- **Automatic versions**: copy to `.workproba/versions/` before write (Python `LocalProjectClient`),
+  in addition to user confirmation on modifications.
 - **Scope**: the agent does not leave the project folder.
 - **Sandbox**: local Python subprocess, no network, configurable timeout.
 - **Sidecar**: reachable on loopback only (`127.0.0.1`, `::1`).
+- **Audit**: `approval.requested` / `approval.resolved` events when audit is enabled.
 
 ## Python packaging (sidecar)
 
@@ -131,7 +142,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **B** | Done | Open a space UI, file list, local sessions |
 | **C** | Done | Direct Python SSE, `LocalProjectClient`, subprocess sandbox |
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
-| **D+** | Done | Scoped user/project memory, plugins (personas), attachments, document preview, audit |
+| **D+** | Done | Scoped user/project memory, plugins (personas), attachments, document preview, audit, Human Approval Gate (effect-oriented), Work Event Bus (`work_*` SSE) |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
 | **F** | To do | Optional cloud sync (NestJS) |
 
@@ -140,7 +151,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 - **Sidecar (Python)**: streaming chat, file tools, RAG, scoped memory, personas plugins. pytest suite: see [testing.md](./testing.md) (`pytest -q` for current count).
 - **Rust shell**: venv-aware sidecar spawn + `ai_sidecar_status` + `protocol-asset` for image preview. `cargo check` OK.
 - **Front**: `WorkprobaLayout` (sidebar, right panel, side chat), `useSidecarHealth`, personas plugin integrated in composer.
-- **End-to-end desktop run**: `make dev`, open a space, test chat, memory, personas, document preview.
+- **End-to-end desktop run**: `make dev`, open a space, test chat, memory, personas, document preview, confirmation on file write.
 
 ## Remaining work
 
@@ -161,13 +172,12 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 - **OCR / scanned PDFs**: `LocalExtractor` handles text PDF (pdfplumber), Word/Excel/PowerPoint. OCR (Docling and/or Mistral OCR) not implemented: required for scanned PDFs and images. User decision already made ("Docling for OCR"): integrate Docling as heavy extractor with Mistral OCR fallback.
 - **Durable (Temporal/Inngest)**: deferred. Current agent loop is synchronous (one SSE turn). No long workflow resume/persistence on crash. Reintroduce if long tasks (large corpus indexing, batch processing) justify it.
-- **Cautious mode**: confirmation before file modification (future default). Currently automatic versions (`.workproba/versions/`) are the only safeguard.
+- **Configurable approval policy**: gate is always on for mapped sensitive tools; a global "auto-approve" setting is not implemented yet.
 
 ### Quality / integration
 
-- **Desktop e2e run on machine with display**: validate real chat turn in webview (streaming, sidecar badge, tool call rendering). Sidecar is validated live outside webview.
-- **Pre-existing front tests**: `pages-smoke.spec.ts` and `ssr-paths.spec.ts` reference missing pages (`SpaShell.vue`, `ErrorRouteNotAuthorized.vue`); fix or remove. `layouts.spec.ts` (`StandardLayout` lib-improba) failing.
-- **Front lint**: 7 pre-existing errors in `lib-improba/` (not introduced by sidecar).
+- **Desktop e2e run on machine with display**: validate real chat turn in webview (streaming, sidecar badge, confirmation card, tool call rendering). Sidecar is validated live outside webview.
+- **Front lint**: 1 i18n warning in `Home.vue` (`@intlify/vue-i18n/no-raw-text`).
 
 ## Local development
 

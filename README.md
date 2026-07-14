@@ -15,6 +15,7 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 ## Features
 
 - **Agent chat**: SSE streaming, model and reasoning per conversation, attachments, composite "+" menu
+- **Human approval**: effect-oriented confirmation before file writes, publishing, network access, or code execution
 - **Scoped memory**: global user memories + project memories, local RAG, agent `remember` tool
 - **Personas plugin**: professional perspectives, simulated meetings, discussions (Improba builtin set)
 - **Spaces**: spaces/conversations sidebar (renameable titles), right panel (files, preview, personas), side chat

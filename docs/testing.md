@@ -30,6 +30,10 @@ Framework: **pytest** + `pytest-asyncio`. Offline tests are deterministic (no LL
 - `tests/test_audit.py`, `test_audit_export.py`: audit log
 - `tests/test_versions.py`: file versions
 - `tests/test_extractor.py`: `.docx` extraction, binary
+- `tests/test_confirmation_sandbox.py`: write confirmation and sandbox gating
+- `tests/test_effect_gate.py`: Human Approval Gate (effect classification, `request_effect`, audit, deny/timeout)
+- `tests/test_work_events.py`: Work Event Bus (`work_started`, `work_contribution`, `work_completed`, `work_failed`)
+- `tests/test_memory_flow.py`: cross-session memory promotion and recall flows
 - `tests/test_live_mistral.py`: **live** (network + Mistral key), skipped by default
 
 ### Commands
@@ -46,7 +50,7 @@ WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 
 ### Current coverage
 
-Run `pytest -q` for the up-to-date count (about **336 offline tests** + a few skips, plus 2 live). Covers: agent, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE.
+Run `pytest -q` for the up-to-date count (about **577 offline tests** + a few skips, plus 2 live). Covers: agent, approval gate, work events, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE.
 
 ## Frontend (`front/`)
 
@@ -69,10 +73,13 @@ npx vitest run test/unit --no-coverage   # quick without coverage
 yarn test:e2e                  # Playwright (smoke)
 ```
 
-### Known state
+### Notable unit specs
 
+- `ConfirmationCard.spec.ts`: effect-oriented headline, protection labels, approve/deny.
+- `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection.
+- `spaceTerminology.spec.ts`: Space UX i18n (FR/EN).
+- `useUiTheme.spec.ts`, `uiTheme.spec.ts`: theme persistence (Tauri + localStorage boot).
 - `useSidecarHealth.spec.ts`: sidecar health polling (connected / error / streaming).
-- **Pre-existing failures** unrelated to the sidecar: `pages-smoke.spec.ts` and `ssr-paths.spec.ts` (imports of missing pages), `layouts.spec.ts` (`StandardLayout` lib-improba).
 
 ### Test selection by risk
 
@@ -83,10 +90,11 @@ yarn test:e2e                  # Playwright (smoke)
 
 ## Tauri shell (`desktop/`)
 
-No automated suite. Compilation check:
+Rust unit tests (`cargo test --lib`, 32 tests): workspace migration `workspaces/` → `spaces/`, provider set migration, sidecar status helpers, plugin registry.
 
 ```bash
-cd desktop/src-tauri && cargo check
+cd desktop/src-tauri && cargo test --lib
+cd desktop/src-tauri && cargo check   # compile only
 ```
 
 ## CI

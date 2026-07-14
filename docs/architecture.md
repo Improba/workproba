@@ -49,6 +49,45 @@ Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./wor
 4. Sessions are persisted in `{app_data}/spaces/{id}/.workproba/`.
 5. Each turn: explicit memories and relevant prior session summaries are injected; project RAG is available via `search_kb`. Session summaries are promoted to shared project memory in the background (see [memory.md](./memory.md)).
 
+## Human approval and work events
+
+### Human Approval Gate (effect-oriented)
+
+Before executing a sensitive tool, the agent classifies the intended **effect** (not the raw tool name) and waits for user approval.
+
+| Effect type | Typical tools | User-facing example |
+|---|---|---|
+| `create` / `modify` | `write_docx`, `write_pdf`, `generate_document` | "I will modify: Rapport.docx" |
+| `publish` | `publish_artifact` | "I will publish: memo.pdf in Project X" |
+| `network_access` | `web_search`, `browser_*` | "I will access the network: …" |
+| `code_execute` | `run_code` | "I will execute code" |
+| `external_send` | `sync_to_cloud` | "I will send externally: …" |
+
+Read-only tools (`read_document`, `list_files`, `remember`, `propose_plan`, personas, etc.) are not gated. Unknown plugin tools are not auto-gated (conservative default).
+
+**Backend flow:**
+
+1. `classify_effect()` (`app/agent/effects.py`) builds an `EffectProposal` (effect, targets, protections).
+2. `ConfirmationGate.request_effect()` emits SSE `confirmation_request` with `headline` and `protection_labels` (localized via `app/i18n.py`).
+3. The front shows `ConfirmationCard.vue`; the user approves or denies via `POST /agent/confirm`.
+4. On **approve**: the tool runs. On **deny** or **timeout** (5 min): `ModelRetry` informs the model (`workproba:approval_denied` / `workproba:approval_timeout` markers).
+5. Optional audit: `approval.requested` / `approval.resolved` in `{app_data}/audit/`.
+
+Protections shown on the card include: preview available, automatic version before modify, no network, no external send (when applicable).
+
+### Work Event Bus (`work_*`)
+
+Additive SSE events decoupled from per-tool UI cards. One `work_id` per agent turn (currently = `turn_id`).
+
+| Event | Role |
+|---|---|
+| `work_started` | Turn begins (objective summary) |
+| `work_contribution` | Coarse capability/perspective label while a tool runs |
+| `work_completed` | Turn finished successfully |
+| `work_failed` | Terminal failure (timeout, unrecoverable error) |
+
+Implementation: `app/agent/work_events.py`. Labels are localized (`work.capability.*`, `work.perspective.*`).
+
 ## UI shell (desktop layout)
 
 The main layout (`WorkprobaLayout.vue`) organizes the screen:

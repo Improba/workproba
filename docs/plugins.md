@@ -89,7 +89,7 @@ If the plugin is active: `ask_personas`, `simulate_meeting`.
 
 ## Project plugin (`workproba.projet`)
 
-Internal project management and artifact publishing from the explorer or document preview.
+Internal project management and artifact publishing from the explorer or document preview. Publishing requires user approval via the Human Approval Gate (`effect: publish`).
 
 Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins/projet/artefacts`.
 

@@ -17,6 +17,7 @@ Build **Workproba**, an in-house equivalent of **Claude Cowork**, aimed primaril
 - Multi-OS desktop: macOS (`.dmg`), Linux (`.AppImage`, `.deb`), Windows (`.msi`).
 - **Spaces**: local folder = one space (no upload); renameable display title in sidebar.
 - Polished agent chat, human-language action cards, SSE streaming.
+- **Human approval**: effect-oriented confirmation gate before sensitive actions (writes, publish, network, code).
 - Local memory: RAG per space + explicit user (global) and project (per-space) memories; cross-session promotion from conversation summaries.
 - Personas plugin: simulated professional perspectives (opinion, meeting, discussion).
 - Automatic versions before file modifications.

@@ -51,10 +51,22 @@ Most endpoints require the `X-Internal-Secret` header (value `INTERNAL_SECRET` o
 | Method | Route | Secret | Role |
 |---|---|---|---|
 | POST | `/agent/turn` | no (SSE loopback) | Agent turn, SSE stream |
-| POST | `/agent/confirm` | yes | Sensitive action confirmation |
+| POST | `/agent/confirm` | yes | Approve or deny a pending `confirmation_request` (`approve` / `deny`) |
 | POST | `/agent/plan/approve` | yes | Agent plan approval |
 | POST | `/agent/index-workspace` | yes | Bulk project folder RAG indexing |
 | POST | `/agent/reprocess-attachment` | yes | Reprocess attachment OCR/vision |
+
+### Human Approval Gate
+
+Sensitive agent tools pause until the user approves via `POST /agent/confirm`.
+
+1. During `/agent/turn`, the sidecar may emit SSE `confirmation_request` with effect-oriented fields: `effect`, `targets`, `headline`, `protection_labels`, `protections`.
+2. The front displays `ConfirmationCard` and posts `{ session_id, turn_id, confirmation_id, decision }` to `/agent/confirm`.
+3. On deny or timeout (300 s), the tool is not executed; the model receives `ModelRetry` with `workproba:approval_denied` or `workproba:approval_timeout`.
+
+Effect classification: `app/agent/effects.py` (`classify_effect`). Gate: `app/agent/confirmation.py` (`ConfirmationGate.request_effect`). Gated tools include file writes, `publish_artifact`, `web_search`, `browser_*`, `run_code`, `sync_to_cloud`. Read-only tools are not gated.
+
+Work events (`work_started`, `work_contribution`, `work_completed`, `work_failed`) are emitted alongside tool events; see `app/agent/work_events.py` and [docs/architecture.md](../../docs/architecture.md#human-approval-and-work-events).
 
 ### Documents and versions
 
