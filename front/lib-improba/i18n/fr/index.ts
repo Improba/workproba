@@ -11,6 +11,8 @@ export default {
   failed: 'Action échouée',
   success: 'Action réussie',
   theme: 'Thème',
+  themeSwitchToLight: 'Basculer vers le thème clair',
+  themeSwitchToDark: 'Basculer vers le thème sombre',
   lang: 'Langue',
   name: 'Nom',
   selected: 'Selectionné',

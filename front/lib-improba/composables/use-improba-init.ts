@@ -1,8 +1,9 @@
 import { useQueryParams } from 'src/../lib-improba/composables/use-query-params';
-import { useTheme } from 'src/../lib-improba/composables/use-theme';
 import { useAuth } from 'src/../lib-improba/composables/use-auth';
-import { QVueGlobals } from 'quasar';
+import { useAppSettings } from '@composables/useAppSettings';
+import type { QVueGlobals } from 'quasar';
 import { Router } from 'vue-router';
+import { applyUiTheme, resolveBootUiTheme } from '@utils/uiTheme';
 
 // Init improba composables that need to be initialized at the start of the app
 export const useImprobaInit = async (quasar: QVueGlobals, router: Router) => {
@@ -10,10 +11,11 @@ export const useImprobaInit = async (quasar: QVueGlobals, router: Router) => {
   const qp = useQueryParams(router);
   await qp.methods.initRouteQuery();
 
-  // Init theme
-  const theme = useTheme(quasar);
-  const isDark = process.env.DEFAULT_COLOR_MODE === 'dark';
-  theme.methods.setTheme(isDark, false);
+  // Cache localStorage puis settings Tauri avant le premier rendu.
+  applyUiTheme(resolveBootUiTheme(), quasar);
+  const { load, uiTheme } = useAppSettings();
+  await load();
+  applyUiTheme(uiTheme.value, quasar);
 
   // Auth init
   const auth = useAuth(router);

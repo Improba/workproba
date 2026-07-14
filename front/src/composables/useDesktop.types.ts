@@ -29,6 +29,9 @@ export type LlmProviderName =
   | 'anthropic';
 
 import type { ReasoningEffort } from '#types';
+import type { UiThemeId } from '@utils/uiTheme';
+
+export type { UiThemeId };
 
 export interface LlmProviderEntry {
   id: string;
@@ -151,6 +154,8 @@ export interface AppSettings {
   settingsMode?: SettingsMode;
   settingsLocked?: boolean;
   density?: DensityMode;
+  /** Thème graphique (papier, charbon, …). */
+  uiTheme?: UiThemeId | null;
   onboardingDone?: boolean;
   locale?: AppLocale | null;
   /** Langue imposée par preset : le toggle est masqué. */

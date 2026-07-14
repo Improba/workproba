@@ -185,7 +185,7 @@ function bindCopyButtons(root: ParentNode | null): void {
 </script>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
 import { useThrottleFn } from '@vueuse/core';
 import 'katex/dist/katex.min.css';
 
@@ -232,6 +232,26 @@ watch(renderedHtml, async () => {
   if (props.streaming) return;
   bindCopyButtons(markdownRoot.value);
   await highlightCodeBlocks(markdownRoot.value);
+});
+
+function rehighlightOnThemeChange(): void {
+  if (props.streaming) return;
+  void highlightCodeBlocks(markdownRoot.value);
+}
+
+let themeObserver: MutationObserver | null = null;
+
+onMounted(() => {
+  themeObserver = new MutationObserver(rehighlightOnThemeChange);
+  themeObserver.observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ['data-theme'],
+  });
+});
+
+onUnmounted(() => {
+  themeObserver?.disconnect();
+  themeObserver = null;
 });
 </script>
 

@@ -6,37 +6,38 @@
     :title="ariaLabel"
     @click="onToggle"
   >
-    <Lucide :name="isLight ? 'sun' : 'moon'" size="14" color="accent" />
+    <Lucide :name="isDark ? 'moon' : 'sun'" size="14" color="accent" />
     <span class="wp-theme-toggle__label">{{ i18n.t('theme') }}</span>
   </button>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed } from 'vue';
+import { Notify } from 'quasar';
 import { useI18n } from 'vue-i18n';
-import { useQuasar } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import { useTheme } from 'src/../lib-improba/composables/use-theme';
+import { useUiTheme } from '@composables/useUiTheme';
 
-const quasar = useQuasar();
-const theme = useTheme(quasar);
 const i18n = useI18n();
-
-const isLight = computed(() => !quasar.dark.isActive);
+const { isDark, toggleUiTheme } = useUiTheme();
 
 const ariaLabel = computed(() =>
-  isLight.value
-    ? 'Basculer vers le thème sombre'
-    : 'Basculer vers le thème clair',
+  isDark.value
+    ? i18n.t('themeSwitchToLight')
+    : i18n.t('themeSwitchToDark'),
 );
 
-function onToggle() {
-  theme.methods.setTheme(isLight.value);
+async function onToggle(): Promise<void> {
+  try {
+    await toggleUiTheme();
+  } catch {
+    Notify.create({
+      message: i18n.t('settings.saveFailed'),
+      color: 'negative',
+      timeout: 4000,
+    });
+  }
 }
-
-onMounted(() => {
-  theme.methods.init();
-});
 </script>
 
 <style scoped lang="scss">

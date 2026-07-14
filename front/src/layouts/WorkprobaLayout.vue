@@ -49,14 +49,18 @@ import KeyboardShortcutsHelp from '@components/workproba/KeyboardShortcutsHelp.v
 import { useProject } from '@composables/useProject';
 import { useSidecarHealth } from '@composables/useSidecarHealth';
 import { useAppSettings } from '@composables/useAppSettings';
+import { useUiTheme } from '@composables/useUiTheme';
 import { PERSONAS_PLUGIN_ID } from '@composables/usePlugins';
 import { usePluginSlots } from '@composables/usePluginSlots';
 import { useSideChat } from '@composables/useSideChat';
 
 useSidecarHealth();
 
-const { load: loadAppSettings, density } = useAppSettings();
-void loadAppSettings();
+const { load: loadAppSettings, density, loaded } = useAppSettings();
+useUiTheme();
+if (!loaded.value) {
+  void loadAppSettings();
+}
 
 defineProps<{
   streaming?: boolean;

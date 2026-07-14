@@ -122,11 +122,12 @@ The toggle calls `quasar.dark.set(isDark)`, which sets `body.body--light` or `bo
 
 Relevant files:
 
-- `front/lib-improba/composables/use-theme.ts`
+- `front/src/utils/uiTheme.ts` (registry, `applyUiTheme`, cache localStorage)
+- `front/src/composables/useUiTheme.ts` (watch réactif + toggle persisté)
 - `front/lib-improba/components/layouts/theme-toggler/ThemeToggler.vue`
 - `front/src/components/workproba/WorkprobaTitleBar.vue` (toggle in the titlebar)
 
-User persistence: planned on the API side (`preferDarkTheme`), not yet active; the default comes from `DEFAULT_COLOR_MODE` (`.env`).
+User persistence: Tauri `AppSettings.uiTheme` (`paper` | `charcoal`), miroir `localStorage` (`workproba:uiTheme`) pour le boot sans flash. Chargement au boot via `useImprobaInit` avant le montage du layout. Fallback sans settings : `DEFAULT_COLOR_MODE` (`.env`).
 
 ## Usage in code
 

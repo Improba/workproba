@@ -231,6 +231,28 @@ pub enum DensityMode {
     Spacious,
 }
 
+/// Thème graphique persisté (palette + mode clair/sombre).
+/// Extensible : ajouter des variantes sans changer le schéma (serde lowercase).
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum UiTheme {
+    #[default]
+    Paper,
+    Charcoal,
+}
+
+fn deserialize_ui_theme_option<'de, D>(deserializer: D) -> Result<Option<UiTheme>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Option::<String>::deserialize(deserializer)?;
+    Ok(match raw.as_deref() {
+        Some("paper") => Some(UiTheme::Paper),
+        Some("charcoal") => Some(UiTheme::Charcoal),
+        _ => None,
+    })
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
@@ -258,6 +280,13 @@ pub struct AppSettings {
     /// Densité d'affichage de l'UI.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub density: Option<DensityMode>,
+    /// Thème graphique (papier clair, charbon sombre, …).
+    #[serde(
+        default,
+        deserialize_with = "deserialize_ui_theme_option",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub ui_theme: Option<UiTheme>,
     /// Onboarding validé par l'utilisateur.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub onboarding_done: Option<bool>,
@@ -315,6 +344,7 @@ impl Default for AppSettings {
             settings_mode: None,
             settings_locked: None,
             density: None,
+            ui_theme: None,
             onboarding_done: None,
             locale: None,
             locale_locked: None,
@@ -475,6 +505,33 @@ mod settings_tests {
     use super::*;
 
     #[test]
+    fn settings_deserialize_ui_theme() {
+        let raw = r#"{"version":1,"providers":[],"uiTheme":"charcoal"}"#;
+        let settings: AppSettings = serde_json::from_str(raw).expect("deserialize");
+        assert_eq!(settings.ui_theme, Some(UiTheme::Charcoal));
+    }
+
+    #[test]
+    fn settings_deserialize_invalid_ui_theme() {
+        let raw = r#"{"version":1,"providers":[],"uiTheme":"royal"}"#;
+        let settings: AppSettings = serde_json::from_str(raw).expect("deserialize");
+        assert_eq!(settings.ui_theme, None);
+    }
+
+    #[test]
+    fn settings_roundtrip_ui_theme() {
+        let settings = AppSettings {
+            version: SETTINGS_VERSION,
+            providers: Vec::new(),
+            ui_theme: Some(UiTheme::Paper),
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&settings).expect("serialize");
+        let parsed: AppSettings = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.ui_theme, Some(UiTheme::Paper));
+    }
+
+    #[test]
     fn default_settings_include_optional_locale() {
         let settings = AppSettings::default();
         assert!(settings.locale.is_none());
@@ -507,6 +564,7 @@ mod settings_tests {
             settings_mode: None,
             settings_locked: None,
             density: None,
+            ui_theme: None,
             onboarding_done: None,
             locale: Some("fr".to_string()),
             locale_locked: Some(true),
@@ -644,6 +702,7 @@ pub fn save_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSet
         settings_mode: settings.settings_mode,
         settings_locked: settings.settings_locked,
         density: settings.density,
+        ui_theme: settings.ui_theme,
         onboarding_done: settings.onboarding_done,
         locale: settings.locale,
         locale_locked: settings.locale_locked,

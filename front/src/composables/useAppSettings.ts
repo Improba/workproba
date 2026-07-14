@@ -15,6 +15,8 @@ import { isLocalLlmProvider } from '@utils/isLocalLlmProvider';
 import { supportsReasoning, defaultReasoningEffort } from '@utils/reasoningSupport';
 import { normalizeLocale, resolveInitialLocale, setLang } from '@boot/i18n';
 import { t } from '@utils/i18nT';
+import type { UiThemeId } from '@utils/uiTheme';
+import { isUiThemeId, resolveInitialUiTheme, writeCachedUiTheme } from '@utils/uiTheme';
 import {
   applySessionOverridesToSet,
   migrateLegacyProvidersToSets,
@@ -55,6 +57,8 @@ const ONBOARDING_DONE_KEY = 'workproba:onboardingDone';
 
 const settings = ref<AppSettings>({ version: 1, providers: [], density: 'comfortable' });
 const loaded = ref(false);
+/** Invalide un load() en cours si save() ou un load() plus récent a modifié les réglages. */
+let loadGeneration = 0;
 
 function readOnboardingDone(): boolean {
   if (typeof localStorage === 'undefined') return false;
@@ -129,6 +133,10 @@ const permissionsNetwork = computed<boolean>(
 
 const density = computed<DensityMode>(
   () => settings.value.density ?? 'comfortable',
+);
+
+const uiTheme = computed<UiThemeId>(() =>
+  resolveInitialUiTheme(settings.value.uiTheme ?? null),
 );
 
 const locale = computed<AppLocale>(
@@ -314,6 +322,7 @@ export interface UseAppSettingsReturn {
   settingsLocked: typeof settingsLocked;
   permissionsNetwork: typeof permissionsNetwork;
   density: typeof density;
+  uiTheme: typeof uiTheme;
   locale: typeof locale;
   localeLocked: typeof localeLocked;
   isLocalChatProvider: typeof isLocalChatProvider;
@@ -327,33 +336,60 @@ export interface UseAppSettingsReturn {
   setOnboardingDone: (done: boolean) => Promise<void>;
   setSettingsMode: (mode: SettingsMode) => Promise<AppSettings>;
   setDensity: (mode: DensityMode) => Promise<AppSettings>;
+  setUiTheme: (themeId: UiThemeId) => Promise<AppSettings>;
   setLocale: (nextLocale: AppLocale) => Promise<AppSettings>;
 }
 
 export function useAppSettings(): UseAppSettingsReturn {
   async function load(): Promise<AppSettings> {
+    const gen = loadGeneration;
     const value = await getAppSettings();
+    if (gen !== loadGeneration) {
+      loaded.value = true;
+      return settings.value;
+    }
     const storedLocale = normalizeLocale(value.locale ?? undefined);
     const resolvedLocale = storedLocale ?? resolveInitialLocale();
+    const resolvedUiTheme = resolveInitialUiTheme(
+      value.uiTheme && isUiThemeId(value.uiTheme) ? value.uiTheme : null,
+    );
     settings.value = ensureSetsLoaded({
       ...value,
+      uiTheme: resolvedUiTheme,
       locale: resolvedLocale,
       onboardingDone: readOnboardingDone(),
     });
+    writeCachedUiTheme(resolvedUiTheme);
     setLang(resolvedLocale);
     loaded.value = true;
     return settings.value;
   }
 
   async function save(next: AppSettings): Promise<AppSettings> {
+    loadGeneration += 1;
+    const previous = settings.value;
     const prepared = ensureSetsLoaded(next);
     settings.value = prepared;
+    if (prepared.uiTheme && isUiThemeId(prepared.uiTheme)) {
+      writeCachedUiTheme(prepared.uiTheme);
+    }
     if (!isDesktopApp()) {
       return prepared;
     }
-    const persisted = await saveAppSettings(prepared);
-    settings.value = persisted;
-    return persisted;
+    try {
+      const persisted = await saveAppSettings(prepared);
+      settings.value = persisted;
+      if (persisted.uiTheme && isUiThemeId(persisted.uiTheme)) {
+        writeCachedUiTheme(persisted.uiTheme);
+      }
+      return persisted;
+    } catch (error) {
+      settings.value = previous;
+      if (previous.uiTheme && isUiThemeId(previous.uiTheme)) {
+        writeCachedUiTheme(previous.uiTheme);
+      }
+      throw error;
+    }
   }
 
   async function setActiveSet(id: string): Promise<AppSettings> {
@@ -407,6 +443,10 @@ export function useAppSettings(): UseAppSettingsReturn {
     return save({ ...settings.value, density: mode });
   }
 
+  async function setUiTheme(themeId: UiThemeId): Promise<AppSettings> {
+    return save({ ...settings.value, uiTheme: themeId });
+  }
+
   async function setLocale(nextLocale: AppLocale): Promise<AppSettings> {
     if (localeLocked.value) {
       return settings.value;
@@ -435,6 +475,7 @@ export function useAppSettings(): UseAppSettingsReturn {
     settingsLocked,
     permissionsNetwork,
     density,
+    uiTheme,
     locale,
     localeLocked,
     isLocalChatProvider,
@@ -448,6 +489,7 @@ export function useAppSettings(): UseAppSettingsReturn {
     setOnboardingDone,
     setSettingsMode,
     setDensity,
+    setUiTheme,
     setLocale,
   };
 }
