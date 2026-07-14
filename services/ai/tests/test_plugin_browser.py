@@ -66,8 +66,9 @@ class MockBrowserEngine:
         locale: str = "fr",
         audit_app_data: Path | None = None,
         audit_actor: str | None = None,
+        work_id: str | None = None,
     ) -> dict[str, str]:
-        _ = locale
+        _ = (locale, work_id)
         browser_mod.validate_navigation_url(url)
         self._active = True
         self._url = url

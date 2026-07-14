@@ -411,6 +411,26 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Consultez le fichier généré après confirmation."
             ),
         },
+        "work": {
+            "capability": {
+                "document_analysis": "Analyse documentaire",
+                "web_search": "Recherche web",
+                "web_browsing": "Navigation web",
+                "office_generation": "Production bureautique",
+                "code_execution": "Exécution de code",
+                "publishing": "Publication",
+                "planning": "Planification",
+                "generic": "Compétence",
+            },
+            "perspective": {
+                "business": "Regard métier",
+            },
+            "kind": {
+                "capability": "Compétence",
+                "perspective": "Perspective",
+                "control": "Contrôle",
+            },
+        },
         "utility": {
             "title_system_prompt": (
                 "Tu génères un titre court en français pour une conversation "
@@ -799,6 +819,26 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Preview unavailable for this format. "
                 "See the generated file after confirmation."
             ),
+        },
+        "work": {
+            "capability": {
+                "document_analysis": "Document analysis",
+                "web_search": "Web search",
+                "web_browsing": "Web browsing",
+                "office_generation": "Office generation",
+                "code_execution": "Code execution",
+                "publishing": "Publishing",
+                "planning": "Planning",
+                "generic": "Capability",
+            },
+            "perspective": {
+                "business": "Business perspective",
+            },
+            "kind": {
+                "capability": "Capability",
+                "perspective": "Perspective",
+                "control": "Control",
+            },
         },
         "utility": {
             "title_system_prompt": (

@@ -265,9 +265,11 @@ async def test_run_turn_tool_call_blocks_fallback(
         ctx: Any,
         *,
         locale: str,
+        work_id: str,
         hook_payload_base: dict[str, Any] | None = None,
         plugin_data_dir: Path | None = None,
     ) -> AsyncIterator[Any]:
+        _ = work_id
         yield ToolCallStartEvent(
             tool_call_id="tc1",
             tool_name="read_document",

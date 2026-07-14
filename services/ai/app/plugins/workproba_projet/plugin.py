@@ -137,6 +137,7 @@ def register_projet_tools(agent: Agent[ToolDeps, str]) -> None:
                 content=content,
                 project_id=project_id,
                 name=name,
+                work_id=deps.context.work_id,
             )
             return artefact
         except FileNotFoundError as exc:

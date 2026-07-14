@@ -63,6 +63,7 @@ class ToolContext:
     audit_enabled: bool | None = None
     browser_pilotage_paused: bool = False
     last_user_query: str = ""
+    work_id: str | None = None
 
 
 @dataclass

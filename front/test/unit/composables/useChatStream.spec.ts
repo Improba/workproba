@@ -238,6 +238,29 @@ describe('useChatStream — feedbacks', () => {
     expect(result.data.humanSummary).toBe('3 fichiers trouvés');
   });
 
+  it('ignore les événements work_* sans crasher', () => {
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    expect(
+      mapPythonSseEvent({
+        type: 'work_started',
+        data: { work_id: 'turn-1', objective: 'hello' },
+      }),
+    ).toBeNull();
+    expect(
+      mapPythonSseEvent({
+        type: 'work_contribution',
+        data: {
+          work_id: 'turn-1',
+          contribution_id: 'tc1',
+          kind: 'capability',
+          label: 'Capability',
+          status: 'started',
+        },
+      }),
+    ).toBeNull();
+    debugSpy.mockRestore();
+  });
+
   it('applique humanSummary au tool call (start puis remplacement au result)', async () => {
     (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
       sseResponse([

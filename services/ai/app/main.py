@@ -25,6 +25,7 @@ from app.agent.compaction import (
 from app.agent.memory_consolidation import promote_session_summary
 from app.agent.confirmation import confirmation_registry
 from app.agent.loop import AgentLoop
+from app.agent.work_events import audit_details_with_work_id, work_id_for_turn
 from app.agent.plan import plan_registry
 from app.agent.tools import build_agent
 from app.auth import INTERNAL_SECRET_HEADER, internal_secret_middleware
@@ -470,14 +471,17 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                                 resolve_app_data_dir(audit_base),
                                 "provider.fallback",
                                 "agent",
-                                {
-                                    "turn_id": turn_id,
-                                    "from_provider": llm_config.provider,
-                                    "to_provider": config.provider,
-                                    "from_model": llm_config.model,
-                                    "to_model": config.model,
-                                    "reason": fallback_reason,
-                                },
+                                audit_details_with_work_id(
+                                    {
+                                        "turn_id": turn_id,
+                                        "from_provider": llm_config.provider,
+                                        "to_provider": config.provider,
+                                        "from_model": llm_config.model,
+                                        "to_model": config.model,
+                                        "reason": fallback_reason,
+                                    },
+                                    work_id_for_turn(turn_id),
+                                ),
                                 enabled=payload.audit_enabled,
                             )
                             logger.info(

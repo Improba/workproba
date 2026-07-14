@@ -270,6 +270,14 @@ export function mapPythonSseEvent(
           rationale: String(data.rationale ?? ''),
         },
       };
+    case 'work_started':
+    case 'work_contribution':
+    case 'work_completed':
+    case 'work_failed':
+      if (import.meta.env.DEV) {
+        console.debug('[useChatStream] ignoring work event', event.type);
+      }
+      return null;
     default:
       return null;
   }

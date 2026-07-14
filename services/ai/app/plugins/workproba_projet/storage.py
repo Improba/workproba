@@ -148,6 +148,7 @@ def publish_artifact(
     content: str | None = None,
     project_id: str,
     name: str,
+    work_id: str | None = None,
 ) -> dict[str, Any]:
     project = find_project(plugin_data_dir, project_id)
     if project is None:
@@ -185,11 +186,13 @@ def publish_artifact(
         result_source_path = normalize_relative_path(source_path or "")
 
     stat = dest.stat()
+    from app.agent.work_events import audit_details_with_work_id
+
     log_event(
         resolve_app_data_dir(plugin_data_dir.parent),
         "publish_artifact",
         "user",
-        audit_details,
+        audit_details_with_work_id(audit_details, work_id),
     )
     result: dict[str, Any] = {
         "id": artefact_name,

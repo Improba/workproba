@@ -283,6 +283,7 @@ class BrowserEngine:
         locale: str = "fr",
         audit_app_data: Path | None = None,
         audit_actor: str | None = None,
+        work_id: str | None = None,
     ) -> dict[str, str]:
         target = validate_navigation_url(url)
         await self._ensure_ready(locale=locale)
@@ -291,12 +292,16 @@ class BrowserEngine:
         payload = await self._snapshot_payload()
         if audit_app_data is not None and audit_actor:
             from app.audit import log_event, resolve_app_data_dir
+            from app.agent.work_events import audit_details_with_work_id
 
             log_event(
                 resolve_app_data_dir(audit_app_data),
                 "browser.navigate",
                 audit_actor,
-                {"url": payload.get("url"), "title": payload.get("title")},
+                audit_details_with_work_id(
+                    {"url": payload.get("url"), "title": payload.get("title")},
+                    work_id,
+                ),
             )
         return payload
 

@@ -422,6 +422,35 @@ class ErrorEvent(BaseModel):
     code: str = "agent_error"
 
 
+class WorkStartedEvent(BaseModel):
+    type: Literal["work_started"] = "work_started"
+    work_id: str
+    objective: str = ""
+
+
+class WorkContributionEvent(BaseModel):
+    type: Literal["work_contribution"] = "work_contribution"
+    work_id: str
+    contribution_id: str
+    kind: Literal["capability", "perspective", "control"]
+    label: str
+    status: Literal["started", "completed", "failed"]
+    summary: str = ""
+
+
+class WorkCompletedEvent(BaseModel):
+    type: Literal["work_completed"] = "work_completed"
+    work_id: str
+    summary: str = ""
+
+
+class WorkFailedEvent(BaseModel):
+    type: Literal["work_failed"] = "work_failed"
+    work_id: str
+    code: str = ""
+    message: str = ""
+
+
 AgentEvent = Annotated[
     TokenEvent
     | ThinkingStartEvent
@@ -436,7 +465,11 @@ AgentEvent = Annotated[
     | FallbackEvent
     | AttachmentStatusEvent
     | DoneEvent
-    | ErrorEvent,
+    | ErrorEvent
+    | WorkStartedEvent
+    | WorkContributionEvent
+    | WorkCompletedEvent
+    | WorkFailedEvent,
     Field(discriminator="type"),
 ]
 

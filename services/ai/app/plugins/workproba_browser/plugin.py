@@ -129,6 +129,7 @@ def register_browser_tools(agent: Agent[Any, str]) -> None:
                 locale=locale,
                 audit_app_data=audit_app_data,
                 audit_actor="agent" if audit_app_data is not None else None,
+                work_id=ctx.deps.context.work_id,
             )
         except browser_engine.BrowserError as exc:
             raise _retry_browser_error(exc, locale) from exc

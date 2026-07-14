@@ -41,6 +41,11 @@ from app.agent.confirmation import ConfirmationGate, confirmation_registry
 from app.agent.human import build_human_summary
 from app.agent.plan import PlanGate, plan_registry
 from app.agent.tools import ToolContext, ToolDeps
+from app.agent.work_events import (
+    audit_details_with_work_id,
+    derive_work_event,
+    work_id_for_turn,
+)
 from app.i18n import DEFAULT_LOCALE, t
 from app.limits import DEFAULT_LIMITS, Limits
 from app.llm.fallback import FallbackableProviderError, is_fallbackable
@@ -129,6 +134,14 @@ class AgentLoop:
                     "Unhandled agent turn error (session=%s turn=%s)",
                     request.session_id,
                     turn_id,
+                )
+                await output_queue.put(
+                    derive_work_event(
+                        phase="failed",
+                        work_id=work_id_for_turn(turn_id),
+                        code="internal_error",
+                        message=t(request.locale, "loop.internal_error"),
+                    )
                 )
                 await output_queue.put(
                     ErrorEvent(
@@ -243,6 +256,7 @@ class AgentLoop:
             workspace_data_dir=workspace_data_dir,
             project_root=self._project_root,
         )
+        work_id = work_id_for_turn(gate.turn_id)
         context = ToolContext(
             tenant_id=request.tenant_id or "",
             project_id=request.project_id,
@@ -262,6 +276,7 @@ class AgentLoop:
             audit_enabled=request.audit_enabled,
             browser_pilotage_paused=request.browser_pilotage_paused,
             last_user_query=request.message,
+            work_id=work_id,
         )
         deps = ToolDeps(
             context=context,
@@ -287,6 +302,11 @@ class AgentLoop:
                 "turn.started",
                 {**hook_payload_base},
             )
+            yield derive_work_event(
+                phase="started",
+                work_id=work_id,
+                objective=request.message[:200],
+            )
 
         if request.audit_enabled and not is_fallback_attempt:
             from app.audit import log_event, resolve_app_data_dir
@@ -298,17 +318,18 @@ class AgentLoop:
                 or self._project_root
             )
             if audit_base is not None:
+                prompt_details = build_turn_prompt_details(
+                    self._agent,
+                    deps,
+                    request,
+                    turn_id=gate.turn_id,
+                    model_settings=self._model_settings,
+                )
                 log_event(
                     resolve_app_data_dir(audit_base),
                     "turn.prompt",
                     "agent",
-                    build_turn_prompt_details(
-                        self._agent,
-                        deps,
-                        request,
-                        turn_id=gate.turn_id,
-                        model_settings=self._model_settings,
-                    ),
+                    audit_details_with_work_id(prompt_details, work_id),
                     enabled=request.audit_enabled,
                 )
 
@@ -334,6 +355,7 @@ class AgentLoop:
                             node,
                             run.ctx,
                             locale=request.locale,
+                            work_id=work_id,
                             hook_payload_base=hook_payload_base,
                             plugin_data_dir=plugin_data_dir,
                         ):
@@ -356,6 +378,11 @@ class AgentLoop:
                                 "summary": turn_summary,
                             },
                         )
+                        yield derive_work_event(
+                            phase="completed",
+                            work_id=work_id,
+                            turn_summary=turn_summary,
+                        )
                         yield DoneEvent(
                             content=output if isinstance(output, str) else str(output),
                             input_tokens=input_tokens,
@@ -363,18 +390,32 @@ class AgentLoop:
                             total_tokens=total_tokens,
                         )
         except UsageLimitExceeded:
+            message = t(request.locale, "loop.usage_limit_exceeded")
+            yield derive_work_event(
+                phase="failed",
+                work_id=work_id,
+                code="usage_limit_exceeded",
+                message=message,
+            )
             yield ErrorEvent(
                 code="usage_limit_exceeded",
-                message=t(request.locale, "loop.usage_limit_exceeded"),
+                message=message,
             )
         except UnexpectedModelBehavior as exc:
+            message = t(
+                request.locale,
+                "loop.unexpected_model_behavior",
+                detail=exc,
+            )
+            yield derive_work_event(
+                phase="failed",
+                work_id=work_id,
+                code="unexpected_model_behavior",
+                message=message,
+            )
             yield ErrorEvent(
                 code="unexpected_model_behavior",
-                message=t(
-                    request.locale,
-                    "loop.unexpected_model_behavior",
-                    detail=exc,
-                ),
+                message=message,
             )
         except asyncio.CancelledError:
             raise
@@ -383,18 +424,32 @@ class AgentLoop:
             if fallbackable and not emitted:
                 raise FallbackableProviderError(reason) from exc
             if fallbackable and emitted:
+                message = t(request.locale, "loop.provider_unavailable")
+                yield derive_work_event(
+                    phase="failed",
+                    work_id=work_id,
+                    code="provider_unavailable",
+                    message=message,
+                )
                 yield ErrorEvent(
                     code="provider_unavailable",
-                    message=t(request.locale, "loop.provider_unavailable"),
+                    message=message,
                 )
                 return
             logger.exception(
                 "Agent iteration failed (session=%s)",
                 request.session_id,
             )
+            message = t(request.locale, "loop.internal_error")
+            yield derive_work_event(
+                phase="failed",
+                work_id=work_id,
+                code="internal_error",
+                message=message,
+            )
             yield ErrorEvent(
                 code="internal_error",
-                message=t(request.locale, "loop.internal_error"),
+                message=message,
             )
 
     async def _iter_model_stream(self, node: Any, ctx: Any) -> AsyncIterator[AgentEvent]:
@@ -409,6 +464,7 @@ class AgentLoop:
         ctx: Any,
         *,
         locale: str,
+        work_id: str,
         hook_payload_base: dict[str, Any] | None = None,
         plugin_data_dir: Path | None = None,
     ) -> AsyncIterator[AgentEvent]:
@@ -422,15 +478,25 @@ class AgentLoop:
                     part = event.part
                     arguments = parse_tool_arguments(part.args)
                     pending_arguments[part.tool_call_id] = arguments
+                    human_summary = build_human_summary(
+                        part.tool_name,
+                        arguments,
+                        locale=locale,
+                    )
                     yield ToolCallStartEvent(
                         tool_call_id=part.tool_call_id,
                         tool_name=part.tool_name,
                         arguments=arguments,
-                        human_summary=build_human_summary(
-                            part.tool_name,
-                            arguments,
-                            locale=locale,
-                        ),
+                        human_summary=human_summary,
+                    )
+                    yield derive_work_event(
+                        phase="contribution",
+                        work_id=work_id,
+                        locale=locale,
+                        tool_name=part.tool_name,
+                        contribution_id=part.tool_call_id,
+                        contribution_status="started",
+                        summary=human_summary,
                     )
                 elif isinstance(event, FunctionToolResultEvent):
                     part = event.part
@@ -472,6 +538,15 @@ class AgentLoop:
                         result=sse_result,
                         is_error=is_error,
                         human_summary=human_summary,
+                    )
+                    yield derive_work_event(
+                        phase="contribution",
+                        work_id=work_id,
+                        locale=locale,
+                        tool_name=tool_name,
+                        contribution_id=tool_call_id,
+                        contribution_status="failed" if is_error else "completed",
+                        summary=human_summary,
                     )
                     if hook_payload_base is not None:
                         hook_registry.dispatch(
