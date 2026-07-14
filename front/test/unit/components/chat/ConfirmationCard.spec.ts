@@ -30,6 +30,7 @@ describe('ConfirmationCard', () => {
       global: {
         stubs: {
           PreviewChangeDialog: true,
+          Lucide: true,
         },
       },
     });
@@ -60,6 +61,7 @@ describe('ConfirmationCard', () => {
       global: {
         stubs: {
           PreviewChangeDialog: true,
+          Lucide: true,
         },
       },
     });
@@ -87,6 +89,7 @@ describe('ConfirmationCard', () => {
       global: {
         stubs: {
           PreviewChangeDialog: true,
+          Lucide: true,
         },
       },
     });

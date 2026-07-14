@@ -5,6 +5,11 @@
     role="region"
     :aria-label="t('chat.confirmationRegion')"
   >
+    <header class="confirmation-card__header">
+      <Lucide name="shield-check" size="16" color="accent" />
+      <h3 class="confirmation-card__title">{{ t('chat.confirmationRegion') }}</h3>
+    </header>
+
     <template v-if="hasEffectHeadline">
       <p class="confirmation-card__headline">
         <strong>{{ confirmation.headline }}</strong>
@@ -17,8 +22,10 @@
         <li
           v-for="(label, index) in confirmation.protectionLabels"
           :key="`${index}-${label}`"
+          class="confirmation-card__protection"
         >
-          {{ label }}
+          <Lucide name="shield" size="xs" color="wp-text-muted" />
+          <span>{{ label }}</span>
         </li>
       </ul>
     </template>
@@ -89,6 +96,7 @@
 import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import type { ChatConfirmation } from '#types';
+import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import PreviewChangeDialog from '@components/chat/PreviewChangeDialog.vue';
 import { extractProposedContent, isFileWriteTool } from '@utils/fileWriteTools';
 
@@ -167,12 +175,26 @@ const customSummaryHtml = computed(() => {
 <style scoped lang="scss">
 .confirmation-card {
   width: 100%;
-  margin: 0;
+  margin: var(--wp-space-2) 0 0;
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--wp-accent);
   border-radius: var(--wp-r-md);
   background: var(--wp-accent-soft);
   box-shadow: var(--wp-shadow-1);
+}
+
+.confirmation-card__header {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin-bottom: 0.65rem;
+}
+
+.confirmation-card__title {
+  margin: 0;
+  font-size: var(--wp-fs-base);
+  font-weight: 700;
+  color: var(--wp-text);
 }
 
 .confirmation-card__headline,
@@ -195,15 +217,20 @@ const customSummaryHtml = computed(() => {
 
 .confirmation-card__protections {
   margin: 0 0 0.75rem;
-  padding-left: 1.1rem;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
   font-size: var(--wp-fs-sm, 0.875rem);
   line-height: var(--wp-lh-normal);
   color: var(--wp-text-muted, var(--wp-text));
-  opacity: 0.9;
+}
 
-  li + li {
-    margin-top: 0.2rem;
-  }
+.confirmation-card__protection {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
 }
 
 .confirmation-card__actions {

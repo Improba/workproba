@@ -174,6 +174,14 @@ const { t } = useI18n();
   font-size: var(--wp-fs-base);
   font-weight: 600;
   cursor: pointer;
+  transition: background var(--wp-dur) var(--wp-ease),
+    border-color var(--wp-dur) var(--wp-ease),
+    opacity var(--wp-dur) var(--wp-ease);
+
+  &:focus-visible {
+    outline: 2px solid var(--wp-focus-ring);
+    outline-offset: 2px;
+  }
 
   &:disabled {
     opacity: 0.65;
@@ -185,11 +193,19 @@ const { t } = useI18n();
   border: 1px solid var(--wp-border-strong);
   background: var(--wp-surface);
   color: var(--wp-text);
+
+  &:not(:disabled):hover {
+    background: var(--wp-surface-2);
+  }
 }
 
 .plan-card__btn--approve {
   border: 1px solid var(--wp-accent);
   background: var(--wp-accent);
   color: var(--wp-canard);
+
+  &:not(:disabled):hover {
+    background: var(--wp-accent-strong);
+  }
 }
 </style>
