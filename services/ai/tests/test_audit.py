@@ -3,14 +3,20 @@
 from __future__ import annotations
 
 import json
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import Any
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
+from openai import APITimeoutError
+from pydantic_ai.models.test import TestModel
 
 import app.auth as authmod
 import app.main as mainmod
+from app.agent.loop import AgentLoop
 from app.audit import (
     audit_file_path,
     get_audit_config,
@@ -221,3 +227,161 @@ def test_audit_http_filters_from_to_aliases(tmp_path: Path) -> None:
         body = list_resp.json()
         assert body["total"] == 1
         assert body["entries"][0]["event"] == "recent"
+
+
+def test_turn_prompt_audited_when_enabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mainmod, "build_model", lambda config: TestModel(seed=0, call_tools=[]))
+    app_data = _app_data(tmp_path)
+    workspace = app_data / "spaces" / "space-1"
+    project = tmp_path / "project"
+    project.mkdir()
+
+    payload = {
+        "tenant_id": "t",
+        "project_id": "p1",
+        "project_path": str(project),
+        "workspace_data_dir": str(workspace),
+        "workspace_title": "Espace test",
+        "session_id": "sess-audit-prompt",
+        "message": "bonjour",
+        "history": [],
+        "documents": [],
+        "audit_enabled": True,
+        "llm_provider_config": {
+            "provider": "ollama",
+            "model": "llama3.2",
+        },
+    }
+
+    with TestClient(mainmod.app) as client:
+        with client.stream(
+            "POST",
+            "/agent/turn",
+            json=payload,
+            headers=INTERNAL_HEADERS,
+        ) as resp:
+            assert resp.status_code == 200
+            for _line in resp.iter_lines():
+                pass
+
+    entries, total = read_audit(app_data, event="turn.prompt")
+    assert total == 1
+    details = entries[0]["details"]
+    assert details["session_id"] == "sess-audit-prompt"
+    assert details["provider"] == "ollama"
+    assert details["model"] == "llama3.2"
+    assert details["variables"]["workspace_title"] == "Espace test"
+    assert details["combined_sha256"]
+    assert any(ref["kind"] == "static" for ref in details["prompt_refs"])
+    assert any(ref["kind"] == "dynamic" for ref in details["prompt_refs"])
+    serialized = json.dumps(details)
+    assert "bonjour" not in serialized
+
+
+def test_turn_prompt_not_audited_when_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(mainmod, "build_model", lambda config: TestModel(seed=0, call_tools=[]))
+    app_data = _app_data(tmp_path)
+    workspace = app_data / "spaces" / "space-1"
+    project = tmp_path / "project"
+    project.mkdir()
+
+    payload = {
+        "tenant_id": "t",
+        "project_id": "p1",
+        "project_path": str(project),
+        "workspace_data_dir": str(workspace),
+        "session_id": "sess-audit-off",
+        "message": "hello",
+        "history": [],
+        "documents": [],
+        "audit_enabled": False,
+        "llm_provider_config": {
+            "provider": "ollama",
+            "model": "llama3.2",
+        },
+    }
+
+    with TestClient(mainmod.app) as client:
+        with client.stream(
+            "POST",
+            "/agent/turn",
+            json=payload,
+            headers=INTERNAL_HEADERS,
+        ) as resp:
+            assert resp.status_code == 200
+            for _line in resp.iter_lines():
+                pass
+
+    entries, total = read_audit(app_data, event="turn.prompt")
+    assert total == 0
+
+
+def test_turn_prompt_not_duplicated_on_provider_fallback(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Un repli provider ne doit pas émettre un second événement turn.prompt."""
+    monkeypatch.setattr(mainmod, "build_model", lambda config: TestModel(seed=0, call_tools=[]))
+
+    original = AgentLoop._iter_model_stream
+    call_count = {"n": 0}
+
+    async def fail_once_then_succeed(
+        self: AgentLoop, node: Any, ctx: Any
+    ) -> AsyncIterator[Any]:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise APITimeoutError(request=httpx.Request("POST", "http://example.test/v1/chat"))
+        async for event in original(self, node, ctx):
+            yield event
+
+    monkeypatch.setattr(AgentLoop, "_iter_model_stream", fail_once_then_succeed)
+
+    app_data = _app_data(tmp_path)
+    workspace = app_data / "spaces" / "space-1"
+    project = tmp_path / "project"
+    project.mkdir()
+
+    payload = {
+        "tenant_id": "t",
+        "project_id": "p1",
+        "project_path": str(project),
+        "workspace_data_dir": str(workspace),
+        "session_id": "sess-fallback-audit",
+        "message": "hello",
+        "history": [],
+        "documents": [],
+        "audit_enabled": True,
+        "provider_set": {
+            "id": "test-fallback-audit",
+            "chat": {
+                "provider": "mistral",
+                "model": "mistral-small-latest",
+                "api_key": "primary-key",
+            },
+            "chat_fallback": {
+                "provider": "ollama",
+                "model": "llama3.2",
+            },
+        },
+    }
+
+    with TestClient(mainmod.app) as client:
+        with client.stream(
+            "POST",
+            "/agent/turn",
+            json=payload,
+            headers=INTERNAL_HEADERS,
+        ) as resp:
+            assert resp.status_code == 200
+            for _line in resp.iter_lines():
+                pass
+
+    assert call_count["n"] >= 2
+
+    prompt_entries, prompt_total = read_audit(app_data, event="turn.prompt")
+    assert prompt_total == 1
+    assert prompt_entries[0]["details"]["session_id"] == "sess-fallback-audit"
+
+    fallback_entries, fallback_total = read_audit(app_data, event="provider.fallback")
+    assert fallback_total == 1

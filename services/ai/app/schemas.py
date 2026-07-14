@@ -110,11 +110,20 @@ class ProviderSetCapabilities(BaseModel):
 
 
 class ProviderSet(BaseModel):
+    """Ensemble de providers IA (chat, embeddings, OCR, vision).
+
+    ``chat_fallback`` : repli chat optionnel en cas d'indisponibilité du
+    provider primaire (timeout, connexion, 5xx, 429). À configurer
+    explicitement avec un provider que l'utilisateur sait disponible ;
+    aucun repli automatique n'est appliqué sur les sets intégrés.
+    """
+
     id: str = ""
     name: str = ""
     description: str = ""
     badges: list[str] = Field(default_factory=list)
     chat: ProviderSetChat | None = None
+    chat_fallback: ProviderSetChat | None = None
     embeddings: ProviderSetEmbeddings | None = None
     ocr: ProviderSetOcr | None = None
     vision: ProviderSetVision = Field(default_factory=ProviderSetVision)
@@ -382,6 +391,16 @@ class DoneEvent(BaseModel):
     total_tokens: int | None = None
 
 
+class FallbackEvent(BaseModel):
+    type: Literal["fallback"] = "fallback"
+    turn_id: str
+    from_provider: str
+    to_provider: str
+    from_model: str | None = None
+    to_model: str | None = None
+    reason: str
+
+
 class ErrorEvent(BaseModel):
     """Erreur SSE stable pour le front.
 
@@ -394,6 +413,7 @@ class ErrorEvent(BaseModel):
     - turn_in_progress : un autre tour est déjà actif pour cette session (HTTP 409).
     - input_too_large : historique ou message utilisateur trop volumineux (HTTP 422).
     - agent_error : code générique historique (éviter pour les nouveaux cas).
+    - provider_unavailable : fournisseur IA indisponible (timeout, connexion, 5xx, 429).
     """
 
     type: Literal["error"] = "error"
@@ -412,6 +432,7 @@ AgentEvent = Annotated[
     | PlanProposedEvent
     | CompactionEvent
     | TurnStartEvent
+    | FallbackEvent
     | AttachmentStatusEvent
     | DoneEvent
     | ErrorEvent,

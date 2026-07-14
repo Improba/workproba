@@ -214,7 +214,7 @@ describe('aiSidecar payload', () => {
     expect(payload.history[1].content!.length).toBe(MAX_TOOL_RESULT_HISTORY_CHARS + 1);
   });
 
-  it('buildAgentTurnPayload inclut les messages system (résumé compaction)', () => {
+  it('buildAgentTurnPayload inclut les messages compaction (rôle user)', () => {
     const payload = buildAgentTurnPayload(
       'sess-1',
       '/proj',
@@ -222,7 +222,7 @@ describe('aiSidecar payload', () => {
       [
         {
           id: 'sum',
-          role: 'system',
+          role: 'user',
           content: 'Résumé des échanges précédents :\n\nDécision conservée',
           messageKind: 'compaction',
           createdAt: '2026-01-01T00:00:00.000Z',
@@ -238,7 +238,7 @@ describe('aiSidecar payload', () => {
     );
 
     expect(payload.history[0]).toMatchObject({
-      role: 'system',
+      role: 'user',
       content: 'Résumé des échanges précédents :\n\nDécision conservée',
     });
     expect(payload.history[1]).toMatchObject({ role: 'user', content: 'suite' });

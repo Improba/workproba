@@ -259,6 +259,9 @@ export default {
     roleYou: 'Vous',
     compactionSummary: 'Résumé de conversation',
     compactionContentPrefix: 'Résumé des échanges précédents :\n\n',
+    providerFallback: 'Moteur indisponible : bascule vers {toProvider}.',
+    providerFallbackWithModel:
+      'Moteur indisponible : bascule vers {toProvider} ({toModel}).',
     toolResultTruncated: '(résultat tronqué)',
     page: {
       metaSep: '·',

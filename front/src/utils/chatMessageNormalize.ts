@@ -9,6 +9,7 @@ import type {
   ToolCallStatus,
 } from '#types';
 import { normalizeChatErrorCode } from '#types';
+import { isCompactionMessageLike } from './compactionMessage';
 
 const VALID_ROLES = new Set<ChatMessageRole>(['user', 'assistant', 'system']);
 const VALID_TOOL_STATUSES = new Set<ToolCallStatus>([
@@ -157,7 +158,11 @@ export function normalizeChatMessage(raw: unknown): ChatMessage | null {
     message.parentId = raw.parentId;
   }
   if (typeof raw.thinking === 'string') message.thinking = raw.thinking;
-  if (raw.messageKind === 'compaction') message.messageKind = 'compaction';
+  if (
+    isCompactionMessageLike(message.role, message.content, raw.messageKind as string | undefined)
+  ) {
+    message.messageKind = 'compaction';
+  }
   if (raw.streaming === true) message.streaming = true;
 
   if (Array.isArray(raw.toolCalls)) {

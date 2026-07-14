@@ -178,6 +178,7 @@ import PersonasOpinionCard from '@components/personas/PersonasOpinionCard.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { usePlugins } from '@composables/usePlugins';
 import { formatOpinionMarkdown } from '@composables/usePersonas';
+import { isCompactionMessageLike } from '@utils/compactionMessage';
 import type { ChatMessage, ChatMessagePart, ChatToolCall } from '#types';
 
 const props = defineProps<{
@@ -228,14 +229,17 @@ function openOpinionPublish(): void {
 }
 
 const roleLabel = computed(() => {
+  if (isCompactionMessage.value) return t('chat.compactionSummary');
   if (props.message.role === 'user') return t('chat.roleYou');
-  if (props.message.role === 'system') return t('chat.compactionSummary');
   return t('chat.roleAssistant');
 });
 
-const isCompactionMessage = computed(
-  () =>
-    props.message.messageKind === 'compaction' || props.message.role === 'system',
+const isCompactionMessage = computed(() =>
+  isCompactionMessageLike(
+    props.message.role,
+    props.message.content,
+    props.message.messageKind,
+  ),
 );
 
 const compactionBody = computed(() => {

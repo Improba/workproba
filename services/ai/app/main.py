@@ -2,6 +2,7 @@ import asyncio
 import base64
 import binascii
 import json
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -30,12 +31,14 @@ from app.capabilities import Capabilities, detect_capabilities
 from app.config import Settings, get_settings
 from app.local_client import LocalProjectClient
 from app.llm.config import build_model, build_model_settings, resolve_llm_config
+from app.llm.fallback import FallbackableProviderError
 from app.llm.provider import resolve_litellm_model
 from app.llm.provider_sets import (
     MissingApiKeyError,
     ocr_is_supported,
     resolve_chat_from_set,
     resolve_embeddings_from_set,
+    resolve_fallback_chat_config,
     vision_is_supported,
 )
 from app.llm.utility import generate_title, summarize_conversation
@@ -51,6 +54,7 @@ from app.schemas import (
     CompactionEvent,
     DocumentPreviewResponse,
     ErrorEvent,
+    FallbackEvent,
     LLMProviderConfig,
     PreviewChangeRequest,
     PreviewChangeResponse,
@@ -71,6 +75,8 @@ from app.schemas import (
 from app.i18n import normalize_locale, t
 from app.turn_manager import turn_manager
 from app.versions import list_versions, restore_version
+
+logger = logging.getLogger(__name__)
 from app.audit import (
     export_audit_csv,
     get_audit_config,
@@ -418,39 +424,124 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                     locale=payload.locale,
                     overhead_tokens=overhead,
                 )
-            model = build_model(llm_config)
-            agent = build_agent(
-                model,
-                ui_mode=payload.ui_mode,
-                sandbox_available=caps.sandbox_available,
-                locale=payload.locale,
-                active_plugins=payload.active_plugins,
-            )
-            agent_loop = AgentLoop(
-                agent=agent,
-                project_client=project_client,
-                sandbox_runner=sandbox_runner,
-                max_iterations=settings.max_agent_iterations,
-                model_settings=build_model_settings(llm_config),
-                project_root=project_root,
-                limits=limits,
-            )
             if compaction_event is not None:
                 yield to_sse_event(compaction_event)
 
+            fallback_config = (
+                resolve_fallback_chat_config(payload.provider_set)
+                if payload.provider_set
+                else None
+            )
+            attempt_configs: list[tuple[LLMProviderConfig, bool]] = [
+                (llm_config, False),
+            ]
+            if fallback_config is not None:
+                attempt_configs.append((fallback_config, True))
+            fallback_reason = ""
+
             try:
                 async with asyncio.timeout(settings.turn_timeout_seconds):
-                    async for event in agent_loop.run_turn(
-                        payload,
-                        turn_id=turn_id,
-                        cancel_event=cancel_event,
+                    for attempt_index, (config, strip_thinking) in enumerate(
+                        attempt_configs
                     ):
-                        if await _client_disconnected(request):
-                            cancel_event.set()
+                        cancel_event.clear()
+                        if attempt_index == 1:
+                            yield to_sse_event(
+                                FallbackEvent(
+                                    turn_id=turn_id,
+                                    from_provider=llm_config.provider,
+                                    to_provider=config.provider,
+                                    from_model=llm_config.model,
+                                    to_model=config.model,
+                                    reason=fallback_reason,
+                                )
+                            )
+                            audit_base = (
+                                workspace_data_dir
+                                if workspace_data_dir is not None
+                                else (
+                                    Path(payload.plugin_data_dir).expanduser().resolve()
+                                    if payload.plugin_data_dir
+                                    else project_root
+                                )
+                            )
+                            log_event(
+                                resolve_app_data_dir(audit_base),
+                                "provider.fallback",
+                                "agent",
+                                {
+                                    "turn_id": turn_id,
+                                    "from_provider": llm_config.provider,
+                                    "to_provider": config.provider,
+                                    "from_model": llm_config.model,
+                                    "to_model": config.model,
+                                    "reason": fallback_reason,
+                                },
+                                enabled=payload.audit_enabled,
+                            )
+                            logger.info(
+                                "Chat provider fallback (turn_id=%s from=%s/%s to=%s/%s reason=%s)",
+                                turn_id,
+                                llm_config.provider,
+                                llm_config.model,
+                                config.provider,
+                                config.model,
+                                fallback_reason,
+                            )
+
+                        model = build_model(config)
+                        agent = build_agent(
+                            model,
+                            ui_mode=payload.ui_mode,
+                            sandbox_available=caps.sandbox_available,
+                            locale=payload.locale,
+                            active_plugins=payload.active_plugins,
+                        )
+                        agent_loop = AgentLoop(
+                            agent=agent,
+                            project_client=project_client,
+                            sandbox_runner=sandbox_runner,
+                            max_iterations=settings.max_agent_iterations,
+                            model_settings=build_model_settings(config),
+                            project_root=project_root,
+                            limits=limits,
+                        )
+                        try:
+                            async for event in agent_loop.run_turn(
+                                payload,
+                                turn_id=turn_id,
+                                cancel_event=cancel_event,
+                                strip_thinking=strip_thinking,
+                                is_fallback_attempt=attempt_index == 1,
+                            ):
+                                if await _client_disconnected(request):
+                                    cancel_event.set()
+                                    break
+                                if cancel_event.is_set():
+                                    break
+                                yield to_sse_event(event)
                             break
-                        if cancel_event.is_set():
+                        except FallbackableProviderError as exc:
+                            fallback_reason = exc.reason
+                            if (
+                                attempt_index == 0
+                                and fallback_config is not None
+                                and len(attempt_configs) > 1
+                            ):
+                                if await _client_disconnected(request):
+                                    cancel_event.set()
+                                    break
+                                continue
+                            yield to_sse_event(
+                                ErrorEvent(
+                                    code="provider_unavailable",
+                                    message=t(
+                                        payload.locale,
+                                        "loop.provider_unavailable",
+                                    ),
+                                )
+                            )
                             break
-                        yield to_sse_event(event)
             except TimeoutError:
                 cancel_event.set()
                 yield to_sse_event(

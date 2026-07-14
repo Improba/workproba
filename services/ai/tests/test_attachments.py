@@ -38,6 +38,7 @@ async def test_text_attachment_is_inlined() -> None:
     out = await build_inline_attachments_context([d], DEFAULT_LIMITS)
     assert "Pièce jointe : note.txt" in out
     assert "hello world" in out
+    assert "<untrusted>" in out
 
 
 async def test_image_attachment_is_placeholder() -> None:

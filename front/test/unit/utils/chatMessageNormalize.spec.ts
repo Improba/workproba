@@ -47,7 +47,24 @@ describe('chatMessageNormalize', () => {
     expect(messages[0].id).toBe('ok');
   });
 
-  it('accepte le rôle system et persiste messageKind compaction', () => {
+  it('accepte le rôle user compaction et persiste messageKind', () => {
+    const normalized = normalizeChatMessage({
+      id: 'sum1',
+      role: 'user',
+      content: 'Résumé',
+      messageKind: 'compaction',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(normalized).toMatchObject({
+      id: 'sum1',
+      role: 'user',
+      content: 'Résumé',
+      messageKind: 'compaction',
+    });
+  });
+
+  it('accepte le rôle system legacy et persiste messageKind compaction', () => {
     const normalized = normalizeChatMessage({
       id: 'sys1',
       role: 'system',
@@ -62,5 +79,16 @@ describe('chatMessageNormalize', () => {
       content: 'Résumé',
       messageKind: 'compaction',
     });
+  });
+
+  it('infère messageKind compaction depuis le préfixe i18n sans messageKind stocké', () => {
+    const normalized = normalizeChatMessage({
+      id: 'sum2',
+      role: 'user',
+      content: 'Résumé des échanges précédents :\n\nContenu résumé',
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    expect(normalized?.messageKind).toBe('compaction');
   });
 });

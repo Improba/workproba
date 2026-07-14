@@ -232,6 +232,7 @@ def build_agent(
         system_prompt=system_prompt_for_locale(locale),
     )
 
+    # Refs audit : app.prompts.registry.DYNAMIC_HOOK_SPECS
     @agent.system_prompt
     def project_inventory_prompt(ctx: RunContext[ToolDeps]) -> str:
         """Injecte l'inventaire des fichiers projet reçus dans le payload."""
@@ -333,23 +334,34 @@ def build_agent(
         ]
         selected = selected[:topk]
 
+        from app.agent.untrusted import wrap_untrusted_content
+
         def _format(header_key: str, scope: str) -> str:
             scope_items = [item for item in selected if item.get("_scope") == scope]
             if not scope_items:
                 return ""
-            lines = [t(locale, header_key)]
+            bullets: list[str] = []
             for item in scope_items:
                 content = str(item.get("content", "")).strip().replace("\n", " ")
                 if not content:
                     continue
-                lines.append(f"- {content}")
-            return "\n".join(lines) if len(lines) > 1 else ""
+                bullets.append(f"- {content}")
+            if not bullets:
+                return ""
+            wrapped = wrap_untrusted_content(
+                "\n".join(bullets),
+                locale,
+                "memory.untrusted_header",
+            )
+            return f"{t(locale, header_key)}\n{wrapped}"
 
         user_block = _format("memory.agent_user_header", "user")
         project_block = _format("memory.agent_project_header", "project")
-        if not user_block and not project_block:
+        blocks = [block for block in (user_block, project_block) if block]
+        if not blocks:
             return ""
-        return f"{user_block}\n{project_block}".strip()
+        guardrail = t(locale, "memory.agent_guardrail")
+        return f"{guardrail}\n\n" + "\n\n".join(blocks)
 
     @agent.tool
     async def remember(

@@ -601,7 +601,30 @@ describe('useChatStream — feedbacks', () => {
     expect(mapped?.data.summary_failed).toBe(false);
   });
 
-  it('applyCompactionToMessages réduit les messages et insère un résumé system', () => {
+  it('mappe fallback SSE vers ChatStreamFallbackData', () => {
+    const mapped = mapPythonSseEvent({
+      type: 'fallback',
+      data: {
+        turn_id: 'turn-1',
+        from_provider: 'mistral',
+        to_provider: 'ollama',
+        from_model: 'mistral-small-latest',
+        to_model: 'llama3.2',
+        reason: 'timeout',
+      },
+    });
+    expect(mapped?.type).toBe('fallback');
+    expect(mapped?.data).toMatchObject({
+      turnId: 'turn-1',
+      fromProvider: 'mistral',
+      toProvider: 'ollama',
+      fromModel: 'mistral-small-latest',
+      toModel: 'llama3.2',
+      reason: 'timeout',
+    });
+  });
+
+  it('applyCompactionToMessages réduit les messages et insère un résumé user', () => {
     const messages: ChatMessage[] = [
       { id: 'old', role: 'user', content: 'ancien 1', createdAt: '2026-01-01T00:00:00.000Z' },
       { id: 'old2', role: 'assistant', content: 'ancien 2', createdAt: '2026-01-01T00:00:01.000Z' },
@@ -623,7 +646,7 @@ describe('useChatStream — feedbacks', () => {
     });
 
     expect(messages).toHaveLength(3);
-    expect(messages[0].role).toBe('system');
+    expect(messages[0].role).toBe('user');
     expect(messages[0].messageKind).toBe('compaction');
     expect(messages[0].content).toContain('Contexte condensé');
     expect(messages[0].content).toContain('Résumé des échanges précédents :');

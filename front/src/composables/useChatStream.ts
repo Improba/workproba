@@ -1,4 +1,5 @@
 import { ref, type Ref } from 'vue';
+import { Notify } from 'quasar';
 import type {
   ChatCompactionInfo,
   ChatConfirmation,
@@ -9,6 +10,7 @@ import type {
   ChatProposedPlan,
   ChatStreamCompactionData,
   ChatStreamEvent,
+  ChatStreamFallbackData,
   ChatToolCall,
   ChatUsage,
   RawChatStreamEvent,
@@ -234,6 +236,19 @@ export function mapPythonSseEvent(
           summary_failed: Boolean(data.summary_failed ?? data.summaryFailed ?? false),
         },
       };
+    case 'fallback':
+      return {
+        type: 'fallback',
+        data: {
+          turnId: String(data.turn_id ?? ''),
+          fromProvider: String(data.from_provider ?? ''),
+          toProvider: String(data.to_provider ?? ''),
+          fromModel:
+            data.from_model != null ? String(data.from_model) : null,
+          toModel: data.to_model != null ? String(data.to_model) : null,
+          reason: String(data.reason ?? ''),
+        },
+      };
     case 'error':
       return {
         type: 'error',
@@ -291,7 +306,7 @@ export function applyCompactionToMessages(
     const prefixI18n = t('chat.compactionContentPrefix');
     next.unshift({
       id: createMessageId(),
-      role: 'system',
+      role: 'user',
       content: `${prefixI18n}${summary}`,
       messageKind: 'compaction',
       createdAt: new Date().toISOString(),
@@ -316,6 +331,17 @@ function compactionInfoFromEvent(data: ChatStreamCompactionData): ChatCompaction
     summary: data.summary ?? null,
     summaryFailed: Boolean(data.summary_failed ?? false),
   };
+}
+
+function notifyProviderFallback(data: ChatStreamFallbackData): void {
+  const toModel = data.toModel?.trim();
+  const message = toModel
+    ? t('chat.providerFallbackWithModel', {
+        toProvider: data.toProvider,
+        toModel,
+      })
+    : t('chat.providerFallback', { toProvider: data.toProvider });
+  Notify.create({ message, color: 'warning', timeout: 5000 });
 }
 
 /** Reconstruit des `parts` ordonnées pour un message legacy sans parts. */
@@ -814,6 +840,7 @@ export function useChatStream(
   // Identifiant de tour fourni par le backend (event turn_start). Utilisé pour
   // isoler la résolution d'une confirmation parmi plusieurs tours concurrents.
   let currentTurnId: string | null = null;
+  let fallbackNotifiedTurnId: string | null = null;
 
   function setIdlePaused(paused: boolean): void {
     idlePaused = paused;
@@ -844,8 +871,17 @@ export function useChatStream(
       lastCompaction.value = compactionInfoFromEvent(event.data);
       return;
     }
+    if (event.type === 'fallback') {
+      const turnId = event.data.turnId || currentTurnId;
+      if (turnId && turnId !== fallbackNotifiedTurnId) {
+        fallbackNotifiedTurnId = turnId;
+        notifyProviderFallback(event.data);
+      }
+      return;
+    }
     if (event.type === 'turn_start') {
       if (event.data.turnId) currentTurnId = event.data.turnId;
+      fallbackNotifiedTurnId = null;
       return;
     }
     if (!currentAssistantId) return;
@@ -902,6 +938,7 @@ export function useChatStream(
     flushPendingTokens();
     currentAssistantId = null;
     currentTurnId = null;
+    fallbackNotifiedTurnId = null;
     error.value = null;
     if (flushTimer) {
       clearTimeout(flushTimer);
@@ -938,6 +975,7 @@ export function useChatStream(
     resetStreamingFlag();
     currentAssistantId = null;
     currentTurnId = null;
+    fallbackNotifiedTurnId = null;
     streaming.value = false;
   }
 
@@ -1025,6 +1063,7 @@ export function useChatStream(
     abortController = new AbortController();
     currentAssistantId = assistantMessage.id;
     currentTurnId = null;
+    fallbackNotifiedTurnId = null;
     pendingTokens = '';
     if (flushTimer) {
       clearTimeout(flushTimer);

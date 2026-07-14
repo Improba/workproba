@@ -15,18 +15,22 @@ from pydantic_ai.messages import (
     PartDeltaEvent,
     PartEndEvent,
     PartStartEvent,
+    SystemPromptPart,
     TextPart,
     TextPartDelta,
     ThinkingPart,
     ThinkingPartDelta,
+    UserPromptPart,
 )
 
 from app.agent.loop import (
     AgentLoop,
     coerce_tool_result,
+    is_compaction_summary_message,
     map_model_stream_events,
     to_model_messages,
 )
+from app.i18n import t
 from app.agent.tools import ToolContext, build_agent
 from app.schemas import (
     AgentTurnRequest,
@@ -98,6 +102,56 @@ def test_to_model_messages_system() -> None:
     msgs = to_model_messages([ChatMessage(role="system", content="tu es WP")])
     assert len(msgs) == 1
     assert msgs[0].kind == "request"
+    assert isinstance(msgs[0].parts[0], SystemPromptPart)
+
+
+def test_to_model_messages_compaction_summary_routes_to_user_prompt() -> None:
+    prefix = t("fr", "utility.compaction_summary_prefix")
+    msgs = to_model_messages(
+        [
+            ChatMessage(
+                role="user",
+                content=f"{prefix}\n\nDécision conservée",
+            )
+        ],
+        locale="fr",
+    )
+    assert len(msgs) == 2
+    assert isinstance(msgs[0].parts[0], SystemPromptPart)
+    assert isinstance(msgs[1].parts[0], UserPromptPart)
+    assert msgs[1].parts[0].content.startswith(prefix)
+
+
+def test_to_model_messages_legacy_compaction_system_routes_to_user_prompt() -> None:
+    prefix = t("fr", "utility.compaction_summary_prefix")
+    msgs = to_model_messages(
+        [
+            ChatMessage(
+                role="system",
+                content=f"{prefix}\n\nAncien résumé",
+            )
+        ],
+        locale="fr",
+    )
+    assert len(msgs) == 2
+    assert isinstance(msgs[0].parts[0], SystemPromptPart)
+    assert isinstance(msgs[1].parts[0], UserPromptPart)
+
+
+def test_is_compaction_summary_message_detects_by_prefix_only() -> None:
+    prefix = t("fr", "utility.compaction_summary_prefix")
+    assert is_compaction_summary_message(
+        ChatMessage(role="user", content=f"{prefix}\n\nok"),
+        "fr",
+    )
+    assert is_compaction_summary_message(
+        ChatMessage(role="system", content=f"{prefix}\n\nok"),
+        "fr",
+    )
+    assert not is_compaction_summary_message(
+        ChatMessage(role="system", content="tu es un assistant"),
+        "fr",
+    )
 
 
 def test_to_model_messages_assistant_only_tool_calls() -> None:

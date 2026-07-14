@@ -54,17 +54,18 @@ def _sse_events(resp: Any) -> list[tuple[str, dict[str, Any]]]:
 
 def test_estimate_history_tokens() -> None:
     assert estimate_history_tokens([]) == 0
-    # L'estimation compte contenu + thinking + overhead de rôle (len(role)+2)
-    # par message, puis applique chars/4.
-    # user  : "abcd" (4) + "user" (4) + 2 = 10
-    # assistant : "abcdefgh" (8) + "assistant" (9) + 2 = 19
-    # total = 29 chars ; 29 // 4 = 7.
+    # L'estimation assemble content/thinking/name/tool_call_id/role par message
+    # (join \n), puis applique l'heuristique conservative : CJK ~1 token/char,
+    # autres caracteres ceil(chars/3).
+    # user      : "abcd\n\n\n\nuser" -> ceil(12/3) = 4
+    # assistant : "\nabcdefgh\n\n\nassistant" -> ceil(21/3) = 7
+    # total = 11 (ancien chars/4 donnait 7).
     assert estimate_history_tokens(
         [
             ChatMessage(role="user", content="abcd"),
             ChatMessage(role="assistant", thinking="abcdefgh"),
         ]
-    ) == 7
+    ) == 11
 
 
 async def test_compact_history_under_threshold_returns_original() -> None:
@@ -105,7 +106,7 @@ async def test_compact_history_summarizes_old_messages(
     )
 
     assert event is not None
-    assert compacted[0].role == "system"
+    assert compacted[0].role == "user"
     assert "Résumé" in (compacted[0].content or "")
     assert compacted[1:] == history[-COMPACT_KEEP_LAST:]
     assert event.kept_count == COMPACT_KEEP_LAST
@@ -135,7 +136,7 @@ async def test_compact_history_overhead_triggers_compaction(
     )
 
     assert event is not None
-    assert compacted[0].role == "system"
+    assert compacted[0].role == "user"
 
 
 async def test_compact_history_prior_summary_incremental(
@@ -262,11 +263,27 @@ def test_extract_prior_summary_accepts_front_persisted_format() -> None:
     prefix = t("fr", "utility.compaction_summary_prefix")
     # Même format que applyCompactionToMessages : prefixI18n + summary
     front_content = f"{prefix}\n\nDécision persistée côté client"
-    message = ChatMessage(role="system", content=front_content)
+    message = ChatMessage(role="user", content=front_content)
 
     prior, prior_msg, remaining = _extract_prior_summary([message], "fr")
 
     assert prior == "Décision persistée côté client"
+    assert prior_msg == message
+    assert remaining == []
+
+
+def test_extract_prior_summary_accepts_legacy_system_role() -> None:
+    from app.agent.compaction import _extract_prior_summary
+
+    prefix = t("fr", "utility.compaction_summary_prefix")
+    message = ChatMessage(
+        role="system",
+        content=f"{prefix}\n\nAncien résumé legacy",
+    )
+
+    prior, prior_msg, remaining = _extract_prior_summary([message], "fr")
+
+    assert prior == "Ancien résumé legacy"
     assert prior_msg == message
     assert remaining == []
 

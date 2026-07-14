@@ -260,6 +260,9 @@ export default {
     roleYou: 'You',
     compactionSummary: 'Conversation summary',
     compactionContentPrefix: 'Summary of previous exchanges:\n\n',
+    providerFallback: 'Engine unavailable: switching to {toProvider}.',
+    providerFallbackWithModel:
+      'Engine unavailable: switching to {toProvider} ({toModel}).',
     toolResultTruncated: '(result truncated)',
     page: {
       metaSep: '·',

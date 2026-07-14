@@ -1,9 +1,9 @@
-import json
 from pathlib import Path
 from typing import Any
 
 from app.config import Settings
 from app.i18n import DEFAULT_LOCALE, t
+from app.llm.tokens import estimate_message_tokens, estimate_tokens
 from app.llm.utility import summarize_conversation
 from app.schemas import (
     ChatMessage,
@@ -14,26 +14,15 @@ from app.schemas import (
 )
 
 
-def _message_char_estimate(message: ChatMessage) -> int:
-    """Heuristique de taille d'un message pour l'estimation de tokens.
-
-    Compte le contenu texte, le thinking, les métadonnées de rôle et les
-    payloads d'outils (tool_calls sérialisés). Pas de tokenizer provider ici :
-    on applique chars/4 comme approximation conservative (sous-estime rarement
-    le coût structurel JSON).
-    """
-    total = len(message.content or "") + len(message.thinking or "")
-    total += len(message.name or "") + len(message.tool_call_id or "")
-    for tool_call in message.tool_calls:
-        total += len(tool_call.id) + len(tool_call.name)
-        total += len(json.dumps(tool_call.arguments, ensure_ascii=False))
-    total += len(message.role) + 2
-    return total
-
-
-def estimate_history_tokens(history: list[ChatMessage]) -> int:
-    total_chars = sum(_message_char_estimate(message) for message in history)
-    return max(total_chars // 4, 0)
+def estimate_history_tokens(
+    history: list[ChatMessage],
+    provider: str | None = None,
+) -> int:
+    """Estime le cout token de l'historique avec un estimateur conservateur."""
+    return max(
+        sum(estimate_message_tokens(message, provider=provider) for message in history),
+        0,
+    )
 
 
 def estimate_memory_overhead(
@@ -48,7 +37,7 @@ def estimate_memory_overhead(
     from app.memory_stores import open_memory_store_for_scope
 
     workspace_data_dir = Path(data_dir).expanduser().resolve()
-    total_chars = 0
+    parts: list[str] = []
     for scope in ("user", "project"):
         try:
             store = open_memory_store_for_scope(scope, workspace_data_dir)
@@ -59,23 +48,28 @@ def estimate_memory_overhead(
         finally:
             store.close()
         for item in items:
-            total_chars += len(str(item.get("content", "")))
-    return max(total_chars // 4, 0)
+            parts.append(str(item.get("content", "")))
+    if not parts:
+        return 0
+    return max(estimate_tokens("\n".join(parts)), 0)
 
 
 def estimate_documents_overhead(documents: list[DocumentReference]) -> int:
     """Estime le coût token de l'inventaire documents transmis au tour."""
-    total_chars = 0
+    if not documents:
+        return 0
+    parts: list[str] = []
     for doc in documents:
-        total_chars += len(doc.id) + len(doc.name)
-        total_chars += len(doc.mime_type or "")
-        total_chars += len(str(doc.metadata.get("relativePath", "")))
-        total_chars += len(str(doc.metadata.get("kind", "")))
+        parts.append(doc.id)
+        parts.append(doc.name)
+        parts.append(doc.mime_type or "")
+        parts.append(str(doc.metadata.get("relativePath", "")))
+        parts.append(str(doc.metadata.get("kind", "")))
         if doc.content_base64:
-            total_chars += len(doc.content_base64)
+            parts.append(doc.content_base64)
         elif doc.size_bytes is not None:
-            total_chars += len(str(doc.size_bytes))
-    return max(total_chars // 4, 0)
+            parts.append(str(doc.size_bytes))
+    return max(estimate_tokens("\n".join(parts)), 0)
 
 
 def _extract_prior_summary(
@@ -87,12 +81,11 @@ def _extract_prior_summary(
         return None, None, old
 
     first = old[0]
-    if first.role != "system":
-        return None, None, old
-
     prefix = t(locale, "utility.compaction_summary_prefix")
     content = (first.content or "").strip()
     if not content.startswith(prefix):
+        return None, None, old
+    if first.role not in ("system", "user"):
         return None, None, old
 
     body = content[len(prefix) :].strip()
@@ -119,7 +112,10 @@ async def compact_history_if_needed(
     if not context_window or not auto_compact or len(history) < min_history:
         return history, None
 
-    estimate = estimate_history_tokens(history) + overhead_tokens
+    estimate = estimate_history_tokens(
+        history,
+        provider=chat_config.provider if chat_config else None,
+    ) + overhead_tokens
     if estimate < int(threshold * context_window):
         return history, None
 
@@ -144,7 +140,7 @@ async def compact_history_if_needed(
         )
         resp = await summarize_conversation(req, settings)
         summary_msg = ChatMessage(
-            role="system",
+            role="user",
             content=(
                 f"{t(locale, 'utility.compaction_summary_prefix')}\n\n{resp.summary}"
             ),

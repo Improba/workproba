@@ -230,6 +230,7 @@ export type ChatStreamEventType =
   | 'tool_call_result'
   | 'plan_proposed'
   | 'compaction'
+  | 'fallback'
   | 'done'
   | 'error';
 
@@ -318,6 +319,15 @@ export interface ChatStreamCompactionData {
   summary_failed?: boolean;
 }
 
+export interface ChatStreamFallbackData {
+  turnId: string;
+  fromProvider: string;
+  toProvider: string;
+  fromModel?: string | null;
+  toModel?: string | null;
+  reason: string;
+}
+
 export interface ChatStreamPlanProposedData {
   planId: string;
   steps: ChatPlanStep[];
@@ -335,6 +345,7 @@ export type ChatStreamEvent =
   | { type: 'confirmation_request'; data: ChatStreamConfirmationRequestData }
   | { type: 'plan_proposed'; data: ChatStreamPlanProposedData }
   | { type: 'compaction'; data: ChatStreamCompactionData }
+  | { type: 'fallback'; data: ChatStreamFallbackData }
   | { type: 'done'; data: ChatStreamDoneData }
   | { type: 'error'; data: ChatStreamErrorData };
 

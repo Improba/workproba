@@ -228,6 +228,26 @@ def _decode_base64(content_base64: str) -> bytes | None:
         return None
 
 
+def _wrap_untrusted_document_content(text: str, locale: str) -> str:
+    from app.agent.untrusted import wrap_untrusted_content
+
+    return wrap_untrusted_content(text, locale, "attachments.untrusted_header")
+
+
+def _format_extracted_document_block(
+    doc: DocumentReference,
+    text: str,
+    locale: str,
+    *,
+    note: str = "",
+) -> str:
+    wrapped = _wrap_untrusted_document_content(text, locale)
+    return (
+        f"### {t(locale, 'attachments.title', name=doc.name)}\n"
+        f"```\n{wrapped}\n```{note}"
+    )
+
+
 def _status(
     doc_id: str,
     status_key: str,
@@ -383,10 +403,7 @@ async def process_inline_attachments(
                         max_chars=limits.extract_max_chars,
                         total=extracted.metadata.get("chars_total", "?"),
                     )
-                blocks.append(
-                    f"### {t(locale, 'attachments.title', name=doc.name)}\n"
-                    f"```\n{extracted.text}\n```{note}"
-                )
+                blocks.append(_format_extracted_document_block(doc, extracted.text, locale, note=note))
                 statuses.append(_status(doc.id, "read", locale))
                 continue
 
@@ -412,10 +429,7 @@ async def process_inline_attachments(
                             "attachments.text_truncated_suffix",
                             max_chars=limits.extract_max_chars,
                         )
-                    blocks.append(
-                        f"### {t(locale, 'attachments.title', name=doc.name)}\n"
-                        f"```\n{text}\n```"
-                    )
+                    blocks.append(_format_extracted_document_block(doc, text, locale))
                     statuses.append(_status(doc.id, "scanned_pdf", locale))
                 except Exception as exc:  # noqa: BLE001
                     blocks.append(
@@ -493,10 +507,7 @@ async def process_inline_attachments(
                     max_chars=limits.extract_max_chars,
                     total=extracted.metadata.get("chars_total", "?"),
                 )
-            blocks.append(
-                f"### {t(locale, 'attachments.title', name=doc.name)}\n"
-                f"```\n{extracted.text}\n```{note}"
-            )
+            blocks.append(_format_extracted_document_block(doc, extracted.text, locale, note=note))
             if status_key:
                 statuses.append(_status(doc.id, status_key, locale))
             continue
@@ -518,9 +529,7 @@ async def process_inline_attachments(
                     "attachments.text_truncated_suffix",
                     max_chars=limits.extract_max_chars,
                 )
-            blocks.append(
-                f"### {t(locale, 'attachments.title', name=doc.name)}\n```\n{text}\n```"
-            )
+            blocks.append(_format_extracted_document_block(doc, text, locale))
             statuses.append(_status(doc.id, "read", locale))
             continue
 

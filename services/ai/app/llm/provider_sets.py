@@ -126,6 +126,25 @@ def resolve_chat_from_set(provider_set: ProviderSet) -> LLMProviderConfig:
     )
 
 
+def resolve_fallback_chat_config(provider_set: ProviderSet) -> LLMProviderConfig | None:
+    """Construit la config chat de repli, ou None si absente ou non utilisable."""
+    chat_fallback = provider_set.chat_fallback
+    if chat_fallback is None:
+        return None
+    chat_key = provider_set.chat.api_key if provider_set.chat else None
+    try:
+        api_key = _resolve_api_key(chat_fallback, fallback_key=chat_key)
+    except MissingApiKeyError:
+        return None
+    return LLMProviderConfig(
+        provider=chat_fallback.provider,
+        model=chat_fallback.model,
+        base_url=chat_fallback.base_url,
+        api_key=api_key,
+        reasoning_effort=_chat_reasoning_to_effort(chat_fallback.reasoning),
+    )
+
+
 def resolve_embeddings_from_set(provider_set: ProviderSet) -> LLMProviderConfig | None:
     """Construit une config embeddings depuis le set, ou None si absent."""
     if provider_set.embeddings is None:

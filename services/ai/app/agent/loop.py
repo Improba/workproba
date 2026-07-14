@@ -41,8 +41,9 @@ from app.agent.confirmation import ConfirmationGate, confirmation_registry
 from app.agent.human import build_human_summary
 from app.agent.plan import PlanGate, plan_registry
 from app.agent.tools import ToolContext, ToolDeps
-from app.i18n import t
+from app.i18n import DEFAULT_LOCALE, t
 from app.limits import DEFAULT_LIMITS, Limits
+from app.llm.fallback import FallbackableProviderError, is_fallbackable
 from app.llm.provider import parse_tool_arguments
 from app.llm.utility import extract_usage_tokens
 from app.plugins.hooks import hook_registry
@@ -97,6 +98,8 @@ class AgentLoop:
         *,
         turn_id: str,
         cancel_event: asyncio.Event | None = None,
+        strip_thinking: bool = False,
+        is_fallback_attempt: bool = False,
     ) -> AsyncIterator[AgentEvent]:
         gate = ConfirmationGate(session_id=request.session_id, turn_id=turn_id)
         plan_gate = PlanGate(session_id=request.session_id, turn_id=turn_id)
@@ -107,12 +110,20 @@ class AgentLoop:
 
         async def producer() -> None:
             try:
-                async for event in self._run_turn_internal(request, gate, plan_gate):
+                async for event in self._run_turn_internal(
+                    request,
+                    gate,
+                    plan_gate,
+                    strip_thinking=strip_thinking,
+                    is_fallback_attempt=is_fallback_attempt,
+                ):
                     if cancel.is_set():
                         break
                     await output_queue.put(event)
             except asyncio.CancelledError:
                 raise
+            except FallbackableProviderError as exc:
+                await output_queue.put(exc)
             except Exception:
                 logger.exception(
                     "Unhandled agent turn error (session=%s turn=%s)",
@@ -162,6 +173,8 @@ class AgentLoop:
                     continue
                 if event is _SENTINEL:
                     break
+                if isinstance(event, FallbackableProviderError):
+                    raise event
                 yield event  # type: ignore[misc]
         finally:
             cancel.set()
@@ -184,6 +197,9 @@ class AgentLoop:
         request: AgentTurnRequest,
         gate: ConfirmationGate,
         plan_gate: PlanGate,
+        *,
+        strip_thinking: bool = False,
+        is_fallback_attempt: bool = False,
     ) -> AsyncIterator[AgentEvent]:
         workspace_data_dir = (
             Path(request.workspace_data_dir).expanduser().resolve()
@@ -204,13 +220,14 @@ class AgentLoop:
             provider_set=provider_set,
             ui_mode=request.ui_mode,
         )
-        for status in processed.statuses:
-            yield AttachmentStatusEvent(
-                message_id=request.session_id,
-                attachment_id=status.attachment_id,
-                status_key=status.status_key,
-                label_locale=status.label_locale,
-            )
+        if not is_fallback_attempt:
+            for status in processed.statuses:
+                yield AttachmentStatusEvent(
+                    message_id=request.session_id,
+                    attachment_id=status.attachment_id,
+                    status_key=status.status_key,
+                    label_locale=status.label_locale,
+                )
         user_prompt = build_user_prompt(request.message, processed)
         plugin_data_dir = (
             Path(request.plugin_data_dir).expanduser().resolve()
@@ -253,16 +270,46 @@ class AgentLoop:
             confirmation_gate=gate,
             plan_gate=plan_gate,
         )
-        history = to_model_messages(request.history)
+        history = to_model_messages(
+            request.history,
+            strip_thinking=strip_thinking,
+            locale=request.locale,
+        )
         turn_summary = ""
+        emitted = False
         hook_payload_base = {
             "turn_id": gate.turn_id,
             "_plugin_contexts": plugin_contexts,
         }
-        hook_registry.dispatch(
-            "turn.started",
-            {**hook_payload_base},
-        )
+        if not is_fallback_attempt:
+            hook_registry.dispatch(
+                "turn.started",
+                {**hook_payload_base},
+            )
+
+        if request.audit_enabled and not is_fallback_attempt:
+            from app.audit import log_event, resolve_app_data_dir
+            from app.prompts.manifest import build_turn_prompt_details
+
+            audit_base = (
+                workspace_data_dir
+                or plugin_data_dir
+                or self._project_root
+            )
+            if audit_base is not None:
+                log_event(
+                    resolve_app_data_dir(audit_base),
+                    "turn.prompt",
+                    "agent",
+                    build_turn_prompt_details(
+                        self._agent,
+                        deps,
+                        request,
+                        turn_id=gate.turn_id,
+                        model_settings=self._model_settings,
+                    ),
+                    enabled=request.audit_enabled,
+                )
 
         try:
             async with self._agent.iter(
@@ -275,6 +322,11 @@ class AgentLoop:
                 async for node in run:
                     if Agent.is_model_request_node(node):
                         async for event in self._iter_model_stream(node, run.ctx):
+                            if not emitted and isinstance(
+                                event,
+                                (TokenEvent, ThinkingDeltaEvent, ThinkingStartEvent),
+                            ):
+                                emitted = True
                             yield event
                     elif Agent.is_call_tools_node(node):
                         async for event in self._iter_tool_stream(
@@ -283,6 +335,11 @@ class AgentLoop:
                             locale=request.locale,
                             hook_payload_base=hook_payload_base,
                         ):
+                            if not emitted and isinstance(
+                                event,
+                                (ToolCallStartEvent, ToolCallResultEvent),
+                            ):
+                                emitted = True
                             yield event
                     elif Agent.is_end_node(node):
                         output = run.result.output if run.result else ""
@@ -317,7 +374,18 @@ class AgentLoop:
                     detail=exc,
                 ),
             )
-        except Exception:
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            fallbackable, reason = is_fallbackable(exc)
+            if fallbackable and not emitted:
+                raise FallbackableProviderError(reason) from exc
+            if fallbackable and emitted:
+                yield ErrorEvent(
+                    code="provider_unavailable",
+                    message=t(request.locale, "loop.provider_unavailable"),
+                )
+                return
             logger.exception(
                 "Agent iteration failed (session=%s)",
                 request.session_id,
@@ -464,11 +532,42 @@ def _thinking_id(index: int) -> str:
     return f"think-{index}"
 
 
-def to_model_messages(history: list[ChatMessage]) -> list[_ModelMessage]:
+def is_compaction_summary_message(message: ChatMessage, locale: str) -> bool:
+    """Détecte un résumé de compaction par son préfixe i18n (rôle user ou legacy system)."""
+    prefix = t(locale, "utility.compaction_summary_prefix")
+    content = (message.content or "").strip()
+    return content.startswith(prefix)
+
+
+def to_model_messages(
+    history: list[ChatMessage],
+    *,
+    strip_thinking: bool = False,
+    locale: str = DEFAULT_LOCALE,
+) -> list[_ModelMessage]:
     """Convertit l'historique Workproba en messages Pydantic AI."""
     messages: list[_ModelMessage] = []
+    compaction_framing_added = False
     for message in history:
-        if message.role == "system":
+        if is_compaction_summary_message(message, locale):
+            if not compaction_framing_added:
+                messages.append(
+                    ModelRequest(
+                        [
+                            SystemPromptPart(
+                                content=t(
+                                    locale,
+                                    "utility.compaction_framing_instruction",
+                                )
+                            )
+                        ]
+                    )
+                )
+                compaction_framing_added = True
+            messages.append(
+                ModelRequest([UserPromptPart(content=message.content or "")])
+            )
+        elif message.role == "system":
             messages.append(
                 ModelRequest([SystemPromptPart(content=message.content or "")])
             )
@@ -478,7 +577,7 @@ def to_model_messages(history: list[ChatMessage]) -> list[_ModelMessage]:
             )
         elif message.role == "assistant":
             parts: list[Any] = []
-            if message.thinking:
+            if message.thinking and not strip_thinking:
                 parts.append(ThinkingPart(content=message.thinking))
             if message.content:
                 parts.append(TextPart(content=message.content))
