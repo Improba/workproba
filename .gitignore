@@ -12,6 +12,8 @@ dist/
 
 # Compiled Python bytecode
 *.py[cod]
+services/ai/build/
+services/ai/dist/
 
 # Log files
 *.log
@@ -66,3 +68,10 @@ api/coverage/
 # Improba specific files
 .knowledge-base
 AGENTS.md
+
+# Sidecar PyInstaller (garder .gitkeep)
+desktop/src-tauri/binaries/workproba-ai-*
+!desktop/src-tauri/binaries/.gitkeep
+
+# CI staging / release bundles
+artifacts/

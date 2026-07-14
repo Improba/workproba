@@ -1,24 +1,33 @@
 name: Desktop Release
 
-# Builds unsigned installers for macOS, Windows, and Linux on version tags.
-# Code signing is intentionally omitted in V2.
+# Builds unsigned installers (macOS, Windows, Linux) on version tags vX.Y.Z.
+# Two-phase pipeline: matrix build → single release job (no concurrent release races).
+# Code signing omitted until certificates are available — see docs/signing.md.
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  release:
+  build:
     permissions:
-      contents: write
+      contents: read
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
+          - platform: macos-14
             args: '--target aarch64-apple-darwin'
-          - platform: macos-latest
+          - platform: macos-15-intel
             args: '--target x86_64-apple-darwin'
           - platform: ubuntu-22.04
             args: ''
@@ -35,19 +44,33 @@ jobs:
         with:
           node-version: '22'
           cache: yarn
-          cache-dependency-path: front/yarn.lock
+          cache-dependency-path: |
+            front/yarn.lock
+            desktop/yarn.lock
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/ai/pyproject.toml
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust cross-target (macOS)
+        if: startsWith(matrix.platform, 'macos-')
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            macos-14) rustup target add aarch64-apple-darwin ;;
+            macos-15-intel) rustup target add x86_64-apple-darwin ;;
+          esac
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: desktop/src-tauri
-
-      - name: Install frontend dependencies
-        working-directory: front
-        run: yarn install --frozen-lockfile
 
       - name: Install Linux system dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -59,31 +82,91 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Build Tauri app
-        uses: tauri-apps/tauri-action@v0
+      - name: Install frontend dependencies
+        working-directory: front
+        run: yarn install --frozen-lockfile
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: yarn install --frozen-lockfile
+
+      - name: Build Python sidecar
+        shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          projectPath: desktop
-          tauriScript: yarn tauri
-          args: ${{ matrix.args }}
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Workproba ${{ github.ref_name }}'
-          releaseBody: |
-            Installateurs multi-plateformes Workproba (non signés, V2).
+          CI: 'true'
+        run: bash scripts/build-sidecar.sh
 
-            - macOS: `.dmg`
-            - Windows: `.msi` / `.exe` (NSIS)
-            - Linux: `.deb` / `.AppImage`
+      - name: Smoke test sidecar binary
+        shell: bash
+        run: bash scripts/smoke-test-sidecar.sh
 
-            Le moteur IA est embarqué ; aucune dépendance de développement requise côté utilisateur.
-          releaseDraft: true
-          prerelease: false
+      - name: Build Tauri app
+        working-directory: desktop
+        shell: bash
+        env:
+          CI: true
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ matrix.args }}" ]]; then
+            yarn tauri build ${{ matrix.args }}
+          else
+            yarn tauri build
+          fi
 
-      - name: Upload release artifacts
+      - name: Stage installer artifacts
+        shell: bash
+        run: bash scripts/stage-release-artifacts.sh "${{ matrix.platform }}"
+
+      - name: Upload installer artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: workproba-${{ matrix.platform }}-${{ matrix.args || 'default' }}
-          path: |
-            desktop/src-tauri/target/release/bundle/**/*
-          if-no-files-found: warn
+          name: release-${{ matrix.platform }}
+          path: artifacts/release-${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 14
+
+  create-release:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release bundle and checksums
+        shell: bash
+        run: bash scripts/prepare-release-bundle.sh
+
+      - name: Create GitHub Release (draft)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Workproba ${{ github.ref_name }}
+          draft: true
+          prerelease: false
+          body: |
+            Installateurs multi-plateformes Workproba (non signés).
+
+            | OS | Fichiers |
+            |---|---|
+            | macOS Apple Silicon | `.dmg` (aarch64) |
+            | macOS Intel | `.dmg` (x86_64) |
+            | Windows | `.msi` / `.exe` (NSIS) |
+            | Linux | `.deb` / `.AppImage` |
+
+            Le moteur IA Python est embarqué ; aucune dépendance de développement requise côté utilisateur.
+
+            **Intégrité :** vérifiez `SHA256SUMS.txt` avant installation.
+
+            **Note sécurité :** installateurs non signés. Windows SmartScreen et macOS Gatekeeper affichent un avertissement au premier lancement. Voir [docs/installateurs.md](https://github.com/Improba/workproba/blob/main/docs/installateurs.md).
+
+            Signature Authenticode / Apple Developer ID : voir [docs/signing.md](https://github.com/Improba/workproba/blob/main/docs/signing.md).
+          files: artifacts/release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

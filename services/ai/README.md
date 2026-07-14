@@ -12,6 +12,18 @@ Listens on `127.0.0.1:8765` (loopback only in production).
 # or all-in-one: make dev
 ```
 
+## Packaging (PyInstaller)
+
+Production binary for Tauri `externalBin` (onefile, ~120 Mo Linux) :
+
+```bash
+# from repo root
+make build-sidecar
+# → desktop/src-tauri/binaries/workproba-ai-<host-triple>
+```
+
+Spec: `workproba_ai.spec`, entry point: `workproba_ai_entry.py`. Onefile évite un dossier `_internal` séparé, incompatible avec le layout runtime des sidecars Tauri. CI builds and smoke-tests the sidecar on every push to `main`/`develop` and on release tags.
+
 ## Security
 
 Most endpoints require the `X-Internal-Secret` header (value `INTERNAL_SECRET` on the sidecar, `DESKTOP_INTERNAL_SECRET` on the front). Agent and personas SSE flows are accessible on loopback without a secret.

@@ -39,6 +39,9 @@ dev = [
 browser = [
   "playwright>=1.49",
 ]
+build = [
+  "pyinstaller>=6",
+]
 
 [tool.pyright]
 pythonVersion = "3.12"

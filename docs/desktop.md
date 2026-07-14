@@ -132,7 +132,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **C** | Done | Direct Python SSE, `LocalProjectClient`, subprocess sandbox |
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, plugins (personas), attachments, document preview, audit |
-| **E** | To do | Multi-OS packaging + PyInstaller sidecar |
+| **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
 | **F** | To do | Optional cloud sync (NestJS) |
 
 ### Phase D: validation
@@ -144,10 +144,15 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 ## Remaining work
 
-### Product (phases E & F)
+### Product (phase F)
 
-- **Phase E: Multi-OS packaging**: PyInstaller sidecar (`workproba-ai-<triple>` in `desktop/src-tauri/binaries/`, referenced by `bundle.externalBin`); build `.dmg`/`.app` (macOS), `.deb`/`.rpm`/`.AppImage` (Linux), `.msi`/`.exe` NSIS (Windows); CI build per triple.
 - **Phase F: Optional cloud sync**: reuse archived NestJS stack (`legacy/`) for optional workspace sync.
+
+### CI / release
+
+- **CI** : `.github/workflows/desktop-ci.yml` (pytest, cargo, front lint/tests, packaging sidecar sur push main/develop).
+- **Release** : tag `vX.Y.Z` via `./scripts/create-tag.sh` → `.github/workflows/desktop-release.yml` (installateurs non signés, brouillon GitHub).
+- **Signature** : voir [signing.md](./signing.md) (à activer quand les certificats seront disponibles).
 
 ### Functional (beyond initial release, to prioritize)
 
@@ -159,7 +164,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 - **Desktop e2e run on machine with display**: validate real chat turn in webview (streaming, sidecar badge, tool call rendering). Sidecar is validated live outside webview.
 - **Pre-existing front tests**: `pages-smoke.spec.ts` and `ssr-paths.spec.ts` reference missing pages (`SpaShell.vue`, `ErrorRouteNotAuthorized.vue`); fix or remove. `layouts.spec.ts` (`StandardLayout` lib-improba) failing.
-- **CI**: no CI on desktop pivot. Set up with phase E (`cargo check`, `pytest -q`, `yarn test:unit`, `yarn build`).
+- **CI**: `desktop-ci.yml` on push/PR; `desktop-release.yml` on tag `v*.*.*`. See [docs/signing.md](../docs/signing.md) for future code signing.
 - **Front lint**: 7 pre-existing errors in `lib-improba/` (not introduced by sidecar).
 
 ## Local development

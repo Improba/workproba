@@ -36,7 +36,7 @@ Remaining `[ ]` checkboxes in this plan describe **technical or manual work** st
 | **API, tests** | **Vitest**, `test:unit*` and `test:e2e*` scripts in `api/package.json` |
 | **API, e2e** | Vitest e2e operational (`test/e2e/`); isolated run via `yarn test:e2e` |
 | **Front, tests** | **Vitest**, 3 files, **7 tests** passing |
-| **CI** | `.github/workflows/ci.yml` present; **not validated** until branch is pushed |
+| **CI** | `.github/workflows/desktop-ci.yml` + `desktop-release.yml` (desktop) ; ancien `ci.yml` retiré |
 | **`lib-improba`** | Code copied api + front; no npm package |
 
 ---

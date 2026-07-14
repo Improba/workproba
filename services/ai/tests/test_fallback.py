@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -265,6 +266,7 @@ async def test_run_turn_tool_call_blocks_fallback(
         *,
         locale: str,
         hook_payload_base: dict[str, Any] | None = None,
+        plugin_data_dir: Path | None = None,
     ) -> AsyncIterator[Any]:
         yield ToolCallStartEvent(
             tool_call_id="tc1",

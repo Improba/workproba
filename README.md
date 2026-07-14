@@ -111,5 +111,7 @@ Or: `bash scripts/dev.sh` then `cd desktop && yarn dev`
 ### Build installer
 
 ```bash
-cd desktop && yarn build
+make build-desktop    # sidecar PyInstaller + installateurs Tauri
 ```
+
+Publish a release: `./scripts/create-tag.sh` (creates tag `vX.Y.Z`, triggers GitHub Actions). Installers are unsigned for now; see [docs/signing.md](./docs/signing.md).

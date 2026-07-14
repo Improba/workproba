@@ -10,7 +10,9 @@ use commands::{
     open_path, pick_project_folder, restore_last_project_path, reveal_in_os, save_app_settings,
     save_conversation, set_active_project_path, uninstall_local_plugin, FsWatchState, ProjectState,
 };
-use sidecar::{ai_sidecar_status, start_ai_sidecar, try_spawn_dev_uvicorn};
+use sidecar::{
+    ai_sidecar_status, spawn_packaged_sidecar, start_ai_sidecar, try_spawn_dev_uvicorn,
+};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -39,6 +41,8 @@ pub fn run() {
                         );
                     }
                 }
+            } else if let Err(error) = spawn_packaged_sidecar(app.handle()) {
+                eprintln!("Sidecar empaqueté: {error}");
             }
             Ok(())
         })

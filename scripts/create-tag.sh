@@ -1,143 +1,147 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# Bump version across desktop artifacts and push tag vX.Y.Z to trigger desktop-release.yml.
+#
+# Usage:
+#   ./scripts/create-tag.sh           # patch bump (default)
+#   ./scripts/create-tag.sh minor
+#   ./scripts/create-tag.sh major
 
-# Use examples: 
-# ./scripts/create-tag.sh prod
-# ./scripts/create-tag.sh prod major 
-# ./scripts/create-tag.sh prod minor
-# ./scripts/create-tag.sh prod patch
+set -euo pipefail
 
-# Ensure script is run with bash
-if [ -z "$BASH_VERSION" ]; then
-    echo "This script must be run with bash, not sh"
+if [[ -z "${BASH_VERSION:-}" ]]; then
+  echo "This script must be run with bash" >&2
+  exit 1
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+  echo "jq is required (apt install jq / brew install jq)" >&2
+  exit 1
+fi
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if ! git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "Not a git repository: $ROOT" >&2
+  exit 1
+fi
+
+if ! git -C "$ROOT" diff --quiet || ! git -C "$ROOT" diff --cached --quiet; then
+  echo "Working tree is not clean. Commit or stash changes before creating a release tag." >&2
+  exit 1
+fi
+
+BRANCH="$(git -C "$ROOT" branch --show-current)"
+if [[ "$BRANCH" != "main" && "$BRANCH" != "master" ]]; then
+  echo "Warning: you are on branch '$BRANCH', not main/master." >&2
+  if [[ -z "${CI:-}" && -t 0 ]]; then
+    read -r -p "Continue? (y/N) " reply
+    [[ "$reply" =~ ^[Yy]$ ]] || exit 1
+  fi
+fi
+
+VERSION_TYPE="${1:-patch}"
+if [[ "$VERSION_TYPE" != "major" && "$VERSION_TYPE" != "minor" && "$VERSION_TYPE" != "patch" ]]; then
+  echo "Usage: $0 [patch|minor|major]" >&2
+  exit 1
+fi
+
+read_version() {
+  local file="$1"
+  local mode="$2"
+  case "$mode" in
+    json) jq -r '.version' "$file" ;;
+    toml) awk -F'"' '/^version = / { print $2; exit }' "$file" ;;
+    *) echo "unknown mode: $mode" >&2; exit 1 ;;
+  esac
+}
+
+VERSION_FILES=(
+  "json:$ROOT/package.json"
+  "json:$ROOT/front/package.json"
+  "json:$ROOT/desktop/package.json"
+  "json:$ROOT/desktop/src-tauri/tauri.conf.json"
+  "toml:$ROOT/desktop/src-tauri/Cargo.toml"
+  "toml:$ROOT/services/ai/pyproject.toml"
+)
+
+CURRENT=""
+for entry in "${VERSION_FILES[@]}"; do
+  mode="${entry%%:*}"
+  file="${entry#*:}"
+  version="$(read_version "$file" "$mode")"
+  if [[ -z "$CURRENT" ]]; then
+    CURRENT="$version"
+  elif [[ "$version" != "$CURRENT" ]]; then
+    echo "Version mismatch: $file has $version, expected $CURRENT" >&2
+    echo "Align all version fields before running create-tag.sh." >&2
     exit 1
+  fi
+done
+
+IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT"
+case "$VERSION_TYPE" in
+  major) MAJOR=$((MAJOR + 1)); MINOR=0; PATCH=0 ;;
+  minor) MINOR=$((MINOR + 1)); PATCH=0 ;;
+  patch) PATCH=$((PATCH + 1)) ;;
+esac
+NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+TAG="v${NEW_VERSION}"
+
+if git -C "$ROOT" rev-parse --verify "refs/tags/${TAG}" >/dev/null 2>&1; then
+  echo "Tag ${TAG} already exists." >&2
+  exit 1
 fi
 
-# Exit on error in subscript
-set -e
-
-# The first argument may be: 
-# - prod
-# If no argument is provided, error
-if [ -z "$1" ]; then
-    echo "No argument provided, for example prod"
-    exit 1
-fi
-deployType="$1"
-
-# Print the deploy type
-echo "Deploy type: $deployType"
-
-# The second argument may be: 
-# - major
-# - minor
-# - patch
-# If no argument is provided, it is patch
-if [ -z "$2" ]; then
-    versionType="patch"
-else
-    versionType="$2"
-
-    if [ "$versionType" != "major" ] && [ "$versionType" != "minor" ] && [ "$versionType" != "patch" ]; then
-        echo "Invalid version type, must be major, minor or patch"
-        exit 1
+LATEST_TAG="$(git -C "$ROOT" tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n 1 || true)"
+if [[ -n "$LATEST_TAG" ]]; then
+  LATEST_VERSION="${LATEST_TAG#v}"
+  if [[ "$(printf '%s\n' "$LATEST_VERSION" "$NEW_VERSION" | sort -V | tail -n1)" == "$LATEST_VERSION" && "$LATEST_VERSION" != "$NEW_VERSION" ]]; then
+    echo "Warning: latest tag ($LATEST_TAG) is newer than planned release ($TAG)" >&2
+    if [[ -z "${CI:-}" && -t 0 ]]; then
+      read -r -p "Continue? (y/N) " reply
+      [[ "$reply" =~ ^[Yy]$ ]] || exit 1
     fi
+  fi
 fi
 
-echo "Version type: $versionType"
+echo "Bumping $CURRENT → $NEW_VERSION (tag $TAG)"
 
-# Get script directory in a cross-platform way
-scriptFolderPath="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+replace_json_version() {
+  local file="$1"
+  if [[ "$OSTYPE" == darwin* ]]; then
+    sed -i '' "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW_VERSION\"/g" "$file"
+  else
+    sed -i "s/\"version\": \"$CURRENT\"/\"version\": \"$NEW_VERSION\"/g" "$file"
+  fi
+}
 
-# Get the version from the package.json of front and api
-frontVersion=$(cat $scriptFolderPath/../front/package.json | jq -r '.version')
-apiVersion=$(cat $scriptFolderPath/../api/package.json | jq -r '.version')
+replace_toml_version() {
+  local file="$1"
+  if [[ "$OSTYPE" == darwin* ]]; then
+    sed -i '' "s/^version = \"$CURRENT\"/version = \"$NEW_VERSION\"/" "$file"
+  else
+    sed -i "s/^version = \"$CURRENT\"/version = \"$NEW_VERSION\"/" "$file"
+  fi
+}
 
-# Print the versions
-echo "Front version: $frontVersion"
-echo "API version: $apiVersion"
+replace_json_version "$ROOT/package.json"
+replace_json_version "$ROOT/front/package.json"
+replace_json_version "$ROOT/desktop/package.json"
+replace_json_version "$ROOT/desktop/src-tauri/tauri.conf.json"
+replace_toml_version "$ROOT/desktop/src-tauri/Cargo.toml"
+replace_toml_version "$ROOT/services/ai/pyproject.toml"
 
-# If the version are not the same, exit
-if [ "$frontVersion" != "$apiVersion" ]; then
-    echo "Front and API versions are not the same, you need to deal with this manually"
-    exit 1
-fi
+git -C "$ROOT" add \
+  package.json \
+  front/package.json \
+  desktop/package.json \
+  desktop/src-tauri/tauri.conf.json \
+  desktop/src-tauri/Cargo.toml \
+  services/ai/pyproject.toml
 
-# If the version are the same, continue
-echo "Front and API versions are the same, continuing..."
+git -C "$ROOT" commit -m "chore: bump version to $NEW_VERSION"
+git -C "$ROOT" push
+git -C "$ROOT" tag "$TAG"
+git -C "$ROOT" push origin "$TAG"
 
-# Check the latest beginning with deployType
-latestTag=$(git tag -l | grep "^${deployType}-v" | sort -V | tail -n 1)
-
-# If the latest tag is "after" the current version (1.2.1 > 1.2.0), exit with a warning
-if [ ! -z "$latestTag" ]; then
-    latestVersion=$(echo $latestTag | sed "s/${deployType}-v//")
-    
-    # Compare versions in a cross-platform way
-    frontMajor=$(echo $frontVersion | cut -d. -f1)
-    frontMinor=$(echo $frontVersion | cut -d. -f2)
-    frontPatch=$(echo $frontVersion | cut -d. -f3)
-    
-    latestMajor=$(echo $latestVersion | cut -d. -f1)
-    latestMinor=$(echo $latestVersion | cut -d. -f2)
-    latestPatch=$(echo $latestVersion | cut -d. -f3)
-    
-    isNewer=false
-    if [ "$latestMajor" -gt "$frontMajor" ]; then
-        isNewer=true
-    elif [ "$latestMajor" -eq "$frontMajor" ] && [ "$latestMinor" -gt "$frontMinor" ]; then
-        isNewer=true
-    elif [ "$latestMajor" -eq "$frontMajor" ] && [ "$latestMinor" -eq "$frontMinor" ] && [ "$latestPatch" -gt "$frontPatch" ]; then
-        isNewer=true
-    fi
-    
-    if [ "$isNewer" = true ]; then
-        echo "Warning: Latest tag version ($latestVersion) is newer than current version ($frontVersion)"
-        echo "This might indicate that you're trying to publish an older version"
-        read -p "Do you want to continue? (y/n) " -n 1 -r
-        echo
-        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-            exit 1
-        fi
-    fi
-fi
-
-# Increment version
-if [ "$versionType" == "major" ]; then
-    newVersion=$(echo $frontVersion | awk -F. '{print $1 + 1 "." 0 "." 0}')
-elif [ "$versionType" == "minor" ]; then
-    newVersion=$(echo $frontVersion | awk -F. '{print $1 "." $2 + 1 "." 0}')
-else
-    newVersion=$(echo $frontVersion | awk -F. '{print $1 "." $2 "." $3 + 1}')
-fi
-
-# Print the new version
-echo "New version: $newVersion"
-
-if [[ "$OSTYPE" == "darwin"* ]]; then
-    SED_CMD="sed -i ''"
-else
-    SED_CMD="sed -i"
-fi
-
-$SED_CMD "s/\"version\": \"$frontVersion\"/\"version\": \"$newVersion\"/g" "$scriptFolderPath/../front/package.json"
-$SED_CMD "s/\"version\": \"$frontVersion\"/\"version\": \"$newVersion\"/g" "$scriptFolderPath/../api/package.json"
-
-# Make a version commit and push it to the remote repository
-git add $scriptFolderPath/../front/package.json
-git add $scriptFolderPath/../api/package.json
-git commit -m "Bump version to $newVersion"
-git push
-
-# Create a new tag with format prod-vX.Y.Z
-git tag ${deployType}-v$newVersion
-
-# Push the tag to the remote repository
-git push origin ${deployType}-v$newVersion
-
-# All done
-echo "All done, the CI will now run on GitHub"
-
-
-
-
-
+echo "Done. GitHub Actions desktop-release will build $TAG."

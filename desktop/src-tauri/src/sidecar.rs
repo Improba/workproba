@@ -6,7 +6,7 @@ use std::time::Duration;
 use tauri::AppHandle;
 use tauri_plugin_shell::ShellExt;
 
-const SIDECAR_NAME: &str = "workproba-ai";
+const SIDECAR_NAME: &str = "binaries/workproba-ai";
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -15,6 +15,17 @@ pub struct SidecarStatus {
     pub running: bool,
     pub port: u16,
     pub message: String,
+}
+
+/// Démarre le sidecar Python empaqueté via `externalBin` (build release).
+pub fn spawn_packaged_sidecar(app: &AppHandle) -> Result<(), String> {
+    match app.shell().sidecar(SIDECAR_NAME) {
+        Ok(command) => {
+            command.spawn().map_err(|error| error.to_string())?;
+            Ok(())
+        }
+        Err(error) => Err(format!("Sidecar empaqueté indisponible: {error}")),
+    }
 }
 
 /// Démarre le sidecar Python (services/ai) une fois empaqueté via `externalBin`.

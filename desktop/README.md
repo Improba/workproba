@@ -86,12 +86,15 @@ In dev, Tauri also tries to **start the sidecar automatically** (`try_spawn_dev_
 ## Multi-platform build
 
 ```bash
-yarn build
+make build-desktop    # sidecar PyInstaller + installateurs Tauri (plateforme courante)
+# ou par étapes :
+make build-sidecar
+cd desktop && yarn build
 ```
 
-Configured targets: `deb`, `rpm`, `appimage`, `msi`, `nsis`, `dmg`, `app`.
+CI builds unsigned installers on GitHub when a `vX.Y.Z` tag is pushed (`./scripts/create-tag.sh`). See [docs/signing.md](../docs/signing.md) for certificate setup.
 
-Python sidecar packaging (`workproba-ai`) will be added via `externalBin` once the PyInstaller binary is ready for each triple (`x86_64-unknown-linux-gnu`, `aarch64-apple-darwin`, `x86_64-pc-windows-msvc`, etc.).
+Python sidecar packaging: `scripts/build-sidecar.sh` → `workproba-ai-<triple>` in `desktop/src-tauri/binaries/`, referenced by `bundle.externalBin`.
 
 ## Tauri commands exposed to the front
 

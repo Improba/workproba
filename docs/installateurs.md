@@ -24,7 +24,7 @@ The artificial intelligence engine is **bundled** in the installer: you do not n
 
 ## Where to download
 
-Installers are published on the Workproba repository **Releases** page when a tagged version is published (for example `v0.2.0`).
+Installers are published on the Workproba repository **Releases** page when a tagged version is published (for example `v0.1.0`, via `./scripts/create-tag.sh`).
 
 Choose the file for your system:
 
@@ -147,7 +147,7 @@ The `.deb` package declares its dependencies automatically (`libwebkit2gtk`, tas
 
 ## Verify file integrity (optional)
 
-Each official release may provide a **SHA256 fingerprint** (checksum) next to the installers on the Releases page.
+Each official release provides a **`SHA256SUMS.txt`** file on the GitHub Releases page (checksums for all installers in that release).
 
 To verify a downloaded file:
 
@@ -165,7 +165,7 @@ shasum -a 256 workproba_*.deb
 sha256sum workproba_*.AppImage
 ```
 
-Compare the result with the SHA256 value published on the release. If they match, the file was not altered during download.
+Compare the result with the matching line in `SHA256SUMS.txt` on the release. If they match, the file was not altered during download.
 
 ---
 

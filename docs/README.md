@@ -5,6 +5,7 @@ Index of **Workproba** project documentation: local-folder work assistant (Claud
 ## Installation (end users)
 
 - **[installateurs.md](./installateurs.md)**: download and install Workproba (Windows, macOS, Linux), SmartScreen/Gatekeeper warnings, uninstall
+- **[signing.md](./signing.md)**: future code signing procedure (Windows Authenticode, macOS notarization)
 
 ## Product framing
 
