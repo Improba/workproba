@@ -17,7 +17,7 @@ Build **Workproba**, an in-house equivalent of **Claude Cowork**, aimed primaril
 - Multi-OS desktop: macOS (`.dmg`), Linux (`.AppImage`, `.deb`), Windows (`.msi`).
 - Local folder = workspace (no upload).
 - Polished agent chat, human-language action cards, SSE streaming.
-- Local memory: RAG per project + explicit user (global) and project (workspace) memories.
+- Local memory: RAG per project + explicit user (global) and project (workspace) memories; cross-session promotion from conversation summaries.
 - Personas plugin: simulated professional perspectives (opinion, meeting, discussion).
 - Automatic versions before file modifications.
 - LLM sovereignty: Ollama, vLLM, Mistral cloud, changeable URLs.

@@ -118,6 +118,8 @@ import {
   resolveUiMode,
   requestTitle,
   requestSummary,
+  promoteSessionMemory,
+  sanitizeChatMessagesForPersistence,
 } from '@services/aiSidecar';
 import { getSession, saveSession } from '@services/workspaceSession';
 import { contextWindowFor } from '@utils/modelCatalog';
@@ -168,7 +170,7 @@ const { consumeAction, pendingAction } = usePersonasNavigation();
 } = usePersonas();
 const { openSideChat, closeSideChat } = useSideChat();
 const { setMessages: syncMainChatContext } = useMainChatContext();
-const { applyToolResult: applyBrowserToolResult } = useBrowser();
+const { applyToolResult: applyBrowserToolResult, pilotagePaused, setAgentTurnActive } = useBrowser();
 
 const personasView = ref<'meeting' | null>(null);
 const meetingState = ref<MeetingState | null>(null);
@@ -253,6 +255,7 @@ const {
   onBrowserToolCall: (toolName, result) => {
     applyBrowserToolResult(toolName, result);
   },
+  browserPilotagePaused: pilotagePaused,
 });
 
 interface ChatMetaPart {
@@ -310,6 +313,7 @@ const metaParts = computed<ChatMetaPart[]>(() => {
 watch(
   [streaming, streamError],
   ([isStreaming, err]) => {
+    setAgentTurnActive(isStreaming);
     setStreaming(isStreaming);
     if (err) {
       setSidecarState('error');
@@ -454,7 +458,7 @@ async function saveSessionNow(items: ChatMessage[]): Promise<void> {
     ...session,
     title: sessionTitle.value.trim() || session.title,
     summary: sessionSummary.value ?? session.summary ?? null,
-    messages: items.filter((m) => !m.streaming),
+    messages: sanitizeChatMessagesForPersistence(items.filter((m) => !m.streaming)),
     reasoningEffort: sessionReasoningOverride.value ?? null,
     model: sessionModelOverride.value ?? null,
   });
@@ -501,6 +505,20 @@ watch(completedTurns, async (turns) => {
     sessionSummary.value = result.summary.trim();
     await flushPersistSession();
     bumpSessions();
+
+    const dataDir = activeDataDir.value;
+    if (dataDir) {
+      void promoteSessionMemory({
+        workspaceDataDir: dataDir,
+        sessionId: sessionId.value,
+        summary: sessionSummary.value,
+        chatConfig: sessionLlmConfigs().chat,
+        utilityConfig: buildUtilityLlmConfig(),
+        locale: toSidecarLocale(locale.value),
+      }).catch(() => {
+        // Promotion mémoire en arrière-plan : échec silencieux.
+      });
+    }
   } catch {
     // Résumé en arrière-plan : on ignore l'échec sans notifier l'utilisateur.
   } finally {

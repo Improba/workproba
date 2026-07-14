@@ -260,6 +260,7 @@ class AgentLoop:
             code_execute=request.code_execute,
             audit_retention_days=request.audit_retention_days,
             audit_enabled=request.audit_enabled,
+            browser_pilotage_paused=request.browser_pilotage_paused,
             last_user_query=request.message,
         )
         deps = ToolDeps(
@@ -334,6 +335,7 @@ class AgentLoop:
                             run.ctx,
                             locale=request.locale,
                             hook_payload_base=hook_payload_base,
+                            plugin_data_dir=plugin_data_dir,
                         ):
                             if not emitted and isinstance(
                                 event,
@@ -408,8 +410,10 @@ class AgentLoop:
         *,
         locale: str,
         hook_payload_base: dict[str, Any] | None = None,
+        plugin_data_dir: Path | None = None,
     ) -> AsyncIterator[AgentEvent]:
         from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
+        from app.plugins.workproba_browser import browser as browser_engine
 
         pending_arguments: dict[str, dict[str, Any]] = {}
         async with node.stream(ctx) as tool_stream:
@@ -455,10 +459,17 @@ class AgentLoop:
                             is_error=is_error,
                             locale=locale,
                         )
+                    sse_result = result
+                    if not is_error:
+                        sse_result = browser_engine.enrich_browser_tool_result_for_sse(
+                            tool_name,
+                            result,
+                            plugin_data_dir,
+                        )
                     yield ToolCallResultEvent(
                         tool_call_id=tool_call_id,
                         tool_name=tool_name,
-                        result=result,
+                        result=sse_result,
                         is_error=is_error,
                         human_summary=human_summary,
                     )
@@ -539,6 +550,21 @@ def is_compaction_summary_message(message: ChatMessage, locale: str) -> bool:
     return content.startswith(prefix)
 
 
+def _strip_screenshot_from_tool_history_content(content: str) -> str:
+    """Retire screenshot_b64 des résultats browser sérialisés dans l'historique."""
+    try:
+        parsed = json.loads(content)
+    except json.JSONDecodeError:
+        return content
+    if not isinstance(parsed, dict) or "screenshot_b64" not in parsed:
+        return content
+    if "snapshot_yaml" not in parsed and "url" not in parsed:
+        return content
+    cleaned = dict(parsed)
+    del cleaned["screenshot_b64"]
+    return json.dumps(cleaned, ensure_ascii=False)
+
+
 def to_model_messages(
     history: list[ChatMessage],
     *,
@@ -591,12 +617,15 @@ def to_model_messages(
                 )
             messages.append(ModelResponse(parts=parts))
         elif message.role == "tool":
+            tool_content = _strip_screenshot_from_tool_history_content(
+                message.content or ""
+            )
             messages.append(
                 ModelRequest(
                     [
                         ToolReturnPart(
                             tool_name=message.name or "",
-                            content=message.content or "",
+                            content=tool_content,
                             tool_call_id=message.tool_call_id or "",
                         )
                     ]

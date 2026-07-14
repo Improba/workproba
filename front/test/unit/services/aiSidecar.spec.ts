@@ -171,6 +171,30 @@ describe('aiSidecar payload', () => {
     expect(payload.permissions_network).toBe(false);
   });
 
+  it('buildAgentTurnPayload inclut browser_pilotage_paused quand actif', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [],
+      [],
+      null,
+      null,
+      null,
+      'guided',
+      null,
+      true,
+      [],
+      'fr',
+      null,
+      ['workproba.browser'],
+      '/data/plugins/workproba.browser',
+      { settingsLocked: false, permissionsNetwork: true, locale: 'fr' },
+      true,
+    );
+    expect(payload.browser_pilotage_paused).toBe(true);
+  });
+
   it('buildAgentTurnPayload inclut tool_calls et messages tool tronqués', () => {
     const longResult = 'x'.repeat(MAX_TOOL_RESULT_HISTORY_CHARS + 500);
     const payload = buildAgentTurnPayload(
@@ -212,6 +236,39 @@ describe('aiSidecar payload', () => {
     });
     expect(payload.history[1].content).toBe(truncateToolResult(longResult));
     expect(payload.history[1].content!.length).toBe(MAX_TOOL_RESULT_HISTORY_CHARS + 1);
+  });
+
+  it('buildAgentTurnPayload retire screenshot_b64 des tools browser dans history', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'Je navigue',
+          toolCalls: [
+            {
+              id: 'tc_browser',
+              name: 'browser_navigate',
+              status: 'success',
+              args: { url: 'https://example.com' },
+              result: {
+                url: 'https://example.com',
+                snapshot_yaml: '- heading: Example',
+                screenshot_b64: 'a'.repeat(5000),
+              },
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      [],
+    );
+    const toolEntry = payload.history.find((entry) => entry.role === 'tool');
+    expect(toolEntry?.content).not.toContain('screenshot_b64');
+    expect(toolEntry?.content).toContain('snapshot_yaml');
   });
 
   it('buildAgentTurnPayload inclut les messages compaction (rôle user)', () => {

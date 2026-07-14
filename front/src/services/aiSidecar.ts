@@ -4,6 +4,7 @@ import type { LlmConfigPayload } from '@composables/useAppSettings';
 import { toSidecarLocale } from '@boot/i18n';
 import { t } from '@utils/i18nT';
 import { providerSetToSidecar } from '@utils/providerSets';
+import { sanitizeBrowserToolResultForHistory } from '@utils/browserTools';
 
 export type UiMode = 'guided' | 'advanced' | 'locked';
 
@@ -54,6 +55,7 @@ export interface AgentTurnPayload {
   plugin_data_dir?: string;
   settings_locked?: boolean;
   permissions_network?: boolean;
+  browser_pilotage_paused?: boolean;
 }
 
 export function getAiSidecarUrl(): string {
@@ -186,15 +188,34 @@ export function toPythonHistory(messages: ChatMessage[]): AgentTurnPayload['hist
 
     for (const tc of m.toolCalls ?? []) {
       if (tc.result === undefined) continue;
+      const sanitized = sanitizeBrowserToolResultForHistory(tc.name, tc.result);
       history.push({
         role: 'tool',
-        content: truncateToolResult(toolResultToString(tc.result)),
+        content: truncateToolResult(toolResultToString(sanitized)),
         tool_call_id: tc.id,
       });
     }
   }
 
   return history;
+}
+
+export function sanitizeChatMessagesForPersistence(messages: ChatMessage[]): ChatMessage[] {
+  return messages.map((message) => {
+    if (message.role !== 'assistant' || !message.toolCalls?.length) {
+      return message;
+    }
+    return {
+      ...message,
+      toolCalls: message.toolCalls.map((toolCall) => ({
+        ...toolCall,
+        result:
+          toolCall.result === undefined
+            ? toolCall.result
+            : sanitizeBrowserToolResultForHistory(toolCall.name, toolCall.result),
+      })),
+    };
+  });
 }
 
 export function buildAgentTurnPayload(
@@ -218,6 +239,7 @@ export function buildAgentTurnPayload(
   activePlugins?: string[] | null,
   pluginDataDir?: string | null,
   security?: SidecarSecurityContext | null,
+  browserPilotagePaused?: boolean | null,
 ): AgentTurnPayload {
   const projectDocs = documents.map((doc) => ({
     id: doc.relativePath,
@@ -262,6 +284,7 @@ export function buildAgentTurnPayload(
     plugin_data_dir: pluginDataDir ?? undefined,
     settings_locked: security?.settingsLocked ?? undefined,
     permissions_network: security?.permissionsNetwork ?? undefined,
+    browser_pilotage_paused: browserPilotagePaused ? true : undefined,
   };
 }
 
@@ -396,6 +419,51 @@ export async function requestSummary(opts: {
     summary: String(data.summary ?? ''),
     inputTokens: parseOptionalInt(data.input_tokens) ?? undefined,
     outputTokens: parseOptionalInt(data.output_tokens) ?? undefined,
+  };
+}
+
+export async function promoteSessionMemory(opts: {
+  workspaceDataDir: string;
+  sessionId: string;
+  summary: string;
+  chatConfig?: LlmConfigPayload | null;
+  utilityConfig?: LlmConfigPayload | null;
+  locale?: 'fr' | 'en' | null;
+}): Promise<{
+  facts: string[];
+  counts: Record<string, number>;
+  pruned?: number;
+}> {
+  const response = await fetch(`${getAiSidecarUrl()}/memory/promote-session`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Internal-Secret': getDesktopSecret(),
+    },
+    body: JSON.stringify({
+      workspace_data_dir: opts.workspaceDataDir,
+      session_id: opts.sessionId,
+      summary: opts.summary,
+      llm_provider_config: opts.chatConfig ?? null,
+      utility_llm_config: opts.utilityConfig ?? null,
+      locale: opts.locale ?? undefined,
+    }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text().catch(() => '');
+    throw new Error(body || `HTTP ${response.status}`);
+  }
+
+  const data = (await response.json()) as {
+    facts?: string[];
+    counts?: Record<string, number>;
+    pruned?: number;
+  };
+  return {
+    facts: Array.isArray(data.facts) ? data.facts.map(String) : [],
+    counts: data.counts ?? {},
+    pruned: data.pruned ?? 0,
   };
 }
 
@@ -1447,14 +1515,32 @@ export async function forgetAllMemory(
 
 // --- Browser (Vague 10) ---
 
-export interface BrowserNavigateResult {
+export interface BrowserViewport {
+  width: number;
+  height: number;
+}
+
+export interface BrowserBBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface BrowserHighlightFields {
+  viewport?: BrowserViewport;
+  action_ref?: string;
+  action_bbox?: BrowserBBox;
+}
+
+export interface BrowserNavigateResult extends BrowserHighlightFields {
   title: string;
   url: string;
   snapshot_yaml: string;
   screenshot_b64: string;
 }
 
-export interface BrowserSnapshotResult {
+export interface BrowserSnapshotResult extends BrowserHighlightFields {
   snapshot_yaml: string;
   screenshot_b64: string;
   title: string;
@@ -1470,9 +1556,11 @@ export interface BrowserActionPayload {
   direction?: string;
 }
 
-export interface BrowserActionResult {
+export interface BrowserActionResult extends BrowserHighlightFields {
   snapshot_yaml: string;
   screenshot_b64: string;
+  title?: string;
+  url?: string;
   extracted?: string;
 }
 

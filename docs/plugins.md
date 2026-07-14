@@ -1,6 +1,6 @@
 # Workproba plugins
 
-> **Last updated:** 11/07/2026
+> **Last updated:** 14/07/2026
 
 Workproba extends the agent core with a **plugin system**: agent tools, HTTP endpoints, UI slots, and namespaced storage. The sidecar registry (`services/ai/app/plugins/registry.py`) is aligned with Tauri persistence (`desktop/src-tauri/src/commands/plugins.rs`).
 
@@ -95,8 +95,8 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 
 ## Experimental plugins
 
-- **Browser**: `/plugins/browser/navigate`, `/snapshot`, `/action`, `/close`, `/status`
-- **Cloud**: `/plugins/cloud/status`, `/config`, `/sync`
+- **Browser**: see [browser.md](./browser.md) (full guide: architecture, 8 agent tools, live UI, security, tests)
+- **Cloud** : `/plugins/cloud/status`, `/config`, `/sync`
 
 Disabled by default; reserved for dev and advanced presets.
 

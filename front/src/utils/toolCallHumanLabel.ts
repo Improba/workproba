@@ -12,6 +12,8 @@ export function fallbackHumanLabel(
       return t('toolCalls.generateDocument');
     case 'search_kb':
       return t('toolCalls.searchKb');
+    case 'web_search':
+      return t('toolCalls.webSearchGeneric');
     case 'list_files':
       return t('toolCalls.listFiles');
     case 'run_code':

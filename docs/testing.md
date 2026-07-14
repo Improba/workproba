@@ -14,12 +14,17 @@ Framework: **pytest** + `pytest-asyncio`. Offline tests are deterministic (no LL
 - `tests/test_llm_config.py`: `build_model`, settings, helpers
 - `tests/test_agent_loop.py`: message conversion, SSE events, tool robustness
 - `tests/test_agent_remember.py`: `remember` tool, memory injection
+- `tests/test_memory_scope.py`, `test_memory_extended.py`: user/project scopes, CRUD
+- `tests/test_memory_prompt.py`: `memory_prompt` injection and guardrails
+- `tests/test_memory_consolidation.py`, `test_memory_promotion.py`: session promotion pipeline
+- `tests/test_memory_ranking.py`, `test_memory_mechanics.py`: lexical ranking, cross-hook behavior
+- `tests/test_recall_project_sessions.py`: cross-session digest builder
 - `tests/test_main_http.py`: `/agent/turn`, CORS preflight, HTTP errors
 - `tests/test_rag_store.py`: chunking, `RagStore` without network
-- `tests/test_memory_scope.py`, `test_memory_extended.py`: user/project scopes
+- `tests/test_compaction.py`: in-conversation history compaction
 - `tests/test_plugin_personas.py`, `test_personas_estimate_cost.py`: personas plugin
 - `tests/test_plugin_projet.py`, `test_plugin_projet_http.py`: project plugin
-- `tests/test_plugin_browser.py`, `test_plugin_cloud.py`: experimental plugins
+- `tests/test_plugin_browser.py`, `test_plugin_cloud.py`: experimental plugins (browser: 38 tests — tools, HTTP, audit, bbox, piloting pause, screenshot limits, history sanitization)
 - `tests/test_documents_preview.py`, `test_preview_change.py`: document preview
 - `tests/test_attachments.py`, `test_reprocess_attachment.py`: attachments
 - `tests/test_audit.py`, `test_audit_export.py`: audit log

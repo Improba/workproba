@@ -62,6 +62,12 @@ class Limits:
     search_max_files: int = 20_000  # budget de fichiers scannés (substring)
     search_file_max_bytes: int = _mb(1)  # taille max d'un fichier scanné
 
+    # --- web_search (core, Mistral Conversations API) ---
+    web_search_max_results: int = 8
+    web_search_timeout_s: float = 45.0
+    web_search_max_per_turn: int = 3
+    web_search_query_max_chars: int = 500
+
     # --- list_files + inventaire projet injecté au prompt ---
     list_max_entries: int = 500  # nombre max d'entrées renvoyées par list_files
     list_max_depth: int = 8  # profondeur de récursion max

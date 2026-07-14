@@ -1,0 +1,1 @@
+"""Fixtures partagées entre tests."""

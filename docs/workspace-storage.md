@@ -82,6 +82,7 @@ One session = one JSON file, read/written via Tauri commands
 | `messages` | Message list (roles `user`/`assistant`, ordered `parts` text/reasoning/tool) |
 | `reasoningEffort` | Reasoning level chosen for the conversation (`none`/`low`/`medium`/`high`) |
 | `model` | LLM model chosen for the conversation (overrides provider default) |
+| `summary` | Optional auto-generated cross-session digest (used by promotion and `recall_project_sessions`) |
 | `createdAt` / `updatedAt` | Timestamps |
 
 `reasoningEffort` and `model` are **persisted per session**: restored on open if still applicable to the active provider, otherwise fallback to the provider default model. Persistence is **debounced** and atomic

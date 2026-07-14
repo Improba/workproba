@@ -22,6 +22,7 @@ from app.agent.compaction import (
     estimate_documents_overhead,
     estimate_memory_overhead,
 )
+from app.agent.memory_consolidation import promote_session_summary
 from app.agent.confirmation import confirmation_registry
 from app.agent.loop import AgentLoop
 from app.agent.plan import plan_registry
@@ -1208,6 +1209,23 @@ class MemoryAddResponse(BaseModel):
     memory: dict[str, Any]
 
 
+class MemoryPromoteSessionRequest(BaseModel):
+    workspace_data_dir: str
+    session_id: str
+    summary: str
+    llm_provider_config: LLMProviderConfig | None = None
+    utility_llm_config: LLMProviderConfig | None = None
+    locale: str = "fr"
+
+
+class MemoryPromoteSessionResponse(BaseModel):
+    session_id: str
+    facts: list[str]
+    results: list[dict[str, Any]]
+    counts: dict[str, int]
+    pruned: int = 0
+
+
 class MemoryForgetRequest(BaseModel):
     workspace_data_dir: str
     memory_id: str
@@ -1617,16 +1635,71 @@ async def memory_add(
     ws_dir = _resolve_workspace_data_dir_path(payload.workspace_data_dir)
     store = _memory_store_for_scope(settings, ws_dir, payload.memory_scope)
     try:
-        memory = store.add_memory(
-            content=payload.content,
+        from app.agent.memory_consolidation import apply_explicit_memory_heuristic
+
+        memory, _operation = apply_explicit_memory_heuristic(
+            store,
+            payload.content,
             source="manual",
             tags=payload.tags,
+            update_threshold=settings.memory_promotion_overlap_threshold,
         )
+        if payload.memory_scope == "project" and settings.memory_project_max_entries > 0:
+            store.trim_memories_to_cap(
+                settings.memory_project_max_entries,
+                actor="system",
+            )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     finally:
         store.close()
     return MemoryAddResponse(memory=memory)
+
+
+@app.post("/memory/promote-session", response_model=MemoryPromoteSessionResponse)
+async def memory_promote_session(
+    request: Request,
+    payload: MemoryPromoteSessionRequest,
+) -> MemoryPromoteSessionResponse:
+    """Promouvoit un résumé de session vers la mémoire project (extraction + consolidation)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    locale = normalize_locale(payload.locale)
+    ws_dir = _resolve_workspace_data_dir_path(payload.workspace_data_dir)
+    summary = payload.summary.strip()
+    if not summary:
+        raise HTTPException(status_code=400, detail="empty_summary")
+
+    store = _memory_store_for_scope(settings, ws_dir, "project")
+    try:
+        result = await promote_session_summary(
+            store,
+            summary=summary,
+            session_id=payload.session_id,
+            workspace_data_dir=ws_dir,
+            locale=locale,
+            settings=settings,
+            utility_llm_config=payload.utility_llm_config,
+            chat_llm_config=payload.llm_provider_config,
+            max_facts=settings.memory_promotion_max_facts,
+            update_threshold=settings.memory_promotion_overlap_threshold,
+            contradiction_enabled=settings.memory_promotion_contradiction_enabled,
+            max_entries=settings.memory_project_max_entries,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    finally:
+        store.close()
+
+    return MemoryPromoteSessionResponse(
+        session_id=str(result.get("session_id") or payload.session_id),
+        facts=list(result.get("facts") or []),
+        results=list(result.get("results") or []),
+        counts=dict(result.get("counts") or {}),
+        pruned=int(result.get("pruned") or 0),
+    )
 
 
 @app.post("/memory/forget", response_model=OkResponse)
@@ -1745,11 +1818,24 @@ class BrowserCloseRequest(BaseModel):
     locale: str = "fr"
 
 
+class BrowserBBox(BaseModel):
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+class BrowserViewport(BaseModel):
+    width: int
+    height: int
+
+
 class BrowserNavigateResponse(BaseModel):
     title: str
     url: str
     snapshot_yaml: str
     screenshot_b64: str
+    viewport: BrowserViewport | None = None
 
 
 class BrowserSnapshotResponse(BaseModel):
@@ -1757,6 +1843,7 @@ class BrowserSnapshotResponse(BaseModel):
     screenshot_b64: str
     title: str
     url: str
+    viewport: BrowserViewport | None = None
 
 
 class BrowserActionResponse(BaseModel):
@@ -1765,6 +1852,9 @@ class BrowserActionResponse(BaseModel):
     title: str = ""
     url: str = ""
     extracted: str | None = None
+    action_ref: str | None = None
+    action_bbox: BrowserBBox | None = None
+    viewport: BrowserViewport | None = None
 
 
 class BrowserStatusResponse(BaseModel):
@@ -1933,7 +2023,7 @@ async def browser_close_endpoint(
 
     from app.plugins.workproba_browser import browser as browser_mod
 
-    browser_mod.close_engine(_resolve_plugin_data_dir(payload.plugin_data_dir))
+    await browser_mod.close_engine_async(_resolve_plugin_data_dir(payload.plugin_data_dir))
     return OkResponse(ok=True)
 
 

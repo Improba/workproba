@@ -45,7 +45,7 @@ Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./wor
 2. Quasar sends the message via SSE to `127.0.0.1:8765`.
 3. Python runs the agent loop (LLM, file tools, subprocess sandbox).
 4. Sessions are persisted in `{app_data}/workspaces/{id}/.workproba/`.
-5. Explicit memories and project RAG feed the agent context (see [memory.md](./memory.md)).
+5. Each turn: explicit memories and relevant prior session summaries are injected; project RAG is available via `search_kb`. Session summaries are promoted to shared project memory in the background (see [memory.md](./memory.md)).
 
 ## UI shell (desktop layout)
 

@@ -7,33 +7,48 @@
 
     <template v-else>
       <div class="browser-panel__toolbar">
-        <div class="browser-panel__nav">
+        <div class="browser-panel__nav-row">
+          <div class="browser-panel__nav">
+            <button
+              type="button"
+              class="browser-panel__nav-btn"
+              :aria-label="t('browser.back')"
+              :disabled="loading"
+              @click="goBack"
+            >
+              <Lucide name="arrow-left" size="14" color="text-muted" />
+            </button>
+            <button
+              type="button"
+              class="browser-panel__nav-btn"
+              :aria-label="t('browser.forward')"
+              :disabled="loading"
+              @click="goForward"
+            >
+              <Lucide name="arrow-right" size="14" color="text-muted" />
+            </button>
+            <button
+              type="button"
+              class="browser-panel__nav-btn"
+              :aria-label="t('browser.reload')"
+              :disabled="loading"
+              @click="refresh"
+            >
+              <Lucide name="rotate-cw" size="14" color="text-muted" />
+            </button>
+          </div>
           <button
             type="button"
-            class="browser-panel__nav-btn"
-            :aria-label="t('browser.back')"
-            :disabled="loading"
-            @click="goBack"
+            class="browser-panel__pilot-btn"
+            :class="{ 'browser-panel__pilot-btn--paused': pilotagePaused }"
+            @click="togglePilotage"
           >
-            <Lucide name="arrow-left" size="14" color="text-muted" />
-          </button>
-          <button
-            type="button"
-            class="browser-panel__nav-btn"
-            :aria-label="t('browser.forward')"
-            :disabled="loading"
-            @click="goForward"
-          >
-            <Lucide name="arrow-right" size="14" color="text-muted" />
-          </button>
-          <button
-            type="button"
-            class="browser-panel__nav-btn"
-            :aria-label="t('browser.reload')"
-            :disabled="loading"
-            @click="refresh"
-          >
-            <Lucide name="rotate-cw" size="14" color="text-muted" />
+            <Lucide
+              :name="pilotagePaused ? 'play' : 'square'"
+              size="12"
+              color="text-muted"
+            />
+            {{ pilotagePaused ? t('browser.resumePilotage') : t('browser.pausePilotage') }}
           </button>
         </div>
         <form class="browser-panel__url-form" @submit.prevent="onNavigate">
@@ -54,6 +69,10 @@
         </form>
       </div>
 
+      <p v-if="pilotagePaused" class="browser-panel__paused" role="status">
+        {{ t('browser.pilotagePaused') }}
+      </p>
+
       <p v-if="error" class="browser-panel__error" role="alert">
         {{ errorMessage }}
       </p>
@@ -62,12 +81,37 @@
         <p v-if="loading && !screenshot" class="browser-panel__loading">
           {{ t('common.loading') }}
         </p>
-        <img
-          v-else-if="screenshot"
-          :src="screenshotSrc"
-          :alt="title || t('browser.pageView')"
-          class="browser-panel__screenshot"
-        />
+        <div v-else-if="screenshot" class="browser-panel__screenshot-wrap">
+          <img
+            ref="screenshotEl"
+            :src="screenshotSrc"
+            :alt="title || t('browser.pageView')"
+            class="browser-panel__screenshot"
+            @load="updateScreenshotWidth"
+          />
+          <div
+            v-if="highlightStyle"
+            class="browser-panel__highlight"
+            :style="highlightStyle"
+            :aria-label="t('browser.highlightRef', { ref: highlight?.ref ?? '' })"
+          />
+          <div
+            v-if="agentTurnActive && !pilotagePaused"
+            class="browser-panel__live-badge"
+            role="status"
+          >
+            <span class="browser-panel__live-dot" aria-hidden="true" />
+            {{ t('browser.liveView') }}
+          </div>
+          <div
+            v-if="lastAiAction"
+            class="browser-panel__action-overlay"
+            :aria-label="t('browser.aiActionOverlay')"
+          >
+            <Lucide name="bot" size="12" color="accent" />
+            <span class="browser-panel__action-label">{{ lastAiAction.label }}</span>
+          </div>
+        </div>
         <div v-else class="browser-panel__empty">
           <Lucide name="globe" size="32" color="text-faint" />
           <p>{{ t('browser.empty') }}</p>
@@ -88,6 +132,8 @@
         <ul class="browser-panel__ai-tools">
           <li>{{ t('browser.aiToolNavigate') }}</li>
           <li>{{ t('browser.aiToolClick') }}</li>
+          <li>{{ t('browser.aiToolType') }}</li>
+          <li>{{ t('browser.aiToolScroll') }}</li>
           <li>{{ t('browser.aiToolExtract') }}</li>
         </ul>
       </section>
@@ -96,10 +142,11 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useBrowser } from '@composables/useBrowser';
+import { scaleHighlightStyle } from '@utils/browserHighlight';
 
 const { t } = useI18n();
 const {
@@ -110,24 +157,41 @@ const {
   snapshotYaml,
   loading,
   error,
+  pilotagePaused,
+  lastAiAction,
+  highlight,
+  agentTurnActive,
   init,
   navigate,
   refresh,
   goBack,
   goForward,
+  pausePilotage,
+  resumePilotage,
 } = useBrowser();
 
 const urlDraft = ref('');
+const screenshotEl = ref<HTMLImageElement | null>(null);
+const screenshotDisplayWidth = ref(0);
 
 watch(currentUrl, (url) => {
   if (url) urlDraft.value = url;
+});
+
+watch(screenshot, () => {
+  updateScreenshotWidth();
 });
 
 const screenshotSrc = computed(() => {
   if (!screenshot.value) return '';
   const raw = screenshot.value;
   if (raw.startsWith('data:')) return raw;
-  return `data:image/png;base64,${raw}`;
+  return `data:image/jpeg;base64,${raw}`;
+});
+
+const highlightStyle = computed(() => {
+  if (!highlight.value || screenshotDisplayWidth.value <= 0) return null;
+  return scaleHighlightStyle(highlight.value, screenshotDisplayWidth.value);
 });
 
 const errorMessage = computed(() => {
@@ -141,12 +205,45 @@ const errorMessage = computed(() => {
   return t('browser.errorGeneric');
 });
 
+function updateScreenshotWidth(): void {
+  screenshotDisplayWidth.value = screenshotEl.value?.clientWidth ?? 0;
+}
+
+let resizeObserver: ResizeObserver | null = null;
+
 function onNavigate(): void {
   void navigate(urlDraft.value.trim());
 }
 
+function togglePilotage(): void {
+  if (pilotagePaused.value) {
+    resumePilotage();
+  } else {
+    pausePilotage();
+  }
+}
+
 onMounted(() => {
   void init();
+  if (typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => {
+      updateScreenshotWidth();
+    });
+  }
+});
+
+watch(screenshotEl, (el, _prev, onCleanup) => {
+  if (!resizeObserver || !el) return;
+  resizeObserver.observe(el);
+  updateScreenshotWidth();
+  onCleanup(() => {
+    resizeObserver?.unobserve(el);
+  });
+});
+
+onUnmounted(() => {
+  resizeObserver?.disconnect();
+  resizeObserver = null;
 });
 </script>
 
@@ -182,6 +279,13 @@ onMounted(() => {
   border-bottom: 1px solid var(--wp-border);
 }
 
+.browser-panel__nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wp-space-2);
+}
+
 .browser-panel__nav {
   display: flex;
   gap: var(--wp-space-1);
@@ -201,6 +305,25 @@ onMounted(() => {
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+}
+
+.browser-panel__pilot-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-1);
+  padding: var(--wp-space-1) var(--wp-space-2);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-surface-2);
+  color: var(--wp-text-muted);
+  font-size: var(--wp-fs-xs);
+  cursor: pointer;
+  white-space: nowrap;
+
+  &--paused {
+    border-color: color-mix(in srgb, var(--wp-accent) 40%, var(--wp-border));
+    color: var(--wp-accent);
   }
 }
 
@@ -236,6 +359,15 @@ onMounted(() => {
   }
 }
 
+.browser-panel__paused {
+  flex: none;
+  margin: 0;
+  padding: var(--wp-space-2) var(--wp-space-3);
+  background: color-mix(in srgb, var(--wp-accent) 8%, transparent);
+  color: var(--wp-text-muted);
+  font-size: var(--wp-fs-xs);
+}
+
 .browser-panel__error {
   flex: none;
   margin: 0;
@@ -261,10 +393,94 @@ onMounted(() => {
   font-size: var(--wp-fs-sm);
 }
 
+.browser-panel__screenshot-wrap {
+  position: relative;
+  max-width: 100%;
+}
+
 .browser-panel__screenshot {
   max-width: 100%;
   height: auto;
   display: block;
+}
+
+.browser-panel__highlight {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--wp-accent);
+  background: color-mix(in srgb, var(--wp-accent) 18%, transparent);
+  border-radius: 2px;
+  pointer-events: none;
+  animation: browser-highlight-pulse 1.2s ease-in-out 2;
+}
+
+.browser-panel__live-badge {
+  position: absolute;
+  top: var(--wp-space-2);
+  right: var(--wp-space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-1);
+  padding: 2px var(--wp-space-2);
+  border-radius: var(--wp-r-sm);
+  background: color-mix(in srgb, var(--wp-surface) 90%, transparent);
+  border: 1px solid var(--wp-border);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--wp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.browser-panel__live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--wp-accent);
+  animation: browser-live-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes browser-highlight-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes browser-live-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.browser-panel__action-overlay {
+  position: absolute;
+  left: var(--wp-space-2);
+  bottom: var(--wp-space-2);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-1);
+  max-width: calc(100% - var(--wp-space-4));
+  padding: var(--wp-space-1) var(--wp-space-2);
+  border-radius: var(--wp-r-sm);
+  background: color-mix(in srgb, var(--wp-surface) 92%, transparent);
+  border: 1px solid var(--wp-border);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 12%);
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text);
+}
+
+.browser-panel__action-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .browser-panel__snapshot {

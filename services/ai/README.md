@@ -55,13 +55,20 @@ Most endpoints require the `X-Internal-Secret` header (value `INTERNAL_SECRET` o
 
 ### Memory
 
-Scopes `user` (global) and `project` (workspace). See [docs/memory.md](../../docs/memory.md).
+Scopes `user` (global) and `project` (workspace). Full design: [docs/memory.md](../../docs/memory.md).
+
+**Per-turn injection** (dynamic system prompts): `memory_prompt`, `relevant_sessions_prompt`, `project_sessions_prompt`.
+
+**Agent tools**: `remember`, `recall_project_sessions`, `search_kb`.
+
+**Background promotion**: front calls `POST /memory/promote-session` after auto session summary (every 3 turns).
 
 | Method | Route | Secret | Role |
 |---|---|---|---|
 | GET | `/memory/items` | yes | List explicit memories |
 | GET | `/memory/search` | yes | Search (RAG + explicit on project) |
-| POST | `/memory/add` | yes | Manual add |
+| POST | `/memory/add` | yes | Manual add (heuristic consolidation) |
+| POST | `/memory/promote-session` | yes | Promote session summary → project memory |
 | POST | `/memory/forget` | yes | Delete by id |
 | DELETE | `/memory` | yes | Wipe (conversations, memories, all) |
 
@@ -88,12 +95,29 @@ Scopes `user` (global) and `project` (workspace). See [docs/memory.md](../../doc
 | POST | `/plugins/projet/publish` | yes | Publish artifact |
 | GET | `/plugins/projet/artefacts` | yes | List artifacts |
 
-### Experimental plugins
+### Browser plugin (`workproba.browser`)
 
-| Plugin | Main routes |
-|---|---|
-| Browser | `/plugins/browser/navigate`, `/snapshot`, `/action`, `/close`, `/status` |
-| Cloud | `/plugins/cloud/status`, `/config`, `/sync` |
+Opt-in, Playwright headless. Agent tools: `browser_navigate`, `browser_click`, `browser_type`, `browser_scroll`, `browser_press`, `browser_extract`, `browser_back`, `browser_forward`.
+
+Screenshots are UI-only (SSE); the model receives YAML snapshots only. See [docs/browser.md](../../docs/browser.md) for wiring, security, and known limitations.
+
+| Method | Route | Role |
+|---|---|---|
+| POST | `/plugins/browser/navigate` | Navigate + snapshot |
+| POST | `/plugins/browser/snapshot` | Current page snapshot |
+| POST | `/plugins/browser/action` | click, type, scroll, press, back, forward, extract |
+| POST | `/plugins/browser/close` | Close session |
+| GET | `/plugins/browser/status` | Session status |
+
+Full documentation: [docs/browser.md](../../docs/browser.md).
+
+### Web search (core tool)
+
+Agent tool: `web_search`. Always registered; **executable** when the active provider set uses **Mistral** and `permissions_network` is true. Delegates to Mistral Conversations API (`POST /v1/conversations` with native `web_search` connector). Not a plugin; no Settings toggle.
+
+Full documentation: [docs/web-search.md](../../docs/web-search.md).
+
+### Cloud plugin
 
 ### Audit
 
@@ -109,9 +133,9 @@ Scopes `user` (global) and `project` (workspace). See [docs/memory.md](../../doc
 
 ## Agent tools
 
-Base tooling: document read/write, KB search, sandbox, versions, etc.
+Base tooling: document read/write, KB search, sandbox, versions, **`web_search`** (Mistral + network), etc.
 
-Memory tooling: `remember` (user/project scope), automatic injection via `memory_prompt`.
+Memory tooling: `remember` (user/project scope, heuristic dedup), `recall_project_sessions`, automatic injection via `memory_prompt` + `relevant_sessions_prompt`.
 
 Plugin tooling (if active): `ask_personas`, `simulate_meeting` (personas), project/browser/cloud tools per manifest.
 

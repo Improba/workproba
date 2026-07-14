@@ -115,6 +115,36 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
       }
       break;
     }
+    case 'web_search': {
+      const query = formatQuery(asString(args.query));
+      target = query
+        ? t('toolCalls.webSearchQuery', { query })
+        : t('toolCalls.webSearchGeneric');
+      location = t('toolCalls.publicWeb');
+      if (result && typeof result === 'object') {
+        const r = result as Record<string, unknown>;
+        const results = asList(r.results);
+        const count = results.length;
+        outcome =
+          count === 0
+            ? t('toolCalls.noResults')
+            : pluralize('toolCalls.webResultsFound', count);
+        const backend = asString(r.backend);
+        if (backend) {
+          rows.push({ label: t('toolCalls.webSearchBackend'), value: backend });
+        }
+        for (const item of results.slice(0, 5)) {
+          if (!item || typeof item !== 'object') continue;
+          const entry = item as Record<string, unknown>;
+          const url = asString(entry.url);
+          const title = asString(entry.title) || url;
+          if (url) {
+            rows.push({ label: title, value: url });
+          }
+        }
+      }
+      break;
+    }
     case 'read_documents':
     case 'read_document': {
       const paths = asList(args.paths).map((p) => asString(p)).filter(Boolean);

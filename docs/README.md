@@ -16,8 +16,10 @@ Index of **Workproba** project documentation: local-folder work assistant (Claud
 - **[architecture.md](./architecture.md)**: Overview, stack, UI shell, chat, LLM models
 - **[stack.md](./stack.md)**: Component versions, ports, environment variables, dev commands
 - **[workspace-storage.md](./workspace-storage.md)**: Per-workspace storage and global user data
-- **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, `remember` tool
+- **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, promotion, cross-session recall
 - **[plugins.md](./plugins.md)**: Plugin system, personas, UI integration
+- **[browser.md](./browser.md)**: Browser plugin (Playwright, agent tools, live view, security)
+- **[web-search.md](./web-search.md)**: Core `web_search` tool (Mistral Conversations API, citations, network guard)
 
 ## Design & UI
 
@@ -34,7 +36,7 @@ Index of **Workproba** project documentation: local-folder work assistant (Claud
 - **Start dev**: `make dev` or `yarn dev` (see [root README](../README.md))
 - **Understand the product**: [intention.md](./intention.md)
 - **Architecture**: [architecture.md](./architecture.md) · [desktop.md](./desktop.md)
-- **Memory & plugins**: [memory.md](./memory.md) · [plugins.md](./plugins.md)
+- **Memory & plugins**: [memory.md](./memory.md) (scoped memory, RAG, promotion, cross-session recall) · [plugins.md](./plugins.md) · [browser.md](./browser.md) · [web-search.md](./web-search.md)
 - **Stack & variables**: [stack.md](./stack.md)
 - **AI sidecar**: [services/ai/README.md](../services/ai/README.md)
 - **Tauri shell**: [desktop/README.md](../desktop/README.md)

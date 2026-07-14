@@ -228,8 +228,10 @@ async function onToggle(plugin: PluginInfo, enabled: boolean): Promise<void> {
       } else if (plugin.manifest.id === BROWSER_PLUGIN_ID) {
         Notify.create({
           message: t('settings.plugins.browserActivated'),
+          caption: t('settings.plugins.browserOnboarding'),
           color: 'positive',
-          timeout: 2500,
+          multiLine: true,
+          timeout: 10000,
         });
       } else if (plugin.manifest.id === CLOUD_PLUGIN_ID) {
         Notify.create({

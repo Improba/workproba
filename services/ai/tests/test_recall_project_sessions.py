@@ -114,6 +114,25 @@ def test_build_session_digests_filters_by_query(tmp_path: Path) -> None:
     assert result["sessions"][0]["id"] == "finance"
 
 
+def test_build_session_digests_excludes_current_by_stem(tmp_path: Path) -> None:
+    conv_dir = tmp_path / "conversations"
+    conv_dir.mkdir()
+    payload = {
+        "id": "sess_other",
+        "title": "Other",
+        "updatedAt": "2026-07-10T12:00:00Z",
+        "summary": "Autre fil",
+    }
+    (conv_dir / "current.json").write_text(
+        json.dumps({**payload, "id": "sess_current", "summary": "Courant"}),
+        encoding="utf-8",
+    )
+
+    result = build_session_digests(tmp_path, "current")
+
+    assert result["count"] == 0
+
+
 def test_build_session_digests_caps_to_twenty(tmp_path: Path) -> None:
     conv_dir = tmp_path / "conversations"
     conv_dir.mkdir()

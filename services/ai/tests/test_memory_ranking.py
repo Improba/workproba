@@ -49,3 +49,20 @@ def test_dedupe_memories_keep_order() -> None:
     assert len(deduped) == 2
     assert deduped[0]["id"] == "1"
     assert deduped[1]["id"] == "3"
+
+
+def test_rank_sessions_by_query_filters_by_overlap() -> None:
+    from app.agent.memory_ranking import rank_sessions_by_query
+
+    sessions = [
+        {"id": "1", "title": "Budget RH", "summary": "Discussion sur le budget RH 2026"},
+        {"id": "2", "title": "Chat perso", "summary": "Le chat dort sur le canapé"},
+    ]
+    ranked = rank_sessions_by_query(
+        sessions,
+        "budget RH",
+        k=2,
+        min_overlap=2,
+    )
+    assert len(ranked) == 1
+    assert ranked[0]["id"] == "1"

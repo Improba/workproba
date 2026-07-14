@@ -35,6 +35,23 @@ describe('buildToolCallDetails', () => {
     expect(d.outcome).toContain('2 résultats');
   });
 
+  it('décrit la requête et les sources pour web_search', () => {
+    const d = buildToolCallDetails(
+      tc({
+        name: 'web_search',
+        args: { query: 'météo Paris' },
+        result: {
+          backend: 'mistral',
+          results: [{ title: 'Météo Paris', url: 'https://example.com/weather' }],
+        },
+      }),
+    );
+    expect(d.target).toContain('« météo Paris »');
+    expect(d.location).toContain('web');
+    expect(d.outcome).toContain('1 source');
+    expect(d.rows.some((r) => r.value.includes('example.com'))).toBe(true);
+  });
+
   it('décrit le fichier créé et son dossier pour generate_document', () => {
     const d = buildToolCallDetails(
       tc({

@@ -374,6 +374,20 @@ class RagStore:
         conn.commit()
         return int(cursor.rowcount)
 
+    def trim_memories_to_cap(self, max_entries: int, *, actor: str = "system") -> int:
+        """Supprime les souvenirs explicites les plus anciens au-delà du plafond."""
+        if max_entries <= 0:
+            return 0
+        memories = self.list_memories()
+        if len(memories) <= max_entries:
+            return 0
+        removed = 0
+        for memory in memories[max_entries:]:
+            memory_id = str(memory.get("id") or "")
+            if memory_id and self.forget_memory(memory_id, actor=actor, scope="memory_cap"):
+                removed += 1
+        return removed
+
     def clear_rag_index(self) -> None:
         conn = self._connect()
         conn.execute("DELETE FROM chunks")

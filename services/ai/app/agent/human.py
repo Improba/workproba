@@ -93,6 +93,24 @@ def build_human_summary(
             )
         return t(locale, "human.search_kb.will", query=query_label)
 
+    if tool_name == "web_search":
+        query_label = _format_query(str(arguments.get("query") or ""), locale)
+        if is_result:
+            if is_error:
+                return t(locale, "human.web_search.cannot", query=query_label)
+            raw_results = result.get("results")
+            results = raw_results if isinstance(raw_results, list) else []
+            count = len(results)
+            if count == 0:
+                return t(locale, "human.web_search.empty", query=query_label)
+            return format_summary(
+                locale,
+                "human.web_search.count",
+                {"query": query_label},
+                count,
+            )
+        return t(locale, "human.web_search.will", query=query_label)
+
     if tool_name == "read_document":
         doc_id = str(
             arguments.get("document_id") or t(locale, "human.document_default")
@@ -249,21 +267,28 @@ def build_human_summary(
             rounds=rounds,
         )
 
-    for browser_tool, key_prefix in (
-        ("browser_navigate", "human.browser_navigate"),
-        ("browser_click", "human.browser_click"),
-        ("browser_extract", "human.browser_extract"),
-    ):
-        if tool_name == browser_tool:
-            label_key = "url" if browser_tool == "browser_navigate" else (
-                "ref" if browser_tool == "browser_click" else "selector"
-            )
-            label_value = str(arguments.get(label_key) or "")
-            if is_result:
-                if is_error:
-                    return t(locale, f"{key_prefix}.cannot")
-                return t(locale, f"{key_prefix}.done", **{label_key: label_value})
-            return t(locale, f"{key_prefix}.will", **{label_key: label_value})
+    browser_tool_labels: dict[str, str | None] = {
+        "browser_navigate": "url",
+        "browser_click": "ref",
+        "browser_extract": "selector",
+        "browser_type": "ref",
+        "browser_scroll": "direction",
+        "browser_press": "key",
+        "browser_back": None,
+        "browser_forward": None,
+    }
+    if tool_name in browser_tool_labels:
+        key_prefix = f"human.{tool_name}"
+        label_key = browser_tool_labels[tool_name]
+        fmt: dict[str, str] = {}
+        if label_key is not None:
+            template_key = "press_key" if tool_name == "browser_press" else label_key
+            fmt[template_key] = str(arguments.get(label_key) or "")
+        if is_result:
+            if is_error:
+                return t(locale, f"{key_prefix}.cannot")
+            return t(locale, f"{key_prefix}.done", **fmt)
+        return t(locale, f"{key_prefix}.will", **fmt)
 
     if is_result:
         if is_error:

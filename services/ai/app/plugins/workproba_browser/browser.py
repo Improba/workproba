@@ -12,6 +12,7 @@ from typing import Any, Literal
 from urllib.parse import urlparse
 
 from app.i18n import t
+from app.plugins.registry import PLUGIN_WORKPROBA_BROWSER, resolve_plugin_data_dir
 from app.plugins.workproba_browser import manifest
 
 logger = logging.getLogger(__name__)
@@ -60,6 +61,13 @@ def close_engine(plugin_data_dir: Path) -> None:
         engine.close_sync()
 
 
+async def close_engine_async(plugin_data_dir: Path) -> None:
+    key = _engine_key(plugin_data_dir)
+    engine = _ENGINE_REGISTRY.pop(key, None)
+    if engine is not None:
+        await engine.close()
+
+
 def set_engine_factory(factory: type[BrowserEngine] | None) -> None:
     """Point d'injection pour les tests (mock engine)."""
     global _ENGINE_FACTORY
@@ -101,10 +109,40 @@ def _limit_screenshot_b64(raw_b64: str) -> str:
     raw = base64.b64decode(raw_b64)
     if len(raw) <= manifest.MAX_SCREENSHOT_BYTES:
         return raw_b64
-    # Réduction grossière : tronquer le binaire encodé (le front affiche un aperçu limité).
-    max_raw = manifest.MAX_SCREENSHOT_BYTES
-    truncated = raw[:max_raw]
-    return base64.b64encode(truncated).decode("ascii")
+    logger.warning(
+        "screenshot size %d exceeds MAX_SCREENSHOT_BYTES %d; dropping screenshot",
+        len(raw),
+        manifest.MAX_SCREENSHOT_BYTES,
+    )
+    return ""
+
+
+def enrich_browser_tool_result_for_sse(
+    tool_name: str,
+    model_result: dict[str, Any],
+    plugin_data_dir: Path | None,
+) -> dict[str, Any]:
+    """Réinjecte screenshot_b64 pour le SSE front sans l'exposer au modèle."""
+    if plugin_data_dir is None or not tool_name.startswith("browser_"):
+        return model_result
+    browser_dir = resolve_plugin_data_dir(PLUGIN_WORKPROBA_BROWSER, plugin_data_dir)
+    if browser_dir is None:
+        return model_result
+    engine = _ENGINE_REGISTRY.get(_engine_key(browser_dir))
+    if engine is None:
+        return model_result
+    ui = engine.last_tool_ui_snapshot or engine.last_ui_snapshot
+    if not ui:
+        return model_result
+    merged = dict(model_result)
+    screenshot = ui.get("screenshot_b64")
+    if screenshot:
+        merged["screenshot_b64"] = screenshot
+    return merged
+
+
+def viewport_payload() -> dict[str, int]:
+    return {"width": manifest.VIEWPORT_WIDTH, "height": manifest.VIEWPORT_HEIGHT}
 
 
 class BrowserEngine:
@@ -118,6 +156,25 @@ class BrowserEngine:
         self._context: Any = None
         self._page: Any = None
         self._init_lock = asyncio.Lock()
+        self._cached_title = ""
+        self._last_ui_snapshot: dict[str, Any] | None = None
+        self._last_tool_ui_snapshot: dict[str, Any] | None = None
+
+    @property
+    def last_ui_snapshot(self) -> dict[str, Any] | None:
+        return self._last_ui_snapshot
+
+    @property
+    def last_tool_ui_snapshot(self) -> dict[str, Any] | None:
+        return self._last_tool_ui_snapshot
+
+    def remember_tool_ui_snapshot(self, payload: dict[str, Any]) -> None:
+        """Capture UI figée au moment d'une action agent (hors polling live)."""
+        self._last_tool_ui_snapshot = {
+            key: payload[key]
+            for key in ("screenshot_b64", "action_ref", "action_bbox", "viewport")
+            if key in payload and payload.get(key) is not None
+        }
 
     @property
     def active(self) -> bool:
@@ -134,12 +191,7 @@ class BrowserEngine:
 
     @property
     def current_title(self) -> str:
-        if self._page is None:
-            return ""
-        try:
-            return str(self._page.title() or "")
-        except Exception:  # noqa: BLE001
-            return ""
+        return self._cached_title
 
     async def _ensure_ready(self, *, locale: str) -> None:
         async with self._init_lock:
@@ -156,7 +208,10 @@ class BrowserEngine:
             user_data = self.plugin_data_dir / "chromium-profile"
             user_data.mkdir(parents=True, exist_ok=True)
             self._context = await self._browser.new_context(
-                viewport={"width": 1280, "height": 720},
+                viewport={
+                    "width": manifest.VIEWPORT_WIDTH,
+                    "height": manifest.VIEWPORT_HEIGHT,
+                },
                 user_agent=(
                     "WorkprobaBrowser/1.0 (+https://improba.com; local automation)"
                 ),
@@ -170,23 +225,56 @@ class BrowserEngine:
         except TimeoutError as exc:
             raise BrowserError("browser_action_timeout") from exc
 
-    async def _snapshot_payload(self) -> dict[str, str]:
+    async def _bounding_box_for_ref(self, ref: str) -> dict[str, float] | None:
+        assert self._page is not None
+        locator = self._page.locator(f"aria-ref={ref.strip()}")
+        box = await self._run_action(locator.bounding_box())
+        if not box:
+            return None
+        return {
+            "x": float(box["x"]),
+            "y": float(box["y"]),
+            "width": float(box["width"]),
+            "height": float(box["height"]),
+        }
+
+    async def _snapshot_payload(
+        self,
+        *,
+        action_ref: str | None = None,
+    ) -> dict[str, Any]:
         assert self._page is not None
         title = await self._run_action(self._page.title())
         url = self._page.url
         snapshot_yaml = await self._run_action(self._page.locator("body").aria_snapshot())
-        screenshot_bytes = await self._run_action(
-            self._page.screenshot(type="jpeg", quality=70, full_page=False)
-        )
+        quality = 70
+        screenshot_bytes = b""
+        while quality >= 20:
+            screenshot_bytes = await self._run_action(
+                self._page.screenshot(type="jpeg", quality=quality, full_page=False)
+            )
+            if len(screenshot_bytes) <= manifest.MAX_SCREENSHOT_BYTES:
+                break
+            quality -= 15
         screenshot_b64 = _limit_screenshot_b64(
             base64.b64encode(screenshot_bytes).decode("ascii")
         )
-        return {
+        payload: dict[str, Any] = {
             "title": title,
             "url": url,
             "snapshot_yaml": snapshot_yaml,
             "screenshot_b64": screenshot_b64,
+            "viewport": viewport_payload(),
         }
+        self._cached_title = str(title or "")
+        if action_ref and action_ref.strip():
+            cleaned_ref = action_ref.strip()
+            payload["action_ref"] = cleaned_ref
+            bbox = await self._bounding_box_for_ref(cleaned_ref)
+            if bbox is not None:
+                payload["action_bbox"] = bbox
+        self._last_ui_snapshot = dict(payload)
+        return payload
 
     async def navigate(
         self,
@@ -227,7 +315,7 @@ class BrowserEngine:
         assert self._page is not None
         locator = self._page.locator(f"aria-ref={ref.strip()}")
         await self._run_action(locator.click())
-        return await self._snapshot_payload()
+        return await self._snapshot_payload(action_ref=ref)
 
     async def type_text(self, ref: str, text: str, *, locale: str = "fr") -> dict[str, str]:
         if not ref.strip():
@@ -238,7 +326,7 @@ class BrowserEngine:
         assert self._page is not None
         locator = self._page.locator(f"aria-ref={ref.strip()}")
         await self._run_action(locator.fill(text))
-        return await self._snapshot_payload()
+        return await self._snapshot_payload(action_ref=ref)
 
     async def scroll(
         self,
@@ -260,7 +348,8 @@ class BrowserEngine:
         await self._run_action(
             self._page.mouse.wheel(delta[0], delta[1])
         )
-        return await self._snapshot_payload()
+        highlight_ref = ref.strip() if ref and ref.strip() else None
+        return await self._snapshot_payload(action_ref=highlight_ref)
 
     async def extract(
         self,

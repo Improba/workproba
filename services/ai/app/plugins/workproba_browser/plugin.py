@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
@@ -28,6 +28,13 @@ def _plugin_data_dir(ctx: RunContext[Any]) -> Path:
 
 
 def _assert_browser_allowed(ctx: RunContext[Any]) -> None:
+    if ctx.deps.context.browser_pilotage_paused:
+        raise ModelRetry(
+            browser_engine.browser_error_detail(
+                "browser_pilotage_paused",
+                ctx.deps.context.locale,
+            )
+        )
     if (
         ctx.deps.context.settings_locked
         and not ctx.deps.context.permissions_network
@@ -52,6 +59,50 @@ def _emit_navigate_hook(ctx: RunContext[Any], payload: dict[str, Any]) -> None:
 
 def _retry_browser_error(exc: browser_engine.BrowserError, locale: str) -> ModelRetry:
     return ModelRetry(browser_engine.browser_error_detail(str(exc), locale))
+
+
+def _snapshot_tool_result(
+    tool_name: str,
+    arguments: dict[str, Any],
+    result: dict[str, Any],
+    locale: str,
+    *,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "snapshot_yaml": result.get("snapshot_yaml"),
+        "title": result.get("title"),
+        "url": result.get("url"),
+        "human_summary": build_human_summary(
+            tool_name,
+            arguments,
+            result=result,
+            locale=locale,
+        ),
+    }
+    for key in ("action_ref", "action_bbox", "viewport"):
+        if key in result and result.get(key) is not None:
+            payload[key] = result.get(key)
+    if extra:
+        payload.update(extra)
+    return payload
+
+
+async def _run_browser_action(
+    ctx: RunContext[Any],
+    runner: Any,
+) -> dict[str, Any]:
+    locale = ctx.deps.context.locale
+    _assert_browser_allowed(ctx)
+    engine = browser_engine.get_engine(_plugin_data_dir(ctx))
+    try:
+        result = await runner(engine)
+    except browser_engine.BrowserError as exc:
+        raise _retry_browser_error(exc, locale) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise ModelRetry(f"{type(exc).__name__}: {exc}") from exc
+    engine.remember_tool_ui_snapshot(result)
+    return result
 
 
 def register_browser_tools(agent: Agent[Any, str]) -> None:
@@ -88,11 +139,12 @@ def register_browser_tools(agent: Agent[Any, str]) -> None:
             ctx,
             {"url": result.get("url"), "title": result.get("title")},
         )
+        engine.remember_tool_ui_snapshot(result)
         return {
             "title": result.get("title"),
             "url": result.get("url"),
             "snapshot_yaml": result.get("snapshot_yaml"),
-            "screenshot_b64": result.get("screenshot_b64"),
+            "viewport": result.get("viewport"),
             "human_summary": build_human_summary(
                 "browser_navigate",
                 {"url": url},
@@ -109,27 +161,11 @@ def register_browser_tools(agent: Agent[Any, str]) -> None:
             ref: Element ref from snapshot_yaml (e.g. e42).
         """
         locale = ctx.deps.context.locale
-        _assert_browser_allowed(ctx)
-        engine = browser_engine.get_engine(_plugin_data_dir(ctx))
-        try:
-            result = await engine.click(ref, locale=locale)
-        except browser_engine.BrowserError as exc:
-            raise _retry_browser_error(exc, locale) from exc
-        except Exception as exc:  # noqa: BLE001
-            raise ModelRetry(f"{type(exc).__name__}: {exc}") from exc
-
-        return {
-            "snapshot_yaml": result.get("snapshot_yaml"),
-            "screenshot_b64": result.get("screenshot_b64"),
-            "title": result.get("title"),
-            "url": result.get("url"),
-            "human_summary": build_human_summary(
-                "browser_click",
-                {"ref": ref},
-                result=result,
-                locale=locale,
-            ),
-        }
+        result = await _run_browser_action(
+            ctx,
+            lambda engine: engine.click(ref, locale=locale),
+        )
+        return _snapshot_tool_result("browser_click", {"ref": ref}, result, locale)
 
     @agent.tool
     async def browser_extract(ctx: RunContext[Any], selector: str) -> dict[str, Any]:
@@ -139,25 +175,89 @@ def register_browser_tools(agent: Agent[Any, str]) -> None:
             selector: CSS selector for the target element.
         """
         locale = ctx.deps.context.locale
-        _assert_browser_allowed(ctx)
-        engine = browser_engine.get_engine(_plugin_data_dir(ctx))
-        try:
-            result = await engine.extract(selector, locale=locale)
-        except browser_engine.BrowserError as exc:
-            raise _retry_browser_error(exc, locale) from exc
-        except Exception as exc:  # noqa: BLE001
-            raise ModelRetry(f"{type(exc).__name__}: {exc}") from exc
+        result = await _run_browser_action(
+            ctx,
+            lambda engine: engine.extract(selector, locale=locale),
+        )
+        return _snapshot_tool_result(
+            "browser_extract",
+            {"selector": selector},
+            result,
+            locale,
+            extra={"extracted": result.get("extracted")},
+        )
 
-        return {
-            "extracted": result.get("extracted"),
-            "snapshot_yaml": result.get("snapshot_yaml"),
-            "screenshot_b64": result.get("screenshot_b64"),
-            "human_summary": build_human_summary(
-                "browser_extract",
-                {"selector": selector},
-                result=result,
-                locale=locale,
-            ),
-        }
+    @agent.tool
+    async def browser_type(ctx: RunContext[Any], ref: str, text: str) -> dict[str, Any]:
+        """Type text into an input element by accessibility ref from the snapshot.
+
+        Args:
+            ref: Element ref from snapshot_yaml (e.g. e42).
+            text: Text to enter into the field.
+        """
+        locale = ctx.deps.context.locale
+        result = await _run_browser_action(
+            ctx,
+            lambda engine: engine.type_text(ref, text, locale=locale),
+        )
+        return _snapshot_tool_result("browser_type", {"ref": ref, "text": text}, result, locale)
+
+    @agent.tool
+    async def browser_scroll(
+        ctx: RunContext[Any],
+        direction: Literal["up", "down", "left", "right"],
+        ref: str | None = None,
+    ) -> dict[str, Any]:
+        """Scroll the page or bring an element into view.
+
+        Args:
+            direction: Scroll direction.
+            ref: Optional element ref to scroll into view first.
+        """
+        locale = ctx.deps.context.locale
+        result = await _run_browser_action(
+            ctx,
+            lambda engine: engine.scroll(ref, direction, locale=locale),
+        )
+        return _snapshot_tool_result(
+            "browser_scroll",
+            {"direction": direction, "ref": ref or ""},
+            result,
+            locale,
+        )
+
+    @agent.tool
+    async def browser_press(ctx: RunContext[Any], key: str) -> dict[str, Any]:
+        """Press a keyboard key in the browser (e.g. Enter, Tab, Escape).
+
+        Args:
+            key: Key name understood by Playwright (Enter, Tab, Escape, etc.).
+        """
+        locale = ctx.deps.context.locale
+        result = await _run_browser_action(
+            ctx,
+            lambda engine: engine.press(key, locale=locale),
+        )
+        return _snapshot_tool_result("browser_press", {"key": key}, result, locale)
+
+    @agent.tool
+    async def browser_back(ctx: RunContext[Any]) -> dict[str, Any]:
+        """Go back to the previous page in browser history."""
+        locale = ctx.deps.context.locale
+        result = await _run_browser_action(
+            ctx,
+            lambda engine: engine.back(locale=locale),
+        )
+        return _snapshot_tool_result("browser_back", {}, result, locale)
+
+    @agent.tool
+    async def browser_forward(ctx: RunContext[Any]) -> dict[str, Any]:
+        """Go forward to the next page in browser history."""
+        locale = ctx.deps.context.locale
+        result = await _run_browser_action(
+            ctx,
+            lambda engine: engine.forward(locale=locale),
+        )
+        return _snapshot_tool_result("browser_forward", {}, result, locale)
 
     _ = manifest  # référence manifeste outils

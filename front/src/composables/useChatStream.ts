@@ -44,6 +44,7 @@ import {
 } from '@composables/usePlugins';
 import type { LlmProviderName } from '@composables/useDesktop.types';
 import { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
+import { isBrowserAgentTool, type BrowserAgentToolName } from '@utils/browserTools';
 import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
 import { contextWindowFor } from '@utils/modelCatalog';
 import { t } from '@utils/i18nT';
@@ -740,9 +741,11 @@ export interface UseChatStreamOptions {
   ) => void;
   /** Callback outils browser après résultat. */
   onBrowserToolCall?: (
-    toolName: 'browser_navigate' | 'browser_click' | 'browser_extract',
+    toolName: BrowserAgentToolName,
     result: unknown,
   ) => void;
+  /** Pilotage IA du navigateur en pause (bouton utilisateur). */
+  browserPilotagePaused?: Ref<boolean>;
 }
 
 export { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
@@ -903,11 +906,7 @@ export function useChatStream(
           result: event.data.result,
         });
       }
-      if (
-        toolName === 'browser_navigate' ||
-        toolName === 'browser_click' ||
-        toolName === 'browser_extract'
-      ) {
+      if (isBrowserAgentTool(toolName) && event.data.error == null && event.data.status !== 'error') {
         options.onBrowserToolCall?.(toolName, event.data.result);
       }
     }
@@ -1118,6 +1117,7 @@ export function useChatStream(
           permissionsNetwork.value,
           locale.value,
         ),
+        options.browserPilotagePaused?.value ?? false,
       );
 
       const workspaceDataDir = options.workspaceDataDir?.value;

@@ -112,6 +112,45 @@ class Settings(BaseSettings):
         ge=0,
         validation_alias="MEMORY_PROMPT_RECENT_FLOOR",
     )
+    memory_promotion_max_facts: int = Field(
+        default=5,
+        ge=1,
+        le=10,
+        validation_alias="MEMORY_PROMOTION_MAX_FACTS",
+    )
+    memory_promotion_overlap_threshold: float = Field(
+        default=0.55,
+        ge=0.0,
+        le=1.0,
+        validation_alias="MEMORY_PROMOTION_OVERLAP_THRESHOLD",
+    )
+    memory_proactive_sessions_topk: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        validation_alias="MEMORY_PROACTIVE_SESSIONS_TOPK",
+    )
+    memory_proactive_sessions_min_overlap: int = Field(
+        default=2,
+        ge=1,
+        validation_alias="MEMORY_PROACTIVE_SESSIONS_MIN_OVERLAP",
+    )
+    memory_project_max_entries: int = Field(
+        default=200,
+        ge=0,
+        le=2000,
+        validation_alias="MEMORY_PROJECT_MAX_ENTRIES",
+    )
+    memory_promotion_update_confident_threshold: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        validation_alias="MEMORY_PROMOTION_UPDATE_CONFIDENT_THRESHOLD",
+    )
+    memory_promotion_contradiction_enabled: bool = Field(
+        default=True,
+        validation_alias="MEMORY_PROMOTION_CONTRADICTION_ENABLED",
+    )
 
     # Bornes d'entrée sur /agent/turn.
     max_history_messages: int = Field(

@@ -192,6 +192,7 @@ class AgentTurnRequest(BaseModel):
     code_execute: bool = True
     audit_retention_days: int | None = None
     audit_enabled: bool | None = None
+    browser_pilotage_paused: bool = False
 
     @field_validator("locale", mode="before")
     @classmethod

@@ -28,8 +28,12 @@ from app.documents.writer import build_docx_bytes, build_pdf_bytes, build_xlsx_b
 from app.i18n import DEFAULT_LOCALE, t
 from app.limits import DEFAULT_LIMITS, Limits
 from app.project_client import ProjectClient
-from app.sandbox.runner import SandboxRunner
-from app.schemas import DocumentReference, ProviderSet, UiMode
+from app.web_search import (
+    WebSearchError,
+    search_web,
+    web_search_available,
+    web_search_error_detail,
+)
 
 WORKPROBA_SYSTEM_PROMPT = t(DEFAULT_LOCALE, "tools.system_prompt")
 
@@ -57,6 +61,7 @@ class ToolContext:
     code_execute: bool = True
     audit_retention_days: int | None = None
     audit_enabled: bool | None = None
+    browser_pilotage_paused: bool = False
     last_user_query: str = ""
 
 
@@ -68,6 +73,7 @@ class ToolDeps:
     limits: Limits = field(default_factory=lambda: DEFAULT_LIMITS)
     confirmation_gate: ConfirmationGate | None = None
     plan_gate: PlanGate | None = None
+    web_search_calls: int = 0
 
 
 def _retry(exc: Exception) -> ModelRetry:
@@ -176,7 +182,7 @@ def build_session_digests(
             continue
 
         session_id = data.get("id")
-        if session_id == current_session_id:
+        if session_id == current_session_id or session_path.stem == current_session_id:
             continue
 
         title = data.get("title") or "Conversation"
@@ -267,6 +273,91 @@ def build_agent(
         )
 
     @agent.system_prompt
+    def relevant_sessions_prompt(ctx: RunContext[ToolDeps]) -> str:
+        """Injecte les résumés d'autres sessions pertinentes pour la requête courante."""
+        from app.agent.memory_consolidation import session_has_promoted_facts
+        from app.agent.memory_ranking import rank_sessions_by_query
+        from app.agent.untrusted import wrap_untrusted_content
+        from app.config import get_settings
+        from app.memory_stores import open_memory_store_for_scope
+
+        data_dir = ctx.deps.context.workspace_data_dir
+        locale = ctx.deps.context.locale
+        query = (ctx.deps.context.last_user_query or "").strip()
+        if data_dir is None or not query:
+            return ""
+
+        settings = get_settings()
+        topk = settings.memory_proactive_sessions_topk
+        min_overlap = settings.memory_proactive_sessions_min_overlap
+        if topk <= 0:
+            return ""
+
+        try:
+            digest = build_session_digests(
+                data_dir=data_dir,
+                current_session_id=ctx.deps.context.session_id,
+                locale=locale,
+            )
+        except Exception:
+            return ""
+
+        sessions = digest.get("sessions") or []
+        if not isinstance(sessions, list) or not sessions:
+            return ""
+
+        project_store = open_memory_store_for_scope("project", data_dir)
+        try:
+            sessions = [
+                session
+                for session in sessions
+                if not session_has_promoted_facts(
+                    project_store,
+                    str(session.get("id") or ""),
+                )
+            ]
+        finally:
+            project_store.close()
+
+        if not sessions:
+            return ""
+
+        relevant = rank_sessions_by_query(
+            sessions,
+            query,
+            topk,
+            min_overlap=min_overlap,
+        )
+        if not relevant:
+            return ""
+
+        lines: list[str] = []
+        for session in relevant:
+            title = str(session.get("title") or "Conversation").strip()
+            summary = str(session.get("summary") or "").strip().replace("\n", " ")
+            if not summary:
+                continue
+            lines.append(
+                t(
+                    locale,
+                    "memory.relevant_session_entry",
+                    title=title,
+                    summary=summary[:400],
+                )
+            )
+        if not lines:
+            return ""
+
+        wrapped = wrap_untrusted_content(
+            "\n".join(lines),
+            locale,
+            "memory.untrusted_header",
+        )
+        guardrail = t(locale, "memory.agent_guardrail")
+        header = t(locale, "memory.relevant_sessions_header")
+        return f"{guardrail}\n\n{header}\n{wrapped}"
+
+    @agent.system_prompt
     def space_name_prompt(ctx: RunContext[ToolDeps]) -> str:
         title = ctx.deps.context.workspace_title
         if not title or not title.strip():
@@ -276,6 +367,12 @@ def build_agent(
             "tools.space_name_context",
             name=title.strip(),
         )
+
+    @agent.system_prompt
+    def web_search_note_prompt(ctx: RunContext[ToolDeps]) -> str:
+        if not web_search_available(ctx.deps.context):
+            return ""
+        return t(ctx.deps.context.locale, "tools.web_search_note")
 
     @agent.system_prompt
     def plan_mode_instruction(ctx: RunContext[ToolDeps]) -> str:
@@ -383,22 +480,40 @@ def build_agent(
             content: The memory to store, as a concise factual sentence.
             scope: "user" (global) or "project" (this space). Defaults to project.
         """
+        from app.agent.memory_consolidation import apply_explicit_memory_heuristic
+        from app.config import get_settings
         from app.memory_stores import open_memory_store_for_scope
 
         data_dir = ctx.deps.context.workspace_data_dir
         if data_dir is None:
             return {"ok": False, "error": "no_workspace"}
+        settings = get_settings()
         try:
             store = open_memory_store_for_scope(scope, data_dir)
         except Exception as exc:  # noqa: BLE001 - surfaced to the model
             raise _retry(exc) from exc
         try:
-            memory = store.add_memory(content=content, source="agent")
+            memory, operation = apply_explicit_memory_heuristic(
+                store,
+                content,
+                source="agent",
+                update_threshold=settings.memory_promotion_overlap_threshold,
+            )
+            if scope == "project" and settings.memory_project_max_entries > 0:
+                store.trim_memories_to_cap(
+                    settings.memory_project_max_entries,
+                    actor="system",
+                )
         except ValueError as exc:
             raise _retry(exc) from exc
         finally:
             store.close()
-        return {"ok": True, "memory": memory, "scope": scope}
+        return {
+            "ok": True,
+            "memory": memory,
+            "scope": scope,
+            "operation": operation,
+        }
 
     @agent.tool
     async def propose_plan(
@@ -527,6 +642,40 @@ def build_agent(
             return response.model_dump(mode="json")
         except Exception as exc:  # noqa: BLE001 - surfaced to the model
             raise _retry(exc) from exc
+
+    @agent.tool
+    async def web_search(ctx: RunContext[ToolDeps], query: str) -> dict[str, Any]:
+        """Search the public web for up-to-date information.
+
+        Use when the user asks about recent events, prices, news, or external
+        facts not available in project files or space memory. Do NOT use for
+        local project content (use search_kb instead).
+
+        Args:
+            query: Natural-language search query reflecting the user's topic.
+        """
+        locale = ctx.deps.context.locale
+        if not ctx.deps.context.permissions_network:
+            raise ModelRetry(web_search_error_detail("web_search_locked", locale))
+        if not web_search_available(ctx.deps.context):
+            raise ModelRetry(web_search_error_detail("web_search_unavailable", locale))
+        if ctx.deps.web_search_calls >= ctx.deps.limits.web_search_max_per_turn:
+            raise ModelRetry(t(locale, "errors.web_search_limit_reached"))
+
+        try:
+            result = await search_web(
+                query,
+                provider_set=ctx.deps.context.provider_set,
+                locale=locale,
+                limits=ctx.deps.limits,
+            )
+        except WebSearchError as exc:
+            raise ModelRetry(web_search_error_detail(str(exc), locale)) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise _retry(exc) from exc
+
+        ctx.deps.web_search_calls += 1
+        return result
 
     @agent.tool
     async def read_document(

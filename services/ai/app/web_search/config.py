@@ -1,0 +1,4 @@
+"""Constantes recherche web."""
+
+MISTRAL_WEB_SEARCH_COST_USD = 0.03
+MISTRAL_WEB_SEARCH_PREMIUM_COST_USD = 0.05

@@ -875,3 +875,111 @@ describe('attachment_status SSE', () => {
     unmount();
   });
 });
+
+describe('useChatStream — browser tool results', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  it('appelle onBrowserToolCall pour browser_click avec bbox', async () => {
+    const onBrowserToolCall = vi.fn();
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sseResponse([
+        {
+          event: 'tool_call_start',
+          data: {
+            tool_call_id: 'tc_browser_1',
+            tool_name: 'browser_click',
+            arguments: { ref: 'e9' },
+          },
+        },
+        {
+          event: 'tool_call_result',
+          data: {
+            tool_call_id: 'tc_browser_1',
+            tool_name: 'browser_click',
+            result: {
+              snapshot_yaml: '- button [ref=e9]',
+              screenshot_b64: 'abc',
+              action_ref: 'e9',
+              action_bbox: { x: 10, y: 20, width: 100, height: 32 },
+              viewport: { width: 1280, height: 720 },
+            },
+            is_error: false,
+          },
+        },
+        { event: 'done', data: { content: '' } },
+      ]),
+    );
+
+    let api!: UseChatStreamReturn;
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          api = useChatStream({
+            sessionId: ref('sess-1'),
+            projectPath: ref('/proj'),
+            onBrowserToolCall,
+          });
+          return {};
+        },
+        template: '<div />',
+      }),
+    );
+
+    await api.send('clique sur le bouton');
+    expect(onBrowserToolCall).toHaveBeenCalledWith(
+      'browser_click',
+      expect.objectContaining({
+        action_ref: 'e9',
+        action_bbox: expect.objectContaining({ width: 100 }),
+      }),
+    );
+    wrapper.unmount();
+  });
+
+  it('n appelle pas onBrowserToolCall sur erreur browser', async () => {
+    const onBrowserToolCall = vi.fn();
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sseResponse([
+        {
+          event: 'tool_call_start',
+          data: {
+            tool_call_id: 'tc_browser_err',
+            tool_name: 'browser_click',
+            arguments: { ref: 'e9' },
+          },
+        },
+        {
+          event: 'tool_call_result',
+          data: {
+            tool_call_id: 'tc_browser_err',
+            tool_name: 'browser_click',
+            result: { message: 'browser_session_inactive' },
+            is_error: true,
+          },
+        },
+        { event: 'done', data: { content: '' } },
+      ]),
+    );
+
+    let api!: UseChatStreamReturn;
+    const wrapper = mount(
+      defineComponent({
+        setup() {
+          api = useChatStream({
+            sessionId: ref('sess-1'),
+            projectPath: ref('/proj'),
+            onBrowserToolCall,
+          });
+          return {};
+        },
+        template: '<div />',
+      }),
+    );
+
+    await api.send('clique');
+    expect(onBrowserToolCall).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+});

@@ -28,30 +28,36 @@ def estimate_history_tokens(
 def estimate_memory_overhead(
     data_dir: str | Path | None,
     *,
-    max_per_scope: int = 64,
+    max_items: int | None = None,
 ) -> int:
-    """Estime le coût token des souvenirs persistés (user + project)."""
+    """Estime le coût token des souvenirs injectés via memory_prompt."""
     if data_dir is None:
         return 0
 
+    from app.config import get_settings
     from app.memory_stores import open_memory_store_for_scope
 
+    if max_items is None:
+        settings = get_settings()
+        max_items = settings.memory_prompt_topk
+
     workspace_data_dir = Path(data_dir).expanduser().resolve()
-    parts: list[str] = []
+    combined: list[str] = []
     for scope in ("user", "project"):
         try:
             store = open_memory_store_for_scope(scope, workspace_data_dir)
         except Exception:
             continue
         try:
-            items = store.list_memories()[:max_per_scope]
+            for item in store.list_memories():
+                content = str(item.get("content", "")).strip()
+                if content:
+                    combined.append(content)
         finally:
             store.close()
-        for item in items:
-            parts.append(str(item.get("content", "")))
-    if not parts:
+    if not combined:
         return 0
-    return max(estimate_tokens("\n".join(parts)), 0)
+    return max(estimate_tokens("\n".join(combined[:max_items])), 0)
 
 
 def estimate_documents_overhead(documents: list[DocumentReference]) -> int:
