@@ -337,6 +337,71 @@ describe('useChatStream — feedbacks', () => {
     unmount();
   });
 
+  it('confirmation_timeout ne termine pas le streaming ni assistant.error', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        toolCalls: [
+          {
+            id: 'tc_1',
+            name: 'write_docx',
+            status: 'awaiting_confirmation',
+          },
+        ],
+        pendingConfirmation: {
+          confirmationId: 'cf_1',
+          toolCallId: 'tc_1',
+          toolName: 'write_docx',
+          action: 'create',
+          proposedPath: 'out.docx',
+          humanSummary: 'Créer out.docx',
+        },
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'error',
+      data: {
+        code: 'confirmation_timeout',
+        message: "La confirmation a expiré. Relancez l'action si nécessaire.",
+      },
+    });
+
+    const assistant = messages[0];
+    expect(assistant.streaming).toBe(true);
+    expect(assistant.error).toBeUndefined();
+    expect(assistant.pendingConfirmation).toBeNull();
+    expect(assistant.toolCalls?.[0]?.status).toBe('error');
+    expect(assistant.toolCalls?.[0]?.humanSummary).toContain('expiré');
+  });
+
+  it('internal_error garde le comportement terminal sur error SSE', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'error',
+      data: {
+        code: 'internal_error',
+        message: 'Erreur interne',
+      },
+    });
+
+    const assistant = messages[0];
+    expect(assistant.streaming).toBe(false);
+    expect(assistant.error?.code).toBe('internal_error');
+    expect(assistant.error?.retryable).toBe(true);
+  });
+
   it('classifie un échec fetch en sidecar_unreachable (réessayable)', async () => {
     (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValue(
       new TypeError('Failed to fetch'),

@@ -35,6 +35,7 @@ class ConfirmationGate:
         self.turn_id = turn_id
         self._pending: dict[str, _PendingConfirmation] = {}
         self.event_queue: asyncio.Queue[AgentEvent] = asyncio.Queue()
+        self._lock = asyncio.Lock()
 
     async def _await_decision(
         self,
@@ -72,28 +73,29 @@ class ConfirmationGate:
         human_summary: str,
     ) -> bool:
         """Émet confirmation_request et attend approve/deny. Retourne True si approuvé."""
-        confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
-        pending = _PendingConfirmation(
-            session_id=self.session_id,
-            turn_id=self.turn_id,
-            tool_call_id=tool_call_id,
-        )
-        self._pending[confirmation_id] = pending
-
-        decision = await self._await_decision(
-            confirmation_id,
-            pending,
-            ConfirmationRequestEvent(
+        async with self._lock:
+            confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
+            pending = _PendingConfirmation(
+                session_id=self.session_id,
                 turn_id=self.turn_id,
-                confirmation_id=confirmation_id,
                 tool_call_id=tool_call_id,
-                tool_name=tool_name,
-                action=action,
-                proposed_path=proposed_path,
-                human_summary=human_summary,
-            ),
-        )
-        return decision == "approve"
+            )
+            self._pending[confirmation_id] = pending
+
+            decision = await self._await_decision(
+                confirmation_id,
+                pending,
+                ConfirmationRequestEvent(
+                    turn_id=self.turn_id,
+                    confirmation_id=confirmation_id,
+                    tool_call_id=tool_call_id,
+                    tool_name=tool_name,
+                    action=action,
+                    proposed_path=proposed_path,
+                    human_summary=human_summary,
+                ),
+            )
+            return decision == "approve"
 
     async def request_effect(
         self,
@@ -104,63 +106,64 @@ class ConfirmationGate:
         audit_enabled: bool | None = None,
     ) -> bool:
         """Émet confirmation_request enrichi et attend approve/deny."""
-        confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
-        pending = _PendingConfirmation(
-            session_id=self.session_id,
-            turn_id=self.turn_id,
-            tool_call_id=tool_call_id,
-        )
-        self._pending[confirmation_id] = pending
-
-        work_id = work_id_for_turn(self.turn_id)
-        if audit_app_data_dir is not None:
-            log_event(
-                audit_app_data_dir,
-                "approval.requested",
-                "agent",
-                audit_details_with_work_id(
-                    {
-                        "effect": proposal.effect,
-                        "targets": proposal.targets,
-                        "tool_name": proposal.tool_name,
-                    },
-                    work_id,
-                ),
-                enabled=audit_enabled,
-            )
-
-        decision = await self._await_decision(
-            confirmation_id,
-            pending,
-            ConfirmationRequestEvent(
+        async with self._lock:
+            confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
+            pending = _PendingConfirmation(
+                session_id=self.session_id,
                 turn_id=self.turn_id,
-                confirmation_id=confirmation_id,
                 tool_call_id=tool_call_id,
-                tool_name=proposal.tool_name,
-                action=proposal.action,
-                proposed_path=proposal.proposed_path,
-                human_summary=proposal.human_summary,
-                effect=proposal.effect,
-                targets=list(proposal.targets),
-                protections=protections_to_dict(proposal.protections),
-                headline=proposal.headline,
-                protection_labels=list(proposal.protection_labels),
-            ),
-        )
+            )
+            self._pending[confirmation_id] = pending
 
-        if audit_app_data_dir is not None:
-            log_event(
-                audit_app_data_dir,
-                "approval.resolved",
-                "agent",
-                audit_details_with_work_id(
-                    {"decision": decision or "timeout"},
-                    work_id,
+            work_id = work_id_for_turn(self.turn_id)
+            if audit_app_data_dir is not None:
+                log_event(
+                    audit_app_data_dir,
+                    "approval.requested",
+                    "agent",
+                    audit_details_with_work_id(
+                        {
+                            "effect": proposal.effect,
+                            "targets": proposal.targets,
+                            "tool_name": proposal.tool_name,
+                        },
+                        work_id,
+                    ),
+                    enabled=audit_enabled,
+                )
+
+            decision = await self._await_decision(
+                confirmation_id,
+                pending,
+                ConfirmationRequestEvent(
+                    turn_id=self.turn_id,
+                    confirmation_id=confirmation_id,
+                    tool_call_id=tool_call_id,
+                    tool_name=proposal.tool_name,
+                    action=proposal.action,
+                    proposed_path=proposal.proposed_path,
+                    human_summary=proposal.human_summary,
+                    effect=proposal.effect,
+                    targets=list(proposal.targets),
+                    protections=protections_to_dict(proposal.protections),
+                    headline=proposal.headline,
+                    protection_labels=list(proposal.protection_labels),
                 ),
-                enabled=audit_enabled,
             )
 
-        return decision == "approve"
+            if audit_app_data_dir is not None:
+                log_event(
+                    audit_app_data_dir,
+                    "approval.resolved",
+                    "agent",
+                    audit_details_with_work_id(
+                        {"decision": decision or "timeout"},
+                        work_id,
+                    ),
+                    enabled=audit_enabled,
+                )
+
+            return decision == "approve"
 
     def resolve(self, confirmation_id: str, decision: ConfirmationDecision) -> bool:
         pending = self._pending.get(confirmation_id)

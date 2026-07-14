@@ -19,6 +19,7 @@ from app.schemas import (
     AgentTurnRequest,
     PlanProposedEvent,
     ToolCallResultEvent,
+    WorkContributionEvent,
 )
 from app.sandbox.runner import SandboxRunner
 
@@ -124,6 +125,16 @@ async def test_propose_plan_deny_marks_error(tmp_path: Path) -> None:
     assert len(results) == 1
     assert results[0].is_error is True
     assert results[0].result.get("cancelled") is True
+
+    contributions = [
+        e
+        for e in events
+        if isinstance(e, WorkContributionEvent)
+        and e.contribution_id == results[0].tool_call_id
+    ]
+    final = [e for e in contributions if e.status != "started"]
+    assert len(final) == 1
+    assert final[0].status == "cancelled"
 
 
 def test_plan_approve_http_endpoint() -> None:

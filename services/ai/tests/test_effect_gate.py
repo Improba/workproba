@@ -237,6 +237,56 @@ def test_protection_labels_network_access_skips_no_network() -> None:
 
 
 @pytest.mark.asyncio
+async def test_concurrent_request_effect_serialized() -> None:
+    gate = ConfirmationGate(session_id="s1", turn_id="t-serialize")
+    proposal_a = EffectProposal(
+        effect="create",
+        tool_name="write_docx",
+        targets=["a.docx"],
+        action="create",
+        proposed_path="a.docx",
+        human_summary="Créer a.docx",
+    )
+    proposal_b = EffectProposal(
+        effect="create",
+        tool_name="write_docx",
+        targets=["b.docx"],
+        action="create",
+        proposed_path="b.docx",
+        human_summary="Créer b.docx",
+    )
+
+    pending_confirmations = 0
+    max_pending = 0
+    emission_order: list[str] = []
+
+    async def consume_and_approve() -> None:
+        nonlocal pending_confirmations, max_pending
+        approved = 0
+        while approved < 2:
+            event = await gate.event_queue.get()
+            if not isinstance(event, ConfirmationRequestEvent):
+                continue
+            pending_confirmations += 1
+            max_pending = max(max_pending, pending_confirmations)
+            emission_order.append(event.tool_call_id)
+            await asyncio.sleep(0.05)
+            gate.resolve(event.confirmation_id, "approve")
+            pending_confirmations -= 1
+            approved += 1
+
+    consumer = asyncio.create_task(consume_and_approve())
+    await asyncio.gather(
+        gate.request_effect(tool_call_id="tc-a", proposal=proposal_a),
+        gate.request_effect(tool_call_id="tc-b", proposal=proposal_b),
+    )
+    await consumer
+
+    assert emission_order == ["tc-a", "tc-b"]
+    assert max_pending == 1
+
+
+@pytest.mark.asyncio
 async def test_request_effect_emits_enriched_event() -> None:
     gate = ConfirmationGate(session_id="s1", turn_id="turn-42")
     proposal = EffectProposal(

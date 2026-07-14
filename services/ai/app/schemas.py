@@ -439,7 +439,7 @@ class WorkContributionEvent(BaseModel):
     contribution_id: str
     kind: Literal["capability", "perspective", "control"]
     label: str
-    status: Literal["started", "completed", "failed"]
+    status: Literal["started", "completed", "failed", "cancelled"]
     summary: str = ""
 
 

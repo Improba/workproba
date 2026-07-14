@@ -539,13 +539,19 @@ class AgentLoop:
                         is_error=is_error,
                         human_summary=human_summary,
                     )
+                    if result.get("cancelled"):
+                        contribution_status = "cancelled"
+                    elif is_error:
+                        contribution_status = "failed"
+                    else:
+                        contribution_status = "completed"
                     yield derive_work_event(
                         phase="contribution",
                         work_id=work_id,
                         locale=locale,
                         tool_name=tool_name,
                         contribution_id=tool_call_id,
-                        contribution_status="failed" if is_error else "completed",
+                        contribution_status=contribution_status,
                         summary=human_summary,
                     )
                     if hook_payload_base is not None:

@@ -22,6 +22,7 @@ from app.schemas import (
     AgentTurnRequest,
     ConfirmationRequestEvent,
     ToolCallResultEvent,
+    WorkContributionEvent,
 )
 
 from conftest import FakeProjectClient
@@ -241,6 +242,16 @@ async def test_confirmation_deny_cancels_without_write(tmp_path: Path) -> None:
     }
     assert result.human_summary == "Action annulée"
 
+    contributions = [
+        e
+        for e in events
+        if isinstance(e, WorkContributionEvent)
+        and e.contribution_id == results[0].tool_call_id
+    ]
+    final = [e for e in contributions if e.status != "started"]
+    assert len(final) == 1
+    assert final[0].status == "cancelled"
+
 
 async def test_confirmation_modify_action_for_existing_file(tmp_path: Path) -> None:
     (tmp_path / "a").write_text("v1", encoding="utf-8")
@@ -362,3 +373,13 @@ async def test_run_code_unavailable_in_advanced_without_docker() -> None:
     assert results
     assert results[0].is_error is True
     assert "Sandbox indisponible" in str(results[0].result)
+
+    contributions = [
+        e
+        for e in events
+        if isinstance(e, WorkContributionEvent)
+        and e.contribution_id == results[0].tool_call_id
+    ]
+    final = [e for e in contributions if e.status != "started"]
+    assert len(final) == 1
+    assert final[0].status == "failed"

@@ -19,7 +19,7 @@ import app.auth as authmod
 import app.main as mainmod
 from app.agent.loop import AgentLoop
 from app.agent.tools import ToolDeps, build_agent
-from app.agent.work_events import capability_label, work_id_for_turn
+from app.agent.work_events import capability_label, derive_work_event, work_id_for_turn
 from app.audit import read_audit, resolve_app_data_dir
 from app.plugins.workproba_browser import manifest as browser_manifest
 from app.schemas import (
@@ -163,6 +163,20 @@ def test_work_id_for_turn_is_turn_id() -> None:
     turn_id = "turn-abc-123"
     assert work_id_for_turn(turn_id) == turn_id
     assert work_id_for_turn(turn_id) == work_id_for_turn(turn_id)
+
+
+def test_derive_work_event_accepts_cancelled_status() -> None:
+    event = derive_work_event(
+        phase="contribution",
+        work_id="turn-1",
+        locale="fr",
+        tool_name="write_docx",
+        contribution_id="tc-1",
+        contribution_status="cancelled",
+        summary="Action annulée",
+    )
+    assert isinstance(event, WorkContributionEvent)
+    assert event.status == "cancelled"
 
 
 @pytest.mark.parametrize(

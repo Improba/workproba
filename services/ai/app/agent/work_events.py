@@ -13,7 +13,7 @@ from app.schemas import (
 )
 
 WorkKind = Literal["capability", "perspective", "control"]
-ContributionStatus = Literal["started", "completed", "failed"]
+ContributionStatus = Literal["started", "completed", "failed", "cancelled"]
 WorkPhase = Literal["started", "contribution", "completed", "failed"]
 
 _DOCUMENT_TOOLS = frozenset(

@@ -646,6 +646,20 @@ export function applyStreamEvent(
       break;
     }
     case 'error': {
+      if (event.data.code === 'confirmation_timeout') {
+        const pending = assistant.pendingConfirmation;
+        if (pending) {
+          const tool = assistant.toolCalls?.find((t) => t.id === pending.toolCallId);
+          if (tool) {
+            tool.status = 'error';
+            tool.humanSummary =
+              event.data.message ||
+              localizeAgentError('confirmation_timeout', '');
+          }
+          assistant.pendingConfirmation = null;
+        }
+        break;
+      }
       assistant.streaming = false;
       assistant.error = {
         code: event.data.code,
