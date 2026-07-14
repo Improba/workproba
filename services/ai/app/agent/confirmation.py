@@ -5,8 +5,12 @@ from __future__ import annotations
 import asyncio
 import uuid
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Literal
 
+from app.agent.effects import EffectProposal, protections_to_dict
+from app.agent.work_events import audit_details_with_work_id, work_id_for_turn
+from app.audit import log_event
 from app.schemas import AgentEvent, ConfirmationRequestEvent, ErrorEvent
 
 ConfirmationDecision = Literal["approve", "deny"]
@@ -32,6 +36,32 @@ class ConfirmationGate:
         self._pending: dict[str, _PendingConfirmation] = {}
         self.event_queue: asyncio.Queue[AgentEvent] = asyncio.Queue()
 
+    async def _await_decision(
+        self,
+        confirmation_id: str,
+        pending: _PendingConfirmation,
+        event: ConfirmationRequestEvent,
+    ) -> ConfirmationDecision | None:
+        await self.event_queue.put(event)
+        try:
+            await asyncio.wait_for(pending.event.wait(), timeout=CONFIRMATION_TIMEOUT_SECONDS)
+        except TimeoutError:
+            self._pending.pop(confirmation_id, None)
+            await self.event_queue.put(
+                ErrorEvent(
+                    code="confirmation_timeout",
+                    message=(
+                        "La confirmation d'écriture a expiré. "
+                        "L'action a été annulée automatiquement."
+                    ),
+                )
+            )
+            return None
+
+        decision = pending.decision
+        self._pending.pop(confirmation_id, None)
+        return decision
+
     async def request_write(
         self,
         *,
@@ -50,7 +80,9 @@ class ConfirmationGate:
         )
         self._pending[confirmation_id] = pending
 
-        await self.event_queue.put(
+        decision = await self._await_decision(
+            confirmation_id,
+            pending,
             ConfirmationRequestEvent(
                 turn_id=self.turn_id,
                 confirmation_id=confirmation_id,
@@ -59,26 +91,70 @@ class ConfirmationGate:
                 action=action,
                 proposed_path=proposed_path,
                 human_summary=human_summary,
+            ),
+        )
+        return decision == "approve"
+
+    async def request_effect(
+        self,
+        *,
+        tool_call_id: str,
+        proposal: EffectProposal,
+        audit_app_data_dir: Path | None = None,
+    ) -> bool:
+        """Émet confirmation_request enrichi et attend approve/deny."""
+        confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
+        pending = _PendingConfirmation(
+            session_id=self.session_id,
+            turn_id=self.turn_id,
+            tool_call_id=tool_call_id,
+        )
+        self._pending[confirmation_id] = pending
+
+        work_id = work_id_for_turn(self.turn_id)
+        if audit_app_data_dir is not None:
+            log_event(
+                audit_app_data_dir,
+                "approval.requested",
+                "agent",
+                audit_details_with_work_id(
+                    {
+                        "effect": proposal.effect,
+                        "targets": proposal.targets,
+                        "tool_name": proposal.tool_name,
+                    },
+                    work_id,
+                ),
             )
+
+        decision = await self._await_decision(
+            confirmation_id,
+            pending,
+            ConfirmationRequestEvent(
+                turn_id=self.turn_id,
+                confirmation_id=confirmation_id,
+                tool_call_id=tool_call_id,
+                tool_name=proposal.tool_name,
+                action=proposal.action,
+                proposed_path=proposal.proposed_path,
+                human_summary=proposal.human_summary,
+                effect=proposal.effect,
+                targets=list(proposal.targets),
+                protections=protections_to_dict(proposal.protections),
+            ),
         )
 
-        try:
-            await asyncio.wait_for(pending.event.wait(), timeout=CONFIRMATION_TIMEOUT_SECONDS)
-        except TimeoutError:
-            self._pending.pop(confirmation_id, None)
-            await self.event_queue.put(
-                ErrorEvent(
-                    code="confirmation_timeout",
-                    message=(
-                        "La confirmation d'écriture a expiré. "
-                        "L'action a été annulée automatiquement."
-                    ),
-                )
+        if audit_app_data_dir is not None:
+            log_event(
+                audit_app_data_dir,
+                "approval.resolved",
+                "agent",
+                audit_details_with_work_id(
+                    {"decision": decision or "timeout"},
+                    work_id,
+                ),
             )
-            return False
 
-        decision = pending.decision
-        self._pending.pop(confirmation_id, None)
         return decision == "approve"
 
     def resolve(self, confirmation_id: str, decision: ConfirmationDecision) -> bool:

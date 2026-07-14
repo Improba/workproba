@@ -1,0 +1,369 @@
+"""Tests Human Approval Gate orienté effet (B2a voie B)."""
+
+from __future__ import annotations
+
+import asyncio
+from pathlib import Path
+from typing import Any
+
+import pytest
+from pydantic_ai import RunContext
+from pydantic_ai.models.test import TestModel
+
+from app.agent.confirmation import ConfirmationGate
+from app.agent.effects import EffectProposal, classify_effect, effect_label
+from app.agent.tools import ToolContext, ToolDeps, build_agent
+from app.audit import read_audit
+from app.limits import DEFAULT_LIMITS
+from app.plugins.workproba_projet import PLUGIN_ID
+from app.plugins.workproba_projet import storage
+from app.sandbox.runner import SandboxRunner
+from app.schemas import ConfirmationRequestEvent
+
+from conftest import FakeProjectClient
+
+
+class RecordingGate(ConfirmationGate):
+    """Gate qui enregistre les appels request_effect et approuve par défaut."""
+
+    def __init__(self, *, session_id: str = "s1", turn_id: str = "t1") -> None:
+        super().__init__(session_id=session_id, turn_id=turn_id)
+        self.effect_calls: list[EffectProposal] = []
+        self.auto_approve = True
+
+    async def request_effect(
+        self,
+        *,
+        tool_call_id: str,
+        proposal: EffectProposal,
+        audit_app_data_dir: Path | None = None,
+    ) -> bool:
+        self.effect_calls.append(proposal)
+        if not self.auto_approve:
+            return False
+        return True
+
+
+def _deps(
+    *,
+    project_root: Path,
+    gate: ConfirmationGate | None = None,
+    workspace_data_dir: Path | None = None,
+    plugin_data_dir: Path | None = None,
+) -> ToolDeps:
+    return ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            project_root=project_root,
+            workspace_data_dir=workspace_data_dir,
+            plugin_data_dir=plugin_data_dir,
+            locale="fr",
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=gate,
+    )
+
+
+def _ctx(deps: ToolDeps, tool_call_id: str = "tc1") -> RunContext[ToolDeps]:
+    return RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id=tool_call_id,
+    )
+
+
+@pytest.mark.parametrize(
+    ("tool_name", "args", "expected_effect"),
+    [
+        ("write_docx", {"path": "a.docx"}, "create"),
+        ("write_xlsx", {"path": "a.xlsx"}, "create"),
+        ("write_pdf", {"path": "a.pdf"}, "create"),
+        ("generate_document", {"name": "note.md"}, "create"),
+        (
+            "publish_artifact",
+            {"name": "doc.pdf", "project": "Alpha", "project_id": "p1"},
+            "publish",
+        ),
+        ("sync_to_cloud", {"project_id": "p1"}, "external_send"),
+        ("web_search", {"query": "pytest"}, "network_access"),
+        ("browser_navigate", {"url": "https://example.com"}, "network_access"),
+        ("run_code", {"code": "print(1)"}, "code_execute"),
+        ("read_document", {"document_id": "a"}, None),
+        ("list_files", {}, None),
+        ("unknown_future_tool", {}, None),
+    ],
+)
+def test_classify_effect_mapping(
+    tool_name: str,
+    args: dict[str, Any],
+    expected_effect: str | None,
+) -> None:
+    proposal = classify_effect(tool_name, args, permissions_network=True)
+    if expected_effect is None:
+        assert proposal is None
+        return
+    assert proposal is not None
+    assert proposal.effect == expected_effect
+    assert proposal.tool_name == tool_name
+
+
+def test_classify_effect_write_docx_modify(tmp_path: Path) -> None:
+    existing = tmp_path / "report.docx"
+    existing.write_bytes(b"PK")
+    proposal = classify_effect(
+        "write_docx",
+        {"path": "report.docx", "project_root": tmp_path},
+        permissions_network=True,
+    )
+    assert proposal is not None
+    assert proposal.action == "modify"
+    assert proposal.effect == "modify"
+    assert proposal.protections.version_before_modify is True
+    assert proposal.protections.preview is True
+
+
+def test_classify_effect_write_docx_create(tmp_path: Path) -> None:
+    proposal = classify_effect(
+        "write_docx",
+        {"path": "new.docx", "project_root": tmp_path},
+        permissions_network=True,
+    )
+    assert proposal is not None
+    assert proposal.action == "create"
+    assert proposal.effect == "create"
+    assert proposal.protections.version_before_modify is False
+
+
+def test_effect_label_fr_en() -> None:
+    assert effect_label("create", "fr") == "Créer"
+    assert effect_label("network_access", "en") == "Network access"
+
+
+@pytest.mark.asyncio
+async def test_request_effect_emits_enriched_event() -> None:
+    gate = ConfirmationGate(session_id="s1", turn_id="turn-42")
+    proposal = EffectProposal(
+        effect="create",
+        tool_name="write_docx",
+        targets=["out.docx"],
+        action="create",
+        human_summary="Créer out.docx",
+        proposed_path="out.docx",
+    )
+
+    async def approve_later() -> None:
+        await asyncio.sleep(0.05)
+        event = gate.event_queue.get_nowait()
+        assert isinstance(event, ConfirmationRequestEvent)
+        assert event.effect == "create"
+        assert event.targets == ["out.docx"]
+        assert event.protections.get("preview") is False
+        gate.resolve(event.confirmation_id, "approve")
+
+    asyncio.create_task(approve_later())
+    approved = await gate.request_effect(tool_call_id="tc1", proposal=proposal)
+    assert approved is True
+
+
+@pytest.mark.asyncio
+async def test_request_effect_deny_returns_false() -> None:
+    gate = ConfirmationGate(session_id="s1", turn_id="t1")
+    proposal = EffectProposal(
+        effect="publish",
+        tool_name="publish_artifact",
+        targets=["doc.pdf", "Alpha"],
+        action="create",
+        proposed_path="artefacts/p1/doc.pdf",
+        human_summary="Publier",
+    )
+
+    async def deny_later() -> None:
+        await asyncio.sleep(0.05)
+        event = gate.event_queue.get_nowait()
+        assert isinstance(event, ConfirmationRequestEvent)
+        gate.resolve(event.confirmation_id, "deny")
+
+    asyncio.create_task(deny_later())
+    approved = await gate.request_effect(tool_call_id="tc1", proposal=proposal)
+    assert approved is False
+
+
+@pytest.mark.asyncio
+async def test_request_write_legacy_defaults() -> None:
+    gate = ConfirmationGate(session_id="s1", turn_id="t1")
+
+    async def approve_later() -> None:
+        await asyncio.sleep(0.05)
+        event = gate.event_queue.get_nowait()
+        assert isinstance(event, ConfirmationRequestEvent)
+        assert event.effect is None
+        assert event.targets == []
+        assert event.protections == {}
+        gate.resolve(event.confirmation_id, "approve")
+
+    asyncio.create_task(approve_later())
+    approved = await gate.request_write(
+        tool_call_id="tc1",
+        tool_name="generate_document",
+        action="create",
+        proposed_path="note.md",
+        human_summary="Créer note.md",
+    )
+    assert approved is True
+
+
+def test_audit_on_request_effect(tmp_path: Path) -> None:
+    app_data = tmp_path / "app_data"
+    app_data.mkdir()
+
+    async def run() -> None:
+        gate = ConfirmationGate(session_id="s1", turn_id="turn-audit")
+        proposal = EffectProposal(
+            effect="create",
+            tool_name="generate_document",
+            targets=["note.md"],
+            action="create",
+            proposed_path="note.md",
+            human_summary="Créer note.md",
+        )
+
+        async def approve_later() -> None:
+            await asyncio.sleep(0.05)
+            event = gate.event_queue.get_nowait()
+            assert isinstance(event, ConfirmationRequestEvent)
+            gate.resolve(event.confirmation_id, "approve")
+
+        asyncio.create_task(approve_later())
+        await gate.request_effect(
+            tool_call_id="tc1",
+            proposal=proposal,
+            audit_app_data_dir=app_data,
+        )
+
+    asyncio.run(run())
+
+    entries, _ = read_audit(app_data)
+    events = [entry["event"] for entry in entries]
+    assert "approval.requested" in events
+    assert "approval.resolved" in events
+    requested = next(e for e in entries if e["event"] == "approval.requested")
+    resolved = next(e for e in entries if e["event"] == "approval.resolved")
+    assert requested["details"]["work_id"] == "turn-audit"
+    assert requested["details"]["effect"] == "create"
+    assert resolved["details"]["decision"] == "approve"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tool_name", ["write_docx", "write_xlsx", "write_pdf", "generate_document"])
+async def test_write_tools_call_request_effect(
+    tmp_path: Path,
+    tool_name: str,
+) -> None:
+    gate = RecordingGate()
+    deps = _deps(project_root=tmp_path, gate=gate)
+    agent = build_agent(TestModel())
+    tool = agent._function_toolset.tools[tool_name]
+    ctx = _ctx(deps)
+
+    if tool_name == "write_docx":
+        await tool.function(ctx, path="out.docx", title="T", paragraphs=["Hi"])
+    elif tool_name == "write_xlsx":
+        await tool.function(ctx, path="out.xlsx", sheets=[{"name": "S", "rows": [["a"]]}])
+    elif tool_name == "write_pdf":
+        await tool.function(ctx, path="out.pdf", title="T", sections=[{"body": "Hi"}])
+    else:
+        await tool.function(
+            ctx,
+            name="note.md",
+            mime_type="text/markdown",
+            content_markdown="# Hi",
+        )
+
+    assert len(gate.effect_calls) == 1
+    assert gate.effect_calls[0].tool_name == tool_name
+
+
+@pytest.mark.asyncio
+async def test_publish_artifact_calls_request_effect(
+    tmp_path: Path,
+) -> None:
+    plugin_dir = tmp_path / "plugins" / "workproba.projet"
+    plugin_dir.mkdir(parents=True)
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    (workspace / "rapport.docx").write_bytes(b"PK")
+    project = storage.create_project(plugin_dir, "Beta")
+
+    gate = RecordingGate()
+    deps = _deps(
+        project_root=workspace,
+        gate=gate,
+        plugin_data_dir=plugin_dir,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["publish_artifact"]
+    ctx = _ctx(deps)
+
+    await tool.function(
+        ctx,
+        project_id=project["id"],
+        name="rapport.docx",
+        source_path="rapport.docx",
+    )
+
+    assert len(gate.effect_calls) == 1
+    assert gate.effect_calls[0].effect == "publish"
+
+
+@pytest.mark.asyncio
+async def test_read_document_does_not_call_request_effect(tmp_path: Path) -> None:
+    gate = RecordingGate()
+    client = FakeProjectClient(documents={"a.txt": "hello"})
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            project_root=tmp_path,
+            locale="fr",
+        ),
+        project_client=client,
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=gate,
+    )
+    agent = build_agent(TestModel())
+    tool = agent._function_toolset.tools["read_document"]
+    ctx = _ctx(deps)
+
+    await tool.function(ctx, document_id="a.txt")
+    assert gate.effect_calls == []
+
+
+def test_generate_document_persists_via_gate_path(tmp_path: Path) -> None:
+    """generate_document écrit un fichier via _persist_binary_document (gated)."""
+    gate = RecordingGate()
+    deps = _deps(project_root=tmp_path, gate=gate)
+
+    async def run() -> None:
+        agent = build_agent(TestModel())
+        tool = agent._function_toolset.tools["generate_document"]
+        ctx = _ctx(deps)
+        await tool.function(
+            ctx,
+            name="note.md",
+            mime_type="text/markdown",
+            content_markdown="# Title",
+        )
+
+    asyncio.run(run())
+    assert len(gate.effect_calls) == 1
+    assert gate.effect_calls[0].tool_name == "generate_document"

@@ -22,6 +22,7 @@ from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
 
 from app.agent.confirmation import ConfirmationGate
+from app.agent.effects import classify_effect
 from app.agent.human import build_human_summary
 from app.agent.plan import PlanGate
 from app.documents.writer import build_docx_bytes, build_pdf_bytes, build_xlsx_bytes
@@ -756,7 +757,6 @@ def build_agent(
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         deps = ctx.deps
-        proposed_path, action = _write_action(deps.context.project_root, name)
         gate = deps.confirmation_gate
 
         if gate is not None:
@@ -765,12 +765,20 @@ def build_agent(
                 {"name": name},
                 locale=deps.context.locale,
             )
-            approved = await gate.request_write(
+            proposal = classify_effect(
+                tool_name,
+                {"name": name, "project_root": deps.context.project_root},
+                permissions_network=deps.context.permissions_network,
+            )
+            if proposal is None:
+                raise ModelRetry(
+                    f"Effet non classifiable pour l'outil d'écriture {tool_name}"
+                )
+            proposal = proposal.model_copy(update={"human_summary": human_summary})
+            approved = await gate.request_effect(
                 tool_call_id=ctx.tool_call_id or "",
-                tool_name=tool_name,
-                action=action,
-                proposed_path=proposed_path,
-                human_summary=human_summary,
+                proposal=proposal,
+                audit_app_data_dir=deps.context.workspace_data_dir,
             )
             if not approved:
                 return {

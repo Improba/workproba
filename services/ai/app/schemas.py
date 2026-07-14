@@ -310,6 +310,9 @@ class ConfirmationRequestEvent(BaseModel):
     action: Literal["create", "modify"]
     proposed_path: str
     human_summary: str
+    effect: str | None = None
+    targets: list[str] = Field(default_factory=list)
+    protections: dict[str, bool] = Field(default_factory=dict)
 
 
 class PlanStepInfo(BaseModel):

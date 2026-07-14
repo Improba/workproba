@@ -8,6 +8,7 @@ from typing import Any
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
 
+from app.agent.effects import classify_effect
 from app.agent.human import build_human_summary
 from app.agent.tools import ToolDeps
 from app.i18n import t
@@ -115,12 +116,22 @@ def register_projet_tools(agent: Agent[ToolDeps, str]) -> None:
                 {"name": artefact_name, "project": project_name, "project_id": project_id},
                 locale=locale,
             )
-            approved = await gate.request_write(
+            proposal = classify_effect(
+                "publish_artifact",
+                {
+                    "name": artefact_name,
+                    "project": project_name,
+                    "project_id": project_id,
+                },
+                permissions_network=deps.context.permissions_network,
+            )
+            if proposal is None:
+                raise ModelRetry("Effet non classifiable pour publish_artifact")
+            proposal = proposal.model_copy(update={"human_summary": human_summary})
+            approved = await gate.request_effect(
                 tool_call_id=ctx.tool_call_id or "",
-                tool_name="publish_artifact",
-                action="create",
-                proposed_path=f"artefacts/{project_id}/{artefact_name}",
-                human_summary=human_summary,
+                proposal=proposal,
+                audit_app_data_dir=deps.context.workspace_data_dir,
             )
             if not approved:
                 return {

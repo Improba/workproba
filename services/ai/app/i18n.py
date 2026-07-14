@@ -411,6 +411,16 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Consultez le fichier généré après confirmation."
             ),
         },
+        "effect": {
+            "create": "Créer",
+            "modify": "Modifier",
+            "delete": "Supprimer",
+            "send": "Envoyer",
+            "publish": "Publier",
+            "network_access": "Accès réseau",
+            "code_execute": "Exécuter du code",
+            "external_send": "Envoyer à l'extérieur",
+        },
         "work": {
             "capability": {
                 "document_analysis": "Analyse documentaire",
@@ -819,6 +829,16 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Preview unavailable for this format. "
                 "See the generated file after confirmation."
             ),
+        },
+        "effect": {
+            "create": "Create",
+            "modify": "Modify",
+            "delete": "Delete",
+            "send": "Send",
+            "publish": "Publish",
+            "network_access": "Network access",
+            "code_execute": "Execute code",
+            "external_send": "Send externally",
         },
         "work": {
             "capability": {
