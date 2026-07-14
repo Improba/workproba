@@ -360,4 +360,50 @@ describe('memory', () => {
     expect(body.workspace_data_dir).toBe('/data/ws');
     expect(body.scope).toBe('all');
   });
+
+  it('forgetAllMemory transmet scope memories et memory_scope user', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    });
+
+    const { forgetAllMemory } = await import('@services/aiSidecar');
+    await forgetAllMemory('/data/ws', 'memories', 'user');
+
+    const [, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    const body = JSON.parse(String(init?.body));
+    expect(body.scope).toBe('memories');
+    expect(body.memory_scope).toBe('user');
+  });
+
+  it('promoteSessionMemory appelle /memory/promote-session', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        facts: ['Le budget RH est de 120k€'],
+        counts: { ADD: 1 },
+        pruned: 0,
+      }),
+    });
+
+    const { promoteSessionMemory } = await import('@services/aiSidecar');
+    const result = await promoteSessionMemory({
+      workspaceDataDir: '/data/ws',
+      sessionId: 'sess-1',
+      summary: 'Discussion budget.',
+      locale: 'fr',
+    });
+
+    expect(result.facts).toEqual(['Le budget RH est de 120k€']);
+    expect(result.counts.ADD).toBe(1);
+
+    const [url, init] = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(String(url)).toContain('/memory/promote-session');
+    expect(init?.method).toBe('POST');
+    const body = JSON.parse(String(init?.body));
+    expect(body.workspace_data_dir).toBe('/data/ws');
+    expect(body.session_id).toBe('sess-1');
+    expect(body.summary).toBe('Discussion budget.');
+    expect(body.locale).toBe('fr');
+  });
 });

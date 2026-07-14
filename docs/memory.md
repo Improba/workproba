@@ -153,6 +153,8 @@ Lightweight note: « this space has N other conversation(s) ». Points the agent
 
 ## Inter-conversational promotion
 
+> **Statut : livré (14/07/2026).** Pipeline complet côté sidecar + front ; 63 tests pytest mémoire verts. Reste ouvert : ranking sémantique (embeddings), citations cliquables dans le chat (T-V2-18).
+
 ### Trigger (frontend)
 
 In `ChatPage.vue`, every **3 completed turns** (minimum 4 messages):
@@ -358,11 +360,14 @@ Front-end client: `front/src/services/aiSidecar.ts` (`promoteSessionMemory`, `us
 | `test_memory_promotion.py` | `/memory/promote-session` HTTP |
 | `test_memory_ranking.py` | Lexical ranking |
 | `test_memory_mechanics.py` | Cross-hook behavior, dedup, session skip |
+| `test_memory_flow.py` | Flux bout-en-bout : promote → inject, bridge sessions, dédup HTTP |
 | `test_agent_remember.py` | `remember` tool wiring |
 | `test_recall_project_sessions.py` | Session digest builder |
 | `test_compaction.py` | History compaction + memory overhead |
 
 Run: `cd services/ai && uv run pytest tests/test_memory_*.py tests/test_agent_remember.py tests/test_recall_project_sessions.py -q`
+
+Front: `cd front && yarn vitest run test/unit/composables/useMemory.spec.ts test/unit/services/aiSidecar.spec.ts -t "memory|useMemory|promoteSession|forgetAll"`
 
 ---
 
@@ -387,7 +392,7 @@ Run: `cd services/ai && uv run pytest tests/test_memory_*.py tests/test_agent_re
 | Contradiction LLM cost | Up to one utility call per UPDATE candidate per promotion cycle |
 | No cross-workspace RAG | Document index is per project workspace |
 
-Planned (roadmap): `memory_meta.json` for extracted metadata, semantic memory ranking, UI citations.
+Planned (roadmap): `memory_meta.json` for extracted metadata, **semantic memory ranking** (embeddings), **UI citations in chat** (T-V2-18).
 
 ---
 

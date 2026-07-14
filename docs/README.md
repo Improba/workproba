@@ -2,6 +2,17 @@
 
 Index of **Workproba** project documentation: local-folder work assistant (Claude Cowork style), Tauri 2 desktop app + Python sidecar.
 
+## CI / CD
+
+Operational since **14/07/2026** (commit `1155d2d`).
+
+| Workflow | Trigger | Role |
+|---|---|---|
+| [`.github/workflows/desktop-ci.yml`](../.github/workflows/desktop-ci.yml) | push/PR `main`, `develop` | pytest, Rust, front lint/tests, lint-i18n, sidecar packaging |
+| [`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml) | tag `v*.*.*` | installateurs multi-OS + `SHA256SUMS.txt`, release brouillon |
+
+Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md](./signing.md). Next ops step: validate first tagged release on all 4 platforms.
+
 ## Installation (end users)
 
 - **[installateurs.md](./installateurs.md)**: download and install Workproba (Windows, macOS, Linux), SmartScreen/Gatekeeper warnings, uninstall

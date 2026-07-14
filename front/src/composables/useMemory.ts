@@ -117,7 +117,7 @@ export function useMemory(): UseMemoryReturn {
 
   async function forgetAll(
     workspaceDataDir: string | null,
-    scope: ForgetMemoryScope = 'all',
+    scope: ForgetMemoryScope = 'memories',
     memoryScope: MemoryScope = 'project',
   ): Promise<boolean> {
     if (!workspaceDataDir) return false;

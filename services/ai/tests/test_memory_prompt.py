@@ -134,3 +134,28 @@ def test_memory_prompt_both_scopes(locale: str, tmp_path: Path) -> None:
     assert "Dataset sur Kaggle" in text
     assert text.count("<untrusted>") == 2
     assert text.count("</untrusted>") == 2
+
+
+def test_memory_prompt_includes_query_relevant_fact_not_only_recent(
+    tmp_path: Path,
+) -> None:
+    """Le ranking lexical injecte un fait pertinent même s'il n'est pas parmi les plus récents."""
+    ws = _workspace_dir(tmp_path)
+    facts = [
+        "Alpha sans lien",
+        "Beta sans lien",
+        "Budget RH fixé à 120k€",
+        "Gamma sans lien",
+        "Delta sans lien",
+        "Epsilon sans lien",
+    ]
+    for fact in facts:
+        _seed_memory("project", ws, fact)
+
+    agent = build_agent(TestModel(), locale="fr")
+    prompt_fn = _memory_prompt_fn(agent)
+    text = prompt_fn(
+        _FakeRunContext(ws, locale="fr", last_user_query="budget RH annuel")
+    )
+
+    assert "Budget RH fixé à 120k€" in text

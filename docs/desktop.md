@@ -148,11 +148,14 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 - **Phase F: Optional cloud sync**: reuse archived NestJS stack (`legacy/`) for optional workspace sync.
 
-### CI / release
+### CI / release (operational since 14/07/2026, commit `1155d2d`)
 
-- **CI** : `.github/workflows/desktop-ci.yml` (pytest, cargo, front lint/tests, packaging sidecar sur push main/develop).
-- **Release** : tag `vX.Y.Z` via `./scripts/create-tag.sh` → `.github/workflows/desktop-release.yml` (installateurs non signés, brouillon GitHub).
-- **Signature** : voir [signing.md](./signing.md) (à activer quand les certificats seront disponibles).
+| Workflow | Trigger | Content |
+|---|---|---|
+| `desktop-ci.yml` | push/PR `main`, `develop` | validate-scripts, pytest, `cargo fmt/check/test`, front lint/tests, lint-i18n, sidecar packaging (push only) |
+| `desktop-release.yml` | tag `v*.*.*` | matrix 4 OS → installateurs + `SHA256SUMS.txt` → release GitHub en brouillon |
+
+**Publication** : `./scripts/create-tag.sh` (bump version, tag, push). **Signature** : non activée (voir [signing.md](./signing.md)). **Reste** : valider la première release terrain sur les 4 OS ; durcissement CSP / filesystem scope Tauri.
 
 ### Functional (beyond initial release, to prioritize)
 
@@ -164,7 +167,6 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 - **Desktop e2e run on machine with display**: validate real chat turn in webview (streaming, sidecar badge, tool call rendering). Sidecar is validated live outside webview.
 - **Pre-existing front tests**: `pages-smoke.spec.ts` and `ssr-paths.spec.ts` reference missing pages (`SpaShell.vue`, `ErrorRouteNotAuthorized.vue`); fix or remove. `layouts.spec.ts` (`StandardLayout` lib-improba) failing.
-- **CI**: `desktop-ci.yml` on push/PR; `desktop-release.yml` on tag `v*.*.*`. See [docs/signing.md](../docs/signing.md) for future code signing.
 - **Front lint**: 7 pre-existing errors in `lib-improba/` (not introduced by sidecar).
 
 ## Local development

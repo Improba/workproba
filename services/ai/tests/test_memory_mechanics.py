@@ -107,3 +107,35 @@ def test_relevant_sessions_skips_already_promoted(tmp_path: Path) -> None:
     )
 
     assert prompt_fn(ctx) == ""
+
+
+def test_relevant_sessions_injects_unpromoted_summary(tmp_path: Path) -> None:
+    ws = tmp_path / "workspaces" / "ws1"
+    conv = ws / "conversations"
+    conv.mkdir(parents=True)
+    (conv / "other.json").write_text(
+        '{"id":"other","title":"Budget RH","summary":"Le budget annuel RH est de 120k€","updatedAt":"2026-07-10T12:00:00Z"}',
+        encoding="utf-8",
+    )
+
+    agent = build_agent(TestModel(), locale="fr")
+    prompt_fn = _relevant_sessions_prompt_fn(agent)
+    ctx = _FakeRunContext(
+        ToolDeps(
+            context=ToolContext(
+                tenant_id="t",
+                project_id="p",
+                session_id="current",
+                documents=[],
+                workspace_data_dir=ws,
+                locale="fr",
+                last_user_query="budget RH annuel",
+            ),
+            project_client=FakeProjectClient(),
+            sandbox_runner=SandboxRunner(timeout_seconds=10),
+        )
+    )
+
+    text = prompt_fn(ctx)
+    assert "120k" in text
+    assert "<untrusted>" in text

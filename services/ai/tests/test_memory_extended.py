@@ -165,6 +165,35 @@ def test_memory_clear_all_scope(workspace_data_dir: Path) -> None:
     assert not (workspace_data_dir / "conversations" / "sess-1.json").is_file()
 
 
+def test_memory_clear_memories_scope_keeps_conversations(
+    workspace_data_dir: Path,
+) -> None:
+    """Scope memories : efface les souvenirs projet sans toucher aux conversations."""
+    store = open_memory_store(workspace_data_dir / "memory.db")
+    store.add_memory(content="Souvenir", source="manual")
+    store.close()
+    assert (workspace_data_dir / "conversations" / "sess-1.json").is_file()
+
+    headers = {"X-Internal-Secret": "desktop-dev-secret"}
+    with TestClient(mainmod.app) as client:
+        resp = client.request(
+            "DELETE",
+            "/memory",
+            json={
+                "workspace_data_dir": str(workspace_data_dir),
+                "scope": "memories",
+                "confirmed": True,
+            },
+            headers=headers,
+        )
+        assert resp.status_code == 200
+
+    store = open_memory_store(workspace_data_dir / "memory.db")
+    assert store.list_memories() == []
+    store.close()
+    assert (workspace_data_dir / "conversations" / "sess-1.json").is_file()
+
+
 def test_memory_clear_conversations_scope(workspace_data_dir: Path) -> None:
     store = open_memory_store(workspace_data_dir / "memory.db")
     store.add_memory(content="Souvenir", source="manual")

@@ -91,7 +91,14 @@ cd desktop/src-tauri && cargo check
 
 ## CI
 
-No CI configured for the desktop pivot (to be set up with phase E / packaging). Future targets: `cargo check`, `pytest -q`, `yarn test:unit`, `yarn build`.
+GitHub Actions (since 14/07/2026):
+
+| Workflow | Trigger | Targets |
+|---|---|---|
+| `desktop-ci.yml` | push/PR `main`, `develop` | `pytest -q`, `cargo fmt --check`, `cargo check`, `cargo test --lib`, `yarn test:unit`, front lint, lint-i18n, sidecar PyInstaller smoke (push only) |
+| `desktop-release.yml` | tag `v*.*.*` | Tauri installateurs (macOS arm64/x64, Linux, Windows) + `SHA256SUMS.txt` |
+
+Local parity: `make build-sidecar`, `bash scripts/smoke-test-sidecar.sh`, `make build-desktop`. Release: `./scripts/create-tag.sh`.
 
 ## Reference
 

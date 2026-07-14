@@ -99,7 +99,7 @@
       <li v-for="item in displayItems" :key="item.id" class="memory-panel__item">
         <p class="memory-panel__content">{{ item.content }}</p>
         <div class="memory-panel__meta">
-          <span v-if="item.source" class="memory-panel__source">{{ item.source }}</span>
+          <span v-if="item.source" class="memory-panel__source">{{ sourceLabel(item.source) }}</span>
           <span v-if="item.created_at" class="memory-panel__date">{{ formatDate(item.created_at) }}</span>
         </div>
         <button
@@ -134,7 +134,15 @@
           </h3>
         </header>
         <p class="memory-panel__confirm-text">
-          {{ forgetAllStep === 1 ? t('memory.forgetAllConfirm1Text') : t('memory.forgetAllConfirm2Text') }}
+          {{
+            forgetAllStep === 1
+              ? (activeScope === 'user'
+                ? t('memory.forgetAllConfirm1TextUser')
+                : t('memory.forgetAllConfirm1TextProject'))
+              : (activeScope === 'user'
+                ? t('memory.forgetAllConfirm2TextUser')
+                : t('memory.forgetAllConfirm2TextProject'))
+          }}
         </p>
         <footer class="memory-panel__confirm-foot">
           <button type="button" class="memory-panel__confirm-btn" @click="forgetAllStep = 0">
@@ -221,6 +229,18 @@ function isForgettingble(item: MemoryItem): boolean {
   return hit?.kind === 'memory';
 }
 
+const SOURCE_LABEL_KEYS: Record<string, string> = {
+  manual: 'memory.sourceManual',
+  agent: 'memory.sourceAgent',
+  session_promotion: 'memory.sourceSessionPromotion',
+  user: 'memory.sourceUser',
+};
+
+function sourceLabel(source: string): string {
+  const key = SOURCE_LABEL_KEYS[source];
+  return key ? t(key) : source;
+}
+
 function formatDate(iso: string): string {
   try {
     return new Date(iso).toLocaleDateString(locale.value, {
@@ -240,6 +260,7 @@ function reload(): void {
 
 function onSwitchScope(scope: MemoryScope): void {
   if (scope === activeScope.value) return;
+  forgetAllStep.value = 0;
   activeScope.value = scope;
 }
 
@@ -286,9 +307,21 @@ async function onForget(id: string): Promise<void> {
 async function onForgetAll(): Promise<void> {
   forgettingAll.value = true;
   try {
-    const ok = await forgetAll(props.workspaceDataDir, 'all', activeScope.value);
+    const ok = await forgetAll(props.workspaceDataDir, 'memories', activeScope.value);
     if (ok) {
-      Notify.create({ message: t('memory.forgetAllDone'), color: 'positive' });
+      isSearchMode.value = false;
+      searchQuery.value = '';
+      Notify.create({
+        message: activeScope.value === 'user'
+          ? t('memory.forgetAllDoneUser')
+          : t('memory.forgetAllDoneProject'),
+        color: 'positive',
+      });
+    } else {
+      Notify.create({
+        message: t('memory.forgetAllFailed'),
+        classes: 'bg-danger text-white',
+      });
     }
   } finally {
     forgettingAll.value = false;

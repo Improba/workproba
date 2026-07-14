@@ -115,3 +115,12 @@ make build-desktop    # sidecar PyInstaller + installateurs Tauri
 ```
 
 Publish a release: `./scripts/create-tag.sh` (creates tag `vX.Y.Z`, triggers GitHub Actions). Installers are unsigned for now; see [docs/signing.md](./docs/signing.md).
+
+## CI / CD
+
+| Workflow | Trigger | Role |
+|---|---|---|
+| `desktop-ci.yml` | push/PR `main`, `develop` | validate-scripts, pytest, Rust, front lint/tests, lint-i18n, sidecar packaging |
+| `desktop-release.yml` | tag `v*.*.*` | installateurs 4 OS + `SHA256SUMS.txt`, release GitHub en brouillon |
+
+Pipeline livré le **14/07/2026** (commit `1155d2d`). Reste à faire : première release tag validée terrain, signature installateurs ([docs/signing.md](./docs/signing.md)).
