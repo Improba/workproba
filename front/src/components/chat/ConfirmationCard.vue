@@ -1,6 +1,7 @@
 <template>
   <div
     class="confirmation-card"
+    :class="{ 'confirmation-card--attached': attached }"
     data-testid="confirmation-card"
     role="region"
     :aria-label="t('chat.confirmationRegion')"
@@ -11,8 +12,11 @@
     </header>
 
     <template v-if="hasEffectHeadline">
-      <p class="confirmation-card__headline">
-        <strong>{{ confirmation.headline }}</strong>
+      <p v-if="headlineParts" class="confirmation-card__headline">
+        <span class="confirmation-card__headline-lead">{{ headlineParts.lead }}</span><strong
+          v-if="headlineParts.target"
+          class="confirmation-card__headline-target"
+        >{{ headlineParts.target }}</strong>
       </p>
       <ul
         v-if="confirmation.protectionLabels?.length"
@@ -24,7 +28,7 @@
           :key="`${index}-${label}`"
           class="confirmation-card__protection"
         >
-          <Lucide name="shield" size="xs" color="wp-text-muted" />
+          <Lucide name="check-circle-2" size="xs" color="wp-accent-strong" />
           <span>{{ label }}</span>
         </li>
       </ul>
@@ -64,10 +68,10 @@
         type="button"
         class="confirmation-card__btn confirmation-card__btn--deny"
         :disabled="busy"
-        :aria-label="t('chat.confirmationCancel')"
+        :aria-label="t('chat.confirmationRefuse')"
         @click="emit('cancel')"
       >
-        {{ busy ? t('common.inProgress') : t('common.cancel') }}
+        {{ busy ? t('common.inProgress') : t('chat.plan.refuse') }}
       </button>
       <button
         type="button"
@@ -76,7 +80,7 @@
         :aria-label="t('chat.confirmationApprove')"
         @click="emit('approve')"
       >
-        {{ busy ? t('common.inProgress') : t('common.continue') }}
+        {{ busy ? t('common.inProgress') : t('chat.plan.approve') }}
       </button>
     </div>
 
@@ -106,6 +110,8 @@ const props = defineProps<{
   workspaceDataDir?: string | null;
   projectPath?: string | null;
   toolArgs?: Record<string, unknown>;
+  /** Rattachée visuellement au ToolCallCard au-dessus (empilement unique). */
+  attached?: boolean;
 }>();
 
 const { t } = useI18n();
@@ -131,6 +137,20 @@ const canPreview = computed(
 const hasEffectHeadline = computed(() =>
   Boolean(props.confirmation.headline?.trim()),
 );
+
+const headlineParts = computed(() => {
+  const text = props.confirmation.headline?.trim();
+  if (!text) return null;
+  const colonIndex = text.indexOf(':');
+  if (colonIndex === -1) {
+    return { lead: text, target: '' };
+  }
+  const target = text.slice(colonIndex + 1).trim();
+  const lead = target
+    ? `${text.slice(0, colonIndex + 1).trim()} `
+    : text.slice(0, colonIndex + 1).trim();
+  return { lead, target };
+});
 
 function escapeHtml(text: string): string {
   return text
@@ -197,7 +217,24 @@ const customSummaryHtml = computed(() => {
   color: var(--wp-text);
 }
 
-.confirmation-card__headline,
+.confirmation-card__headline {
+  margin: 0 0 0.75rem;
+  font-size: var(--wp-fs-base);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-text);
+}
+
+.confirmation-card__headline-lead {
+  font-weight: 500;
+}
+
+.confirmation-card__headline-target {
+  display: inline;
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  font-weight: 700;
+  color: var(--wp-text);
+}
+
 .confirmation-card__summary {
   margin: 0 0 0.75rem;
   font-size: var(--wp-fs-base);
@@ -267,6 +304,10 @@ const customSummaryHtml = computed(() => {
   border: 1px solid var(--wp-border-strong);
   background: var(--wp-surface);
   color: var(--wp-accent-strong);
+
+  &:not(:disabled):hover {
+    background: var(--wp-surface-2);
+  }
 }
 
 .confirmation-card__btn--deny {

@@ -89,17 +89,21 @@ function normalizePart(
 
 function normalizeConfirmation(raw: unknown): ChatConfirmation | null {
   if (!isRecord(raw)) return null;
-  const confirmationId = asString(raw.confirmationId).trim();
-  const toolCallId = asString(raw.toolCallId).trim();
-  const toolName = asString(raw.toolName).trim();
-  const proposedPath = asString(raw.proposedPath).trim();
+  const confirmationId = asString(
+    raw.confirmationId ?? raw.confirmation_id,
+  ).trim();
+  const toolCallId = asString(raw.toolCallId ?? raw.tool_call_id).trim();
+  const toolName = asString(raw.toolName ?? raw.tool_name).trim();
+  const proposedPath = asString(raw.proposedPath ?? raw.proposed_path).trim();
   if (!confirmationId || !toolCallId || !toolName) return null;
 
-  const protectionLabels = Array.isArray(raw.protectionLabels)
-    ? raw.protectionLabels.map((item) => asString(item)).filter(Boolean)
+  const protectionRaw = raw.protectionLabels ?? raw.protection_labels;
+  const protectionLabels = Array.isArray(protectionRaw)
+    ? protectionRaw.map((item) => asString(item)).filter(Boolean)
     : [];
-  const targets = Array.isArray(raw.targets)
-    ? raw.targets.map((item) => asString(item)).filter(Boolean)
+  const targetsRaw = raw.targets;
+  const targets = Array.isArray(targetsRaw)
+    ? targetsRaw.map((item) => asString(item)).filter(Boolean)
     : [];
 
   return {
@@ -108,8 +112,13 @@ function normalizeConfirmation(raw: unknown): ChatConfirmation | null {
     toolName,
     action: raw.action === 'modify' ? 'modify' : 'create',
     proposedPath,
-    humanSummary: asString(raw.humanSummary),
-    turnId: raw.turnId != null ? asString(raw.turnId) : null,
+    humanSummary: asString(raw.humanSummary ?? raw.human_summary),
+    turnId:
+      raw.turnId != null
+        ? asString(raw.turnId)
+        : raw.turn_id != null
+          ? asString(raw.turn_id)
+          : null,
     effect: raw.effect != null ? asString(raw.effect) : null,
     targets,
     headline: asString(raw.headline),

@@ -106,7 +106,11 @@ class AgentLoop:
         strip_thinking: bool = False,
         is_fallback_attempt: bool = False,
     ) -> AsyncIterator[AgentEvent]:
-        gate = ConfirmationGate(session_id=request.session_id, turn_id=turn_id)
+        gate = ConfirmationGate(
+            session_id=request.session_id,
+            turn_id=turn_id,
+            locale=request.locale,
+        )
         plan_gate = PlanGate(session_id=request.session_id, turn_id=turn_id)
         await confirmation_registry.register(gate)
         await plan_registry.register(plan_gate)

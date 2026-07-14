@@ -109,6 +109,8 @@ const props = defineProps<{
   toolCall: ChatToolCall;
   projectPath?: string | null;
   sessionId?: string | null;
+  /** Masque le résumé redondant quand la carte de confirmation est affichée en dessous. */
+  confirmationActive?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -131,6 +133,9 @@ const { isTechView, showRaw, toggleTechView, toggleRaw } = useToolCallExpansion(
 const { t } = useI18n();
 
 const humanLabel = computed(() => {
+  if (props.confirmationActive) {
+    return t('chat.awaitingConfirmation');
+  }
   if (props.toolCall.status === 'awaiting_confirmation') {
     const summary = props.toolCall.humanSummary?.trim();
     if (summary) return summary;

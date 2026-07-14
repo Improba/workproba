@@ -198,7 +198,7 @@ def test_protection_labels_create() -> None:
     )
     labels = protection_labels(proposal, "fr")
     assert labels == [
-        "Aperçu disponible avant création",
+        "Aperçu disponible avant validation",
         "Aucun accès réseau",
         "Aucun envoi externe",
     ]
@@ -217,7 +217,7 @@ def test_protection_labels_modify() -> None:
     )
     labels = protection_labels(proposal, "fr")
     assert "Version automatique avant modification" in labels
-    assert "Aperçu disponible avant création" in labels
+    assert "Aperçu disponible avant validation" in labels
 
 
 def test_protection_labels_network_access_skips_no_network() -> None:
@@ -298,7 +298,7 @@ async def test_request_effect_emits_enriched_event() -> None:
         proposed_path="out.docx",
         headline="Je vais Créer : out.docx",
         protection_labels=[
-            "Aperçu disponible avant création",
+            "Aperçu disponible avant validation",
             "Aucun accès réseau",
             "Aucun envoi externe",
         ],
@@ -313,7 +313,7 @@ async def test_request_effect_emits_enriched_event() -> None:
         assert event.protections.get("preview") is False
         assert event.headline == "Je vais Créer : out.docx"
         assert event.protection_labels == [
-            "Aperçu disponible avant création",
+            "Aperçu disponible avant validation",
             "Aucun accès réseau",
             "Aucun envoi externe",
         ]

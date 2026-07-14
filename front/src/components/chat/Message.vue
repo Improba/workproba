@@ -95,33 +95,41 @@
           :thinking="part"
           :streaming="!!message.streaming"
         />
-        <ToolCallCard
+        <div
           v-else-if="part.type === 'tool_call' && toolCallById(part.toolCallId)"
-          :tool-call="toolCallById(part.toolCallId)!"
-          :project-path="projectPath"
-          :session-id="sessionId"
-          @open-file="(path) => emit('open-file', path)"
-          @restored="(path) => emit('restored', path)"
-        />
+          :class="{
+            'chat-message__confirmation-group':
+              message.pendingConfirmation?.toolCallId === part.toolCallId,
+          }"
+        >
+          <ToolCallCard
+            :tool-call="toolCallById(part.toolCallId)!"
+            :project-path="projectPath"
+            :session-id="sessionId"
+            :confirmation-active="
+              message.pendingConfirmation?.toolCallId === part.toolCallId
+            "
+            @open-file="(path) => emit('open-file', path)"
+            @restored="(path) => emit('restored', path)"
+          />
+          <ConfirmationCard
+            v-if="message.pendingConfirmation?.toolCallId === part.toolCallId"
+            :confirmation="message.pendingConfirmation!"
+            :busy="confirming"
+            :workspace-data-dir="workspaceDataDir"
+            :project-path="projectPath"
+            :tool-args="toolCallById(part.toolCallId)?.args"
+            attached
+            @approve="emit('confirm-approve')"
+            @cancel="emit('confirm-deny')"
+          />
+        </div>
         <p
           v-else-if="part.type === 'tool_call'"
           class="chat-message__unknown-tool"
         >
           {{ t('chat.unknownTool') }}
         </p>
-        <ConfirmationCard
-          v-if="
-            part.type === 'tool_call' &&
-            message.pendingConfirmation?.toolCallId === part.toolCallId
-          "
-          :confirmation="message.pendingConfirmation!"
-          :busy="confirming"
-          :workspace-data-dir="workspaceDataDir"
-          :project-path="projectPath"
-          :tool-args="toolCallById(part.toolCallId)?.args"
-          @approve="emit('confirm-approve')"
-          @cancel="emit('confirm-deny')"
-        />
         </template>
       </template>
 
@@ -391,6 +399,27 @@ function toolCallById(id: string): ChatToolCall | undefined {
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-2);
+}
+
+.chat-message__confirmation-group {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--wp-r-md);
+  box-shadow: var(--wp-shadow-1);
+  overflow: hidden;
+
+  :deep(.tool-call-card) {
+    box-shadow: none;
+    border-bottom: none;
+    border-radius: var(--wp-r-md) var(--wp-r-md) 0 0;
+  }
+
+  :deep(.confirmation-card) {
+    margin-top: 0;
+    box-shadow: none;
+    border-radius: 0 0 var(--wp-r-md) var(--wp-r-md);
+    border-top: 1px dashed color-mix(in srgb, var(--wp-accent) 35%, var(--wp-border));
+  }
 }
 
 .chat-message__error {

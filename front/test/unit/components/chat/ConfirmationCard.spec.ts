@@ -22,7 +22,7 @@ describe('ConfirmationCard', () => {
         confirmation: baseConfirmation({
           headline: 'Je vais Créer : Note.docx',
           protectionLabels: [
-            'Aperçu disponible avant création',
+            'Aperçu disponible avant validation',
             'Aucun accès réseau',
           ],
         }),
@@ -39,9 +39,10 @@ describe('ConfirmationCard', () => {
     expect(wrapper.find('.confirmation-card__headline').text()).toBe(
       'Je vais Créer : Note.docx',
     );
+    expect(wrapper.find('.confirmation-card__headline-target').text()).toBe('Note.docx');
     const protections = wrapper.findAll('[data-testid="confirmation-protections"] li');
     expect(protections).toHaveLength(2);
-    expect(protections[0].text()).toBe('Aperçu disponible avant création');
+    expect(protections[0].text()).toBe('Aperçu disponible avant validation');
     expect(protections[1].text()).toBe('Aucun accès réseau');
     expect(wrapper.find('.confirmation-card__summary').exists()).toBe(false);
 

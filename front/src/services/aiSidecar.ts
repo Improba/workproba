@@ -756,6 +756,7 @@ export interface PlanApprovePayload {
   approved: boolean;
   modifications?: unknown[];
   turn_id?: string;
+  locale?: string;
 }
 
 export async function approveAgentPlan(payload: PlanApprovePayload): Promise<boolean> {

@@ -11,6 +11,7 @@ from typing import Literal
 from app.agent.effects import EffectProposal, protections_to_dict
 from app.agent.work_events import audit_details_with_work_id, work_id_for_turn
 from app.audit import log_event
+from app.i18n import t
 from app.schemas import AgentEvent, ConfirmationRequestEvent, ErrorEvent
 
 ConfirmationDecision = Literal["approve", "deny"]
@@ -30,9 +31,10 @@ class _PendingConfirmation:
 class ConfirmationGate:
     """File d'attente de confirmations pour un tour agent."""
 
-    def __init__(self, *, session_id: str, turn_id: str) -> None:
+    def __init__(self, *, session_id: str, turn_id: str, locale: str = "fr") -> None:
         self.session_id = session_id
         self.turn_id = turn_id
+        self.locale = locale
         self._pending: dict[str, _PendingConfirmation] = {}
         self.event_queue: asyncio.Queue[AgentEvent] = asyncio.Queue()
         self._lock = asyncio.Lock()
@@ -51,10 +53,7 @@ class ConfirmationGate:
             await self.event_queue.put(
                 ErrorEvent(
                     code="confirmation_timeout",
-                    message=(
-                        "La confirmation d'écriture a expiré. "
-                        "L'action a été annulée automatiquement."
-                    ),
+                    message=t(self.locale, "loop.confirmation_timeout"),
                 )
             )
             return None

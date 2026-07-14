@@ -155,6 +155,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
             ),
             "unexpected_model_behavior": "Comportement modèle inattendu : {detail}",
             "action_cancelled": "Action annulée",
+            "confirmation_timeout": (
+                "La confirmation a expiré. Relancez l'action si nécessaire."
+            ),
             "provider_unavailable": "Le fournisseur IA est indisponible.",
         },
         "main": {
@@ -428,7 +431,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "external_send": "Je vais envoyer à l'extérieur : {targets}",
             },
             "protection": {
-                "preview": "Aperçu disponible avant création",
+                "preview": "Aperçu disponible avant validation",
                 "version_before_modify": "Version automatique avant modification",
                 "no_network": "Aucun accès réseau",
                 "no_external_send": "Aucun envoi externe",
@@ -595,6 +598,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
             ),
             "unexpected_model_behavior": "Unexpected model behavior: {detail}",
             "action_cancelled": "Action cancelled",
+            "confirmation_timeout": (
+                "The confirmation expired. Retry the action if needed."
+            ),
             "provider_unavailable": "The AI provider is unavailable.",
         },
         "main": {
@@ -860,7 +866,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "external_send": "I will send externally: {targets}",
             },
             "protection": {
-                "preview": "Preview available",
+                "preview": "Preview available before approval",
                 "version_before_modify": "Automatic version before modification",
                 "no_network": "No network access",
                 "no_external_send": "No external send",

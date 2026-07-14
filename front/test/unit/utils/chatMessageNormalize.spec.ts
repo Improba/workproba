@@ -91,4 +91,40 @@ describe('chatMessageNormalize', () => {
 
     expect(normalized?.messageKind).toBe('compaction');
   });
+
+  it('normalise pendingConfirmation en snake_case (persistance legacy)', () => {
+    const normalized = normalizeChatMessage({
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      pendingConfirmation: {
+        confirmation_id: 'cf_1',
+        tool_call_id: 'tc_1',
+        tool_name: 'write_docx',
+        action: 'modify',
+        proposed_path: 'note.docx',
+        human_summary: 'Modifier note.docx',
+        turn_id: 'turn_1',
+        effect: 'modify',
+        targets: ['note.docx'],
+        headline: 'Je vais Modifier : note.docx',
+        protection_labels: ['Aperçu disponible avant validation'],
+      },
+    });
+
+    expect(normalized?.pendingConfirmation).toEqual({
+      confirmationId: 'cf_1',
+      toolCallId: 'tc_1',
+      toolName: 'write_docx',
+      action: 'modify',
+      proposedPath: 'note.docx',
+      humanSummary: 'Modifier note.docx',
+      turnId: 'turn_1',
+      effect: 'modify',
+      targets: ['note.docx'],
+      headline: 'Je vais Modifier : note.docx',
+      protectionLabels: ['Aperçu disponible avant validation'],
+    });
+  });
 });

@@ -472,7 +472,7 @@ describe('useChatStream — feedbacks', () => {
         effect: 'create',
         targets: ['contrat_dupont.docx'],
         headline: 'Je vais Créer : contrat_dupont.docx',
-        protection_labels: ['Aperçu disponible avant création'],
+        protection_labels: ['Aperçu disponible avant validation'],
       },
     });
     expect(mapped.type).toBe('confirmation_request');
@@ -484,7 +484,7 @@ describe('useChatStream — feedbacks', () => {
     expect(mapped.data.effect).toBe('create');
     expect(mapped.data.targets).toEqual(['contrat_dupont.docx']);
     expect(mapped.data.headline).toBe('Je vais Créer : contrat_dupont.docx');
-    expect(mapped.data.protectionLabels).toEqual(['Aperçu disponible avant création']);
+    expect(mapped.data.protectionLabels).toEqual(['Aperçu disponible avant validation']);
   });
 
   it('mappe turn_start et propage turn_id jusqu\'au confirm', async () => {
@@ -532,6 +532,7 @@ describe('useChatStream — feedbacks', () => {
     expect(confirmBody.confirmation_id).toBe('cf_1');
     expect(confirmBody.decision).toBe('approve');
     expect(confirmBody.turn_id).toBe('turn_abc');
+    expect(confirmBody.locale).toBe('fr');
     unmount();
   });
 

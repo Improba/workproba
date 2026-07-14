@@ -88,8 +88,14 @@ function parseSseChunk(buffer: string): {
 
     try {
       const data = JSON.parse(dataLines.join('\n')) as Record<string, unknown>;
+      const resolvedType =
+        eventType !== 'message'
+          ? eventType
+          : typeof data.type === 'string' && data.type.trim()
+            ? data.type.trim()
+            : eventType;
       events.push({
-        type: eventType,
+        type: resolvedType,
         data,
       });
     } catch {
@@ -190,8 +196,10 @@ export function mapPythonSseEvent(
           targets: Array.isArray(data.targets) ? data.targets : [],
           headline: String(data.headline ?? ''),
           protectionLabels: Array.isArray(data.protection_labels)
-            ? data.protection_labels
-            : [],
+            ? data.protection_labels.map(String)
+            : Array.isArray(data.protectionLabels)
+              ? data.protectionLabels.map(String)
+              : [],
         },
       };
     case 'thinking_start':
@@ -652,9 +660,7 @@ export function applyStreamEvent(
           const tool = assistant.toolCalls?.find((t) => t.id === pending.toolCallId);
           if (tool) {
             tool.status = 'error';
-            tool.humanSummary =
-              event.data.message ||
-              localizeAgentError('confirmation_timeout', '');
+            tool.humanSummary = localizeAgentError('confirmation_timeout', '');
           }
           assistant.pendingConfirmation = null;
         }
@@ -1306,6 +1312,7 @@ export function useChatStream(
           session_id: options.sessionId.value,
           confirmation_id: pending.confirmationId,
           decision,
+          locale: locale.value,
           ...(turnId ? { turn_id: turnId } : {}),
         }),
       });
@@ -1386,6 +1393,7 @@ export function useChatStream(
         session_id: options.sessionId.value,
         plan_id: plan.planId,
         approved,
+        locale: locale.value,
         ...(currentTurnId ? { turn_id: currentTurnId } : {}),
       });
       if (!ok) {

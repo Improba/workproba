@@ -84,7 +84,7 @@ describe('statusLabel', () => {
     expect(statusLabel('success')).toBe('Terminé');
     expect(statusLabel('error')).toBe('Échec');
     expect(statusLabel('running')).toBe('En cours…');
-    expect(statusLabel('awaiting_confirmation')).toBe('En attente de confirmation');
+    expect(statusLabel('awaiting_confirmation')).toBe('En attente de votre confirmation');
     expect(statusLabel('pending')).toBe('En attente');
   });
 });
