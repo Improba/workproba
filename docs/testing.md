@@ -17,7 +17,9 @@ Framework: **pytest** + `pytest-asyncio`. Offline tests are deterministic (no LL
 - `tests/test_memory_scope.py`, `test_memory_extended.py`: user/project scopes, CRUD
 - `tests/test_memory_prompt.py`: `memory_prompt` injection and guardrails
 - `tests/test_memory_consolidation.py`, `test_memory_promotion.py`: session promotion pipeline
-- `tests/test_memory_ranking.py`, `test_memory_mechanics.py`: lexical ranking, cross-hook behavior
+- `tests/test_memory_ranking.py`, `test_memory_ranking_semantic.py`, `test_memory_embeddings.py`, `test_embedding_cache.py`, `test_memory_mechanics.py`: hybrid ranking, embedding cache, cross-hook behavior
+- `tests/test_audit_correlation.py`: audit payload correlation (`turn_id`, `session_id`, `work_id`)
+- `tests/test_web_search_backends.py`: pluggable web search backend registry
 - `tests/test_recall_project_sessions.py`: cross-session digest builder
 - `tests/test_main_http.py`: `/agent/turn`, CORS preflight, HTTP errors
 - `tests/test_rag_store.py`: chunking, `RagStore` without network
@@ -50,7 +52,7 @@ WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 
 ### Current coverage
 
-Run `pytest -q` for the up-to-date count (about **577 offline tests** + a few skips, plus 2 live). Covers: agent, approval gate, work events, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE.
+Run `pytest -q` for the up-to-date count (about **606 offline tests** + a few skips, plus 2 live). Covers: agent, approval gate, work events, scoped memory (hybrid ranking + embedding cache), plugins, documents, audit, attachments, RAG, HTTP SSE.
 
 ## Frontend (`front/`)
 
@@ -76,7 +78,7 @@ yarn test:e2e                  # Playwright (smoke)
 ### Notable unit specs
 
 - `ConfirmationCard.spec.ts`: effect-oriented headline, protection labels, approve/deny.
-- `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection.
+- `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection, `work_*` correlation (`streamCorrelation`).
 - `spaceTerminology.spec.ts`: Space UX i18n (FR/EN).
 - `useUiTheme.spec.ts`, `uiTheme.spec.ts`: theme persistence (Tauri + localStorage boot).
 - `useSidecarHealth.spec.ts`: sidecar health polling (connected / error / streaming).

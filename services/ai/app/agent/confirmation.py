@@ -161,6 +161,8 @@ class ConfirmationGate:
                             "tool_name": proposal.tool_name,
                         },
                         work_id,
+                        turn_id=self.turn_id,
+                        session_id=self.session_id,
                     ),
                     enabled=audit_enabled,
                 )

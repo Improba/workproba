@@ -246,6 +246,20 @@ export interface ChatStreamTurnStartData {
   turnId: string;
 }
 
+export interface ChatStreamWorkStartedData {
+  workId: string;
+  objective?: string;
+}
+
+export interface ChatStreamWorkTerminalData {
+  workId: string;
+}
+
+export interface StreamCorrelation {
+  turnId: string | null;
+  workId: string | null;
+}
+
 export interface ChatStreamThinkingStartData {
   thinkingId: string;
 }
@@ -354,6 +368,8 @@ export type ChatStreamEvent =
   | { type: 'plan_proposed'; data: ChatStreamPlanProposedData }
   | { type: 'compaction'; data: ChatStreamCompactionData }
   | { type: 'fallback'; data: ChatStreamFallbackData }
+  | { type: 'work_started'; data: ChatStreamWorkStartedData }
+  | { type: 'work_terminal'; data: ChatStreamWorkTerminalData }
   | { type: 'done'; data: ChatStreamDoneData }
   | { type: 'error'; data: ChatStreamErrorData };
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -594,3 +595,83 @@ def test_get_meeting_includes_summary(plugin_dir: Path) -> None:
     assert detail is not None
     assert isinstance(detail["summary"], dict)
     assert detail["summary"]["content"] == "Synthèse"
+
+
+@pytest.mark.asyncio
+async def test_stream_ask_yields_before_slow_persona_finishes(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    call_order: list[str] = []
+
+    async def tracked_run(
+        *,
+        settings: Any,
+        provider_set: Any,
+        system_prompt: str,
+        user_prompt: str,
+        locale: str,
+    ) -> str:
+        _ = (settings, provider_set, system_prompt, user_prompt, locale)
+        if "RH" in system_prompt or "rh" in system_prompt.lower():
+            call_order.append("start_rh")
+            await asyncio.sleep(0.08)
+            call_order.append("end_rh")
+            return "RH lent"
+        call_order.append("fast")
+        return "Rapide"
+
+    monkeypatch.setattr(orchestrator, "_run_persona_prompt", tracked_run)
+    events: list[dict] = []
+    async for event in orchestrator.stream_ask(
+        plugin_data_dir=plugin_dir,
+        persona_ids=["01", "03"],
+        question="Question test",
+        context="",
+        settings=object(),
+        provider_set=None,
+        locale="fr",
+        rag_store=None,
+    ):
+        if event.get("type") == "persona_opinion":
+            events.append(event)
+
+    assert len(events) == 2
+    assert "fast" in call_order[0:2] or call_order[0] == "fast"
+
+
+@pytest.mark.asyncio
+async def test_generate_opinions_parallelizes_llm_calls(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    in_flight = {"current": 0, "max": 0}
+
+    async def tracked_run(
+        *,
+        settings: Any,
+        provider_set: Any,
+        system_prompt: str,
+        user_prompt: str,
+        locale: str,
+    ) -> str:
+        _ = (settings, provider_set, system_prompt, user_prompt, locale)
+        in_flight["current"] += 1
+        in_flight["max"] = max(in_flight["max"], in_flight["current"])
+        await asyncio.sleep(0.05)
+        in_flight["current"] -= 1
+        return "Intervention simulée."
+
+    monkeypatch.setattr(orchestrator, "_run_persona_prompt", tracked_run)
+    await orchestrator.generate_opinions(
+        plugin_data_dir=plugin_dir,
+        persona_ids=["01", "03"],
+        question="Ce contrat est-il clair ?",
+        context="Brouillon v2",
+        settings=object(),
+        provider_set=None,
+        locale="fr",
+        rag_store=None,
+    )
+    assert in_flight["max"] >= 2
+

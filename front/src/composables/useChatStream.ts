@@ -16,6 +16,7 @@ import type {
   RawChatStreamEvent,
   ReasoningEffort,
   SendMessagePayload,
+  StreamCorrelation,
 } from '#types';
 import { normalizeChatErrorCode } from '#types';
 import type { LocalDocumentEntry } from '@composables/useDesktop.types';
@@ -285,13 +286,30 @@ export function mapPythonSseEvent(
         },
       };
     case 'work_started':
+      return {
+        type: 'work_started',
+        data: {
+          workId: String(data.work_id ?? ''),
+          objective:
+            data.objective != null ? String(data.objective) : undefined,
+        },
+      };
     case 'work_contribution':
-    case 'work_completed':
-    case 'work_failed':
       if (import.meta.env.DEV) {
-        console.debug('[useChatStream] ignoring work event', event.type);
+        console.debug('[useChatStream] work event', event.type, {
+          turnId: data.turn_id != null ? String(data.turn_id) : null,
+          workId: data.work_id != null ? String(data.work_id) : null,
+        });
       }
       return null;
+    case 'work_completed':
+    case 'work_failed':
+      return {
+        type: 'work_terminal',
+        data: {
+          workId: String(data.work_id ?? ''),
+        },
+      };
     default:
       return null;
   }
@@ -804,6 +822,7 @@ export interface UseChatStreamReturn {
   completedTurns: Ref<number>;
   lastCompaction: Ref<ChatCompactionInfo | null>;
   attachmentStatuses: Ref<Record<string, AttachmentStatusEntry>>;
+  streamCorrelation: Ref<StreamCorrelation>;
   send: (text: string, options?: Partial<SendMessagePayload>) => Promise<void>;
   confirm: (decision: 'approve' | 'deny') => Promise<void>;
   approvePlan: (approved: boolean) => Promise<void>;
@@ -871,6 +890,10 @@ export function useChatStream(
   const completedTurns = ref(0);
   const lastCompaction = ref<ChatCompactionInfo | null>(null);
   const attachmentStatuses = ref<Record<string, AttachmentStatusEntry>>({});
+  const streamCorrelation = ref<StreamCorrelation>({
+    turnId: null,
+    workId: null,
+  });
 
   let abortController: AbortController | null = null;
   let currentAssistantId: string | null = null;
@@ -882,6 +905,7 @@ export function useChatStream(
   // Identifiant de tour fourni par le backend (event turn_start). Utilisé pour
   // isoler la résolution d'une confirmation parmi plusieurs tours concurrents.
   let currentTurnId: string | null = null;
+  let currentWorkId: string | null = null;
   let fallbackNotifiedTurnId: string | null = null;
 
   function setIdlePaused(paused: boolean): void {
@@ -907,7 +931,27 @@ export function useChatStream(
     flushTimer = setTimeout(flushPendingTokens, FLUSH_THROTTLE_MS);
   }
 
+  function syncStreamCorrelation(): void {
+    streamCorrelation.value = {
+      turnId: currentTurnId,
+      workId: currentWorkId,
+    };
+    if (import.meta.env.DEV && (currentTurnId || currentWorkId)) {
+      console.debug('[useChatStream] correlation', streamCorrelation.value);
+    }
+  }
+
   function applyEvent(event: ChatStreamEvent): void {
+    if (event.type === 'work_started') {
+      currentWorkId = event.data.workId || currentWorkId;
+      syncStreamCorrelation();
+      return;
+    }
+    if (event.type === 'work_terminal') {
+      currentWorkId = null;
+      syncStreamCorrelation();
+      return;
+    }
     if (event.type === 'compaction') {
       applyCompactionToMessages(messages.value, event.data);
       lastCompaction.value = compactionInfoFromEvent(event.data);
@@ -923,7 +967,9 @@ export function useChatStream(
     }
     if (event.type === 'turn_start') {
       if (event.data.turnId) currentTurnId = event.data.turnId;
+      currentWorkId = event.data.turnId || currentWorkId;
       fallbackNotifiedTurnId = null;
+      syncStreamCorrelation();
       return;
     }
     if (!currentAssistantId) return;
@@ -976,6 +1022,8 @@ export function useChatStream(
     flushPendingTokens();
     currentAssistantId = null;
     currentTurnId = null;
+    currentWorkId = null;
+    syncStreamCorrelation();
     fallbackNotifiedTurnId = null;
     error.value = null;
     if (flushTimer) {
@@ -1013,6 +1061,8 @@ export function useChatStream(
     resetStreamingFlag();
     currentAssistantId = null;
     currentTurnId = null;
+    currentWorkId = null;
+    syncStreamCorrelation();
     fallbackNotifiedTurnId = null;
     streaming.value = false;
   }
@@ -1101,6 +1151,8 @@ export function useChatStream(
     abortController = new AbortController();
     currentAssistantId = assistantMessage.id;
     currentTurnId = null;
+    currentWorkId = null;
+    syncStreamCorrelation();
     fallbackNotifiedTurnId = null;
     pendingTokens = '';
     if (flushTimer) {
@@ -1427,6 +1479,7 @@ export function useChatStream(
     completedTurns,
     lastCompaction,
     attachmentStatuses,
+    streamCorrelation,
     send,
     confirm,
     approvePlan,

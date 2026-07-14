@@ -81,7 +81,7 @@ Work events (`work_started`, `work_contribution`, `work_completed`, `work_failed
 
 Scopes `user` (global) and `project` (workspace). Full design: [docs/memory.md](../../docs/memory.md).
 
-**Per-turn injection** (dynamic system prompts): `memory_prompt`, `relevant_sessions_prompt`, `project_sessions_prompt`.
+**Per-turn injection** (dynamic system prompts): `memory_prompt`, `relevant_sessions_prompt`, `project_sessions_prompt`. Ranking uses **hybrid semantic + lexical** scores when an embedding model is configured; vectors are cached in-process (`embedding_cache.py`, see [docs/memory.md](../../docs/memory.md)).
 
 **Agent tools**: `remember`, `recall_project_sessions`, `search_kb`.
 
@@ -185,5 +185,6 @@ Coverage: agent, scoped memory, plugins, documents, audit, attachments, RAG, HTT
 
 - Agent: [Pydantic AI](https://ai.pydantic.dev/) (native models). Routing via `OpenAIChatModel` + `AnthropicModel`.
 - RAG embeddings: LiteLLM (`litellm.aembedding`). Disabled if `LLM_EMBEDDING_MODEL` is empty → substring search fallback.
+- Memory injection ranking: hybrid semantic + lexical (`memory_ranking.py`); LRU embedding cache per sidecar process (`MEMORY_EMBEDDING_CACHE_MAX_ENTRIES`).
 - Extraction: text PDF, Word, Excel, PowerPoint. OCR / scanned PDFs out of initial scope.
 - Durable (Temporal/Inngest): deferred.

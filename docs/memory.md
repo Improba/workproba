@@ -32,8 +32,11 @@ Explicit memories use two **scopes** (`user`, `project`). RAG is **project-only*
 ```mermaid
 flowchart TB
     subgraph per_turn [Every agent turn]
-        MP[memory_prompt]
-        RS[relevant_sessions_prompt]
+        PREP[loop: collect memories + sessions + hybrid ranking]
+        CACHE[embedding_cache LRU]
+        PREP --> CACHE
+        CACHE --> MP[memory_prompt]
+        CACHE --> RS[relevant_sessions_prompt]
         PS[project_sessions_prompt]
         MP --> InjectFacts[Up to 12 explicit facts]
         RS --> InjectSummaries[Up to 2 prior session summaries]
@@ -114,16 +117,22 @@ Promoted entries include tags: `session:{session_id}`, `promoted`.
 
 ## Per-turn agent injection
 
+Each turn, `AgentLoop` (`services/ai/app/agent/loop.py`) prepares context **once** before the agent runs:
+
+1. Load explicit memories (`collect_tagged_memories`) → `prepared_tagged_memories` on `ToolContext` (avoids a second SQLite read in `memory_prompt`).
+2. Build session digests, filter already-promoted sessions → `prepared_session_candidates`.
+3. If semantic ranking is enabled and an embedding model is configured, compute hybrid ranking vectors via `prepare_ranking_for_turn` (with LRU cache; see below).
+
 Dynamic system-prompt hooks in `services/ai/app/agent/tools.py`:
 
 ### `memory_prompt`
 
 Injects explicit user + project memories each turn:
 
-1. Load both scopes, deduplicate by normalized content.
+1. Reuse `prepared_tagged_memories` when set; otherwise load both scopes and deduplicate by normalized content.
 2. Always include the **3** most recent entries (`MEMORY_PROMPT_RECENT_FLOOR`).
-3. Rank remaining slots by **lexical token overlap** with the current user message (`last_user_query`).
-4. Skip ranked entries with **zero overlap** when the query is non-empty (avoids irrelevant noise).
+3. Rank remaining slots by **hybrid score** (semantic cosine + lexical overlap) with the current user message (`last_user_query`) when embeddings are available; otherwise lexical only.
+4. Skip ranked entries with **zero lexical overlap and** insufficient semantic score when the query is non-empty.
 5. Cap total at **12** entries (`MEMORY_PROMPT_TOPK`, max 64).
 
 Content is wrapped in `<untrusted>` with i18n guardrail headers.
@@ -132,8 +141,9 @@ Content is wrapped in `<untrusted>` with i18n guardrail headers.
 
 Proactively injects up to **2** summaries of **other** conversations in the same workspace when:
 
-- the current user message has tokens overlapping the session title/summary;
-- the session has **not** yet been promoted (no `session:{id}` tag in project memory).
+- the current user message overlaps the session title/summary (lexically and/or semantically via hybrid ranking);
+- the session has **not** yet been promoted (no `session:{id}` tag in project memory);
+- `prepared_session_candidates` from the turn prep is reused when available (no second digest read).
 
 This bridges the gap before the next promotion cycle. Once facts are promoted, this hook defers to `memory_prompt`.
 
@@ -151,9 +161,43 @@ Lightweight note: « this space has N other conversation(s) ». Points the agent
 
 ---
 
+## Semantic hybrid ranking (explicit memories + sessions)
+
+> **Status: shipped (14/07/2026).** Enabled by default when an embedding model is configured (`provider_set.embeddings` or `LLM_EMBEDDING_*`).
+
+Explicit memory injection and proactive session recall use a **hybrid ranker** (`app/agent/memory_ranking.py`):
+
+| Signal | Weight (default) | Role |
+|---|---|---|
+| Cosine similarity (query ↔ memory/session text) | 0.6 (`MEMORY_RANKING_SEMANTIC_WEIGHT`) | Finds paraphrases and related wording |
+| Lexical token overlap | 0.4 (complement) | Stable fallback, exact-term matches |
+
+Implementation:
+
+- `app/agent/memory_embeddings.py`: resolves embedding credentials, batches texts, calls cache.
+- `app/agent/embedding_cache.py`: LRU cache keyed by **`model + base_url + SHA256(text)`**; only cache misses hit LiteLLM.
+- `app/agent/loop.py`: precomputes vectors once per turn; passes them via `ToolContext` (`memory_query_embedding`, `memory_item_embeddings`, `session_item_embeddings`).
+
+### Long conversations (cache behaviour)
+
+On a typical multi-turn chat **without memory changes**:
+
+| Turn | Embeddings computed |
+|---|---|
+| 1 | Query + all explicit memories + all candidate sessions |
+| 2+ | **Query only** (memories/sessions served from cache) |
+
+When a new fact is added (`remember`, promotion, UI add), only the **new or changed text** is embedded. Content-hash keys auto-invalidate when wording changes.
+
+Cache is **process-local** (in-memory LRU, default 4096 entries). It does not survive a sidecar restart; a future persistence layer is optional.
+
+Disable semantic ranking: `MEMORY_RANKING_SEMANTIC_ENABLED=false` (falls back to lexical ranking only; no embedding calls for injection).
+
+---
+
 ## Inter-conversational promotion
 
-> **Status: shipped (14/07/2026).** Full pipeline on sidecar + front; 63 green pytest memory tests. Still open: semantic ranking (embeddings), clickable citations in chat (T-V2-18).
+> **Status: shipped (14/07/2026).** Full pipeline on sidecar + front. Still open: clickable citations in chat (T-V2-18).
 
 ### Trigger (frontend)
 
@@ -329,6 +373,11 @@ Front-end client: `front/src/services/aiSidecar.ts` (`promoteSessionMemory`, `us
 | `MEMORY_PROACTIVE_SESSIONS_TOPK` | 2 | Prior sessions injected per turn |
 | `MEMORY_PROACTIVE_SESSIONS_MIN_OVERLAP` | 2 | Min token overlap (capped by query length) |
 | `MEMORY_PROJECT_MAX_ENTRIES` | 200 | Project explicit memory LRU cap |
+| `MEMORY_RANKING_SEMANTIC_ENABLED` | true | Hybrid semantic + lexical ranking for injection |
+| `MEMORY_RANKING_SEMANTIC_WEIGHT` | 0.6 | Weight of cosine similarity in hybrid score |
+| `MEMORY_RANKING_MIN_SEMANTIC_SCORE` | 0.25 | Min cosine to rank without lexical overlap |
+| `MEMORY_RANKING_EMBEDDING_TIMEOUT_S` | 15 | Timeout (seconds) for embedding batch per turn |
+| `MEMORY_EMBEDDING_CACHE_MAX_ENTRIES` | 4096 | LRU cache size (model + endpoint + text hash) |
 
 ---
 
@@ -339,7 +388,10 @@ Front-end client: `front/src/services/aiSidecar.ts` (`promoteSessionMemory`, `us
 | `app/memory_stores.py` | Scope → SQLite path |
 | `app/rag/store.py` | `RagStore`, explicit memories, RAG, LRU trim |
 | `app/agent/memory_consolidation.py` | Promotion pipeline, consolidation, audit |
-| `app/agent/memory_ranking.py` | Lexical ranking for memories and sessions |
+| `app/agent/memory_ranking.py` | Hybrid + lexical ranking for memories and sessions |
+| `app/agent/memory_embeddings.py` | Per-turn embedding prep, provider resolution |
+| `app/agent/embedding_cache.py` | LRU cache + batched `embed_texts_cached` |
+| `app/agent/loop.py` | Turn prep: memories, sessions, ranking context |
 | `app/agent/tools.py` | Agent hooks + `remember` + `recall_project_sessions` |
 | `app/agent/compaction.py` | In-conversation history summarization |
 | `app/agent/untrusted.py` | `<untrusted>` wrapping |
@@ -358,14 +410,17 @@ Front-end client: `front/src/services/aiSidecar.ts` (`promoteSessionMemory`, `us
 | `test_memory_prompt.py` | Injection, guardrails, scopes |
 | `test_memory_consolidation.py` | ADD/UPDATE/NOOP/DELETE, audit, trim |
 | `test_memory_promotion.py` | `/memory/promote-session` HTTP |
-| `test_memory_ranking.py` | Lexical ranking |
+| `test_memory_ranking.py` | Lexical ranking fallback |
+| `test_memory_ranking_semantic.py` | Hybrid semantic ranking |
+| `test_memory_embeddings.py` | Embedding prep, credentials, timeout |
+| `test_embedding_cache.py` | LRU cache, long-conversation hits, dedup batch |
 | `test_memory_mechanics.py` | Cross-hook behavior, dedup, session skip |
 | `test_memory_flow.py` | End-to-end flow: promote → inject, session bridge, HTTP dedup |
 | `test_agent_remember.py` | `remember` tool wiring |
 | `test_recall_project_sessions.py` | Session digest builder |
 | `test_compaction.py` | History compaction + memory overhead |
 
-Run: `cd services/ai && uv run pytest tests/test_memory_*.py tests/test_agent_remember.py tests/test_recall_project_sessions.py -q`
+Run: `cd services/ai && uv run pytest tests/test_memory_*.py tests/test_embedding_cache.py tests/test_agent_remember.py tests/test_recall_project_sessions.py -q`
 
 Front: `cd front && yarn vitest run test/unit/composables/useMemory.spec.ts test/unit/services/aiSidecar.spec.ts -t "memory|useMemory|promoteSession|forgetAll"`
 
@@ -386,13 +441,14 @@ Front: `cd front && yarn vitest run test/unit/composables/useMemory.spec.ts test
 
 | Limitation | Notes |
 |---|---|
-| Lexical ranking only | Explicit memory selection uses token overlap, not embeddings |
+| Embedding cache not persisted | LRU is process-local; sidecar restart re-embeds once |
 | Promotion latency | Facts appear in shared memory up to ~3 turns after they are discussed |
 | User scope uncapped | Global memories grow until manual cleanup |
 | Contradiction LLM cost | Up to one utility call per UPDATE candidate per promotion cycle |
 | No cross-workspace RAG | Document index is per project workspace |
+| No embedding model | Hybrid ranking disabled; lexical overlap only for injection |
 
-Planned (roadmap): `memory_meta.json` for extracted metadata, **semantic memory ranking** (embeddings), **UI citations in chat** (T-V2-18).
+Planned (roadmap): `memory_meta.json` for extracted metadata, **persistent embedding cache**, **UI citations in chat** (T-V2-18).
 
 ---
 

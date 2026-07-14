@@ -61,7 +61,7 @@ Simulate **complementary professional perspectives** on a topic: HR, legal, CFO,
 
 | Mode | SSE endpoint | Description |
 |---|---|---|
-| Opinion | `POST /plugins/personas/ask` | Each persona gives their opinion |
+| Opinion | `POST /plugins/personas/ask` | Each persona gives their opinion (parallel LLM calls; streaming preserved) |
 | Meeting | `POST /plugins/personas/meeting` | Multi-turn simulation |
 | Discussion | `POST /plugins/personas/discuss` | Guided multi-persona exchange |
 

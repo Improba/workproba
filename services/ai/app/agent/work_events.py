@@ -62,11 +62,19 @@ def capability_label(tool_name: str, locale: str) -> tuple[WorkKind, str]:
 def audit_details_with_work_id(
     details: dict[str, Any],
     work_id: str | None,
+    *,
+    turn_id: str | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
-    """Ajoute work_id dans details d'audit quand disponible."""
-    if not work_id:
-        return details
-    return {**details, "work_id": work_id}
+    """Ajoute work_id (et corrélation optionnelle) dans details d'audit."""
+    merged = dict(details)
+    if work_id:
+        merged.setdefault("work_id", work_id)
+    if turn_id:
+        merged.setdefault("turn_id", turn_id)
+    if session_id:
+        merged.setdefault("session_id", session_id)
+    return merged
 
 
 def derive_work_event(

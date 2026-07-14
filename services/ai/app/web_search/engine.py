@@ -1,4 +1,4 @@
-"""Moteur de recherche web délégué (Mistral Conversations API)."""
+"""Moteur de recherche web délégué (backends pluggables)."""
 
 from __future__ import annotations
 
@@ -8,12 +8,49 @@ from typing import Any, TypedDict
 from app.limits import Limits
 from app.schemas import ProviderSet
 from app.web_search import config
+from app.web_search.backends import register_web_search_backend, run_registered_backend
 from app.web_search.errors import WebSearchError
 from app.web_search.mistral_backend import search_mistral
 
 SearchBackend = Callable[..., Awaitable[dict[str, Any]]]
 
 _engine_factory: SearchBackend | None = None
+
+
+async def _mistral_registered_backend(
+    query: str,
+    *,
+    provider_set: ProviderSet | None,
+    locale: str,
+    limits: Limits,
+    premium: bool = False,
+) -> dict[str, Any]:
+    _ = locale
+    if provider_set is None or provider_set.chat is None:
+        raise WebSearchError("web_search_unavailable")
+
+    from app.llm.provider_sets import MissingApiKeyError, resolve_chat_from_set
+
+    try:
+        llm_config = resolve_chat_from_set(provider_set)
+    except (MissingApiKeyError, ValueError) as exc:
+        raise WebSearchError("web_search_unavailable") from exc
+
+    api_key = llm_config.api_key.get_secret_value() if llm_config.api_key else None
+    if not api_key:
+        raise WebSearchError("web_search_unavailable")
+
+    return await search_mistral(
+        query,
+        model=llm_config.model,
+        api_key=api_key,
+        base_url=llm_config.base_url or "https://api.mistral.ai/v1",
+        premium=premium,
+        timeout_s=limits.web_search_timeout_s,
+    )
+
+
+register_web_search_backend("mistral", _mistral_registered_backend)
 
 
 class WebCitation(TypedDict):
@@ -164,34 +201,35 @@ async def search_web(
         raise WebSearchError("web_search_unavailable")
 
     chat = provider_set.chat
-    if chat.provider != "mistral":
+    registered = chat.provider
+    if not registered:
         raise WebSearchError("web_search_unavailable")
-
-    from app.llm.provider_sets import MissingApiKeyError, resolve_chat_from_set
 
     try:
-        llm_config = resolve_chat_from_set(provider_set)
-    except (MissingApiKeyError, ValueError) as exc:
+        raw = await run_registered_backend(
+            registered,
+            normalized,
+            provider_set=provider_set,
+            locale=locale,
+            limits=limits,
+            premium=premium,
+        )
+    except KeyError:
+        raise WebSearchError("web_search_unavailable") from None
+    except WebSearchError:
+        raise
+    except Exception as exc:
         raise WebSearchError("web_search_unavailable") from exc
 
-    api_key = llm_config.api_key.get_secret_value() if llm_config.api_key else None
-    if not api_key:
-        raise WebSearchError("web_search_unavailable")
+    if isinstance(raw, dict) and "query" in raw and "results" in raw:
+        return raw
 
-    raw = await search_mistral(
-        normalized,
-        model=llm_config.model,
-        api_key=api_key,
-        base_url=llm_config.base_url or "https://api.mistral.ai/v1",
-        premium=premium,
-        timeout_s=limits.web_search_timeout_s,
-    )
     parsed = parse_mistral_conversation_response(
         raw,
         max_results=limits.web_search_max_results,
         premium=premium,
     )
-    return _finalize(normalized, parsed, backend="mistral")
+    return _finalize(normalized, parsed, backend=registered)
 
 
 def _finalize(query: str, parsed: dict[str, Any], *, backend: str) -> dict[str, Any]:

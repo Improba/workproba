@@ -265,6 +265,54 @@ class AgentLoop:
             project_root=self._project_root,
         )
         work_id = work_id_for_turn(gate.turn_id)
+        memory_query_embedding: tuple[float, ...] | None = None
+        memory_item_embeddings: dict[str, tuple[float, ...]] | None = None
+        session_item_embeddings: dict[str, tuple[float, ...]] | None = None
+        prepared_session_candidates: tuple[dict, ...] | None = None
+        prepared_tagged_memories: tuple[dict, ...] | None = None
+        if workspace_data_dir is not None and request.message.strip():
+            from app.agent.memory_embeddings import (
+                collect_tagged_memories,
+                prepare_ranking_for_turn,
+            )
+            from app.agent.tools import build_session_digests, filter_rankable_sessions
+
+            try:
+                tagged_memories = collect_tagged_memories(workspace_data_dir)
+                prepared_tagged_memories = tuple(tagged_memories)
+                digest = build_session_digests(
+                    data_dir=workspace_data_dir,
+                    current_session_id=request.session_id,
+                    locale=request.locale,
+                )
+                sessions_for_ranking = digest.get("sessions") or []
+                if not isinstance(sessions_for_ranking, list):
+                    sessions_for_ranking = []
+                sessions_for_ranking = filter_rankable_sessions(
+                    sessions_for_ranking,
+                    workspace_data_dir,
+                )
+                if sessions_for_ranking:
+                    prepared_session_candidates = tuple(sessions_for_ranking)
+                ranking_context = await prepare_ranking_for_turn(
+                    query=request.message,
+                    workspace_data_dir=workspace_data_dir,
+                    sessions=sessions_for_ranking,
+                    embedding_config=request.embedding_config,
+                    provider_set=provider_set,
+                    memories=tagged_memories,
+                )
+                if ranking_context is not None:
+                    memory_query_embedding = ranking_context.query_embedding
+                    memory_item_embeddings = ranking_context.memory_embeddings
+                    session_item_embeddings = ranking_context.session_embeddings
+            except Exception:
+                logger.warning(
+                    "memory ranking context skipped (session=%s turn=%s)",
+                    request.session_id,
+                    gate.turn_id,
+                    exc_info=True,
+                )
         context = ToolContext(
             tenant_id=request.tenant_id or "",
             project_id=request.project_id,
@@ -285,6 +333,11 @@ class AgentLoop:
             browser_pilotage_paused=request.browser_pilotage_paused,
             last_user_query=request.message,
             work_id=work_id,
+            memory_query_embedding=memory_query_embedding,
+            memory_item_embeddings=memory_item_embeddings,
+            session_item_embeddings=session_item_embeddings,
+            prepared_session_candidates=prepared_session_candidates,
+            prepared_tagged_memories=prepared_tagged_memories,
         )
         deps = ToolDeps(
             context=context,
@@ -337,7 +390,12 @@ class AgentLoop:
                     resolve_app_data_dir(audit_base),
                     "turn.prompt",
                     "agent",
-                    audit_details_with_work_id(prompt_details, work_id),
+                    audit_details_with_work_id(
+                        prompt_details,
+                        work_id,
+                        turn_id=gate.turn_id,
+                        session_id=request.session_id,
+                    ),
                     enabled=request.audit_enabled,
                 )
 

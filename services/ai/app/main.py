@@ -482,6 +482,8 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                                         "reason": fallback_reason,
                                     },
                                     work_id_for_turn(turn_id),
+                                    turn_id=turn_id,
+                                    session_id=payload.session_id,
                                 ),
                                 enabled=payload.audit_enabled,
                             )

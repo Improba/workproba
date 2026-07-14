@@ -56,6 +56,7 @@ Sidecar logs in dev: `tail -f .dev-ai.log` at the monorepo root.
 | `INTERNAL_SECRET` | Shared secret with the front |
 | `LLM_DEFAULT_*` | Default LLM config (Ollama, etc.) |
 | `LLM_EMBEDDING_*` | RAG embedding config (`MODEL` required to enable vector RAG) |
+| `MEMORY_RANKING_*`, `MEMORY_EMBEDDING_CACHE_MAX_ENTRIES` | Hybrid memory/session ranking + embedding LRU cache (see [memory.md](./memory.md)) |
 | `SANDBOX_TIMEOUT_SECONDS` | Subprocess sandbox timeout |
 | `MAX_AGENT_ITERATIONS` | Agent loop limit |
 

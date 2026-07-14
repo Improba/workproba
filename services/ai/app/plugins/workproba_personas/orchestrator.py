@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from typing import Any
@@ -103,6 +104,78 @@ async def _run_persona_prompt(
     return output.strip() if isinstance(output, str) else str(output).strip()
 
 
+def _persona_opinion_entry(persona: JsonDict, content: str, *, memory_text: str) -> JsonDict:
+    name = str(persona.get("name") or persona.get("id") or "")
+    return {
+        "persona_id": persona.get("id"),
+        "persona_name": name,
+        "role": persona.get("role"),
+        "avatar_color": persona.get("avatar_color"),
+        "avatar_icon": persona.get("avatar_icon"),
+        "content": content,
+        "memory_citations": bool(memory_text),
+    }
+
+
+async def _run_personas_parallel(
+    personas: list[JsonDict],
+    *,
+    settings: Any,
+    provider_set: ProviderSet | None,
+    user_prompt: str,
+    locale: str,
+) -> list[tuple[JsonDict, str]]:
+    """Exécute les appels persona indépendants en parallèle (ordre préservé à la sortie)."""
+
+    async def _one(persona: JsonDict) -> tuple[JsonDict, str]:
+        system_prompt = str(persona.get("system_prompt") or "")
+        content = await _run_persona_prompt(
+            settings=settings,
+            provider_set=provider_set,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            locale=locale,
+        )
+        return persona, content
+
+    async with asyncio.TaskGroup() as group:
+        tasks = [group.create_task(_one(persona)) for persona in personas]
+    return [task.result() for task in tasks]
+
+
+async def _stream_personas_parallel(
+    personas: list[JsonDict],
+    *,
+    settings: Any,
+    provider_set: ProviderSet | None,
+    user_prompt: str,
+    locale: str,
+) -> AsyncIterator[tuple[JsonDict, str]]:
+    """Exécute les personas en parallèle et yield au fur et à mesure des réponses."""
+
+    async def _one(persona: JsonDict) -> tuple[JsonDict, str]:
+        system_prompt = str(persona.get("system_prompt") or "")
+        content = await _run_persona_prompt(
+            settings=settings,
+            provider_set=provider_set,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            locale=locale,
+        )
+        return persona, content
+
+    tasks = [asyncio.create_task(_one(persona)) for persona in personas]
+    try:
+        for done in asyncio.as_completed(tasks):
+            yield await done
+    except Exception:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        raise
+
+
 def _discuss_transcript_lines(messages: list[JsonDict], *, locale: str) -> list[str]:
     lines: list[str] = []
     for item in messages:
@@ -148,27 +221,15 @@ async def generate_opinions(
         locale=locale,
     )
     opinions: list[JsonDict] = []
-    for persona in personas:
-        name = str(persona.get("name") or persona.get("id") or "")
-        system_prompt = str(persona.get("system_prompt") or "")
-        content = await _run_persona_prompt(
-            settings=settings,
-            provider_set=provider_set,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            locale=locale,
-        )
-        opinions.append(
-            {
-                "persona_id": persona.get("id"),
-                "persona_name": name,
-                "role": persona.get("role"),
-                "avatar_color": persona.get("avatar_color"),
-                "avatar_icon": persona.get("avatar_icon"),
-                "content": content,
-                "memory_citations": bool(memory_text),
-            }
-        )
+    parallel_results = await _run_personas_parallel(
+        personas,
+        settings=settings,
+        provider_set=provider_set,
+        user_prompt=user_prompt,
+        locale=locale,
+    )
+    for persona, content in parallel_results:
+        opinions.append(_persona_opinion_entry(persona, content, memory_text=memory_text))
     return opinions, warnings
 
 
@@ -199,25 +260,16 @@ async def stream_ask(
         memory_text=memory_text,
         locale=locale,
     )
-    for persona in personas:
-        name = str(persona.get("name") or persona.get("id") or "")
-        system_prompt = str(persona.get("system_prompt") or "")
-        content = await _run_persona_prompt(
-            settings=settings,
-            provider_set=provider_set,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
-            locale=locale,
-        )
+    async for persona, content in _stream_personas_parallel(
+        personas,
+        settings=settings,
+        provider_set=provider_set,
+        user_prompt=user_prompt,
+        locale=locale,
+    ):
         yield {
             "type": "persona_opinion",
-            "persona_id": persona.get("id"),
-            "persona_name": name,
-            "role": persona.get("role"),
-            "avatar_color": persona.get("avatar_color"),
-            "avatar_icon": persona.get("avatar_icon"),
-            "content": content,
-            "memory_citations": bool(memory_text),
+            **_persona_opinion_entry(persona, content, memory_text=memory_text),
         }
     yield {"type": "done"}
 

@@ -238,14 +238,14 @@ describe('useChatStream — feedbacks', () => {
     expect(result.data.humanSummary).toBe('3 fichiers trouvés');
   });
 
-  it('ignore les événements work_* sans crasher', () => {
+  it('mappe work_started et ignore les autres work_* sans crasher', () => {
     const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
-    expect(
-      mapPythonSseEvent({
-        type: 'work_started',
-        data: { work_id: 'turn-1', objective: 'hello' },
-      }),
-    ).toBeNull();
+    const started = mapPythonSseEvent({
+      type: 'work_started',
+      data: { work_id: 'turn-1', objective: 'hello' },
+    });
+    expect(started?.type).toBe('work_started');
+    expect(started?.data.workId).toBe('turn-1');
     expect(
       mapPythonSseEvent({
         type: 'work_contribution',
@@ -579,6 +579,33 @@ describe('useChatStream — feedbacks', () => {
     expect(confirmBody.decision).toBe('approve');
     expect(confirmBody.turn_id).toBe('turn_abc');
     expect(confirmBody.locale).toBe('fr');
+    unmount();
+  });
+
+  it('mappe work_started et expose streamCorrelation', async () => {
+    const mapped = mapPythonSseEvent({
+      type: 'work_started',
+      data: { work_id: 'turn_corr', objective: 'Analyser le budget' },
+    });
+    expect(mapped?.type).toBe('work_started');
+    expect(mapped?.data.workId).toBe('turn_corr');
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      sseResponse([
+        { event: 'turn_start', data: { turn_id: 'turn_corr' } },
+        { event: 'work_started', data: { work_id: 'turn_corr', objective: 'Budget' } },
+        { event: 'done', data: { content: 'ok' } },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('budget');
+
+    expect(api.streamCorrelation.value).toEqual({
+      turnId: 'turn_corr',
+      workId: 'turn_corr',
+    });
     unmount();
   });
 

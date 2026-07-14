@@ -28,7 +28,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 - **[architecture.md](./architecture.md)**: Overview, stack, UI shell, chat, LLM models, human approval gate, work events
 - **[stack.md](./stack.md)**: Component versions, ports, environment variables, dev commands
 - **[workspace-storage.md](./workspace-storage.md)**: Per-space storage and global user data (Space UX, `{app_data}/spaces/`, migration from legacy `workspaces/`)
-- **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, promotion, cross-session recall
+- **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, hybrid ranking, embedding cache, promotion, cross-session recall
 - **[plugins.md](./plugins.md)**: Plugin system, personas, UI integration
 - **[browser.md](./browser.md)**: Browser plugin (Playwright, agent tools, live view, security)
 - **[web-search.md](./web-search.md)**: Core `web_search` tool (Mistral Conversations API, citations, network guard)

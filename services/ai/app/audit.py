@@ -106,6 +106,41 @@ def save_audit_config(
     return get_audit_config(app_data_dir)
 
 
+def audit_correlation(
+    *,
+    turn_id: str | None = None,
+    work_id: str | None = None,
+    session_id: str | None = None,
+) -> dict[str, str]:
+    """Champs de corrélation standard pour le support terrain."""
+    payload: dict[str, str] = {}
+    if turn_id:
+        payload["turn_id"] = turn_id
+    if work_id:
+        payload["work_id"] = work_id
+    if session_id:
+        payload["session_id"] = session_id
+    return payload
+
+
+def merge_audit_details(
+    details: dict[str, Any],
+    *,
+    turn_id: str | None = None,
+    work_id: str | None = None,
+    session_id: str | None = None,
+) -> dict[str, Any]:
+    """Fusionne details avec les identifiants de corrélation (sans écraser l'existant)."""
+    merged = dict(details)
+    for key, value in audit_correlation(
+        turn_id=turn_id,
+        work_id=work_id,
+        session_id=session_id,
+    ).items():
+        merged.setdefault(key, value)
+    return merged
+
+
 def log_event(
     app_data_dir: Path,
     event: str,

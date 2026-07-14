@@ -65,6 +65,11 @@ class ToolContext:
     browser_pilotage_paused: bool = False
     last_user_query: str = ""
     work_id: str | None = None
+    memory_query_embedding: tuple[float, ...] | None = None
+    memory_item_embeddings: dict[str, tuple[float, ...]] | None = None
+    session_item_embeddings: dict[str, tuple[float, ...]] | None = None
+    prepared_session_candidates: tuple[dict, ...] | None = None
+    prepared_tagged_memories: tuple[dict, ...] | None = None
 
 
 @dataclass
@@ -224,6 +229,31 @@ def build_session_digests(
     }
 
 
+def filter_rankable_sessions(
+    sessions: list[dict],
+    workspace_data_dir: Path,
+) -> list[dict]:
+    """Exclut les sessions dont les faits ont déjà été promus en mémoire projet."""
+    from app.agent.memory_consolidation import session_has_promoted_facts
+    from app.memory_stores import open_memory_store_for_scope
+
+    if not sessions:
+        return []
+
+    project_store = open_memory_store_for_scope("project", workspace_data_dir)
+    try:
+        return [
+            session
+            for session in sessions
+            if not session_has_promoted_facts(
+                project_store,
+                str(session.get("id") or ""),
+            )
+        ]
+    finally:
+        project_store.close()
+
+
 def build_agent(
     model: Any,
     *,
@@ -277,11 +307,9 @@ def build_agent(
     @agent.system_prompt
     def relevant_sessions_prompt(ctx: RunContext[ToolDeps]) -> str:
         """Injecte les résumés d'autres sessions pertinentes pour la requête courante."""
-        from app.agent.memory_consolidation import session_has_promoted_facts
-        from app.agent.memory_ranking import rank_sessions_by_query
+        from app.agent.memory_ranking import rank_sessions_hybrid
         from app.agent.untrusted import wrap_untrusted_content
         from app.config import get_settings
-        from app.memory_stores import open_memory_store_for_scope
 
         data_dir = ctx.deps.context.workspace_data_dir
         locale = ctx.deps.context.locale
@@ -296,38 +324,32 @@ def build_agent(
             return ""
 
         try:
-            digest = build_session_digests(
-                data_dir=data_dir,
-                current_session_id=ctx.deps.context.session_id,
-                locale=locale,
-            )
+            if ctx.deps.context.prepared_session_candidates is not None:
+                sessions = list(ctx.deps.context.prepared_session_candidates)
+            else:
+                digest = build_session_digests(
+                    data_dir=data_dir,
+                    current_session_id=ctx.deps.context.session_id,
+                    locale=locale,
+                )
+                sessions = digest.get("sessions") or []
+                if not isinstance(sessions, list) or not sessions:
+                    return ""
+                sessions = filter_rankable_sessions(sessions, data_dir)
         except Exception:
             return ""
-
-        sessions = digest.get("sessions") or []
-        if not isinstance(sessions, list) or not sessions:
-            return ""
-
-        project_store = open_memory_store_for_scope("project", data_dir)
-        try:
-            sessions = [
-                session
-                for session in sessions
-                if not session_has_promoted_facts(
-                    project_store,
-                    str(session.get("id") or ""),
-                )
-            ]
-        finally:
-            project_store.close()
 
         if not sessions:
             return ""
 
-        relevant = rank_sessions_by_query(
+        relevant = rank_sessions_hybrid(
             sessions,
             query,
             topk,
+            query_embedding=ctx.deps.context.memory_query_embedding,
+            session_embeddings=ctx.deps.context.session_item_embeddings,
+            semantic_weight=settings.memory_ranking_semantic_weight,
+            min_semantic_score=settings.memory_ranking_min_semantic_score,
             min_overlap=min_overlap,
         )
         if not relevant:
@@ -392,9 +414,11 @@ def build_agent(
         niveau, sans outil de lecture explicite. La persistance est assurée par
         deux bases SQLite distinctes ouvertes sans embeddings (souvenirs only).
         """
-        from app.agent.memory_ranking import dedupe_memories_keep_order, rank_memories_by_query
+        from app.agent.memory_ranking import (
+            dedupe_memories_keep_order,
+            rank_memories_hybrid,
+        )
         from app.config import get_settings
-        from app.memory_stores import open_memory_store_for_scope
 
         data_dir = ctx.deps.context.workspace_data_dir
         locale = ctx.deps.context.locale
@@ -406,27 +430,42 @@ def build_agent(
         recent_floor = settings.memory_prompt_recent_floor
         query = ctx.deps.context.last_user_query
 
-        def _collect(scope: str) -> list[dict]:
-            try:
-                store = open_memory_store_for_scope(scope, data_dir)
-            except Exception:
-                return []
-            try:
-                return [
-                    {**item, "_scope": scope}
-                    for item in store.list_memories()
-                ]
-            finally:
-                store.close()
+        if ctx.deps.context.prepared_tagged_memories is not None:
+            tagged = list(ctx.deps.context.prepared_tagged_memories)
+        elif data_dir is not None:
+            from app.memory_stores import open_memory_store_for_scope
 
-        tagged = dedupe_memories_keep_order(_collect("user") + _collect("project"))
+            def _collect(scope: str) -> list[dict]:
+                try:
+                    store = open_memory_store_for_scope(scope, data_dir)
+                except Exception:
+                    return []
+                try:
+                    return [
+                        {**item, "_scope": scope}
+                        for item in store.list_memories()
+                    ]
+                finally:
+                    store.close()
+
+            tagged = dedupe_memories_keep_order(_collect("user") + _collect("project"))
+        else:
+            tagged = []
         if not tagged:
             return ""
 
         chronological = list(reversed(tagged))
         recent = chronological[-recent_floor:] if recent_floor > 0 else []
         remaining_k = max(0, topk - len(recent))
-        ranked = rank_memories_by_query(chronological, query, remaining_k)
+        ranked = rank_memories_hybrid(
+            chronological,
+            query,
+            remaining_k,
+            query_embedding=ctx.deps.context.memory_query_embedding,
+            item_embeddings=ctx.deps.context.memory_item_embeddings,
+            semantic_weight=settings.memory_ranking_semantic_weight,
+            min_semantic_score=settings.memory_ranking_min_semantic_score,
+        )
         recent_keys = {
             str(item.get("content", "")).strip().lower() for item in recent
         }

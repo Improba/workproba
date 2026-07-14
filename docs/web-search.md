@@ -57,6 +57,7 @@ workproba/services/ai/app/
   web_search/
     __init__.py
     config.py
+    backends.py           # provider registry (register_web_search_backend)
     engine.py             # search_web, parse_mistral_conversation_response, set_search_backend
     mistral_backend.py    # POST https://api.mistral.ai/v1/conversations
     errors.py             # WebSearchError, web_search_error_detail
@@ -106,7 +107,9 @@ Normalized result shape:
 
 `results` are snippets for the model; `citations` are structured sources for the UI (often the same after URL deduplication).
 
-## Mistral backend
+## Mistral backend (default)
+
+Backends are **pluggable per provider** via `backends.py` (`register_web_search_backend`). Mistral is registered at import time in `engine.py`. A backend may return a finalized payload (`query` + `results`) for tests or alternate connectors.
 
 | Parameter | Value |
 |---|---|
@@ -172,7 +175,8 @@ Defined in `app/limits.py`:
 cd workproba/services/ai
 uv run pytest tests/test_web_search_tool.py \
              tests/test_web_search_mistral.py \
-             tests/test_web_search_mistral_backend.py -q
+             tests/test_web_search_mistral_backend.py \
+             tests/test_web_search_backends.py -q
 ```
 
 | Area | File |
@@ -180,6 +184,7 @@ uv run pytest tests/test_web_search_tool.py \
 | Tool guards, limits, human_summary | `tests/test_web_search_tool.py` |
 | Mistral response parsing | `tests/test_web_search_mistral.py` |
 | HTTP backend (mocked httpx) | `tests/test_web_search_mistral_backend.py` |
+| Provider registry | `tests/test_web_search_backends.py` |
 | Fixture | `tests/fixtures/mistral_web_search_response.py` |
 
 Front: `front/test/unit/utils/toolCallDetails.spec.ts`, `toolCallHumanLabel.spec.ts`.

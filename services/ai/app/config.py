@@ -135,6 +135,34 @@ class Settings(BaseSettings):
         ge=1,
         validation_alias="MEMORY_PROACTIVE_SESSIONS_MIN_OVERLAP",
     )
+    memory_ranking_semantic_enabled: bool = Field(
+        default=True,
+        validation_alias="MEMORY_RANKING_SEMANTIC_ENABLED",
+    )
+    memory_ranking_semantic_weight: float = Field(
+        default=0.6,
+        ge=0.0,
+        le=1.0,
+        validation_alias="MEMORY_RANKING_SEMANTIC_WEIGHT",
+    )
+    memory_ranking_min_semantic_score: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        validation_alias="MEMORY_RANKING_MIN_SEMANTIC_SCORE",
+    )
+    memory_ranking_embedding_timeout_s: float = Field(
+        default=15.0,
+        ge=1.0,
+        le=120.0,
+        validation_alias="MEMORY_RANKING_EMBEDDING_TIMEOUT_S",
+    )
+    memory_embedding_cache_max_entries: int = Field(
+        default=4096,
+        ge=64,
+        le=65536,
+        validation_alias="MEMORY_EMBEDDING_CACHE_MAX_ENTRIES",
+    )
     memory_project_max_entries: int = Field(
         default=200,
         ge=0,
