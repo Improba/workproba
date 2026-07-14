@@ -209,8 +209,7 @@ Classes must be **written explicitly** in code (no dynamic `` `bg-${color}` ``).
 
 ## References
 
-- [design.md](./design.md), `--wp-*` tokens, typography, density, focus
-- [design/design-system.md](./design/design-system.md), chrome mockups and UX flows
+- [design.md](./design.md), `--wp-*` tokens, typography, density, focus, UI shell
 - In-app demo page: `demo-anubis` route
 - Package: `anubis-ui@^1.4.4`, README in `node_modules/anubis-ui`
 

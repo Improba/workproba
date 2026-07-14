@@ -1,17 +1,65 @@
 # Design System
 
-This document describes the design system used in this project, centered around the **Anubis UI** library for color and style management.
+This document describes the design system used in Workproba: the **Anubis UI** palette, the **`--wp-*`** shell tokens, and the **desktop UI shell** as implemented today. **This file and the code are the source of truth.**
 
 ## Overview
 
-The project uses **Anubis UI** (`anubis-ui` v1.3.1), a custom CSS framework that provides:
+The project uses **Anubis UI** (`anubis-ui@^1.4.4`), a custom CSS framework that provides:
 
 - A consistent color system with light/dark mode support
 - Automatically generated utility classes
 - CSS variables for flexible usage
 - Seamless integration with Quasar Framework
 
-Workproba adds a dedicated **`--wp-*`** token system on top (defined in `front/src/css/workproba.scss`) for all custom application CSS: typography, focus, spacing, density, surfaces, and brand accents.
+Workproba adds a dedicated **`--wp-*`** token system on top (defined in `front/src/css/workproba.scss`) for all custom application CSS: typography, focus, spacing, density, surfaces, chat-specific colors, and brand accents.
+
+Icons in the shell use **Lucide** via `Lucide.vue` (Mastok wrapper), with colors mapped to Anubis / `--wp-*` tokens.
+
+## UI shell (desktop layout)
+
+The main layout is `front/src/layouts/WorkprobaLayout.vue`. Root element: `.wp-shell` with `data-density` driven by `useAppSettings.density` (`compact` | `comfortable` | `spacious`).
+
+```
++--------------------------------------------------------------------------------+
+| WorkprobaTitleBar (~40px)                                                      |
+| [Workproba · workspace · user]     [sidecar] [side chat] [files] [sidebar] …   |
++----------+-------------------------------------------+------------+----------+
+| Sidebar  |              Center (router-view)         | RightPanel | SideChat |
+| 268px    |  Home · Chat · Settings …                 |  320px     | 380px    |
+| rail 56  |  Chat max ~46rem, composer ~34rem        |  tabbed    | optional |
++----------+-------------------------------------------+------------+----------+
+```
+
+### Regions
+
+| Region | Component | Role |
+|--------|-----------|------|
+| **Title bar** | `WorkprobaTitleBar.vue` | Tauri drag region; brand, workspace name, user profile; sidecar status chip (opens settings dialog); toggles for side chat, right panel, sidebar; keyboard shortcuts (`?`); theme toggle |
+| **Left sidebar** | `WorkspaceSidebar.vue` | **Tree model**: recent workspaces as expandable nodes, conversations nested under each workspace. Footer: settings, memory, profile. Collapsible to **56px icon rail** (never fully hidden) |
+| **Center** | `<router-view />` in `.wp-center` | Home (onboarding, recent sessions), chat (`ChatView`), settings pages. Chat body uses `--wp-font-chat` |
+| **Right panel** | `RightPanel.vue` | Collapsible (`Ctrl/Cmd+B`), state per session. **Tabs**: Files (`FileExplorer`), Preview (`DocumentPreview`), Personas (if plugin active), dynamic plugin tabs |
+| **Side chat** | `SideChatPanel.vue` | Optional panel (`Ctrl/Cmd+Shift+L`) for plugin side conversations (e.g. Personas). Width 320–420px (default 380px) |
+
+### Responsive breakpoints
+
+Handled in `WorkprobaLayout.vue`:
+
+| Viewport | Behavior |
+|----------|----------|
+| `< 820px` | Sidebar switches to 56px rail; right panel closed |
+| `< 1100px` | Right panel auto-collapsed; opening side chat also closes files panel |
+
+### Keyboard shortcuts (shell)
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl/Cmd+B` | Toggle right panel (files / preview / …) |
+| `Ctrl/Cmd+\` | Toggle sidebar rail |
+| `Ctrl/Cmd+Shift+L` | Toggle side chat (if a plugin provides one) |
+| `Ctrl/Cmd+R` / `F5` | Reload webview |
+| `?` | Toggle keyboard shortcuts help |
+
+See also [architecture.md](./architecture.md) for data flow and plugin integration.
 
 ## Workproba Tokens (`--wp-*`)
 
@@ -19,13 +67,15 @@ Workproba adds a dedicated **`--wp-*`** token system on top (defined in `front/s
 
 | Layer | Usage |
 |--------|-------|
-| **`--wp-*`** | Semantic aliases for the Workproba **shell** (surfaces, borders, typography, focus), defined in `workproba.scss`, often mapped to Anubis (`var(--neutral-lower)`, etc.) |
+| **`--wp-*`** | Semantic aliases for the Workproba **shell** (surfaces, borders, typography, focus, chat), defined in `workproba.scss`, often mapped to Anubis (`var(--neutral-lower)`, etc.) |
 | **Anubis** (`--primary`, `--neutral-*`, `bg-*` / `text-*` classes) | **Palette source of truth** via `anubis.config.json` → `_anubis.scss` |
 | **Quasar** | Structural components; colors via `--q-*` synchronized in `workproba.scss` |
 
 **Contribution rule**: all custom styling in a Workproba component goes through `--wp-*` tokens. No hardcoded colors or sizes (`#203d52`, `14px`, etc.) in component `.vue` / `.scss` files.
 
 ### Typography
+
+Webfonts are embedded offline (Tauri) via `@fontsource` in `workproba.scss`: Varela Round, Inter (400–700), JetBrains Mono.
 
 | Token | Value | Role |
 |-------|--------|------|
@@ -35,22 +85,23 @@ Workproba adds a dedicated **`--wp-*`** token system on top (defined in `front/s
 | `--wp-fs-md` | 17px | Subtitles, section titles |
 | `--wp-fs-lg` | 20px | Intermediate titles |
 | `--wp-fs-xl` | 24px | Page titles |
-| `--wp-fs-display` | 32px | Hero display |
+| `--wp-fs-display` | 32px | Hero display (onboarding) |
 | `--wp-lh-tight` | 1.2 | Titles, labels |
 | `--wp-lh-normal` | 1.5 | Body text |
 | `--wp-lh-relaxed` | 1.65 | Spacious paragraphs |
-| `--wp-font-ui` | Varela Round, … | Interface font |
-| `--wp-font-head` | Inter, … | Titles and chat |
+| `--wp-font-ui` | Varela Round, … | General UI chrome (sidebar, buttons, labels) |
+| `--wp-font-head` | Inter, … | Headings (`h1`–`h6`, `.wp-head`) |
+| `--wp-font-chat` | Inter, … | Chat center zone (`.wp-center`) |
 | `--wp-font-mono` | JetBrains Mono, … | Code, keyboard shortcuts |
 
 ### Keyboard focus
 
 | Token | Role |
 |-------|------|
-| `--wp-focus-ring` | `:focus-visible` ring, `var(--accent-high)` (light cyan, dark gold) |
+| `--wp-focus-ring` | `:focus-visible` ring; per theme: `var(--accent-high)` (light cyan, dark gold) |
 | `--wp-focus-offset` | Outline offset (2px) |
 
-Applied globally on `.wp-shell` for titlebar, sidebar, explorer, composer, and buttons.
+Applied globally on `.wp-shell` for titlebar, sidebar, explorer, composer, and buttons via the `wp-focus-visible` mixin.
 
 ### Spacing and density
 
@@ -64,19 +115,35 @@ The `--wp-space-1` through `--wp-space-6` tokens define the spacing scale. Their
 
 ### Surfaces, borders, and accents
 
+Light mode uses a **warm neutral** palette (cream surfaces, warm borders). Dark mode uses warm charcoal + gold accent.
+
 | Token | Role |
 |-------|------|
 | `--wp-bg` | Global application background |
 | `--wp-surface`, `--wp-surface-2`, `--wp-surface-3` | Cards, panels, elevated areas |
 | `--wp-border`, `--wp-border-strong` | Separators and outlines |
 | `--wp-text`, `--wp-text-muted`, `--wp-text-faint` | Text hierarchy |
+| `--text-muted`, `--text-faint` | Aliases for Lucide `color` prop |
 | `--wp-primary`, `--wp-primary-soft` | Branding: teal (light) / gold (dark), via `var(--primary)` |
 | `--wp-accent`, `--wp-accent-strong`, `--wp-accent-soft` | Actions, focus, active tabs: cyan (light) / gold (dark) |
-| `--wp-canard`, `--wp-cyan`, `--wp-gold`, `--wp-violet` | Improba brand accents (stable across themes) |
+| `--wp-canard`, `--wp-cyan`, `--wp-gold`, `--wp-violet` | Improba brand accents (theme-adjusted where noted in SCSS) |
+| `--wp-gold-soft`, `--wp-violet-soft` | Soft backgrounds for badges and Personas tab |
+| `--wp-selection`, `--wp-selection-soft` | Text selection in chat |
+| `--wp-user-bubble-bg`, `--wp-user-bubble-text`, `--wp-user-bubble-border` | User message bubbles in chat |
 | `--wp-success`, `--wp-danger`, `--wp-danger-soft` | Semantic states |
 | `--wp-r-sm` … `--wp-r-pill` | Border radii |
-| `--wp-shadow-1`, `--wp-shadow-2` | Light shadows |
+| `--wp-shadow-1`, `--wp-shadow-2` | Light shadows (theme-specific values) |
 | `--wp-ease`, `--wp-dur` | Transitions (180ms) |
+
+### Animation utilities
+
+Defined in `workproba.scss`:
+
+| Class | Effect |
+|-------|--------|
+| `.wp-breathe` | Opacity pulse (1.6s) for "working" / streaming indicators |
+| `.wp-fade-in` | Fade + translateY 4px (220ms) for message appearance |
+| `.wp-sr-only` | Visually hidden, screen-reader accessible |
 
 ### Source files
 
@@ -125,7 +192,7 @@ The system defines several palettes with their variants:
 | **Success** | Successful actions | Success messages, validations |
 | **Danger** | Errors and destructive actions | Error messages, delete buttons |
 | **Warning** | Warnings | Warning messages, alerts |
-| **Accent** | Visual accents | Highlighted elements (same as primary) |
+| **Accent** | Visual accents | Highlighted elements, focus, streaming |
 | **Text** | Text colors | Main text, inverted text, links |
 
 ### Color variants
@@ -193,6 +260,18 @@ Full list and modification procedure: [anubis-ui.md](./anubis-ui.md).
 </template>
 ```
 
+**✅ DO**: Use `--wp-*` tokens in scoped SCSS for Workproba components
+
+```scss
+.my-panel {
+  background: var(--wp-surface);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-md);
+  padding: var(--wp-space-3);
+  font-family: var(--wp-font-ui);
+}
+```
+
 **❌ AVOID**: Using default Quasar colors
 
 ```vue
@@ -204,25 +283,31 @@ Full list and modification procedure: [anubis-ui.md](./anubis-ui.md).
 </template>
 ```
 
+### Lucide icons
+
+Use the Mastok wrapper with Anubis or `--wp-*` color names:
+
+```vue
+<Lucide name="folder" size="16" color="wp-text-muted" />
+<Lucide name="message-square-plus" size="sm" color="wp-canard" />
+<Lucide name="users" size="15" color="wp-gold" />
+```
+
+Supported aliases: `text-muted`, `text-faint`, `text` → mapped to `--wp-*` in `Lucide.vue`.
+
 ### In SCSS/CSS styles
 
-**✅ DO**: Use Anubis CSS variables
+**✅ DO**: Use Anubis CSS variables or `--wp-*` tokens
 
 ```scss
 .my-component {
   color: var(--primary);
-  background-color: var(--neutral-lower);
-  border-color: var(--warning);
+  background-color: var(--wp-surface);
+  border-color: var(--wp-border);
   
   &:hover {
     background-color: var(--primary-lower);
   }
-}
-
-.custom-card {
-  background: var(--neutral-lowest);
-  border: 1px solid var(--neutral-low);
-  box-shadow: 0px 2px 8px var(--neutral-high-20); // 20% opacity
 }
 ```
 
@@ -327,14 +412,15 @@ Classes are generated automatically during the build:
 - All Mastok components (`MBtn`, `MCard`, `MChip`, etc.) use Anubis colors
 - Color props (`primary`, `secondary`, `danger`, etc.) correspond to Anubis colors
 - Components automatically generate the required Anubis classes
+- **`Lucide.vue`** is the standard icon component in the Workproba shell
 
 See [Mastok README](../front/lib-improba/components/mastok/README.md) for more details.
 
 ## Best practices
 
-### 1. Always use Anubis
+### 1. Always use Anubis and `--wp-*`
 
-Do not mix Anubis colors with default Quasar colors. This ensures:
+Do not mix Anubis colors with default Quasar colors. In Workproba shell components, prefer `--wp-*` for surfaces and spacing. This ensures:
 
 - Visual consistency across the application
 - Automatic light/dark mode support
@@ -351,12 +437,13 @@ Choose the color variant suited to the context:
 
 ### 3. Prefer CSS variables in styles
 
-In SCSS/CSS files, always use `var(--color-name)` rather than hexadecimal values:
+In SCSS/CSS files, always use `var(--color-name)` or `var(--wp-*)` rather than hexadecimal values:
 
 ```scss
 // ✅ Good
 .my-class {
-  color: var(--primary);
+  color: var(--wp-text);
+  background: var(--wp-surface);
 }
 
 // ❌ Bad
@@ -459,15 +546,16 @@ If you have existing code using Quasar colors:
 ## References
 
 - **[Complete Anubis UI guide](./anubis-ui.md)**, detailed documentation with all examples
+- **[Architecture](./architecture.md)**, UI shell overview and message flow
 - **[Mastok Components](../front/lib-improba/components/mastok/README.md)**, UI components using Anubis
 - **[Demo page](../front/lib-improba/pages/demo/Anubis.vue)**, visual examples in the application (`demo-anubis` route)
 
 ## Summary
 
-- ✅ **Use**: Workproba `--wp-*` tokens for all custom CSS (typography, spacing, surfaces, focus)
+- ✅ **Use**: Workproba `--wp-*` tokens for all custom CSS (typography, spacing, surfaces, focus, chat)
 - ✅ **Use**: Anubis classes (`bg-primary`, `text-neutral-highest`, etc.)
 - ✅ **Use**: Anubis CSS variables (`var(--primary)`, `var(--neutral-lower)`, etc.)
-- ✅ **Use**: Mastok components with color props
+- ✅ **Use**: Mastok components with color props; `Lucide` for icons
 - ❌ **Avoid**: Hardcoded colors or sizes in Workproba components
 - ❌ **Avoid**: Quasar colors (`color="primary"`, `text-grey-7`, etc.)
 - ❌ **Avoid**: Hardcoded hexadecimal values in styles
