@@ -29,6 +29,13 @@ describe('space terminology i18n', () => {
     expect(en.home.step3Text).toMatch(/space/i);
   });
 
+  it('aligne le scope mémoire espace (fr/en)', () => {
+    expect(fr.memory.scopeProject).toBe('Espace');
+    expect(fr.memory.scopeProjectHint).toMatch(/espace/i);
+    expect(en.memory.scopeProject).toBe('Space');
+    expect(en.memory.scopeProjectHint).toMatch(/space/i);
+  });
+
   it('expose les libellés de renommage d\'espace', () => {
     expect(fr.shell.renameSpace).toMatch(/espace/i);
     expect(fr.shell.renameSpaceTitle).toBeTruthy();

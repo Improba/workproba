@@ -1,7 +1,7 @@
 # Workproba Desktop
 
 > **Status:** Product decision: desktop pivot
-> **Last updated:** 11/07/2026
+> **Last updated:** 14/07/2026
 
 ## Decision
 
@@ -19,7 +19,7 @@ The AI agent remains in **Python** (sidecar). Rust does not replace Python: it p
 
 ## Product metaphor (non-coders)
 
-The user opens **a project folder** on their disk. The Imp (agent) works inside it:
+The user **opens a space** (a local folder on disk). The Imp (agent) works inside it:
 
 - reads and modifies Word, Excel, PDF;
 - runs code **under the hood** in a local subprocess sandbox;
@@ -29,9 +29,9 @@ Main UI concepts:
 
 | Displayed concept | Meaning |
 |---|---|
-| **Folder** | The client project (local filesystem) |
+| **Space** | A local folder the user works in (display title renameable in sidebar) |
 | **Conversation** | Exchange with the Imp |
-| **Memory** | What the tool knows about the folder (project RAG + user/project memories) |
+| **Memory** | What the tool knows about the space (per-space RAG + user/project memories) |
 | **Personas** | Simulated professional perspectives (plugin: opinion / meeting / discussion) |
 
 ## Desktop architecture
@@ -56,19 +56,19 @@ Main UI concepts:
                │
                ▼
 ┌──────────────────────────┐
-│  {app_data}/workspaces/  │
-│  {id}/.workproba/          │
+│  {app_data}/spaces/      │
+│  {id}/.workproba/        │
 └──────────────────────────┘
 ```
 
-Chat **does not go through Rust**: the Quasar webview calls the Python sidecar directly over HTTP/SSE. Tauri handles native filesystem (open folder, list files, open a document).
+Chat **does not go through Rust**: the Quasar webview calls the Python sidecar directly over HTTP/SSE. Tauri handles native filesystem (open a space via folder picker, list files, open a document).
 
-### Per-workspace storage
+### Per-space storage
 
 Workproba metadata lives in the **application folder**, not in the client folder. See [workspace-storage.md](./workspace-storage.md).
 
 ```
-{app_data}/workspaces/{workspace_id}/.workproba/
+{app_data}/spaces/{workspace_id}/.workproba/
 ├── manifest.json
 ├── conversations/
 ├── versions/
@@ -87,15 +87,15 @@ Workproba metadata lives in the **application folder**, not in the client folder
        └── invoke Tauri (folder, open_path): outside chat path
 ```
 
-1. The user selects a project folder (Tauri dialog).
-2. Tauri registers the workspace (stable ID + path); the front keeps the path and `workspace_id`.
+1. The user opens a space (folder picker dialog; UI label: "Open a space").
+2. Tauri registers the space (stable `workspace_id` + path + display title); the front keeps the path and `workspace_id`. The user can rename the display title in the sidebar (`update_workspace_title`).
 3. The user sends a message in chat.
 4. Quasar calls `POST http://127.0.0.1:8765/agent/turn` (direct SSE). The payload
    includes the conversation **model + reasoning level** override
    (persisted in session), clamped against model capabilities.
 5. Python runs the agent loop: LLM, file tools, local search, subprocess sandbox.
 6. SSE events are shown in chat (tokens, reasoning with spinner,
-   tool calls); sessions are persisted in `{app_data}/workspaces/{id}/.workproba/conversations/`.
+   tool calls); sessions are persisted in `{app_data}/spaces/{id}/.workproba/conversations/`.
 
 **No web server** in the product path. The former NestJS stack is in `legacy/`.
 
@@ -106,7 +106,7 @@ Workproba metadata lives in the **application folder**, not in the client folder
 | UI | TypeScript / Quasar | Chat, files, results, onboarding |
 | Desktop shell | Rust / Tauri | Window, OS APIs, filesystem, packaging |
 | AI core | Python / FastAPI | Agent loop, extraction, RAG, subprocess sandbox |
-| Local data | `{app_data}/workspaces/{id}/.workproba/` | Sessions, versions, memory |
+| Local data | `{app_data}/spaces/{id}/.workproba/` | Sessions, versions, memory |
 | Cloud (archived) | `legacy/` | Former NestJS stack |
 
 ## Security and trust (UX)
@@ -128,7 +128,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | Phase | Status | Content |
 |---|---|---|
 | **A** | Done | Tauri scaffold, folder commands, docs |
-| **B** | Done | Open folder UI, file list, local sessions |
+| **B** | Done | Open a space UI, file list, local sessions |
 | **C** | Done | Direct Python SSE, `LocalProjectClient`, subprocess sandbox |
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, plugins (personas), attachments, document preview, audit |
@@ -140,7 +140,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 - **Sidecar (Python)**: streaming chat, file tools, RAG, scoped memory, personas plugins. pytest suite: see [testing.md](./testing.md) (`pytest -q` for current count).
 - **Rust shell**: venv-aware sidecar spawn + `ai_sidecar_status` + `protocol-asset` for image preview. `cargo check` OK.
 - **Front**: `WorkprobaLayout` (sidebar, right panel, side chat), `useSidecarHealth`, personas plugin integrated in composer.
-- **End-to-end desktop run**: `make dev`, open a folder, test chat, memory, personas, document preview.
+- **End-to-end desktop run**: `make dev`, open a space, test chat, memory, personas, document preview.
 
 ## Remaining work
 
@@ -153,9 +153,9 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | Workflow | Trigger | Content |
 |---|---|---|
 | `desktop-ci.yml` | push/PR `main`, `develop` | validate-scripts, pytest, `cargo fmt/check/test`, front lint/tests, lint-i18n, sidecar packaging (push only) |
-| `desktop-release.yml` | tag `v*.*.*` | matrix 4 OS → installateurs + `SHA256SUMS.txt` → release GitHub en brouillon |
+| `desktop-release.yml` | tag `v*.*.*` | matrix 4 OS → installers + `SHA256SUMS.txt` → GitHub draft release |
 
-**Publication** : `./scripts/create-tag.sh` (bump version, tag, push). **Signature** : non activée (voir [signing.md](./signing.md)). **Reste** : valider la première release terrain sur les 4 OS ; durcissement CSP / filesystem scope Tauri.
+**Publishing**: `./scripts/create-tag.sh` (bump version, tag, push). **Signing**: not enabled (see [signing.md](./signing.md)). **Remaining**: validate first field release on all 4 OS; harden CSP / Tauri filesystem scope.
 
 ### Functional (beyond initial release, to prioritize)
 

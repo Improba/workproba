@@ -96,7 +96,7 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 ## Experimental plugins
 
 - **Browser**: see [browser.md](./browser.md) (full guide: architecture, 8 agent tools, live UI, security, tests)
-- **Cloud** : `/plugins/cloud/status`, `/config`, `/sync`
+- **Cloud:** `/plugins/cloud/status`, `/config`, `/sync`
 
 Disabled by default; reserved for dev and advanced presets.
 

@@ -1,10 +1,12 @@
 # Workproba architecture
 
-> **Last updated:** 11/07/2026
+> **Last updated:** 14/07/2026
 
 ## Overview
 
-**Workproba** is a desktop application (macOS, Linux, Windows): the user opens a **local project folder**; the agent manipulates files in place, relies on locally indexed memory, and runs code under the hood in an isolated sandbox.
+**Workproba** is a desktop application (macOS, Linux, Windows): the user **opens a space** (a local folder on disk); the agent manipulates files in place, relies on locally indexed memory, and runs code under the hood in an isolated sandbox.
+
+> **Terminology:** The user-facing concept is **Space**. Internal code and `registry.json` still use `workspace_id` / `ws_…` and a `workspaces` array. Metadata paths use `{app_data}/spaces/`.
 
 Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./workspace-storage.md).
 
@@ -12,10 +14,10 @@ Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./wor
 
 | Layer | Technology | Role |
 |---|---|---|
-| Desktop shell | Tauri 2 (Rust) | Window, native filesystem, workspace storage, packaging |
+| Desktop shell | Tauri 2 (Rust) | Window, native filesystem, per-space storage, packaging |
 | Frontend | Quasar 2 + Vue 3 | Webview UI (chat, files) |
 | AI core | Python 3.12 + FastAPI (sidecar) | Agent loop, extraction, RAG, sandbox |
-| Local data | `{app_data}/` (workspaces, user, plugins, audit) | Conversations, versions, memory, plugins |
+| Local data | `{app_data}/` (spaces, user, plugins, audit) | Conversations, versions, memory, plugins |
 | Agent | Pydantic AI (native models) | Type-safe chat/agent, tools, streaming |
 | LLM | OpenAIChatModel (OpenAI-compat) + AnthropicModel | Local Ollama, Mistral cloud, vLLM, OpenAI, Anthropic |
 | RAG embeddings | LiteLLM (`aembedding`) | Ollama, Mistral, OpenAI… |
@@ -41,10 +43,10 @@ Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./wor
 
 ## Message flow
 
-1. The user opens a folder (Tauri).
+1. The user opens a space (folder picker; UI: "Open a space").
 2. Quasar sends the message via SSE to `127.0.0.1:8765`.
 3. Python runs the agent loop (LLM, file tools, subprocess sandbox).
-4. Sessions are persisted in `{app_data}/workspaces/{id}/.workproba/`.
+4. Sessions are persisted in `{app_data}/spaces/{id}/.workproba/`.
 5. Each turn: explicit memories and relevant prior session summaries are injected; project RAG is available via `search_kb`. Session summaries are promoted to shared project memory in the background (see [memory.md](./memory.md)).
 
 ## UI shell (desktop layout)
@@ -59,7 +61,7 @@ WorkprobaTitleBar
 └── SideChatPanel (Ctrl+Shift+L): lateral personas discussion
 ```
 
-**Sidebar** (`WorkspaceSidebar.vue`): workspaces → conversations tree, streaming indicator, user profile, memory and model settings access.
+**Sidebar** (`WorkspaceSidebar.vue`): spaces → conversations tree, renameable display titles, streaming indicator, user profile, memory and model settings access.
 
 **Right panel** (`RightPanel.vue`): file explorer, document preview (`DocumentPreview` + `VersionsPanel`), Personas tab if plugin active, dynamic plugin tabs.
 

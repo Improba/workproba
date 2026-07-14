@@ -381,7 +381,7 @@ export default {
     advancedProviderSaved: 'Provider enregistré',
     engine: {
       title: 'Comment Workproba travaille',
-      subtitle: 'Choisissez le moteur IA qui alimente vos conversations et la mémoire du dossier.',
+      subtitle: 'Choisissez le moteur IA qui alimente vos conversations et la mémoire de l\'espace.',
       chooseEngine: 'Choisissez comment Workproba travaille',
       useThisEngine: 'Utiliser ce moteur',
       activeEngine: 'Moteur actif',
@@ -563,7 +563,7 @@ export default {
     workproba: {
       projet: {
         name: 'Projet',
-        description: 'Partagez des documents publiés entre collaborateurs, à part de votre espace de travail.',
+        description: 'Partagez des documents publiés entre collaborateurs, à part de votre espace.',
         tabLabel: 'Projet',
         onboardingTitle: 'Créez votre premier projet',
         onboardingText: 'Un projet regroupe les documents que vous choisissez de partager. Commencez par en créer un.',
@@ -816,7 +816,7 @@ export default {
         edit: 'Modifier',
         nameLabel: 'Nom du jeu',
         selectPersonas: 'Personas à inclure',
-        localOnlyNote: 'Les jeux sont enregistrés dans votre espace de travail.',
+        localOnlyNote: 'Les jeux sont enregistrés dans votre espace.',
       },
     },
     persona: {
@@ -875,7 +875,7 @@ export default {
     forgetAllDoneUser: 'Votre mémoire utilisateur a été effacée.',
     forgetAllFailed: 'Impossible d\'effacer la mémoire.',
     scopeUser: 'Utilisateur',
-    scopeProject: 'Projet',
+    scopeProject: 'Espace',
     scopeUserHint: 'Partagée entre tous les espaces',
     scopeProjectHint: 'Spécifique à cet espace',
     addPlaceholder: 'Ajouter un souvenir…',

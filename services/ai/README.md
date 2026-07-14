@@ -22,7 +22,7 @@ make build-sidecar
 # → desktop/src-tauri/binaries/workproba-ai-<host-triple>
 ```
 
-Spec: `workproba_ai.spec`, entry point: `workproba_ai_entry.py`. Onefile évite un dossier `_internal` séparé, incompatible avec le layout runtime des sidecars Tauri. CI builds and smoke-tests the sidecar on every push to `main`/`develop` and on release tags.
+Spec: `workproba_ai.spec`, entry point: `workproba_ai_entry.py`. Onefile avoids a separate `_internal` folder, which is incompatible with the Tauri sidecar runtime layout. CI builds and smoke-tests the sidecar on every push to `main`/`develop` and on release tags.
 
 ## Security
 

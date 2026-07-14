@@ -2,7 +2,7 @@
 
 AI is fragmenting: a copilot in every app, contexts that never overlap, features siloed inside each suite. Our conviction is that it should first be **a personal work interface**, centered on the person, connected to their folders and tools, rather than embedded in each one of them.
 
-**Workproba** is a desktop application (**macOS, Linux, Windows**) that embodies this principle. You open a project folder on your machine; the assistant works directly on your files (Word, Excel, PDF), indexes and remembers context locally, and relies on the **LLM provider of your choice** (Ollama, Mistral, OpenAI, etc.). Your documents and memory stay on the machine; relevant context is sent to the model on each exchange, according to your configuration.
+**Workproba** is a desktop application (**macOS, Linux, Windows**) that embodies this principle. You **open a space** (a local folder on your machine); the assistant works directly on your files (Word, Excel, PDF), indexes and remembers context locally, and relies on the **LLM provider of your choice** (Ollama, Mistral, OpenAI, etc.). Your documents and memory stay on the machine; relevant context is sent to the model on each exchange, according to your configuration.
 
 *Local-first desktop app. Local files and memory, configurable LLM providers.*
 
@@ -17,7 +17,7 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 - **Agent chat**: SSE streaming, model and reasoning per conversation, attachments, composite "+" menu
 - **Scoped memory**: global user memories + project memories, local RAG, agent `remember` tool
 - **Personas plugin**: professional perspectives, simulated meetings, discussions (Improba builtin set)
-- **Workspace**: workspaces/conversations sidebar, right panel (files, preview, personas), side chat
+- **Spaces**: spaces/conversations sidebar (renameable titles), right panel (files, preview, personas), side chat
 - **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write
 - **Plugins**: project, browser, cloud (extensible, activatable in settings)
 
@@ -41,7 +41,7 @@ Step-by-step guide (SmartScreen, Gatekeeper, `.deb`, AppImage, uninstall): **[do
 - [docs/architecture.md](./docs/architecture.md): technical overview
 - [docs/memory.md](./docs/memory.md): user/project memory and RAG
 - [docs/plugins.md](./docs/plugins.md): plugins (personas, project, …)
-- [docs/workspace-storage.md](./docs/workspace-storage.md): per-workspace storage
+- [docs/workspace-storage.md](./docs/workspace-storage.md): per-space storage
 - [docs/README.md](./docs/README.md): full documentation index
 - [desktop/README.md](./desktop/README.md): Tauri development
 - [services/ai/README.md](./services/ai/README.md): Python sidecar API
@@ -111,7 +111,7 @@ Or: `bash scripts/dev.sh` then `cd desktop && yarn dev`
 ### Build installer
 
 ```bash
-make build-desktop    # sidecar PyInstaller + installateurs Tauri
+make build-desktop    # PyInstaller sidecar + Tauri installers
 ```
 
 Publish a release: `./scripts/create-tag.sh` (creates tag `vX.Y.Z`, triggers GitHub Actions). Installers are unsigned for now; see [docs/signing.md](./docs/signing.md).
@@ -121,6 +121,6 @@ Publish a release: `./scripts/create-tag.sh` (creates tag `vX.Y.Z`, triggers Git
 | Workflow | Trigger | Role |
 |---|---|---|
 | `desktop-ci.yml` | push/PR `main`, `develop` | validate-scripts, pytest, Rust, front lint/tests, lint-i18n, sidecar packaging |
-| `desktop-release.yml` | tag `v*.*.*` | installateurs 4 OS + `SHA256SUMS.txt`, release GitHub en brouillon |
+| `desktop-release.yml` | tag `v*.*.*` | 4-OS installers + `SHA256SUMS.txt`, draft GitHub release |
 
-Pipeline livré le **14/07/2026** (commit `1155d2d`). Reste à faire : première release tag validée terrain, signature installateurs ([docs/signing.md](./docs/signing.md)).
+Pipeline shipped **14/07/2026** (commit `1155d2d`). Remaining: first tagged release validated in the field, installer signing ([docs/signing.md](./docs/signing.md)).

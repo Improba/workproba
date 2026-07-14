@@ -1,12 +1,25 @@
-# Per-workspace storage
+# Per-space storage
 
-> **Last updated:** 11/07/2026
+> **Last updated:** 14/07/2026
+
+## Terminology
+
+| Term | Meaning |
+|---|---|
+| **Space** | User-facing concept: one local folder on disk that the user works in. The UI says "Open a space". |
+| **Display title** | Renameable label shown in the sidebar (default = folder basename). Updated via `update_workspace_title`. |
+| `workspace_id` / `ws_…` | Stable internal identifier in code and `registry.json`. Unchanged if the folder is renamed or the display title is edited. |
+| `folder_path` | Current absolute path to the space's folder on disk (updated on each open). |
+| **Project memory** (`project` scope in sidecar) | Per-space RAG and explicit memories in `.workproba/memory.db`. Not the `workproba.projet` plugin. |
+| `registry.json` → `workspaces` array | Internal registry field name (unchanged). Each entry maps a `workspace_id` to folder path and display title. |
+
+On disk, metadata lives under `{app_data}/spaces/` (migrated from legacy `{app_data}/workspaces/` on first launch after the Space UX update).
 
 ## Principle
 
-A **workspace** = a user folder on disk (e.g. `~/Clients/Dupont_2026/`).
+A **space** = a user folder on disk (e.g. `~/Clients/Dupont_2026/`).
 
-**Business files** stay in that folder, untouched. **Workproba metadata** (conversations, versions, project RAG memory and project memories) lives in a dedicated application directory, **not** in the client folder. Some data is **global user** data (user memory, profile, plugins).
+**Business files** stay in that folder, untouched. **Workproba metadata** (conversations, versions, per-space RAG memory and project memories) lives in a dedicated application directory, **not** in the client folder. Some data is **global user** data (user memory, profile, plugins).
 
 This model follows **Claude Cowork** (metadata in Application Support, user files in place) and avoids **Cursor** pitfalls (path hash → lost history on rename).
 
@@ -22,8 +35,8 @@ This model follows **Claude Cowork** (metadata in Application Support, user file
 ~/.local/share/fr.improba.workproba/          # Linux
 ~/Library/Application Support/fr.improba.workproba/   # macOS
 %LOCALAPPDATA%/fr.improba.workproba/          # Windows
-├── registry.json                           # index of known workspaces
-├── last-project.json                       # last opened folder
+├── registry.json                           # index of known spaces (internal key: workspaces[])
+├── last-project.json                       # last opened space
 ├── settings.json                           # app settings (LLM providers, active plugins)
 ├── user/
 │   └── memory.db                           # global explicit memories (user scope)
@@ -32,27 +45,35 @@ This model follows **Claude Cowork** (metadata in Application Support, user file
 ├── audit/
 │   ├── audit.jsonl                         # local audit log
 │   └── config.json                         # retention, activation
-└── workspaces/
+└── spaces/
     └── ws_a1b2c3d4.../
         └── .workproba/
-            ├── manifest.json               # folder path, title, dates
+            ├── manifest.json               # folder path, display title, dates
             ├── config.json                 # project instructions (later phase)
             ├── conversations/
             │   └── sess_....json           # one session = one JSON file
             ├── versions/                   # snapshots before AI modification
             ├── attachments/                # chat attachments per session
-            └── memory.db                   # project RAG + explicit memories (project scope)
+            └── memory.db                   # per-space RAG + explicit memories (project scope)
 ```
+
+## Display title
+
+Each space has a **display title** shown in the sidebar (default = folder basename). The user can rename it without affecting the folder on disk or the stable `workspace_id`. Tauri command: `update_workspace_title(workspace_id, title)` → updates `manifest.json` and the `registry.json` entry.
+
+## Migration from `workspaces/`
+
+On first launch after the Space UX update, if `{app_data}/workspaces/` exists and `{app_data}/spaces/` does not, Tauri **renames** `workspaces/` → `spaces/` automatically. No data loss; IDs and registry entries are preserved.
 
 ## Stable identification
 
 | Field | Role |
 |---|---|
-| `workspace_id` | Stable UUID (`ws_…`), unchanged if the folder is renamed |
+| `workspace_id` | Stable UUID (`ws_…`), unchanged if the folder is renamed or the display title is edited |
 | `folder_path` | Current folder path (updated on each open) |
-| `folder_path_normalized` | Canonical path to find the workspace after partial rename |
+| `folder_path_normalized` | Canonical path to find the space after partial rename |
 
-On folder open: lookup by canonical path → reuse existing ID or create a new workspace.
+On space open: lookup by canonical path → reuse existing ID or create a new space.
 
 ## Responsibility split
 
@@ -62,11 +83,11 @@ On folder open: lookup by canonical path → reuse existing ID or create a new w
 | Conversations | `.workproba/conversations/` (system) | Tauri → Quasar front |
 | File versions | `.workproba/versions/` (system) | Python sidecar |
 | Chat attachments | `.workproba/attachments/` (system) | Python sidecar |
-| Project memory (RAG + explicit) | `.workproba/memory.db` (system) | Python sidecar |
+| Per-space memory (RAG + explicit) | `.workproba/memory.db` (system) | Python sidecar |
 | User memory (explicit) | `{app_data}/user/memory.db` | Python sidecar |
 | Plugin data | `{app_data}/plugins/{plugin_id}/` | Python sidecar + Tauri settings |
 | Audit log | `{app_data}/audit/` | Python sidecar |
-| Project registry | `registry.json` | Tauri |
+| Space registry | `registry.json` | Tauri |
 
 The Python sidecar receives `workspace_data_dir` in agent and memory payloads to write to the right place. See [memory.md](./memory.md) for scope details.
 
@@ -94,7 +115,7 @@ See also [architecture.md § Model and reasoning per conversation](./architectur
 
 ## Initial release migration
 
-Sessions stored in `localStorage` (`workproba:sessions:{path}`) are **imported automatically** on first access to a workspace, then removed from the browser.
+Sessions stored in `localStorage` (`workproba:sessions:{path}`) are **imported automatically** on first access to a space, then removed from the browser.
 
 ## Competitive comparison
 
@@ -102,7 +123,7 @@ Sessions stored in `localStorage` (`workproba:sessions:{path}`) are **imported a
 |---|---|---|
 | **Claude Cowork** | Local folder mounted as-is | `Application Support/Claude-3p/` |
 | **Cursor** | `.cursor/` = config only | `workspaceStorage/{hash}/` (fragile on move) |
-| **Workproba** | Client folder without pollution | `{app_data}/workspaces/{uuid}/.workproba/` |
+| **Workproba** | Client folder without pollution | `{app_data}/spaces/{uuid}/.workproba/` |
 
 ## See also
 

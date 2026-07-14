@@ -1,93 +1,93 @@
-# Signature des installateurs Workproba
+# Workproba installer signing
 
-> **Statut :** non implémenté (builds non signés en V2)
-> **Dernière mise à jour :** 14/07/2026
+> **Status:** not implemented (unsigned V2 builds)
+> **Last updated:** 14/07/2026
 
-Les releases actuelles sont **volontairement non signées**. Windows SmartScreen et macOS Gatekeeper affichent un avertissement au premier lancement. C'est documenté pour les utilisateurs dans [installateurs.md](./installateurs.md).
+Current releases are **intentionally unsigned**. Windows SmartScreen and macOS Gatekeeper show a warning on first launch. This is documented for users in [installateurs.md](./installateurs.md).
 
-Ce document décrit ce qu'il faudra mettre en place lorsque les certificats Improba seront disponibles.
+This document describes what to put in place when Improba certificates are available.
 
-## Référence interne
+## Internal reference
 
-Le pipeline de production signé d'**ActoGraph v3** (`actograph-v3/.github/workflows/publish.yml`) sert de modèle :
+The signed production pipeline from **ActoGraph v3** (`actograph-v3/.github/workflows/publish.yml`) serves as a model:
 
-- Windows : Certum SimplySign (certificat cloud, TOTP)
-- macOS : Developer ID Application + notarization Apple
-- Vérifications post-build obligatoires (refus d'uploader un binaire non signé)
+- Windows: Certum SimplySign (cloud certificate, TOTP)
+- macOS: Developer ID Application + Apple notarization
+- Mandatory post-build checks (refuse to upload an unsigned binary)
 
-Workproba utilise **Tauri 2** (pas Electron). Les hooks de signature diffèrent mais les certificats et secrets GitHub sont les mêmes.
+Workproba uses **Tauri 2** (not Electron). Signing hooks differ, but certificates and GitHub secrets are the same.
 
 ## Windows (Authenticode)
 
-### Prérequis
+### Prerequisites
 
 | Secret / variable | Description |
 |---|---|
-| `CERTUM_OTP_URI` | URI otpauth pour le TOTP SimplySign |
-| `CERTUM_USERNAME` | Compte Certum |
-| `CERTUM_SUBJECT_FILTER` | Filtre sujet certificat (ex. `Improba`) |
+| `CERTUM_OTP_URI` | otpauth URI for SimplySign TOTP |
+| `CERTUM_USERNAME` | Certum account |
+| `CERTUM_SUBJECT_FILTER` | Certificate subject filter (e.g. `Improba`) |
 
-### Scripts à réutiliser ou adapter
+### Scripts to reuse or adapt
 
-Depuis actograph-v3 :
+From actograph-v3:
 
 - `.github/scripts/install-simplysign.ps1`
 - `.github/scripts/configure-simplysign.ps1`
 - `.github/scripts/connect-simplysign.ps1`
 
-Ces scripts installent SimplySign Desktop sur le runner Windows, authentifient via TOTP, et exportent `WIN_CERT_SHA1` (thumbprint du certificat cloud).
+These scripts install SimplySign Desktop on the Windows runner, authenticate via TOTP, and export `WIN_CERT_SHA1` (cloud certificate thumbprint).
 
-### Configuration Tauri
+### Tauri configuration
 
-Dans `desktop/src-tauri/tauri.conf.json` :
+In `desktop/src-tauri/tauri.conf.json`:
 
 ```json
 "windows": {
-  "certificateThumbprint": "<thumbprint ou via env>",
+  "certificateThumbprint": "<thumbprint or via env>",
   "digestAlgorithm": "sha256",
   "timestampUrl": "http://timestamp.digicert.com"
 }
 ```
 
-Ou via variables d'environnement au build :
+Or via build-time environment variables:
 
-- `TAURI_SIGNING_PRIVATE_KEY` (si clé fichier exportée)
-- thumbprint SimplySign consommé par `tauri build` / NSIS
+- `TAURI_SIGNING_PRIVATE_KEY` (if using an exported key file)
+- SimplySign thumbprint consumed by `tauri build` / NSIS
 
-### Étape CI à ajouter (dans `desktop-release.yml`, job Windows)
+### CI step to add (in `desktop-release.yml`, Windows job)
 
-1. Cache + install SimplySign (comme actograph)
-2. Authentification TOTP
-3. Build Tauri
-4. **Vérification** : `Get-AuthenticodeSignature` sur chaque `.exe` / `.msi` produit
-5. Cleanup SimplySign en `always()`
+1. Cache + install SimplySign (as in actograph)
+2. TOTP authentication
+3. Tauri build
+4. **Verification:** `Get-AuthenticodeSignature` on each produced `.exe` / `.msi`
+5. SimplySign cleanup in `always()`
 
-Ne jamais publier d'artefacts Windows non signés une fois la signature activée (fail-fast comme actograph).
+Never publish unsigned Windows artifacts once signing is enabled (fail-fast as in actograph).
 
 ## macOS (Developer ID + notarization)
 
-### Prérequis
+### Prerequisites
 
 | Secret | Description |
 |---|---|
-| `MAC_CERT_BASE64` | Certificat `.p12` encodé base64 |
-| `CSC_KEY_PASSWORD` | Mot de passe du `.p12` |
-| `APPLE_ID` | Apple ID du compte développeur |
-| `APPLE_APP_SPECIFIC_PASSWORD` | Mot de passe spécifique à l'application |
-| `APPLE_TEAM_ID` | Team ID Apple (ex. `XXXXXXXXXX`) |
+| `MAC_CERT_BASE64` | Base64-encoded `.p12` certificate |
+| `CSC_KEY_PASSWORD` | `.p12` password |
+| `APPLE_ID` | Developer account Apple ID |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password |
+| `APPLE_TEAM_ID` | Apple Team ID (e.g. `XXXXXXXXXX`) |
 
-### Étape CI à ajouter (jobs macOS)
+### CI step to add (macOS jobs)
 
-1. Importer le `.p12` dans un keychain éphémère du runner
-2. Exporter `CSC_KEYCHAIN`, `CSC_IDENTITY` (ex. `Developer ID Application: Improba (...)`)
-3. Build Tauri avec notarization (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`)
-4. **Vérifications** :
+1. Import the `.p12` into an ephemeral runner keychain
+2. Export `CSC_KEYCHAIN`, `CSC_IDENTITY` (e.g. `Developer ID Application: Improba (...)`)
+3. Build Tauri with notarization (`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`)
+4. **Checks:**
    - `codesign --verify --deep --strict`
-   - présence de `Developer ID Application` et du bon `TeamIdentifier`
+   - presence of `Developer ID Application` and the correct `TeamIdentifier`
    - `spctl -a -vv` (Gatekeeper)
-5. Cleanup keychain + `.p12` en `always()`
+5. Keychain + `.p12` cleanup in `always()`
 
-### Configuration Tauri
+### Tauri configuration
 
 ```json
 "macOS": {
@@ -96,46 +96,46 @@ Ne jamais publier d'artefacts Windows non signés une fois la signature activée
 }
 ```
 
-Un fichier `entitlements.plist` sera à créer selon les besoins (accès fichiers, réseau loopback, etc.).
+An `entitlements.plist` file will need to be created as required (file access, loopback network, etc.).
 
 ## Linux
 
-Selon la stratégie de distribution :
+Depending on distribution strategy:
 
 | Format | Signature |
 |---|---|
-| `.deb` | Clé GPG du dépôt APT (optionnel) |
-| `.AppImage` | Signature intégrée AppImage (`gpg --detach-sign`) |
-| Flatpak | Signature Flathub (hors scope initial) |
+| `.deb` | APT repository GPG key (optional) |
+| `.AppImage` | Built-in AppImage signature (`gpg --detach-sign`) |
+| Flatpak | Flathub signature (out of initial scope) |
 
-Priorité plus basse que Windows et macOS pour la première itération signée.
+Lower priority than Windows and macOS for the first signed iteration.
 
-## Secrets GitHub
+## GitHub secrets
 
-Créer un **environment** `deploy` (comme actograph) avec :
+Create a **`deploy`** environment (as in actograph) with:
 
-- protection par reviewers si souhaité
-- secrets listés ci-dessus
-- accès restreint au workflow `desktop-release.yml`
+- optional reviewer protection
+- secrets listed above
+- access restricted to the `desktop-release.yml` workflow
 
-## Activation progressive recommandée
+## Recommended progressive rollout
 
-1. **Phase 1 (actuelle)** : builds non signés, `releaseDraft: true`, documentation utilisateur
-2. **Phase 2** : signature Windows seule + vérification Authenticode
-3. **Phase 3** : signature macOS + notarization
-4. **Phase 4** : `releaseDraft: false`, checksums SHA256 publiés sur la release
+1. **Phase 1 (current):** unsigned builds, `releaseDraft: true`, user documentation
+2. **Phase 2:** Windows signing only + Authenticode verification
+3. **Phase 3:** macOS signing + notarization
+4. **Phase 4:** `releaseDraft: false`, SHA256 checksums published on the release
 
-## Checklist avant première release signée
+## Checklist before first signed release
 
-- [ ] Certificat Windows Certum actif et SimplySign testé manuellement
-- [ ] Certificat Apple Developer ID valide (expiration > 6 mois)
-- [ ] Secrets injectés dans l'environment GitHub `deploy`
-- [ ] Build CI vert sur les 4 plateformes avec vérifications de signature
-- [ ] Test manuel install + premier lancement sans avertissement OS
-- [ ] Mise à jour de [installateurs.md](./installateurs.md) (retirer les sections SmartScreen/Gatekeeper « attendu »)
+- [ ] Active Windows Certum certificate and SimplySign tested manually
+- [ ] Valid Apple Developer ID certificate (expiration > 6 months)
+- [ ] Secrets injected into the GitHub `deploy` environment
+- [ ] Green CI build on all 4 platforms with signature checks
+- [ ] Manual install + first launch test with no OS warning
+- [ ] Update [installateurs.md](./installateurs.md) (remove SmartScreen/Gatekeeper "expected" sections)
 
-## Voir aussi
+## See also
 
-- [installateurs.md](./installateurs.md) : guide utilisateur actuel (non signé)
-- [desktop.md](./desktop.md) : architecture desktop et packaging
-- `.github/workflows/desktop-release.yml` : pipeline release actuel (build matrix → job `create-release` unique + `SHA256SUMS.txt`)
+- [installateurs.md](./installateurs.md): current user guide (unsigned)
+- [desktop.md](./desktop.md): desktop architecture and packaging
+- `.github/workflows/desktop-release.yml`: current release pipeline (build matrix → single `create-release` job + `SHA256SUMS.txt`)

@@ -8,6 +8,7 @@ use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
 use super::fs_watch::start_fs_watch;
+use super::settings_store::get_app_settings;
 use super::workspace_store::{
     self, ConversationSession, WorkspaceInfo, WORKPROBA_DIR_NAME,
 };
@@ -126,12 +127,23 @@ fn activate_workspace(
     Ok(workspace)
 }
 
+fn pick_space_folder_title(app: &AppHandle) -> &'static str {
+    match get_app_settings(app.clone())
+        .ok()
+        .and_then(|settings| settings.locale)
+        .as_deref()
+    {
+        Some("fr") => "Ouvrir un espace…",
+        _ => "Open a space…",
+    }
+}
+
 #[tauri::command]
 pub async fn pick_project_folder(app: AppHandle) -> Result<Option<String>, String> {
     let selection = app
         .dialog()
         .file()
-        .set_title("Ouvrir un dossier d'espace")
+        .set_title(pick_space_folder_title(&app))
         .blocking_pick_folder();
 
     Ok(selection.map(|path| path.to_string()))

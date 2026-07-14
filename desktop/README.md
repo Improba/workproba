@@ -4,6 +4,8 @@
 
 The UI reuses the **Quasar** front (`../front/`) in a webview. The AI core remains in **Python** (`../services/ai/`) launched as a sidecar. Rust only provides the native bridge (window, folder dialog, OS permissions, sidecar lifecycle).
 
+**UX terminology:** The user works in **spaces** (local folders). Tauri command names still use `workspace` / `project` internally (e.g. `workspace_id`, `list_workspaces`).
+
 ## Prerequisites
 
 | Tool | Version | Usage |
@@ -68,7 +70,7 @@ The Python AI service must be started separately in dev (see below).
 Useful notes:
 
 - **First launch**: full Rust compilation, potentially long. Subsequent builds are incremental.
-- **Rust**: no in-process hot reload. Tauri watches `.rs` files and relaunches the app after recompilation. Window state (open folder, etc.) is lost on restart.
+- **Rust**: no in-process hot reload. Tauri watches `.rs` files and relaunches the app after recompilation. Window state (open space, etc.) is lost on restart.
 - **Frontend**: the webview loads the Quasar dev server; Vue/TS changes reflect without restarting Tauri.
 - **Python**: independent of `make dev-desktop`. Run `make dev-ai` in another terminal.
 
@@ -86,8 +88,8 @@ In dev, Tauri also tries to **start the sidecar automatically** (`try_spawn_dev_
 ## Multi-platform build
 
 ```bash
-make build-desktop    # sidecar PyInstaller + installateurs Tauri (plateforme courante)
-# ou par étapes :
+make build-desktop    # sidecar PyInstaller + Tauri installers (current platform)
+# or step by step:
 make build-sidecar
 cd desktop && yarn build
 ```
@@ -100,15 +102,16 @@ Python sidecar packaging: `scripts/build-sidecar.sh` → `workproba-ai-<triple>`
 
 | Command | Role |
 |---|---|
-| `pick_project_folder` | Native "Open folder" dialog |
-| `set_active_project_path` | Activates a folder, registers the workspace (`WorkspaceInfo`) |
-| `get_active_project_path` | Returns the active folder |
-| `get_workspace_data_dir` | System `.workproba` path for a folder |
-| `list_workspaces` | Lists known workspaces |
+| `pick_project_folder` | Native folder picker ("Open a space" in UI) |
+| `set_active_project_path` | Activates a space, registers it (`WorkspaceInfo`) |
+| `get_active_project_path` | Returns the active space folder path |
+| `get_workspace_data_dir` | System `.workproba` path for a space (`{app_data}/spaces/{id}/.workproba/`) |
+| `list_workspaces` | Lists known spaces |
+| `update_workspace_title` | Renames a space display title (sidebar label; does not rename the folder) |
 | `list_conversations` / `save_conversation` | Chat sessions on disk |
-| `list_documents` | Lists project files (excluding dotfiles) |
+| `list_documents` | Lists space files (excluding dotfiles) |
 | `open_path` | Opens a file or folder with the OS default app |
-| `restore_last_project_path` | Restores the last opened folder (persisted app data) |
+| `restore_last_project_path` | Restores the last opened space (persisted app data) |
 | `start_ai_sidecar` | Starts the packaged Python binary (prod) |
 | `ai_sidecar_status` | Sidecar TCP liveness (`127.0.0.1:8765`) for the front health badge |
 

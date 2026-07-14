@@ -382,7 +382,7 @@ export default {
     advancedProviderSaved: 'Provider saved',
     engine: {
       title: 'How Workproba works',
-      subtitle: 'Choose the AI engine that powers your conversations and folder memory.',
+      subtitle: 'Choose the AI engine that powers your conversations and space memory.',
       chooseEngine: 'Choose how Workproba works',
       useThisEngine: 'Use this engine',
       activeEngine: 'Active engine',
@@ -564,7 +564,7 @@ export default {
     workproba: {
       projet: {
         name: 'Project',
-        description: 'Share published documents with collaborators, separate from your workspace.',
+        description: 'Share published documents with collaborators, separate from your space.',
         tabLabel: 'Project',
         onboardingTitle: 'Create your first project',
         onboardingText: 'A project groups the documents you choose to share. Start by creating one.',
@@ -704,7 +704,7 @@ export default {
       tooltip: 'Persona meetings and discussions are stored on this device. Only explicit publishing to a project or cloud sync shares them.',
     },
     includeMemory: 'Include memory',
-    includeMemoryTooltip: 'Lets personas consult workspace memory for a more informed opinion or meeting.',
+    includeMemoryTooltip: 'Lets personas consult space memory for a more informed opinion or meeting.',
     publishToProject: 'Publish to project',
     publishToProjectTooltip: 'Enable the Project plugin to publish a report.',
     publishToProjectTitle: 'Publish to a project',
@@ -722,7 +722,7 @@ export default {
       cardLabel: 'Opinion on {topic}',
       header: 'Opinion on {topic}',
       waiting: 'Thinking…',
-      memoryCited: 'Workspace memory consulted',
+      memoryCited: 'Space memory consulted',
       another: 'Ask another opinion',
       toDiscussion: 'Turn into a discussion',
     },
@@ -817,7 +817,7 @@ export default {
         edit: 'Edit',
         nameLabel: 'Set name',
         selectPersonas: 'Personas to include',
-        localOnlyNote: 'Sets are saved to your workspace.',
+        localOnlyNote: 'Sets are saved to your space.',
       },
     },
     persona: {
@@ -876,7 +876,7 @@ export default {
     forgetAllDoneUser: 'Your user memory has been cleared.',
     forgetAllFailed: 'Could not clear memory.',
     scopeUser: 'User',
-    scopeProject: 'Project',
+    scopeProject: 'Space',
     scopeUserHint: 'Shared across all spaces',
     scopeProjectHint: 'Specific to this space',
     addPlaceholder: 'Add a memory…',

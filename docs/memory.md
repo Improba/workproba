@@ -153,7 +153,7 @@ Lightweight note: « this space has N other conversation(s) ». Points the agent
 
 ## Inter-conversational promotion
 
-> **Statut : livré (14/07/2026).** Pipeline complet côté sidecar + front ; 63 tests pytest mémoire verts. Reste ouvert : ranking sémantique (embeddings), citations cliquables dans le chat (T-V2-18).
+> **Status: shipped (14/07/2026).** Full pipeline on sidecar + front; 63 green pytest memory tests. Still open: semantic ranking (embeddings), clickable citations in chat (T-V2-18).
 
 ### Trigger (frontend)
 
@@ -360,7 +360,7 @@ Front-end client: `front/src/services/aiSidecar.ts` (`promoteSessionMemory`, `us
 | `test_memory_promotion.py` | `/memory/promote-session` HTTP |
 | `test_memory_ranking.py` | Lexical ranking |
 | `test_memory_mechanics.py` | Cross-hook behavior, dedup, session skip |
-| `test_memory_flow.py` | Flux bout-en-bout : promote → inject, bridge sessions, dédup HTTP |
+| `test_memory_flow.py` | End-to-end flow: promote → inject, session bridge, HTTP dedup |
 | `test_agent_remember.py` | `remember` tool wiring |
 | `test_recall_project_sessions.py` | Session digest builder |
 | `test_compaction.py` | History compaction + memory overhead |

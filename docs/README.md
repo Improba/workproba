@@ -9,7 +9,7 @@ Operational since **14/07/2026** (commit `1155d2d`).
 | Workflow | Trigger | Role |
 |---|---|---|
 | [`.github/workflows/desktop-ci.yml`](../.github/workflows/desktop-ci.yml) | push/PR `main`, `develop` | pytest, Rust, front lint/tests, lint-i18n, sidecar packaging |
-| [`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml) | tag `v*.*.*` | installateurs multi-OS + `SHA256SUMS.txt`, release brouillon |
+| [`.github/workflows/desktop-release.yml`](../.github/workflows/desktop-release.yml) | tag `v*.*.*` | multi-OS installers + `SHA256SUMS.txt`, draft release |
 
 Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md](./signing.md). Next ops step: validate first tagged release on all 4 platforms.
 
@@ -27,7 +27,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 
 - **[architecture.md](./architecture.md)**: Overview, stack, UI shell, chat, LLM models
 - **[stack.md](./stack.md)**: Component versions, ports, environment variables, dev commands
-- **[workspace-storage.md](./workspace-storage.md)**: Per-workspace storage and global user data
+- **[workspace-storage.md](./workspace-storage.md)**: Per-space storage and global user data (Space UX, `{app_data}/spaces/`, migration from legacy `workspaces/`)
 - **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, promotion, cross-session recall
 - **[plugins.md](./plugins.md)**: Plugin system, personas, UI integration
 - **[browser.md](./browser.md)**: Browser plugin (Playwright, agent tools, live view, security)
