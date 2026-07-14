@@ -44,6 +44,7 @@ class RecordingGate(ConfirmationGate):
         tool_call_id: str,
         proposal: EffectProposal,
         audit_app_data_dir: Path | None = None,
+        audit_enabled: bool | None = None,
     ) -> bool:
         self.effect_calls.append(proposal)
         if not self.auto_approve:
@@ -359,6 +360,190 @@ def test_audit_on_request_effect(tmp_path: Path) -> None:
     assert requested["details"]["work_id"] == "turn-audit"
     assert requested["details"]["effect"] == "create"
     assert resolved["details"]["decision"] == "approve"
+
+
+def test_audit_disabled_on_request_effect(tmp_path: Path) -> None:
+    app_data = tmp_path / "app_data"
+    app_data.mkdir()
+
+    async def run() -> None:
+        gate = ConfirmationGate(session_id="s1", turn_id="turn-no-audit")
+        proposal = EffectProposal(
+            effect="create",
+            tool_name="generate_document",
+            targets=["note.md"],
+            action="create",
+            proposed_path="note.md",
+            human_summary="Créer note.md",
+        )
+
+        async def approve_later() -> None:
+            await asyncio.sleep(0.05)
+            event = gate.event_queue.get_nowait()
+            assert isinstance(event, ConfirmationRequestEvent)
+            gate.resolve(event.confirmation_id, "approve")
+
+        asyncio.create_task(approve_later())
+        await gate.request_effect(
+            tool_call_id="tc1",
+            proposal=proposal,
+            audit_app_data_dir=app_data,
+            audit_enabled=False,
+        )
+
+    asyncio.run(run())
+
+    entries, _ = read_audit(app_data)
+    assert entries == []
+
+
+@pytest.mark.asyncio
+async def test_request_effect_timeout_writes_audit(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    app_data = tmp_path / "app_data"
+    app_data.mkdir()
+    monkeypatch.setattr(
+        "app.agent.confirmation.CONFIRMATION_TIMEOUT_SECONDS",
+        0.05,
+    )
+
+    gate = ConfirmationGate(session_id="s1", turn_id="turn-timeout")
+    proposal = EffectProposal(
+        effect="create",
+        tool_name="write_docx",
+        targets=["out.docx"],
+        action="create",
+        proposed_path="out.docx",
+        human_summary="Créer out.docx",
+    )
+
+    approved = await gate.request_effect(
+        tool_call_id="tc1",
+        proposal=proposal,
+        audit_app_data_dir=app_data,
+        audit_enabled=True,
+    )
+    assert approved is False
+
+    entries, _ = read_audit(app_data)
+    events = [entry["event"] for entry in entries]
+    assert events == ["approval.requested", "approval.resolved"]
+    resolved = next(e for e in entries if e["event"] == "approval.resolved")
+    assert resolved["details"]["decision"] == "timeout"
+
+
+def test_request_effect_deny_writes_audit(tmp_path: Path) -> None:
+    app_data = tmp_path / "app_data"
+    app_data.mkdir()
+
+    async def run() -> None:
+        gate = ConfirmationGate(session_id="s1", turn_id="turn-deny")
+        proposal = EffectProposal(
+            effect="publish",
+            tool_name="publish_artifact",
+            targets=["doc.pdf", "Alpha"],
+            action="create",
+            proposed_path="artefacts/p1/doc.pdf",
+            human_summary="Publier",
+        )
+
+        async def deny_later() -> None:
+            await asyncio.sleep(0.05)
+            event = gate.event_queue.get_nowait()
+            assert isinstance(event, ConfirmationRequestEvent)
+            gate.resolve(event.confirmation_id, "deny")
+
+        asyncio.create_task(deny_later())
+        approved = await gate.request_effect(
+            tool_call_id="tc1",
+            proposal=proposal,
+            audit_app_data_dir=app_data,
+            audit_enabled=True,
+        )
+        assert approved is False
+
+    asyncio.run(run())
+
+    entries, _ = read_audit(app_data)
+    resolved = next(e for e in entries if e["event"] == "approval.resolved")
+    assert resolved["details"]["decision"] == "deny"
+
+
+def test_multi_file_same_work_id_audit(tmp_path: Path) -> None:
+    app_data = tmp_path / "app_data"
+    app_data.mkdir()
+    turn_id = "turn-multi"
+
+    async def run() -> None:
+        gate = ConfirmationGate(session_id="s1", turn_id=turn_id)
+
+        async def approve_both() -> None:
+            for _ in range(2):
+                await asyncio.sleep(0.05)
+                event = gate.event_queue.get_nowait()
+                assert isinstance(event, ConfirmationRequestEvent)
+                gate.resolve(event.confirmation_id, "approve")
+
+        asyncio.create_task(approve_both())
+
+        for name in ("a.docx", "b.docx"):
+            proposal = EffectProposal(
+                effect="create",
+                tool_name="write_docx",
+                targets=[name],
+                action="create",
+                proposed_path=name,
+                human_summary=f"Créer {name}",
+            )
+            approved = await gate.request_effect(
+                tool_call_id=f"tc-{name}",
+                proposal=proposal,
+                audit_app_data_dir=app_data,
+                audit_enabled=True,
+            )
+            assert approved is True
+
+    asyncio.run(run())
+
+    entries, _ = read_audit(app_data)
+    requested = [e for e in entries if e["event"] == "approval.requested"]
+    resolved = [e for e in entries if e["event"] == "approval.resolved"]
+    assert len(requested) == 2
+    assert len(resolved) == 2
+    assert all(e["details"]["work_id"] == turn_id for e in requested + resolved)
+
+
+def test_classify_effect_search_kb_returns_none() -> None:
+    proposal = classify_effect("search_kb", {"query": "pytest"}, permissions_network=True)
+    assert proposal is None
+
+
+@pytest.mark.asyncio
+async def test_search_kb_does_not_call_request_effect(tmp_path: Path) -> None:
+    gate = RecordingGate()
+    client = FakeProjectClient()
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            project_root=tmp_path,
+            locale="fr",
+        ),
+        project_client=client,
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=gate,
+    )
+    agent = build_agent(TestModel())
+    tool = agent._function_toolset.tools["search_kb"]
+    ctx = _ctx(deps)
+
+    await tool.function(ctx, query="hello")
+    assert gate.effect_calls == []
 
 
 @pytest.mark.asyncio

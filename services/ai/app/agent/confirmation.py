@@ -101,6 +101,7 @@ class ConfirmationGate:
         tool_call_id: str,
         proposal: EffectProposal,
         audit_app_data_dir: Path | None = None,
+        audit_enabled: bool | None = None,
     ) -> bool:
         """Émet confirmation_request enrichi et attend approve/deny."""
         confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
@@ -125,6 +126,7 @@ class ConfirmationGate:
                     },
                     work_id,
                 ),
+                enabled=audit_enabled,
             )
 
         decision = await self._await_decision(
@@ -155,6 +157,7 @@ class ConfirmationGate:
                     {"decision": decision or "timeout"},
                     work_id,
                 ),
+                enabled=audit_enabled,
             )
 
         return decision == "approve"

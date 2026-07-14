@@ -786,6 +786,7 @@ def build_agent(
                 tool_call_id=ctx.tool_call_id or "",
                 proposal=proposal,
                 audit_app_data_dir=deps.context.workspace_data_dir,
+                audit_enabled=deps.context.audit_enabled,
             )
             if not approved:
                 return {
