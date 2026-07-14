@@ -63,6 +63,7 @@ from app.schemas import (
     ProviderSet,
     ProviderSetTestResponse,
     TurnStartEvent,
+    WorkFailedEvent,
     UtilitySummarizeRequest,
     UtilitySummarizeResponse,
     UtilityTitleRequest,
@@ -537,33 +538,57 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                                     cancel_event.set()
                                     break
                                 continue
+                            provider_message = t(
+                                payload.locale,
+                                "loop.provider_unavailable",
+                            )
+                            yield to_sse_event(
+                                WorkFailedEvent(
+                                    work_id=work_id_for_turn(turn_id),
+                                    code="provider_unavailable",
+                                    message=provider_message,
+                                )
+                            )
                             yield to_sse_event(
                                 ErrorEvent(
                                     code="provider_unavailable",
-                                    message=t(
-                                        payload.locale,
-                                        "loop.provider_unavailable",
-                                    ),
+                                    message=provider_message,
                                 )
                             )
                             break
             except TimeoutError:
                 cancel_event.set()
+                timeout_message = t(
+                    payload.locale,
+                    "main.turn_timeout",
+                    seconds=settings.turn_timeout_seconds,
+                )
+                yield to_sse_event(
+                    WorkFailedEvent(
+                        work_id=work_id_for_turn(turn_id),
+                        code="turn_timeout",
+                        message=timeout_message,
+                    )
+                )
                 yield to_sse_event(
                     ErrorEvent(
                         code="turn_timeout",
-                        message=t(
-                            payload.locale,
-                            "main.turn_timeout",
-                            seconds=settings.turn_timeout_seconds,
-                        ),
+                        message=timeout_message,
                     )
                 )
         except Exception:
+            internal_message = t(payload.locale, "main.internal_error")
+            yield to_sse_event(
+                WorkFailedEvent(
+                    work_id=work_id_for_turn(turn_id),
+                    code="internal_error",
+                    message=internal_message,
+                )
+            )
             yield to_sse_event(
                 ErrorEvent(
                     code="internal_error",
-                    message=t(payload.locale, "main.internal_error"),
+                    message=internal_message,
                 )
             )
         finally:

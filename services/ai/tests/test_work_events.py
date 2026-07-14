@@ -2,13 +2,21 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
+from fastapi.testclient import TestClient
+from openai import APITimeoutError
 from pydantic_ai import RunContext
 from pydantic_ai.models.test import TestModel
 
+import app.auth as authmod
+import app.main as mainmod
 from app.agent.loop import AgentLoop
 from app.agent.tools import ToolDeps, build_agent
 from app.agent.work_events import capability_label, work_id_for_turn
@@ -26,6 +34,104 @@ from app.schemas import (
 from app.sandbox.runner import SandboxRunner
 
 from conftest import FakeProjectClient
+
+INTERNAL_HEADERS = {"X-Internal-Secret": "desktop-dev-secret"}
+
+
+def _httpx_request() -> httpx.Request:
+    return httpx.Request("POST", "http://example.test/v1/chat/completions")
+
+
+def _sse_events(resp: Any) -> list[tuple[str, dict[str, Any]]]:
+    events: list[tuple[str, dict[str, Any]]] = []
+    event_type: str | None = None
+    data: str | None = None
+    for line in resp.iter_lines():
+        if line.startswith("event:"):
+            event_type = line[len("event:") :].strip()
+        elif line.startswith("data:"):
+            data = line[len("data:") :].strip()
+        elif line == "" and event_type and data:
+            events.append((event_type, json.loads(data)))
+            event_type = None
+            data = None
+    if event_type and data:
+        events.append((event_type, json.loads(data)))
+    return events
+
+
+def _turn_payload(tmp_path: Path, **overrides: Any) -> dict[str, Any]:
+    payload = {
+        "tenant_id": "t",
+        "project_id": str(tmp_path),
+        "project_path": str(tmp_path),
+        "session_id": "sess-work-events",
+        "message": "hello",
+        "history": [],
+        "documents": [],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _provider_set_with_fallback() -> dict[str, Any]:
+    return {
+        "id": "test-fallback",
+        "chat": {
+            "provider": "mistral",
+            "model": "mistral-small-latest",
+            "api_key": "primary-key",
+        },
+        "chat_fallback": {
+            "provider": "ollama",
+            "model": "llama3.2",
+        },
+    }
+
+
+def _assert_work_failed_before_error(
+    events: list[tuple[str, dict[str, Any]]],
+    *,
+    code: str,
+    turn_id: str,
+) -> None:
+    event_types = [event_type for event_type, _data in events]
+    failed_indices = [i for i, event_type in enumerate(event_types) if event_type == "work_failed"]
+    error_indices = [i for i, event_type in enumerate(event_types) if event_type == "error"]
+    assert failed_indices, f"work_failed manquant pour code={code}"
+    assert error_indices, f"error manquant pour code={code}"
+    failed_idx = next(
+        i
+        for i in failed_indices
+        if events[i][1].get("code") == code
+    )
+    error_idx = next(
+        i
+        for i in error_indices
+        if events[i][1].get("code") == code
+    )
+    assert failed_idx < error_idx
+    failed_data = events[failed_idx][1]
+    error_data = events[error_idx][1]
+    assert failed_data["work_id"] == turn_id
+    assert failed_data["code"] == code
+    assert error_data["code"] == code
+    assert failed_data["message"] == error_data["message"]
+    assert event_types.count("work_completed") == 0
+
+
+@pytest.fixture(autouse=True)
+def _patch_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(authmod, "is_loopback_host", lambda host: True)
+
+
+@pytest.fixture(autouse=True)
+def _patch_build_model(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        mainmod,
+        "build_model",
+        lambda config: TestModel(seed=0, call_tools=[]),
+    )
 
 
 def _make_request(
@@ -195,3 +301,130 @@ async def test_fake_plugin_tool_emits_work_contribution_with_label() -> None:
     assert fake_started
     assert fake_started[0].kind == "capability"
     assert fake_started[0].summary
+
+
+def test_agent_turn_timeout_emits_work_failed_before_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SlowLoop:
+        def __init__(self, *args: Any, **kwargs: Any) -> None:
+            pass
+
+        async def run_turn(self, *args: Any, **kwargs: Any) -> AsyncIterator[Any]:
+            await asyncio.sleep(5)
+            if False:
+                yield
+
+    monkeypatch.setattr(mainmod, "AgentLoop", SlowLoop)
+    turn_id = "turn-timeout-work-failed"
+
+    with TestClient(mainmod.app) as client:
+        client.app.state.settings.turn_timeout_seconds = 1
+        with client.stream(
+            "POST",
+            "/agent/turn",
+            json=_turn_payload(tmp_path, session_id="sess-timeout-wf", turn_id=turn_id),
+            headers=INTERNAL_HEADERS,
+        ) as resp:
+            events = _sse_events(resp)
+
+    _assert_work_failed_before_error(events, code="turn_timeout", turn_id=turn_id)
+
+
+def test_agent_turn_provider_unavailable_emits_work_failed_before_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fail_stream(
+        self: AgentLoop, node: Any, ctx: Any
+    ) -> AsyncIterator[Any]:
+        raise APITimeoutError(request=_httpx_request())
+        yield  # pragma: no cover
+
+    monkeypatch.setattr(AgentLoop, "_iter_model_stream", fail_stream)
+    turn_id = "turn-provider-work-failed"
+
+    with TestClient(mainmod.app) as client:
+        with client.stream(
+            "POST",
+            "/agent/turn",
+            json=_turn_payload(
+                tmp_path,
+                session_id="sess-provider-wf",
+                turn_id=turn_id,
+                provider_set={
+                    "id": "no-fallback",
+                    "chat": {
+                        "provider": "mistral",
+                        "model": "mistral-small-latest",
+                        "api_key": "primary-key",
+                    },
+                },
+            ),
+            headers=INTERNAL_HEADERS,
+        ) as resp:
+            events = _sse_events(resp)
+
+    _assert_work_failed_before_error(events, code="provider_unavailable", turn_id=turn_id)
+
+
+def test_agent_turn_internal_error_emits_work_failed_before_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def boom(_config: Any) -> Any:
+        raise RuntimeError("bad llm config")
+
+    monkeypatch.setattr(mainmod, "build_model", boom)
+    turn_id = "turn-internal-work-failed"
+
+    with TestClient(mainmod.app) as client:
+        with client.stream(
+            "POST",
+            "/agent/turn",
+            json=_turn_payload(tmp_path, session_id="sess-internal-wf", turn_id=turn_id),
+            headers=INTERNAL_HEADERS,
+        ) as resp:
+            events = _sse_events(resp)
+
+    _assert_work_failed_before_error(events, code="internal_error", turn_id=turn_id)
+
+
+def test_agent_turn_fallback_retry_emits_single_work_started(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = AgentLoop._iter_model_stream
+    call_count = {"n": 0}
+
+    async def patched_stream(
+        self: AgentLoop, node: Any, ctx: Any
+    ) -> AsyncIterator[Any]:
+        call_count["n"] += 1
+        if call_count["n"] == 1:
+            raise APITimeoutError(request=_httpx_request())
+        async for event in original(self, node, ctx):
+            yield event
+
+    monkeypatch.setattr(AgentLoop, "_iter_model_stream", patched_stream)
+
+    with TestClient(mainmod.app) as client:
+        with client.stream(
+            "POST",
+            "/agent/turn",
+            json=_turn_payload(
+                tmp_path,
+                session_id="sess-fallback-single-ws",
+                provider_set=_provider_set_with_fallback(),
+            ),
+            headers=INTERNAL_HEADERS,
+        ) as resp:
+            events = _sse_events(resp)
+
+    event_types = [event_type for event_type, _data in events]
+    assert event_types.count("work_started") == 1
+    assert "fallback" in event_types
+    assert "work_completed" in event_types
+    assert "work_failed" not in event_types
+    assert call_count["n"] >= 2
