@@ -112,6 +112,30 @@ def test_preview_rejects_path_traversal(tmp_path: Path) -> None:
     assert resp.status_code == 403
 
 
+def test_preview_separate_project_and_data_dirs(tmp_path: Path) -> None:
+    """Desktop : folder_path et data_dir (.workproba) sont des chemins distincts."""
+    data_dir = tmp_path / "data"
+    project_dir = tmp_path / "project"
+    data_dir.mkdir()
+    project_dir.mkdir()
+    doc = Document()
+    doc.add_paragraph("Hello")
+    doc.save(project_dir / "note.docx")
+
+    with TestClient(mainmod.app) as client:
+        resp = client.get(
+            "/documents/preview",
+            params={
+                "path": "note.docx",
+                "workspace_data_dir": str(data_dir),
+                "project_path": str(project_dir),
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    assert "Hello" in resp.json()["html"]
+
+
 def test_preview_image_type(tmp_path: Path) -> None:
     img = tmp_path / "pic.png"
     img.write_bytes(b"\x89PNG\r\n\x1a\n")

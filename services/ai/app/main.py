@@ -762,13 +762,11 @@ async def documents_preview(
     settings: Settings = request.app.state.settings
     require_internal_secret(request, settings)
 
-    workspace_root = Path(workspace_data_dir).expanduser().resolve()
+    # folder_path (project_path) et workspace_data_dir (.workproba) sont distincts en desktop.
     if project_path:
         base = Path(project_path).expanduser().resolve()
-        if not base.is_relative_to(workspace_root):
-            raise HTTPException(status_code=403, detail="Project path outside workspace")
     else:
-        base = workspace_root
+        base = Path(workspace_data_dir).expanduser().resolve()
 
     normalized = path.replace("\\", "/").lstrip("/")
     while normalized.startswith("./"):
@@ -1020,11 +1018,7 @@ def _resolve_workspace_root(payload: ProjetPublishRequest) -> Path:
     if payload.workspace_data_dir is None:
         raise HTTPException(status_code=400, detail="workspace_data_dir required")
     if payload.project_path:
-        root = Path(payload.project_path).expanduser().resolve()
-        workspace_root = Path(payload.workspace_data_dir).expanduser().resolve()
-        if not root.is_relative_to(workspace_root):
-            raise HTTPException(status_code=403, detail="Project path outside workspace")
-        return root
+        return Path(payload.project_path).expanduser().resolve()
     return Path(payload.workspace_data_dir).expanduser().resolve()
 
 
