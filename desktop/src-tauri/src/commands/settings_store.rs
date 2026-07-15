@@ -485,6 +485,7 @@ fn migrate_provider_sets(settings: &mut AppSettings) {
             reasoning: Some("medium".to_string()),
             vision: false,
             tools: true,
+            web_search: false,
         }),
         is_default: true,
         is_builtin: false,

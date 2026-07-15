@@ -418,17 +418,16 @@ pub fn reveal_in_os(path: String) -> Result<(), String> {
         return Err(format!("Le chemin n'existe pas : {path}"));
     }
 
-    let target = if path_buf.is_dir() {
-        path_buf.clone()
-    } else {
-        path_buf
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_else(|| path_buf.clone())
-    };
-
     #[cfg(target_os = "linux")]
     {
+        let target = if path_buf.is_dir() {
+            path_buf.clone()
+        } else {
+            path_buf
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| path_buf.clone())
+        };
         Command::new("xdg-open")
             .arg(&target)
             .spawn()
