@@ -1,6 +1,6 @@
 <template>
   <div class="chat-page">
-    <header class="chat-page__header">
+    <header v-if="messages.length > 0" class="chat-page__header">
       <div class="chat-page__heading">
         <h1 class="chat-page__title">{{ sessionTitle }}</h1>
         <div v-if="metaParts.length || streaming" class="chat-page__meta">
@@ -114,6 +114,7 @@ import { useProject } from '@composables/useProject';
 import { clearExpansionState } from '@composables/useToolCallExpansion';
 import { createSessionLoadGuard } from '@composables/useSessionLoadGuard';
 import { bumpSessions } from '@composables/useSessionSync';
+import { consumePendingChatLaunch } from '@composables/usePendingChatLaunch';
 import {
   resolveUiMode,
   requestTitle,
@@ -406,10 +407,24 @@ async function afterSessionLoaded(loadGen: number): Promise<void> {
     initialPrompt?: string;
     focusComposer?: boolean;
   } | null;
-  const prompt = state?.initialPrompt?.trim();
+  const pending = consumePendingChatLaunch();
 
   await nextTick();
   if (sessionLoadGuard.isStale(loadGen)) return;
+
+  if (pending) {
+    if (pending.reasoningEffort != null) {
+      sessionReasoningOverride.value = pending.reasoningEffort;
+    }
+    if (pending.model) {
+      sessionModelOverride.value = pending.model;
+    }
+    await send(pending.text, { attachments: pending.attachments });
+    void tryAutoTitle(loadGen);
+    return;
+  }
+
+  const prompt = state?.initialPrompt?.trim();
 
   if (prompt) {
     chatViewRef.value?.setDraft(prompt);

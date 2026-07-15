@@ -154,11 +154,10 @@ defineExpose({
   width: 100%;
   max-width: 46rem;
   margin: 0 auto;
-  padding: 0;
+  padding: var(--wp-space-3) var(--wp-space-4) var(--wp-space-4);
 }
 
 .message-list__item {
-  // Pleine largeur : le séparateur et le fond user sont portés par Message.
   width: 100%;
 }
 

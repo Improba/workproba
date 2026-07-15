@@ -67,7 +67,7 @@ describe('pages smoke tests', () => {
       global: {
         stubs: {
           OpenSpaceButton: { template: '<button class="open-space" />' },
-          HomeComposer: true,
+          ChatView: true,
           Lucide: true,
           'q-dialog': { template: '<div><slot /></div>' },
         },

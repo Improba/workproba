@@ -61,17 +61,17 @@
 
   /* Accents de marque (stables entre thèmes) */
   --wp-canard: #203d52;
-  --wp-cyan: #3ecfd9;
+  --wp-cyan: #2bb5c2;
   --wp-gold: #ffcc49;
   --wp-violet: #b077dd;
 
   body.body--light {
-    --wp-bg: var(--neutral-lower);
+    --wp-bg: var(--neutral-low);
     --wp-surface: var(--neutral-lowest);
-    --wp-surface-2: var(--neutral-low);
-    --wp-surface-3: #ebe6de;
-    --wp-border: #e0dbd2;
-    --wp-border-strong: #cfc8bc;
+    --wp-surface-2: var(--neutral-lower);
+    --wp-surface-3: color-mix(in srgb, var(--secondary-low) 65%, var(--neutral-low));
+    --wp-border: var(--neutral-medium);
+    --wp-border-strong: var(--neutral-medium);
     --wp-text: var(--text);
     --wp-text-muted: var(--neutral-higher);
     --wp-text-faint: var(--neutral-high);
@@ -82,18 +82,24 @@
     --wp-accent: var(--accent);
     --wp-accent-strong: var(--accent-high);
     --wp-accent-soft: var(--accent-lowest);
+    --wp-on-accent: var(--text-invert);
     --wp-selection: var(--primary);
     --wp-selection-soft: var(--primary-lowest);
     --wp-user-bubble-bg: var(--primary-lowest);
     --wp-user-bubble-text: var(--primary);
     --wp-user-bubble-border: var(--primary-low);
-    --wp-gold: #e0a93a;
-    --wp-gold-soft: #fff3d6;
+    --wp-gold: var(--warning);
+    --wp-gold-soft: var(--warning-lowest);
     --wp-violet: #9a63c7;
     --wp-violet-soft: #f0e4fa;
+    --wp-avatar-bg: var(--wp-violet);
+    --wp-avatar-text: var(--text-invert);
     --wp-success: var(--success);
+    --wp-success-soft: var(--success-lowest);
     --wp-danger: var(--danger);
     --wp-danger-soft: var(--danger-lowest);
+    --wp-warning: var(--warning);
+    --wp-warning-soft: var(--warning-lowest);
     --wp-focus-ring: var(--accent-high);
     --wp-shadow-1: 0 1px 2px rgba(42, 38, 32, 0.06);
     --wp-shadow-2: 0 6px 20px rgba(42, 38, 32, 0.08);
@@ -103,7 +109,7 @@
     --q-accent: var(--accent);
     --q-positive: var(--success);
     --q-negative: var(--danger);
-    --q-info: #3ecfd9;
+    --q-info: var(--wp-cyan);
     --q-warning: var(--warning);
     --q-dark: var(--neutral-highest);
     --q-dark-page: var(--neutral-lower);
@@ -113,8 +119,8 @@
     --wp-bg: var(--neutral-lowest);
     --wp-surface: var(--neutral-lower);
     --wp-surface-2: var(--neutral-low);
-    --wp-surface-3: #35322e;
-    --wp-border: #3a3733;
+    --wp-surface-3: var(--secondary-low);
+    --wp-border: var(--secondary-low);
     --wp-border-strong: var(--neutral-medium);
     --wp-text: var(--text);
     --wp-text-muted: var(--neutral-higher);
@@ -126,18 +132,24 @@
     --wp-accent: var(--accent);
     --wp-accent-strong: var(--accent-high);
     --wp-accent-soft: var(--accent-lower);
+    --wp-on-accent: var(--text-invert);
     --wp-selection: var(--primary);
     --wp-selection-soft: var(--primary-lower);
     --wp-user-bubble-bg: var(--primary-lower);
     --wp-user-bubble-text: var(--text);
     --wp-user-bubble-border: var(--primary-low);
-    --wp-gold: #ffcc49;
+    --wp-gold: var(--warning);
     --wp-gold-soft: var(--primary-lower);
     --wp-violet: #c99bed;
     --wp-violet-soft: #2e2438;
+    --wp-avatar-bg: var(--wp-violet);
+    --wp-avatar-text: var(--text-invert);
     --wp-success: var(--success);
+    --wp-success-soft: var(--success-lower);
     --wp-danger: var(--danger);
     --wp-danger-soft: var(--danger-lower);
+    --wp-warning: var(--warning);
+    --wp-warning-soft: var(--warning-lowest);
     --wp-focus-ring: var(--accent-high);
 
     --wp-shadow-1: 0 1px 2px rgba(0, 0, 0, 0.28);
@@ -148,7 +160,7 @@
     --q-accent: var(--accent);
     --q-positive: var(--success);
     --q-negative: var(--danger);
-    --q-info: #3ecfd9;
+    --q-info: var(--wp-cyan);
     --q-warning: var(--warning);
     --q-dark: var(--neutral-lowest);
     --q-dark-page: var(--neutral-lowest);

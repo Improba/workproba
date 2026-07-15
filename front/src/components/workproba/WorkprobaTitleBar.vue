@@ -1,7 +1,14 @@
 <template>
   <div class="wp-titlebar" data-tauri-drag-region>
     <div class="wp-titlebar__brand" data-tauri-drag-region>
-      <span class="wp-titlebar__mark">{{ t('shell.titlebarBrand') }}</span>
+      <button
+        type="button"
+        class="wp-titlebar__mark"
+        :aria-label="t('shell.titlebarHome')"
+        @click="goHome"
+      >
+        {{ t('shell.titlebarBrand') }}
+      </button>
       <span v-if="workspaceTitle" class="wp-titlebar__sep">{{ t('shell.titlebarSep') }}</span>
       <span v-if="workspaceTitle" class="wp-titlebar__workspace" :title="activePath ?? ''">
         {{ workspaceTitle }}
@@ -78,7 +85,7 @@
       <button
         v-if="hasSideChat"
         type="button"
-        class="wp-titlebar__btn"
+        class="wp-titlebar__btn wp-titlebar__btn--regards"
         :class="{ 'wp-titlebar__btn--active': sideChatOpen }"
         :aria-label="regardsAriaLabel"
         :title="regardsAriaLabel"
@@ -87,7 +94,7 @@
         <q-tooltip anchor="bottom middle" self="top middle" :offset="[0, 6]">
           {{ regardsAriaLabel }}
         </q-tooltip>
-        <Lucide name="users" size="16" :color="sideChatOpen ? 'accent' : 'text-muted'" />
+        <Lucide name="users" size="16" :color="sideChatOpen ? 'wp-accent' : 'text-muted'" />
         <span class="wp-sr-only">{{ regardsAriaLabel }}</span>
       </button>
 
@@ -289,6 +296,10 @@ function onOpenSettings(): void {
   sidecarDialogOpen.value = false;
   void router.push({ name: 'settings_models' });
 }
+
+function goHome(): void {
+  void router.push({ name: 'home' });
+}
 </script>
 
 <style scoped lang="scss">
@@ -315,6 +326,10 @@ function onOpenSettings(): void {
 }
 
 .wp-titlebar__mark {
+  flex: none;
+  padding: 0;
+  border: none;
+  background: transparent;
   font-family: var(--wp-font-head);
   font-weight: 700;
   font-size: var(--wp-fs-base);
@@ -322,6 +337,12 @@ function onOpenSettings(): void {
   color: var(--wp-primary);
   letter-spacing: 0.01em;
   white-space: nowrap;
+  cursor: pointer;
+  transition: color 120ms var(--wp-ease);
+
+  &:hover {
+    color: var(--wp-accent);
+  }
 }
 
 .wp-titlebar__sep {
@@ -546,6 +567,10 @@ function onOpenSettings(): void {
   }
 
   &--active {
+    color: var(--wp-accent);
+  }
+
+  &--regards.wp-titlebar__btn--active {
     color: var(--wp-accent);
   }
 }

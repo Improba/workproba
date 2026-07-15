@@ -44,7 +44,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRoute } from 'vue-router';
 import WorkprobaTitleBar from '@components/workproba/WorkprobaTitleBar.vue';
 import WorkspaceSidebar from '@components/workproba/WorkspaceSidebar.vue';
 import RightPanel from '@components/workproba/RightPanel.vue';
@@ -86,7 +87,20 @@ const {
   openCapabilities,
   closeCapabilities,
   closeSideChat,
+  closeRightPanel,
 } = useShellSurfaces();
+
+const route = useRoute();
+
+watch(
+  () => route?.name,
+  (name) => {
+    if (name === 'home') {
+      closeRightPanel();
+    }
+  },
+  { immediate: true },
+);
 
 const { sideChatPluginPanels } = usePluginSlots();
 
@@ -218,5 +232,13 @@ onUnmounted(() => {
   flex-direction: column;
   background: var(--wp-bg);
   overflow: hidden;
+
+  /* Les pages (Home, Chat, Settings) remplissent la zone centrale. */
+  > * {
+    flex: 1;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+  }
 }
 </style>

@@ -305,7 +305,7 @@ defineExpose({
   border: none;
   border-radius: var(--wp-r-sm);
   background: var(--wp-accent);
-  color: var(--wp-on-accent, #fff);
+  color: var(--wp-on-accent);
   font-size: var(--wp-fs-xs);
   font-weight: 600;
   cursor: pointer;

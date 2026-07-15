@@ -23,6 +23,7 @@
     </div>
 
     <template v-else>
+    <div class="chat-message__frame">
     <header class="chat-message__header">
       <div class="chat-message__avatar" aria-hidden="true">
         <Lucide
@@ -167,6 +168,7 @@
           </span>
         </div>
       </div>
+    </div>
     </div>
     </template>
   </article>
@@ -318,25 +320,47 @@ function toolCallById(id: string): ChatToolCall | undefined {
 <style scoped lang="scss">
 .chat-message {
   width: 100%;
-  padding: var(--wp-space-4) var(--wp-space-5);
+  padding: var(--wp-space-2) 0;
   color: var(--wp-text);
   font-size: var(--wp-fs-base);
   line-height: var(--wp-lh-normal);
-  border-bottom: 1px solid var(--wp-border);
+}
+
+.chat-message__frame {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-2);
+  min-width: 0;
 }
 
 .chat-message--user {
-  background: var(--wp-user-bubble-bg);
-  border-bottom-color: var(--wp-user-bubble-border);
+  display: flex;
+  justify-content: flex-end;
+
+  .chat-message__frame {
+    max-width: min(100%, 38rem);
+    padding: var(--wp-space-3) var(--wp-space-4);
+    border-radius: var(--wp-r-lg);
+    border: 1px solid color-mix(in srgb, var(--wp-user-bubble-border) 55%, transparent);
+    background: var(--wp-user-bubble-bg);
+    box-shadow: var(--wp-shadow-1);
+  }
+
+  .chat-message__role {
+    color: var(--wp-user-bubble-text);
+  }
 }
 
 .chat-message--assistant {
-  background: transparent;
+  .chat-message__frame {
+    padding: var(--wp-space-1) 0;
+  }
 }
 
 .chat-message--compaction {
-  background: var(--wp-surface-2);
-  border-bottom-color: var(--wp-border);
+  .chat-message__compaction-card {
+    margin: 0 var(--wp-space-1);
+  }
 }
 
 .chat-message__compaction-card {
@@ -374,22 +398,37 @@ function toolCallById(id: string): ChatToolCall | undefined {
   display: flex;
   align-items: center;
   gap: var(--wp-space-2);
-  margin-bottom: var(--wp-space-2);
 }
 
 .chat-message__avatar {
   flex: 0 0 auto;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.625rem;
+  height: 1.625rem;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-surface-2);
+}
+
+.chat-message--user .chat-message__avatar {
+  background: color-mix(in srgb, var(--wp-primary) 10%, var(--wp-user-bubble-bg));
+}
+
+.chat-message--assistant .chat-message__avatar {
+  background: var(--wp-accent-soft);
+}
+
+.chat-message--assistant .chat-message__role {
+  color: var(--wp-text-muted);
 }
 
 .chat-message__role {
-  font-size: var(--wp-fs-sm);
+  font-size: var(--wp-fs-xs);
   font-weight: 600;
-  color: var(--wp-text-muted);
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--wp-text-faint);
   line-height: var(--wp-lh-tight, 1.2);
 }
 
@@ -426,9 +465,9 @@ function toolCallById(id: string): ChatToolCall | undefined {
   display: flex;
   align-items: flex-start;
   gap: var(--wp-space-2);
-  padding: var(--wp-space-2) var(--wp-space-3);
-  border-radius: var(--wp-r-sm);
-  border: 1px solid var(--wp-danger);
+  padding: var(--wp-space-3);
+  border-radius: var(--wp-r-md);
+  border: 1px solid color-mix(in srgb, var(--wp-danger) 45%, var(--wp-border));
   background: var(--wp-danger-soft);
   color: var(--wp-danger);
 }

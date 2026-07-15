@@ -19,7 +19,7 @@
         <div v-if="recentWorkspaces.length === 0" class="wp-sidebar__empty">
           <p>{{ t('shell.noSpaces') }}</p>
           <button type="button" class="wp-sidebar__new-cta" @click="onOpenSpace">
-            <Lucide name="plus" size="16" color="wp-canard" />
+            <Lucide name="plus" size="16" color="text-invert" />
             {{ t('common.openSpace') }}
           </button>
         </div>
@@ -86,7 +86,7 @@
                 class="wp-ws__inline-cta"
                 @click="onNewConversation"
               >
-                <Lucide name="plus" size="13" color="wp-canard" />
+                <Lucide name="plus" size="13" color="text-invert" />
                 {{ t('common.newConversation') }}
               </button>
               <template v-else>{{ t('shell.noConversations') }}</template>
@@ -672,7 +672,7 @@ onMounted(async () => {
 
   &:hover {
     background: var(--wp-surface-2);
-    color: var(--wp-gold);
+    color: var(--wp-accent);
   }
 }
 
@@ -702,7 +702,7 @@ onMounted(async () => {
   border: none;
   border-radius: var(--wp-r-md);
   background: var(--wp-accent);
-  color: #ffffff;
+  color: var(--wp-on-accent);
   font-size: var(--wp-fs-sm);
   font-weight: 600;
   cursor: pointer;
@@ -801,7 +801,7 @@ onMounted(async () => {
 
   &:hover {
     background: var(--wp-surface-2);
-    color: var(--wp-gold);
+    color: var(--wp-accent);
   }
 }
 
@@ -831,7 +831,7 @@ onMounted(async () => {
   border: none;
   border-radius: var(--wp-r-sm);
   background: var(--wp-accent);
-  color: #ffffff;
+  color: var(--wp-on-accent);
   font-size: var(--wp-fs-xs);
   font-weight: 600;
   cursor: pointer;
@@ -963,8 +963,8 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   border-radius: var(--wp-r-pill);
-  background: #b5654a;
-  color: #fff;
+  background: var(--wp-avatar-bg);
+  color: var(--wp-avatar-text);
   font-family: var(--wp-font-head);
   font-weight: 700;
   font-size: var(--wp-fs-sm);

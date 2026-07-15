@@ -1,5 +1,11 @@
 <template>
-  <div class="chat-view">
+  <div
+    class="chat-view"
+    :class="{
+      'chat-view--embedded': embedded || layoutMode === 'hub',
+      'chat-view--hub': layoutMode === 'hub',
+    }"
+  >
     <div
       class="chat-view__messages"
       @dragenter.prevent="onDragEnter"
@@ -8,6 +14,8 @@
       @drop.prevent="onDrop"
     >
       <div v-if="messages.length === 0" class="chat-view__empty">
+        <h2 class="chat-view__empty-hero">{{ emptyHeroTitle }}</h2>
+        <p class="chat-view__empty-hint">{{ t('chat.emptyHint') }}</p>
         <StartPrompts variant="chips" @select="applyPrompt" />
       </div>
 
@@ -237,7 +245,7 @@
             :disabled="!canSend"
             :aria-label="t('chat.send')"
           >
-            <Lucide name="arrow-up" size="18" color="wp-canard" />
+            <Lucide name="arrow-up" size="18" color="text-invert" />
           </button>
         </div>
       </form>
@@ -285,6 +293,9 @@ const props = defineProps<{
   reasoningEffort?: ReasoningEffort | null;
   reasoningProvider?: LlmProviderName | null;
   reasoningModel?: string | null;
+  embedded?: boolean;
+  emptyHero?: string | null;
+  layout?: 'chat' | 'hub';
 }>();
 
 const emit = defineEmits<{
@@ -307,6 +318,12 @@ const emit = defineEmits<{
 
 const COMPOSER_MAX_LENGTH = 32_000;
 const { t } = useI18n();
+
+const layoutMode = computed(() => props.layout ?? 'chat');
+
+const emptyHeroTitle = computed(
+  () => props.emptyHero?.trim() || t('home.heroQuestion'),
+);
 
 const {
   attachments,
@@ -560,6 +577,61 @@ onUnmounted(() => {
   border: 1px solid var(--wp-border);
   box-shadow: var(--wp-shadow-1);
   overflow: hidden;
+
+  &--embedded {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  &--hub {
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    width: 100%;
+
+    .chat-view__messages {
+      flex: none;
+      width: 100%;
+    }
+
+    .chat-view__empty {
+      flex: none;
+      width: 100%;
+      gap: 0.85rem;
+      padding: 0 0 1rem;
+      align-items: center;
+    }
+
+    .chat-view__empty-hero,
+    .chat-view__empty-hint {
+      width: 100%;
+      max-width: none;
+    }
+
+    .chat-view__empty-hero {
+      font-size: clamp(1.35rem, 2.5vw, 1.65rem);
+      letter-spacing: -0.02em;
+    }
+
+    .chat-view__empty-hint {
+      font-size: var(--wp-fs-sm);
+      color: var(--wp-text-faint);
+    }
+
+    .chat-view__composer {
+      max-width: none;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      background: transparent;
+    }
+
+    :deep(.start-prompts--chips) {
+      width: 100%;
+    }
+  }
 }
 
 .chat-view__messages {
@@ -577,9 +649,20 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 1rem;
-  padding: 1.5rem 1.25rem 2rem;
+  padding: 2.5rem 1.25rem 2rem;
+}
+
+.chat-view__empty-hero {
+  margin: 0;
+  max-width: 34rem;
+  font-family: var(--wp-font-head);
+  font-size: var(--wp-fs-xl);
+  font-weight: 700;
+  line-height: 1.25;
+  color: var(--wp-text);
+  text-align: center;
 }
 
 .chat-view__empty-hint {
@@ -600,14 +683,14 @@ onUnmounted(() => {
   height: 2.25rem;
   border: none;
   border-radius: 999px;
-  background: var(--primary);
-  color: var(--text-invert);
+  background: var(--wp-accent);
+  color: var(--wp-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   box-shadow: 0 4px 14px
-    color-mix(in srgb, var(--primary-highest) 25%, transparent);
+    color-mix(in srgb, var(--wp-accent-strong) 25%, transparent);
   transition:
     transform 0.15s ease,
     opacity 0.15s ease;
@@ -778,9 +861,9 @@ onUnmounted(() => {
   gap: 0.3rem;
   height: 2rem;
   padding: 0 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--wp-gold) 35%, var(--wp-border));
+  border: 1px solid color-mix(in srgb, var(--wp-accent) 35%, var(--wp-border));
   border-radius: var(--wp-r-pill);
-  background: color-mix(in srgb, var(--wp-gold) 8%, var(--wp-surface-3));
+  background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-surface-3));
   color: var(--wp-text);
   cursor: pointer;
   font-size: 0.75rem;
@@ -791,14 +874,14 @@ onUnmounted(() => {
     transform var(--wp-dur) var(--wp-ease);
 
   &:hover {
-    background: color-mix(in srgb, var(--wp-gold) 14%, var(--wp-surface-2));
-    border-color: var(--wp-gold);
+    background: color-mix(in srgb, var(--wp-accent) 14%, var(--wp-surface-2));
+    border-color: var(--wp-accent);
     transform: translateY(-1px);
   }
 
   &:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wp-gold) 25%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wp-accent) 25%, transparent);
   }
 }
 
@@ -976,7 +1059,7 @@ onUnmounted(() => {
   border: none;
   border-radius: var(--wp-r-pill);
   background: var(--wp-accent);
-  color: #ffffff;
+  color: var(--wp-on-accent);
   display: flex;
   align-items: center;
   justify-content: center;

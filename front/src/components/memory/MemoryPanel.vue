@@ -643,7 +643,7 @@ onMounted(() => {
   &--danger {
     background: var(--wp-danger);
     border-color: var(--wp-danger);
-    color: #fff;
+    color: var(--wp-on-accent);
     font-weight: 600;
   }
 }

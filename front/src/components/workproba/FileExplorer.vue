@@ -542,7 +542,7 @@ defineExpose({
 }
 
 .wp-files__error-msg {
-  color: var(--wp-danger, #d23a3a);
+  color: var(--wp-danger);
   font-family: var(--wp-font-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
   font-size: var(--wp-fs-xs);
   line-height: var(--wp-lh-relaxed);

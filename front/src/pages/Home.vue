@@ -63,34 +63,70 @@
       <p v-if="error" class="home-page__error">{{ error }}</p>
     </section>
 
-    <section v-else-if="activePath" class="home-page__workspace">
-      <h1 class="home-page__hero">{{ t('home.heroQuestion') }}</h1>
+    <section
+      v-else-if="activePath"
+      class="home-page__workspace"
+      :class="{ 'home-page__workspace--solo': sessionsReady && !recentSessions.length }"
+    >
+      <div class="home-page__stage">
+        <div class="home-page__hub">
+          <ChatView
+            embedded
+            layout="hub"
+            :messages="[]"
+            :streaming="false"
+            :project-path="activePath"
+            :workspace-data-dir="activeDataDir"
+            :settings-locked="settingsLocked"
+            :personas-enabled="isPersonasPluginActive"
+            :reasoning-effort="homeReasoningEffort"
+            :reasoning-provider="activeChatRouting?.provider ?? null"
+            :reasoning-model="homeReasoningModel"
+            @send="startConversationFromComposer"
+            @update:reasoning-effort="onHomeReasoningEffortChange"
+            @update:reasoning-model="onHomeReasoningModelChange"
+          />
+        </div>
 
-      <HomeComposer :disabled="loading" @submit="startConversationWithPrompt" />
-
-      <p v-if="error" class="home-page__error">{{ error }}</p>
-
-      <section v-if="recentSessions.length" class="home-page__sessions">
-        <h2 class="home-page__section-title">{{ t('home.recentConversations') }}</h2>
-        <ul class="home-page__session-list">
-          <li
-            v-for="session in recentSessions"
-            :key="session.id"
-            class="home-page__session-item"
-          >
-            <button
-              type="button"
-              class="home-page__session-link"
-              @click="openSession(session.id)"
+        <footer v-if="recentSessions.length" class="home-page__history">
+          <header class="home-page__history-head">
+            <h2 class="home-page__history-title">{{ t('home.recentConversations') }}</h2>
+          </header>
+          <ul class="home-page__history-list">
+            <li
+              v-for="session in recentSessions"
+              :key="session.id"
+              class="home-page__history-row"
             >
-              <span class="home-page__session-title">{{ session.title }}</span>
-              <span class="home-page__session-date">
-                {{ formatDate(session.updatedAt) }}
-              </span>
-            </button>
-          </li>
-        </ul>
-      </section>
+              <button
+                type="button"
+                class="home-page__history-item"
+                :aria-label="t('home.openSessionAria', { title: session.title })"
+                @click="openSession(session.id)"
+              >
+                <span class="home-page__history-icon" aria-hidden="true">
+                  <Lucide name="messages-square" size="15" color="text-faint" />
+                </span>
+                <span class="home-page__history-label">{{ session.title }}</span>
+                <time
+                  class="home-page__history-time"
+                  :datetime="session.updatedAt"
+                >
+                  {{ formatRelative(session.updatedAt) }}
+                </time>
+                <Lucide
+                  name="chevron-right"
+                  size="14"
+                  color="text-faint"
+                  class="home-page__history-chevron"
+                />
+              </button>
+            </li>
+          </ul>
+        </footer>
+
+        <p v-if="error" class="home-page__error">{{ error }}</p>
+      </div>
     </section>
   </div>
 </template>
@@ -102,16 +138,61 @@ import { useRouter } from 'vue-router';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import OpenSpaceButton from '@components/workspace/OpenSpaceButton.vue';
-import HomeComposer from '@components/home/HomeComposer.vue';
+import ChatView from '@components/chat/ChatView.vue';
 import { useUserProfile } from '@composables/useUserProfile';
 import { useProject } from '@composables/useProject';
+import { useAppSettings } from '@composables/useAppSettings';
+import { usePlugins } from '@composables/usePlugins';
+import { setPendingChatLaunch } from '@composables/usePendingChatLaunch';
 import { createSession, listSessions, type LocalSession } from '@services/workspaceSession';
-import { bumpSessions } from '@composables/useSessionSync';
+import { bumpSessions, useSessionSync } from '@composables/useSessionSync';
+import { effectiveReasoningEffortFromSet } from '@utils/providerSets';
+import { defaultReasoningEffort } from '@utils/reasoningSupport';
+import type { ChatAttachment, ReasoningEffort } from '#types';
 
 const router = useRouter();
 const { t, locale } = useI18n();
 
-const { activePath, activeWorkspaceId, loading, error, openSpace } = useProject();
+const { activePath, activeWorkspaceId, activeDataDir, loading, error, openSpace } = useProject();
+const { settingsLocked, activeChatRouting, activeSet } = useAppSettings();
+const { isPersonasPluginActive } = usePlugins();
+
+const homeReasoningOverride = ref<ReasoningEffort | null>(null);
+const homeModelOverride = ref<string | null>(null);
+
+const homeReasoningModel = computed(
+  () => homeModelOverride.value ?? activeChatRouting.value?.model ?? null,
+);
+
+const homeReasoningEffort = computed<ReasoningEffort>({
+  get() {
+    if (homeReasoningOverride.value != null) {
+      return homeReasoningOverride.value;
+    }
+    const model = homeReasoningModel.value;
+    const routing = activeChatRouting.value;
+    if (!routing || !model) return 'none';
+    if (activeSet.value) {
+      return effectiveReasoningEffortFromSet(
+        activeSet.value,
+        homeModelOverride.value,
+        null,
+      );
+    }
+    return defaultReasoningEffort(routing.provider, model);
+  },
+  set(effort: ReasoningEffort) {
+    homeReasoningOverride.value = effort;
+  },
+});
+
+function onHomeReasoningEffortChange(effort: ReasoningEffort): void {
+  homeReasoningEffort.value = effort;
+}
+
+function onHomeReasoningModelChange(model: string): void {
+  homeModelOverride.value = model;
+}
 
 const {
   needsOnboarding: needsProfileOnboarding,
@@ -144,32 +225,52 @@ async function submitProfileOnboarding(): Promise<void> {
 
 const recentSessions = ref<LocalSession[]>([]);
 const sessionsChecked = ref(false);
+const sessionsReady = ref(false);
+
+const { sessionVersion } = useSessionSync();
 
 async function refreshSessions(): Promise<void> {
   if (!activePath.value || !activeWorkspaceId.value) {
     recentSessions.value = [];
+    sessionsReady.value = true;
     return;
   }
-  recentSessions.value = (await listSessions(
-    activeWorkspaceId.value,
-    activePath.value,
-  )).slice(0, 8);
+  try {
+    recentSessions.value = (await listSessions(
+      activeWorkspaceId.value,
+      activePath.value,
+    )).slice(0, 8);
+  } finally {
+    sessionsReady.value = true;
+  }
 }
 
 watch([activePath, activeWorkspaceId], () => {
+  sessionsReady.value = false;
   void refreshSessions();
 }, { immediate: true });
+
+watch(sessionVersion, () => {
+  void refreshSessions();
+});
 
 onMounted(() => {
   sessionsChecked.value = true;
 });
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(locale.value, {
+function formatRelative(iso: string): string {
+  const ts = new Date(iso).getTime();
+  const diff = Date.now() - ts;
+  if (diff < 60_000) return t('common.justNow');
+  if (diff < 3_600_000) {
+    return t('common.minutesAgo', { count: Math.floor(diff / 60_000) });
+  }
+  if (diff < 86_400_000) {
+    return t('common.hoursAgo', { count: Math.floor(diff / 3_600_000) });
+  }
+  return new Date(iso).toLocaleDateString(locale.value, {
     day: '2-digit',
     month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
   });
 }
 
@@ -177,7 +278,10 @@ function openSession(sessionId: string): void {
   void router.push({ name: 'chat_session', params: { id: sessionId } });
 }
 
-function startConversationWithPrompt(prompt: string): void {
+function startConversationFromComposer(
+  prompt: string,
+  attachments: ChatAttachment[],
+): void {
   if (!activePath.value || !activeWorkspaceId.value) {
     Notify.create({
       message: t('shell.conversationCreateFailed'),
@@ -191,11 +295,16 @@ function startConversationWithPrompt(prompt: string): void {
         activeWorkspaceId.value!,
         activePath.value!,
       );
+      setPendingChatLaunch({
+        text: prompt,
+        attachments,
+        reasoningEffort: homeReasoningEffort.value,
+        model: homeReasoningModel.value,
+      });
       bumpSessions();
       await router.push({
         name: 'chat_session',
         params: { id: session.id },
-        state: { initialPrompt: prompt },
       });
     } catch (err) {
       Notify.create({
@@ -209,30 +318,61 @@ function startConversationWithPrompt(prompt: string): void {
 
 <style scoped lang="scss">
 .home-page {
-  height: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
-  overflow: auto;
+  overflow-y: auto;
   box-sizing: border-box;
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 32px;
+  width: 100%;
   background: var(--wp-bg);
   font-family: var(--wp-font-ui);
 }
 
-.home-page__onboarding,
-.home-page__workspace {
+.home-page__onboarding {
+  flex: 1;
+  width: 100%;
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: clamp(2rem, 10vh, 4rem) 1.5rem 2.5rem;
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 1.25rem;
+  box-sizing: border-box;
 }
 
-.home-page__onboarding {
-  padding-top: 2rem;
+.home-page__workspace {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  width: 100%;
+  box-sizing: border-box;
+  padding: clamp(1.5rem, 5vh, 2.5rem) clamp(1rem, 4vw, 2rem) 2.5rem;
 }
 
-.home-page__onboarding .home-page__title,
-.home-page__hero {
+.home-page__workspace--solo {
+  justify-content: center;
+}
+
+.home-page__stage {
+  width: 100%;
+  max-width: 40rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2.5rem;
+  box-sizing: border-box;
+  flex: none;
+}
+
+.home-page__hub {
+  min-width: 0;
+  width: 100%;
+}
+
+.home-page__onboarding .home-page__title {
   margin: 0;
   font-family: var(--wp-font-head);
   font-size: var(--wp-fs-xl);
@@ -242,15 +382,12 @@ function startConversationWithPrompt(prompt: string): void {
   text-align: center;
 }
 
-.home-page__hero {
-  margin-bottom: 0.25rem;
-}
-
 .home-page__lead {
   margin: 0;
   font-size: 0.9375rem;
   color: var(--wp-text-muted);
   line-height: 1.6;
+  text-align: center;
 }
 
 .home-page__error {
@@ -263,65 +400,125 @@ function startConversationWithPrompt(prompt: string): void {
   padding: 0.45rem 0.65rem;
 }
 
-.home-page__section-title {
-  margin: 0.5rem 0 0;
-  font-family: var(--wp-font-head);
-  font-size: var(--wp-fs-sm);
-  font-weight: 600;
-  color: var(--wp-text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+.home-page__history {
+  width: 100%;
 }
 
-.home-page__sessions {
+.home-page__history-head {
   display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
-  margin-top: 0.5rem;
+  align-items: center;
+  gap: 0.85rem;
+  margin-bottom: 0.75rem;
+
+  &::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--wp-border);
+  }
 }
 
-.home-page__session-list {
+.home-page__history-title {
+  margin: 0;
+  font-family: var(--wp-font-head);
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  color: var(--wp-text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.home-page__history-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-}
-
-.home-page__session-item {
-  margin: 0;
-}
-
-.home-page__session-link {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0.55rem 0.75rem;
   border: 1px solid var(--wp-border);
-  border-radius: var(--wp-r-sm);
+  border-radius: var(--wp-r-md);
   background: var(--wp-surface);
-  cursor: pointer;
-  text-align: left;
-  transition: background var(--wp-dur) var(--wp-ease);
+  box-shadow: var(--wp-shadow-1);
+  overflow: hidden;
+  max-height: min(22rem, 42vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
 
-  &:hover {
-    background: var(--wp-surface-2);
+.home-page__history-row {
+  margin: 0;
+
+  &:not(:last-child) .home-page__history-item {
+    border-bottom: 1px solid var(--wp-border);
   }
 }
 
-.home-page__session-title {
-  font-size: 0.9375rem;
-  font-weight: 600;
-  color: var(--wp-text);
+.home-page__history-item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.72rem 0.9rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: background var(--wp-dur) var(--wp-ease);
+
+  @media (max-width: 520px) {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    padding: 0.65rem 0.75rem;
+  }
+
+  &:hover,
+  &:focus-visible {
+    background: var(--wp-surface-2);
+    outline: none;
+
+    .home-page__history-chevron {
+      opacity: 1;
+      transform: translateX(2px);
+    }
+  }
 }
 
-.home-page__session-date {
-  font-size: 0.8125rem;
-  color: var(--wp-text-muted);
+.home-page__history-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.home-page__history-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--wp-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+}
+
+.home-page__history-time {
+  font-size: 0.75rem;
+  color: var(--wp-text-faint);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.home-page__history-chevron {
+  flex: none;
+  opacity: 0;
+  transition:
+    opacity var(--wp-dur) var(--wp-ease),
+    transform var(--wp-dur) var(--wp-ease);
+
+  @media (max-width: 520px) {
+    display: none;
+  }
 }
 
 .home-page__profile-dialog {

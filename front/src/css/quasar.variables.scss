@@ -13,7 +13,7 @@ $secondary: tokens.$secondary-light;
 $accent: tokens.$accent-light;
 $positive: tokens.$success-light;
 $negative: tokens.$danger-light;
-$info: #3ecfd9; // brand cyan, no Anubis token
+$info: #3ecfd9; // = --wp-cyan (:root); runtime --q-info in workproba.scss
 $warning: tokens.$warning-light;
 
 $h1: (

@@ -10,7 +10,7 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 
 | Light mode | Dark mode |
 |---|---|
-| ![Workproba in light mode, chat, personas and workspace](./docs/images/workproba-light-mode.jpg) | ![Workproba in dark mode, chat, files and workspace](./docs/images/workproba-dark-mode.jpg) |
+| ![Workproba in light mode, chat, Regards and workspace](./docs/images/workproba-light-mode.jpg) | ![Workproba in dark mode, chat, files and workspace](./docs/images/workproba-dark-mode.jpg) |
 
 ## Features
 

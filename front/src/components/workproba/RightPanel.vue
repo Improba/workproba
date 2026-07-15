@@ -232,8 +232,8 @@ defineExpose({
   }
 
   &--active {
-    color: var(--wp-selection);
-    border-bottom-color: var(--wp-selection);
+    color: var(--wp-accent);
+    border-bottom-color: var(--wp-accent);
     font-weight: 600;
   }
 }
