@@ -7,7 +7,7 @@ import json
 import logging
 import shutil
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +19,7 @@ VERSIONS_DIR = "versions"
 MANIFEST_FILENAME = "manifest.json"
 JsonDict = dict[str, Any]
 DEFAULT_MAX_VERSIONS_PER_FILE = 50
+DEFAULT_PURGE_KEEP_VERSIONS = 20
 
 
 def normalize_relative_path(file_path: str) -> str:
@@ -65,6 +66,92 @@ def save_manifest(manifest_path: Path, entries: list[JsonDict]) -> None:
     )
 
 
+def _parse_created_at(value: Any) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed
+
+
+def _delete_version_snapshots(version_dir: Path, entries: list[JsonDict]) -> None:
+    for entry in entries:
+        version_id = entry.get("version_id")
+        if not isinstance(version_id, str) or not version_id:
+            continue
+        snapshot_path = version_dir / f"{version_id}.bin"
+        try:
+            snapshot_path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("Impossible de supprimer %s : %s", snapshot_path, exc)
+
+
+def _select_purge_overflow(
+    entries: list[JsonDict],
+    *,
+    keep_last: int | None,
+    older_than_days: int | None,
+    now: datetime | None = None,
+) -> list[JsonDict]:
+    """Retourne les entrées à supprimer (ordre manifeste, plus anciennes en tête)."""
+    if not entries:
+        return []
+    current = now or datetime.now(timezone.utc)
+    kept = list(entries)
+    removed: list[JsonDict] = []
+
+    if older_than_days is not None and older_than_days > 0:
+        cutoff = current - timedelta(days=older_than_days)
+        still_kept: list[JsonDict] = []
+        for entry in kept:
+            created_at = _parse_created_at(entry.get("created_at"))
+            if created_at is not None and created_at < cutoff:
+                removed.append(entry)
+            else:
+                still_kept.append(entry)
+        kept = still_kept
+
+    if keep_last is not None and keep_last >= 0 and len(kept) > keep_last:
+        overflow = kept[: len(kept) - keep_last]
+        removed.extend(overflow)
+        kept = kept[len(kept) - keep_last :]
+
+    return removed
+
+
+def purge_manifest_versions(
+    *,
+    version_dir: Path,
+    manifest_path: Path,
+    keep_last: int | None = DEFAULT_PURGE_KEEP_VERSIONS,
+    older_than_days: int | None = None,
+) -> int:
+    """Purge les snapshots selon `keep_last` et/ou `older_than_days`. Retourne le nombre supprimé."""
+    entries = load_manifest(manifest_path)
+    if not entries:
+        return 0
+    removed = _select_purge_overflow(
+        entries,
+        keep_last=keep_last,
+        older_than_days=older_than_days,
+    )
+    if not removed:
+        return 0
+    removed_ids = {
+        entry.get("version_id")
+        for entry in removed
+        if isinstance(entry.get("version_id"), str)
+    }
+    kept = [entry for entry in entries if entry.get("version_id") not in removed_ids]
+    _delete_version_snapshots(version_dir, removed)
+    save_manifest(manifest_path, kept)
+    return len(removed)
+
+
 def rotate_versions(
     *,
     version_dir: Path,
@@ -74,21 +161,77 @@ def rotate_versions(
     """Rotation FIFO des snapshots (garde les `max_versions` plus récents)."""
     if max_versions <= 0:
         return
-    entries = load_manifest(manifest_path)
-    if len(entries) <= max_versions:
-        return
-    overflow = entries[: len(entries) - max_versions]
-    kept = entries[len(entries) - max_versions :]
-    for entry in overflow:
-        version_id = entry.get("version_id")
-        if not isinstance(version_id, str) or not version_id:
-            continue
-        snapshot_path = version_dir / f"{version_id}.bin"
-        try:
-            snapshot_path.unlink(missing_ok=True)
-        except OSError as exc:
-            logger.warning("Impossible de supprimer %s : %s", snapshot_path, exc)
-    save_manifest(manifest_path, kept)
+    purge_manifest_versions(
+        version_dir=version_dir,
+        manifest_path=manifest_path,
+        keep_last=max_versions,
+        older_than_days=None,
+    )
+
+
+def purge_versions(
+    *,
+    workspace_data_dir: Path,
+    file_path: str | None = None,
+    keep_last: int | None = DEFAULT_PURGE_KEEP_VERSIONS,
+    older_than_days: int | None = None,
+) -> JsonDict:
+    """Purge optionnelle : garde les N dernières versions et/ou supprime celles plus vieilles que X jours."""
+    if keep_last is None and older_than_days is None:
+        raise ValueError("Au moins un critère de purge est requis (keep_last ou older_than_days).")
+
+    ws_dir = workspace_data_dir.expanduser().resolve()
+    from app.memory_stores import workspace_storage_root
+
+    versions_root = workspace_storage_root(ws_dir) / VERSIONS_DIR
+    if not versions_root.is_dir():
+        return {"ok": True, "files_purged": 0, "versions_removed": 0}
+
+    targets: list[tuple[Path, Path]] = []
+    if file_path:
+        normalized = normalize_relative_path(file_path)
+        version_dir = versions_dir_for_file(ws_dir, normalized)
+        manifest_path = version_dir / MANIFEST_FILENAME
+        if manifest_path.is_file():
+            targets.append((version_dir, manifest_path))
+    else:
+        for version_dir in sorted(versions_root.iterdir()):
+            if not version_dir.is_dir():
+                continue
+            manifest_path = version_dir / MANIFEST_FILENAME
+            if manifest_path.is_file():
+                targets.append((version_dir, manifest_path))
+
+    files_purged = 0
+    versions_removed = 0
+    for version_dir, manifest_path in targets:
+        removed = purge_manifest_versions(
+            version_dir=version_dir,
+            manifest_path=manifest_path,
+            keep_last=keep_last,
+            older_than_days=older_than_days,
+        )
+        if removed:
+            files_purged += 1
+            versions_removed += removed
+
+    log_event(
+        resolve_app_data_dir(ws_dir),
+        "version.purge",
+        "user",
+        {
+            "file_path": normalize_relative_path(file_path) if file_path else None,
+            "keep_last": keep_last,
+            "older_than_days": older_than_days,
+            "files_purged": files_purged,
+            "versions_removed": versions_removed,
+        },
+    )
+    return {
+        "ok": True,
+        "files_purged": files_purged,
+        "versions_removed": versions_removed,
+    }
 
 
 def snapshot_before_overwrite(

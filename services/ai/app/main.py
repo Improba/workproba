@@ -70,6 +70,8 @@ from app.schemas import (
     UtilityTitleResponse,
     VersionInfo,
     VersionListResponse,
+    VersionPurgeRequest,
+    VersionPurgeResponse,
     VersionRestoreRequest,
     VersionRestoreResponse,
     WorkspaceIndexReport,
@@ -77,7 +79,7 @@ from app.schemas import (
 )
 from app.i18n import normalize_locale, t
 from app.turn_manager import turn_manager
-from app.versions import list_versions, restore_version
+from app.versions import list_versions, purge_versions, restore_version
 
 logger = logging.getLogger(__name__)
 from app.audit import (
@@ -867,6 +869,26 @@ async def restore_file_version(
         label=t(payload.locale, "versions.restore_label", file=payload.file_path),
     )
     return VersionRestoreResponse.model_validate(result)
+
+
+@app.post("/versions/purge", response_model=VersionPurgeResponse)
+async def purge_file_versions(
+    request: Request,
+    payload: VersionPurgeRequest,
+) -> VersionPurgeResponse:
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    ws_dir = Path(payload.workspace_data_dir).expanduser().resolve()
+    try:
+        result = purge_versions(
+            workspace_data_dir=ws_dir,
+            file_path=payload.file_path,
+            keep_last=payload.keep_last,
+            older_than_days=payload.older_than_days,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return VersionPurgeResponse.model_validate(result)
 
 
 def to_sse_event(event: BaseModel) -> dict[str, str]:

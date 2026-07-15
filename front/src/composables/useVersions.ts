@@ -1,6 +1,7 @@
 import { ref, type Ref } from 'vue';
 import {
   listFileVersions,
+  purgeFileVersions,
   restoreFileVersion,
   type FileVersionEntry,
 } from '@services/aiSidecar';
@@ -10,14 +11,21 @@ export interface RestoreUndoState {
   previousVersionId: string;
 }
 
+export interface PurgeVersionsResult {
+  ok: boolean;
+  versionsRemoved: number;
+}
+
 export interface UseVersionsReturn {
   versions: Ref<FileVersionEntry[]>;
   loading: Ref<boolean>;
   restoring: Ref<boolean>;
+  purging: Ref<boolean>;
   error: Ref<string | null>;
   lastRestore: Ref<RestoreUndoState | null>;
   listVersions: (filePath: string) => Promise<void>;
   restoreVersion: (filePath: string, versionId: string) => Promise<boolean>;
+  purgeVersions: (filePath: string, opts?: { keepLast?: number; olderThanDays?: number }) => Promise<PurgeVersionsResult>;
   undoRestore: () => Promise<boolean>;
   clearRestoreBanner: () => void;
 }
@@ -29,6 +37,7 @@ export function useVersions(
   const versions = ref<FileVersionEntry[]>([]);
   const loading = ref(false);
   const restoring = ref(false);
+  const purging = ref(false);
   const error = ref<string | null>(null);
   const lastRestore = ref<RestoreUndoState | null>(null);
 
@@ -91,6 +100,37 @@ export function useVersions(
     }
   }
 
+  async function purgeVersionsForFile(
+    filePath: string,
+    opts?: { keepLast?: number; olderThanDays?: number },
+  ): Promise<PurgeVersionsResult> {
+    const dataDir = workspaceDataDir.value;
+    if (!dataDir || !filePath.trim()) {
+      return { ok: false, versionsRemoved: 0 };
+    }
+    purging.value = true;
+    error.value = null;
+    try {
+      const result = await purgeFileVersions({
+        workspaceDataDir: dataDir,
+        filePath,
+        keepLast: opts?.keepLast,
+        olderThanDays: opts?.olderThanDays,
+      });
+      if (!result.ok) {
+        error.value = 'purge_failed';
+        return { ok: false, versionsRemoved: 0 };
+      }
+      await listVersionsForFile(filePath);
+      return { ok: true, versionsRemoved: result.versionsRemoved };
+    } catch {
+      error.value = 'purge_failed';
+      return { ok: false, versionsRemoved: 0 };
+    } finally {
+      purging.value = false;
+    }
+  }
+
   async function undoRestore(): Promise<boolean> {
     const undo = lastRestore.value;
     if (!undo) return false;
@@ -107,10 +147,12 @@ export function useVersions(
     versions,
     loading,
     restoring,
+    purging,
     error,
     lastRestore,
     listVersions: listVersionsForFile,
     restoreVersion: restoreVersionForFile,
+    purgeVersions: purgeVersionsForFile,
     undoRestore,
     clearRestoreBanner,
   };

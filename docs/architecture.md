@@ -120,6 +120,10 @@ WorkprobaTitleBar          ← Capabilities hub button, engine chip, panel toggl
 
 Four builtin plugins; guided UX presents them as **activatable capabilities** (Regards métier, Projets et livrables, Navigation web, Synchronisation). Technical plugin details in advanced Settings → Extensions. See [plugins.md](./plugins.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
+**File versions** (T-V2-15): snapshots live under `{space}/versions/`; the sidecar exposes `GET /versions`, `POST /versions/restore`, and optional `POST /versions/purge` (keep last N, default 20, and/or drop entries older than X days). The right-panel **Versions** tab offers restore and manual cleanup.
+
+**Remote plugins** (T-V3-CP-3 scaffold): typed **`RemoteCapabilityGateway`** in the sidecar (`capability:remote`) delegates identity to remote capabilities with payload minimization, timeouts, and audit; local stub rejects unless explicitly allowed.
+
 ## Active modules
 
 | Folder | Role |

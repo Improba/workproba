@@ -2,6 +2,15 @@
   <section class="versions-panel" :aria-label="t('shell.versions.titre')">
     <header class="versions-panel__header">
       <h3 class="versions-panel__title">{{ t('shell.versions.titre') }}</h3>
+      <button
+        v-if="relativePath && versions.length"
+        type="button"
+        class="versions-panel__purge"
+        :disabled="purging || loading"
+        @click="onPurge"
+      >
+        {{ purging ? t('common.inProgress') : t('shell.versions.purger') }}
+      </button>
     </header>
 
     <div v-if="!relativePath" class="versions-panel__empty">
@@ -77,9 +86,11 @@ const {
   versions,
   loading,
   restoring,
+  purging,
   lastRestore,
   listVersions,
   restoreVersion,
+  purgeVersions,
   undoRestore,
   clearRestoreBanner,
 } = useVersions(workspaceRef, projectRef);
@@ -128,6 +139,27 @@ async function onUndo(): Promise<void> {
   }
 }
 
+async function onPurge(): Promise<void> {
+  const path = props.relativePath;
+  if (!path) return;
+  const confirmed = window.confirm(t('shell.versions.confirmPurger'));
+  if (!confirmed) return;
+
+  const result = await purgeVersions(path);
+  if (result.ok) {
+    Notify.create({
+      message: t('shell.versions.purgeDone', { count: result.versionsRemoved }),
+      color: 'positive',
+      timeout: 2500,
+    });
+  } else {
+    Notify.create({
+      message: t('shell.versions.purgeFailed'),
+      color: 'negative',
+    });
+  }
+}
+
 watch(
   () => props.relativePath,
   (path) => {
@@ -156,6 +188,10 @@ defineExpose({ refresh: () => props.relativePath && listVersions(props.relativeP
 
 .versions-panel__header {
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
 }
 
 .versions-panel__title {
@@ -239,6 +275,22 @@ defineExpose({ refresh: () => props.relativePath && listVersions(props.relativeP
   border-radius: var(--wp-r-sm);
   background: var(--wp-surface);
   color: var(--wp-accent-strong);
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.versions-panel__purge {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: transparent;
+  color: var(--wp-text-muted);
   font-size: var(--wp-fs-xs);
   font-weight: 600;
   cursor: pointer;

@@ -6,6 +6,7 @@ PERMISSIONS = [
     "storage:namespace",
     "project:sync",
     "regards:managed",
+    "capability:remote",
     "network:improba-cloud",
     "ui:panels",
     "settings:section",

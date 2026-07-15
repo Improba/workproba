@@ -605,6 +605,25 @@ class VersionRestoreResponse(BaseModel):
     file_path: str
 
 
+class VersionPurgeRequest(BaseModel):
+    workspace_data_dir: str
+    file_path: str | None = None
+    keep_last: int | None = 20
+    older_than_days: int | None = None
+    locale: Locale = "fr"
+
+    @field_validator("locale", mode="before")
+    @classmethod
+    def coerce_locale_field(cls, value: Any) -> str:
+        return _coerce_locale(value)
+
+
+class VersionPurgeResponse(BaseModel):
+    ok: bool = True
+    files_purged: int = 0
+    versions_removed: int = 0
+
+
 class PreviewChangeRequest(BaseModel):
     workspace_data_dir: str
     project_path: str
