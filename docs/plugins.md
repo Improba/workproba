@@ -104,7 +104,7 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 ## Experimental plugins
 
 - **Browser**: see [browser.md](./browser.md)
-- **Cloud**: `/plugins/cloud/status`, `/config`, `/sync` — local folder sync scaffold. **PR 1–3**: `CloudPanel` lists projects via projet data dir; cloud tab hidden in guided mode; sync shown as nested capability in hub (`coming_soon` in guided). **PR 4**: typed `ProjectSyncPort` (sidecar still resolves projet dir directly today).
+- **Cloud plugin** (`workproba.cloud`): local mount sync via **`ProjectSyncPort`** and `project:sync` permission (PR 4). No direct project namespace access. Bidirectional sync deferred to V3.
 
 ## Local plugins
 

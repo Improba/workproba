@@ -22,6 +22,7 @@ const deactivatePlugin = vi.fn(async (id: string) => {
 const settingsLocked = ref(false);
 const settingsMode = ref<'guided' | 'advanced'>('guided');
 const permissionsNetwork = ref(true);
+const permissionsProjectSync = ref(true);
 const settings = ref({
   version: 1,
   providers: [],
@@ -29,6 +30,7 @@ const settings = ref({
   settingsMode: 'guided' as const,
   pluginsAllowed: null as string[] | null,
   permissionsNetwork: true,
+  permissionsProjectSync: true,
 });
 
 const openRightPanel = vi.fn();
@@ -54,6 +56,7 @@ vi.mock('@composables/useAppSettings', () => ({
     settingsLocked,
     settingsMode,
     permissionsNetwork,
+    permissionsProjectSync,
   }),
 }));
 
@@ -102,10 +105,12 @@ describe('useCapabilities', () => {
       settingsMode: 'guided',
       pluginsAllowed: null,
       permissionsNetwork: true,
+      permissionsProjectSync: true,
     };
     settingsLocked.value = false;
     settingsMode.value = 'guided';
     permissionsNetwork.value = true;
+    permissionsProjectSync.value = true;
     activatePlugin.mockClear();
     deactivatePlugin.mockClear();
     openRightPanel.mockClear();
@@ -133,6 +138,19 @@ describe('useCapabilities', () => {
 
     expect(browser?.state.kind).toBe('blocked');
     expect(browser?.state.managedByOrganization).toBe(true);
+  });
+
+  it('marque project_sync blocked quand project_sync est désactivé par preset', () => {
+    settingsLocked.value = true;
+    settings.value.settingsLocked = true;
+    settings.value.permissionsProjectSync = false;
+    permissionsProjectSync.value = false;
+
+    const { getById } = useCapabilities();
+    const sync = getById('project_sync');
+
+    expect(sync?.state.kind).toBe('blocked');
+    expect(sync?.state.managedByOrganization).toBe(true);
   });
 
   it('activateAndOpen active le plugin puis ouvre la surface shell', async () => {

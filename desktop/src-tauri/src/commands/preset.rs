@@ -26,6 +26,8 @@ pub struct EnterprisePreset {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions_network: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions_project_sync: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_execute: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub audit_retention_days: Option<u32>,
@@ -51,6 +53,8 @@ struct RawPermissions {
     network: Option<bool>,
     #[serde(default, rename = "code_execute")]
     code_execute: Option<bool>,
+    #[serde(default, rename = "project_sync")]
+    project_sync: Option<bool>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -128,6 +132,9 @@ pub fn parse_enterprise_preset(raw: &str) -> Result<EnterprisePreset, String> {
         if preset.code_execute.is_none() {
             preset.code_execute = permissions.code_execute;
         }
+        if preset.permissions_project_sync.is_none() {
+            preset.permissions_project_sync = permissions.project_sync;
+        }
     }
     if let Some(ui) = nested.ui {
         if preset.locale.is_none() {
@@ -183,6 +190,9 @@ pub fn apply_preset_to_settings(settings: &mut AppSettings, preset: &EnterpriseP
     }
     if let Some(network) = preset.permissions_network {
         settings.permissions_network = Some(network);
+    }
+    if let Some(project_sync) = preset.permissions_project_sync {
+        settings.permissions_project_sync = Some(project_sync);
     }
     if let Some(code_execute) = preset.code_execute {
         settings.code_execute = Some(code_execute);
@@ -255,7 +265,8 @@ mod preset_tests {
             },
             "permissions": {
                 "network": false,
-                "code_execute": false
+                "code_execute": false,
+                "project_sync": true
             },
             "ui": {
                 "locale": "fr",
@@ -277,6 +288,7 @@ mod preset_tests {
         assert_eq!(preset.plugins_allowed.as_ref().map(|v| v.len()), Some(2));
         assert_eq!(preset.local_plugins_allowed, Some(false));
         assert_eq!(preset.permissions_network, Some(false));
+        assert_eq!(preset.permissions_project_sync, Some(true));
         assert_eq!(preset.code_execute, Some(false));
         assert_eq!(preset.audit_retention_days, Some(90));
         assert_eq!(preset.audit_enabled, Some(true));
@@ -293,6 +305,7 @@ mod preset_tests {
             plugins_allowed: Some(vec!["workproba.projet".to_string()]),
             local_plugins_allowed: Some(false),
             permissions_network: Some(false),
+            permissions_project_sync: Some(false),
             code_execute: Some(false),
             audit_retention_days: Some(30),
             audit_enabled: Some(true),
@@ -301,6 +314,7 @@ mod preset_tests {
         apply_preset_to_settings(&mut settings, &preset);
         assert_eq!(settings.settings_locked, Some(true));
         assert_eq!(settings.permissions_network, Some(false));
+        assert_eq!(settings.permissions_project_sync, Some(false));
         assert_eq!(settings.audit_retention_days, Some(30));
     }
 

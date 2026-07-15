@@ -314,6 +314,9 @@ pub struct AppSettings {
     /// Autorise les permissions réseau (preset verrouillé). `Some(false)` bloque network:*.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions_network: Option<bool>,
+    /// Autorise la synchronisation projet via port typé (preset verrouillé).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions_project_sync: Option<bool>,
     /// Autorise l'exécution de code (preset verrouillé).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_execute: Option<bool>,
@@ -354,6 +357,7 @@ impl Default for AppSettings {
             plugins_allowed: None,
             local_plugins_allowed: None,
             permissions_network: None,
+            permissions_project_sync: None,
             code_execute: None,
             audit_retention_days: None,
             audit_enabled: None,
@@ -575,6 +579,7 @@ mod settings_tests {
             plugins_allowed: None,
             local_plugins_allowed: None,
             permissions_network: None,
+            permissions_project_sync: None,
             code_execute: None,
             audit_retention_days: None,
             audit_enabled: None,
@@ -716,6 +721,7 @@ pub fn save_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSet
         plugins_allowed: settings.plugins_allowed,
         local_plugins_allowed: settings.local_plugins_allowed,
         permissions_network: settings.permissions_network,
+        permissions_project_sync: settings.permissions_project_sync,
         code_execute: settings.code_execute,
         audit_retention_days: settings.audit_retention_days,
         audit_enabled: settings.audit_enabled,

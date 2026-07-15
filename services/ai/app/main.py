@@ -2263,14 +2263,10 @@ async def cloud_status_endpoint(
     require_internal_secret(request, settings)
     _ = normalize_locale(locale)
 
-    from app.plugins.registry import PLUGIN_WORKPROBA_PROJET, resolve_plugin_data_dir
     from app.plugins.workproba_cloud import storage as cloud_storage
 
     cloud_dir = _resolve_plugin_data_dir(plugin_data_dir)
-    projet_dir = resolve_plugin_data_dir(PLUGIN_WORKPROBA_PROJET, cloud_dir)
-    if projet_dir is None:
-        projet_dir = cloud_dir.parent / PLUGIN_WORKPROBA_PROJET
-    result = cloud_storage.status(cloud_dir, projet_dir)
+    result = cloud_storage.status(cloud_dir)
     return CloudStatusResponse(**result)
 
 
@@ -2299,20 +2295,20 @@ async def cloud_sync_endpoint(
     require_internal_secret(request, settings)
     locale = normalize_locale(payload.locale)
 
-    from app.plugins.registry import PLUGIN_WORKPROBA_PROJET, resolve_plugin_data_dir
     from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.sync_access import open_sync_port_for_cloud
 
     cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
-    projet_dir = resolve_plugin_data_dir(PLUGIN_WORKPROBA_PROJET, cloud_dir)
-    if projet_dir is None:
-        projet_dir = cloud_dir.parent / PLUGIN_WORKPROBA_PROJET
     try:
+        sync_port = open_sync_port_for_cloud(cloud_dir.parent)
         result = cloud_storage.sync_project(
             plugin_data_dir=cloud_dir,
-            projet_plugin_dir=projet_dir,
+            sync_port=sync_port,
             project_id=payload.project_id,
             mount_path=payload.mount_path,
         )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
         code = str(exc)
         if code == "project_not_found":

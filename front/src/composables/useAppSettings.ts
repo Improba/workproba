@@ -136,6 +136,10 @@ const permissionsNetwork = computed<boolean>(
   () => settings.value.permissionsNetwork !== false,
 );
 
+const permissionsProjectSync = computed<boolean>(
+  () => settings.value.permissionsProjectSync !== false,
+);
+
 const density = computed<DensityMode>(
   () => settings.value.density ?? 'comfortable',
 );
@@ -333,6 +337,7 @@ export interface UseAppSettingsReturn {
   settingsMode: typeof settingsMode;
   settingsLocked: typeof settingsLocked;
   permissionsNetwork: typeof permissionsNetwork;
+  permissionsProjectSync: typeof permissionsProjectSync;
   density: typeof density;
   uiTheme: typeof uiTheme;
   locale: typeof locale;
@@ -486,6 +491,7 @@ export function useAppSettings(): UseAppSettingsReturn {
     settingsMode,
     settingsLocked,
     permissionsNetwork,
+    permissionsProjectSync,
     density,
     uiTheme,
     locale,

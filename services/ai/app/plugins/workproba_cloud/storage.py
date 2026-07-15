@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from app.plugins.workproba_projet import storage as projet_storage
+from app.plugins.workproba_projet.sync_port import ProjectSyncPort
 
 CONFIG_FILE = "config.json"
 
@@ -42,7 +41,7 @@ def get_mount_path(plugin_data_dir: Path) -> str | None:
     return None
 
 
-def status(plugin_data_dir: Path, projet_plugin_dir: Path) -> dict[str, Any]:
+def status(plugin_data_dir: Path) -> dict[str, Any]:
     mount_path = get_mount_path(plugin_data_dir)
     config = load_config(plugin_data_dir)
     synced_count = 0
@@ -61,13 +60,17 @@ def status(plugin_data_dir: Path, projet_plugin_dir: Path) -> dict[str, Any]:
 def sync_project(
     *,
     plugin_data_dir: Path,
-    projet_plugin_dir: Path,
+    sync_port: ProjectSyncPort,
     project_id: str,
     mount_path: str | None = None,
 ) -> dict[str, Any]:
-    """Copie les artefacts publiés vers mount_path/projects/{project_id}/."""
-    if projet_storage.find_project(projet_plugin_dir, project_id) is None:
-        raise ValueError("project_not_found")
+    """Copie les artefacts publiés vers mount_path/projects/{project_id}/ via ProjectSyncPort."""
+    try:
+        artefacts = sync_port.list_artefacts(project_id)
+    except ValueError as exc:
+        if str(exc) == "project_not_found":
+            raise ValueError("project_not_found") from exc
+        raise
 
     effective_mount = mount_path or get_mount_path(plugin_data_dir)
     if not effective_mount:
@@ -78,15 +81,15 @@ def sync_project(
     dest_root = mount / "projects" / project_id
     dest_root.mkdir(parents=True, exist_ok=True)
 
-    source_dir = projet_storage.artefacts_dir(projet_plugin_dir, project_id)
     synced: list[str] = []
-    if source_dir.is_dir():
-        for source in sorted(source_dir.iterdir()):
-            if not source.is_file():
-                continue
-            dest = dest_root / source.name
-            shutil.copy2(source, dest)
-            synced.append(source.name)
+    for artefact in artefacts:
+        artefact_id = str(artefact.get("id", ""))
+        if not artefact_id:
+            continue
+        content = sync_port.read_blob(f"{project_id}/{artefact_id}")
+        dest = dest_root / Path(artefact_id).name
+        dest.write_bytes(content)
+        synced.append(artefact_id)
 
     now = datetime.now(UTC).isoformat()
     save_config(plugin_data_dir, {"mount_path": str(mount), "last_sync": now})

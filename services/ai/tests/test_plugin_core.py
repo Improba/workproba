@@ -29,8 +29,9 @@ def test_builtin_plugins_manifest() -> None:
 
     cloud = plugins[PLUGIN_WORKPROBA_CLOUD]
     assert "network:improba-cloud" in cloud.permissions
+    assert "project:sync" in cloud.permissions
     assert "network:custom" not in cloud.permissions
-    assert "storage:cross:workproba.projet" in cloud.permissions
+    assert "storage:cross:workproba.projet" not in cloud.permissions
 
 
 def test_is_plugin_active_retrocompat() -> None:

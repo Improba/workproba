@@ -147,6 +147,7 @@ export interface EnterprisePreset {
   pluginsAllowed?: string[] | null;
   localPluginsAllowed?: boolean | null;
   permissionsNetwork?: boolean | null;
+  permissionsProjectSync?: boolean | null;
   codeExecute?: boolean | null;
   auditRetentionDays?: number | null;
   auditEnabled?: boolean | null;
@@ -181,6 +182,8 @@ export interface AppSettings {
   activeSetId?: string | null;
   /** Autorise les permissions réseau (preset verrouillé). Absent = autorisé. */
   permissionsNetwork?: boolean | null;
+  /** Autorise la synchronisation projet (preset verrouillé). Absent = autorisé. */
+  permissionsProjectSync?: boolean | null;
   /** Plugins locaux autorisés (preset verrouillé). */
   localPluginsAllowed?: boolean | null;
   /** Liste blanche de plugins (preset verrouillé). */

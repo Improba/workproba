@@ -167,7 +167,7 @@ pub fn builtin_manifests() -> Vec<PluginManifest> {
             description: "plugin.workproba.cloud.description".to_string(),
             permissions: vec![
                 "storage:namespace".to_string(),
-                "storage:cross:workproba.projet".to_string(),
+                "project:sync".to_string(),
                 "network:improba-cloud".to_string(),
                 "ui:panels".to_string(),
                 "settings:section".to_string(),
@@ -279,6 +279,11 @@ fn permissions_allowed(settings: &AppSettings, manifest: &PluginManifest) -> Res
                 .any(|p| p.starts_with("network:"))
         {
             return Err("Permission réseau interdite par le preset".to_string());
+        }
+        if settings.permissions_project_sync == Some(false)
+            && manifest.permissions.iter().any(|p| p == "project:sync")
+        {
+            return Err("Permission project:sync interdite par le preset".to_string());
         }
     }
     Ok(())
@@ -704,9 +709,35 @@ mod plugins_tests {
             "cloud must use network:improba-cloud"
         );
         assert!(
+            cloud
+                .permissions
+                .contains(&"project:sync".to_string()),
+            "cloud must use project:sync"
+        );
+        assert!(
+            !cloud
+                .permissions
+                .contains(&"storage:cross:workproba.projet".to_string()),
+            "cloud must not use storage:cross:workproba.projet"
+        );
+        assert!(
             !cloud.permissions.contains(&"network:custom".to_string()),
             "cloud must not use network:custom"
         );
+    }
+
+    #[test]
+    fn cloud_activation_blocked_when_project_sync_preset_false() {
+        let app_data = temp_app_data();
+        let settings = AppSettings {
+            settings_locked: Some(true),
+            permissions_project_sync: Some(false),
+            ..AppSettings::default()
+        };
+
+        let err = activate_plugin_at(&app_data, &settings, "workproba.cloud")
+            .expect_err("cloud blocked by project_sync preset");
+        assert!(err.contains("project:sync"));
     }
 
     #[test]
