@@ -1,6 +1,6 @@
 [package]
 name = "workproba-desktop"
-version = "0.1.1"
+version = "0.1.2"
 description = "Workproba desktop shell (Tauri)"
 authors = ["Improba"]
 edition = "2021"
