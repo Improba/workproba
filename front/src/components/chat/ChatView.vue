@@ -46,7 +46,7 @@
           type="button"
           class="chat-view__scroll-down"
           :aria-label="t('chat.scrollDown')"
-          @click="scrollToBottom(true)"
+          @click="handleScrollDownClick"
         >
           <Lucide name="arrow-down" size="sm" color="text-invert" />
         </button>
@@ -356,7 +356,10 @@ const composerInputRef = ref<QInput | null>(null);
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null);
 const scrollTarget = ref<HTMLElement | null>(null);
 const isPinned = ref(true);
+const userDetached = ref(false);
 let scrollRaf: number | null = null;
+let scrollListenersTarget: HTMLElement | null = null;
+let lastTouchY: number | null = null;
 
 const { arrivedState } = useScroll(scrollTarget, { offset: { bottom: 80 } });
 
@@ -395,6 +398,54 @@ defineExpose({ setDraft });
 
 function bindScrollTarget(): void {
   scrollTarget.value = messageListRef.value?.getScrollTarget() ?? null;
+  bindScrollListeners();
+}
+
+function cancelScheduledScroll(): void {
+  if (scrollRaf !== null) {
+    cancelAnimationFrame(scrollRaf);
+    scrollRaf = null;
+  }
+}
+
+function detachFromBottom(): void {
+  userDetached.value = true;
+  isPinned.value = false;
+  cancelScheduledScroll();
+}
+
+function onUserWheel(event: WheelEvent): void {
+  if (event.deltaY < 0) detachFromBottom();
+}
+
+function onUserTouchStart(event: TouchEvent): void {
+  lastTouchY = event.touches[0]?.clientY ?? null;
+}
+
+function onUserTouchMove(event: TouchEvent): void {
+  const y = event.touches[0]?.clientY;
+  if (y == null || lastTouchY == null) return;
+  if (y > lastTouchY) detachFromBottom();
+  lastTouchY = y;
+}
+
+function bindScrollListeners(): void {
+  const target = scrollTarget.value;
+  if (!target || target === scrollListenersTarget) return;
+  unbindScrollListeners();
+  scrollListenersTarget = target;
+  target.addEventListener('wheel', onUserWheel, { passive: true });
+  target.addEventListener('touchstart', onUserTouchStart, { passive: true });
+  target.addEventListener('touchmove', onUserTouchMove, { passive: true });
+}
+
+function unbindScrollListeners(): void {
+  if (!scrollListenersTarget) return;
+  scrollListenersTarget.removeEventListener('wheel', onUserWheel);
+  scrollListenersTarget.removeEventListener('touchstart', onUserTouchStart);
+  scrollListenersTarget.removeEventListener('touchmove', onUserTouchMove);
+  scrollListenersTarget = null;
+  lastTouchY = null;
 }
 
 function scrollToBottom(smooth = false): void {
@@ -433,13 +484,16 @@ async function scrollToBottomStable(smooth = false): Promise<void> {
       }
 
       const height = target.scrollHeight;
-      scrollToBottom(smooth && attempts === 0);
+      if (isPinned.value) {
+        scrollToBottom(smooth && attempts === 0);
+      }
 
       attempts += 1;
       const stable = height === lastHeight && lastHeight >= 0;
       lastHeight = height;
 
       if (
+        !isPinned.value ||
         stable ||
         attempts >= SCROLL_STABLE_MAX_ATTEMPTS ||
         performance.now() >= deadline
@@ -461,8 +515,14 @@ function scheduleScrollToBottom(): void {
   if (scrollRaf !== null) return;
   scrollRaf = requestAnimationFrame(() => {
     scrollRaf = null;
-    scrollToBottom();
+    if (isPinned.value) scrollToBottom();
   });
+}
+
+function handleScrollDownClick(): void {
+  userDetached.value = false;
+  isPinned.value = true;
+  void scrollToBottomStable(true);
 }
 
 function handleSubmit(): void {
@@ -475,6 +535,7 @@ function handleSubmit(): void {
   draft.value = '';
   clearAttachments();
   // L'utilisateur vient d'envoyer : on force le rappel en bas.
+  userDetached.value = false;
   isPinned.value = true;
   void scrollToBottomStable();
 }
@@ -520,6 +581,13 @@ function onDrop(event: DragEvent): void {
 watch(
   () => arrivedState.bottom,
   (bottom) => {
+    if (userDetached.value) {
+      if (bottom) {
+        userDetached.value = false;
+        isPinned.value = true;
+      }
+      return;
+    }
     isPinned.value = bottom;
   },
   { immediate: true },
@@ -538,6 +606,7 @@ watch(
 watch(
   () => props.sessionId,
   () => {
+    userDetached.value = false;
     isPinned.value = true;
     bindScrollTarget();
     void scrollToBottomStable();
@@ -545,7 +614,11 @@ watch(
 );
 
 watch(
-  () => props.messages[props.messages.length - 1]?.content,
+  () => {
+    const last = props.messages[props.messages.length - 1];
+    if (!last) return null;
+    return [last.content, last.thinking, last.parts?.length, last._contentRev] as const;
+  },
   () => {
     if (isPinned.value) scheduleScrollToBottom();
   },
@@ -557,10 +630,8 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
-  if (scrollRaf !== null) {
-    cancelAnimationFrame(scrollRaf);
-    scrollRaf = null;
-  }
+  cancelScheduledScroll();
+  unbindScrollListeners();
   messageListRef.value = null;
   scrollTarget.value = null;
 });

@@ -47,41 +47,11 @@
         :attachment-statuses="attachmentStatuses"
         :settings-locked="settingsLocked"
       />
-      <div
+      <ThinkingCard
         v-if="showThinkingPlaceholder"
-        class="chat-message__thinking-placeholder"
-        aria-live="polite"
-      >
-        <button
-          type="button"
-          class="chat-message__thinking-toggle"
-          :aria-expanded="thinkingPlaceholderExpanded"
-          :aria-label="thinkingPlaceholderExpanded ? t('common.hide') : t('chat.thinkingToggleShow')"
-          @click="thinkingPlaceholderExpanded = !thinkingPlaceholderExpanded"
-        >
-          <span class="chat-message__thinking-spinner" aria-hidden="true" />
-          <span class="chat-message__thinking-text">{{ t('chat.thinking') }}</span>
-          <span class="chat-message__thinking-hint">
-            {{ thinkingPlaceholderExpanded ? t('common.hide') : t('common.show') }}
-          </span>
-          <Lucide
-            name="chevron-down"
-            size="xs"
-            color="wp-text-muted"
-            :class="thinkingPlaceholderExpanded ? 'chat-message__thinking-chevron chat-message__thinking-chevron--up' : 'chat-message__thinking-chevron'"
-          />
-        </button>
-        <div
-          v-if="thinkingPlaceholderExpanded"
-          class="chat-message__thinking-body"
-          role="region"
-          :aria-label="t('chat.reasoningDetail')"
-        >
-          <p class="chat-message__thinking-empty">
-            {{ t('chat.thinkingEmpty') }}
-          </p>
-        </div>
-      </div>
+        :thinking="thinkingPlaceholderPart"
+        :streaming="true"
+      />
 
       <template v-else>
         <template v-for="part in renderParts" :key="part.id">
@@ -168,6 +138,21 @@
           </span>
         </div>
       </div>
+
+      <footer
+        v-if="showCopyAction"
+        class="chat-message__actions"
+      >
+        <button
+          type="button"
+          class="chat-message__copy"
+          :aria-label="t('chat.copyMessageAria')"
+          @click="copyAssistantMessage"
+        >
+          <Lucide name="copy" size="xs" color="wp-text-muted" />
+          <span>{{ copyLabel }}</span>
+        </button>
+      </footer>
     </div>
     </div>
     </template>
@@ -189,7 +174,8 @@ import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog
 import { usePlugins } from '@composables/usePlugins';
 import { formatOpinionMarkdown } from '@composables/usePersonas';
 import { isCompactionMessageLike } from '@utils/compactionMessage';
-import type { ChatMessage, ChatMessagePart, ChatToolCall } from '#types';
+import { getAssistantCopyText } from '@utils/messageCopy';
+import type { ChatMessage, ChatMessagePart, ChatThinkingPart, ChatToolCall } from '#types';
 
 const props = defineProps<{
   message: ChatMessage;
@@ -213,7 +199,7 @@ const emit = defineEmits<{
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
 }>();
 
-const thinkingPlaceholderExpanded = ref(false);
+const copyLabel = ref('');
 const opinionPublishOpen = ref(false);
 const { t, locale } = useI18n();
 const { isProjetPluginActive } = usePlugins();
@@ -311,6 +297,45 @@ const showThinkingPlaceholder = computed(() => {
   const hasToolCall = parts.some((p) => p.type === 'tool_call');
   return !hasText && !hasThinking && !hasToolCall;
 });
+
+const thinkingPlaceholderPart = computed<ChatThinkingPart>(() => ({
+  type: 'thinking',
+  id: `${props.message.id}__thinking-placeholder`,
+  thinkingId: `${props.message.id}__thinking-placeholder`,
+  content: '',
+  done: false,
+}));
+
+const copyableText = computed(() =>
+  props.message.role === 'assistant' ? getAssistantCopyText(props.message) : '',
+);
+
+const showCopyAction = computed(
+  () =>
+    props.message.role === 'assistant' &&
+    !props.message.streaming &&
+    !props.message.error &&
+    copyableText.value.length > 0,
+);
+
+copyLabel.value = t('chat.copyMessage');
+
+async function copyAssistantMessage(): Promise<void> {
+  const text = copyableText.value;
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    copyLabel.value = t('chat.copyMessageDone');
+    setTimeout(() => {
+      copyLabel.value = t('chat.copyMessage');
+    }, 1500);
+  } catch {
+    copyLabel.value = t('chat.copyMessageFailed');
+    setTimeout(() => {
+      copyLabel.value = t('chat.copyMessage');
+    }, 1500);
+  }
+}
 
 function toolCallById(id: string): ChatToolCall | undefined {
   return props.message.toolCalls?.find((tc) => tc.id === id);
@@ -494,87 +519,6 @@ function toolCallById(id: string): ChatToolCall | undefined {
   opacity: 0.8;
 }
 
-.chat-message__thinking-placeholder {
-  display: flex;
-  flex-direction: column;
-  padding: var(--wp-space-1) 0;
-  color: var(--wp-text-muted);
-  font-size: var(--wp-fs-sm);
-}
-
-.chat-message__thinking-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  padding: var(--wp-space-1) var(--wp-space-2);
-  border: 1px solid transparent;
-  border-radius: var(--wp-r-sm);
-  background: transparent;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background var(--wp-dur) var(--wp-ease),
-    border-color var(--wp-dur) var(--wp-ease);
-
-  &:hover {
-    background: var(--wp-surface-3);
-    border-color: var(--wp-border);
-  }
-
-  &:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px var(--wp-focus-ring);
-  }
-}
-
-.chat-message__thinking-spinner {
-  flex: 0 0 auto;
-  width: 0.9rem;
-  height: 0.9rem;
-  border-radius: var(--wp-r-pill);
-  border: 2px solid var(--wp-accent-soft);
-  border-top-color: var(--wp-accent);
-  animation: chat-thinking-spin 0.7s linear infinite;
-}
-
-.chat-message__thinking-text {
-  font-weight: 500;
-}
-
-.chat-message__thinking-hint {
-  flex: 0 0 auto;
-  padding: 0.1rem var(--wp-space-2);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-r-pill);
-  background: var(--wp-surface-3);
-  font-size: var(--wp-fs-xs);
-  font-weight: 600;
-}
-
-.chat-message__thinking-chevron {
-  flex: 0 0 auto;
-  transition: transform var(--wp-dur) var(--wp-ease);
-
-  &--up {
-    transform: rotate(180deg);
-  }
-}
-
-.chat-message__thinking-body {
-  margin-top: var(--wp-space-2);
-  padding: var(--wp-space-2) var(--wp-space-3);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-r-sm);
-  background: var(--wp-surface-3);
-}
-
-.chat-message__thinking-empty {
-  margin: 0;
-  font-size: var(--wp-fs-sm);
-  line-height: var(--wp-lh-normal);
-  color: var(--wp-text-muted);
-}
-
 .chat-message__unknown-tool {
   margin: 0;
   font-size: var(--wp-fs-sm);
@@ -582,9 +526,38 @@ function toolCallById(id: string): ChatToolCall | undefined {
   font-style: italic;
 }
 
-@keyframes chat-thinking-spin {
-  to {
-    transform: rotate(360deg);
+.chat-message__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin-top: var(--wp-space-1);
+}
+
+.chat-message__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-1);
+  padding: var(--wp-space-1) var(--wp-space-2);
+  border: 1px solid transparent;
+  border-radius: var(--wp-r-sm);
+  background: transparent;
+  color: var(--wp-text-muted);
+  font-size: var(--wp-fs-xs);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--wp-dur) var(--wp-ease),
+    border-color var(--wp-dur) var(--wp-ease),
+    color var(--wp-dur) var(--wp-ease);
+
+  &:hover {
+    background: var(--wp-surface-3);
+    border-color: var(--wp-border);
+    color: var(--wp-text);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--wp-focus-ring);
   }
 }
 </style>

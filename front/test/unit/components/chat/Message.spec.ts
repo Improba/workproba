@@ -85,4 +85,88 @@ describe('Message accessibilité', () => {
     expect(wrapper.find('#chat-message-role-u2').text()).toBe('Vous');
     wrapper.unmount();
   });
+
+  it('affiche le bouton copier pour une réponse assistant terminée', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-copy',
+          role: 'assistant',
+          content: 'Réponse copiable',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    const copyBtn = wrapper.find('.chat-message__copy');
+    expect(copyBtn.exists()).toBe(true);
+    expect(copyBtn.text()).toContain('Copier');
+    wrapper.unmount();
+  });
+
+  it('masque le bouton copier pendant le streaming', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-stream',
+          role: 'assistant',
+          content: 'En cours…',
+          streaming: true,
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.chat-message__copy').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('utilise ThinkingCard comme placeholder de raisonnement initial', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-think',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          parts: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: {
+            props: ['thinking', 'streaming'],
+            template: '<div class="thinking-card-stub" />',
+          },
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.thinking-card-stub').exists()).toBe(true);
+    expect(wrapper.find('.chat-message__thinking-placeholder').exists()).toBe(false);
+    wrapper.unmount();
+  });
 });
