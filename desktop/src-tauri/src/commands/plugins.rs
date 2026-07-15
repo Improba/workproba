@@ -550,7 +550,10 @@ pub fn write_cloud_plugin_config(
     atomic_write(&config_path, &json)
 }
 
-fn cloud_preset_should_enable(settings: &AppSettings, preset: &super::preset::EnterprisePreset) -> bool {
+fn cloud_preset_should_enable(
+    settings: &AppSettings,
+    preset: &super::preset::EnterprisePreset,
+) -> bool {
     let network_improba_cloud = preset
         .permissions_network_improba_cloud
         .or(settings.permissions_network_improba_cloud)
@@ -803,9 +806,7 @@ mod plugins_tests {
             "cloud must use network:improba-cloud"
         );
         assert!(
-            cloud
-                .permissions
-                .contains(&"project:sync".to_string()),
+            cloud.permissions.contains(&"project:sync".to_string()),
             "cloud must use project:sync"
         );
         assert!(

@@ -375,7 +375,8 @@ fn settings_to_export_document(settings: &AppSettings) -> ExportPresetDocument {
         .filter(|locked| *locked)
         .map(|_| "locked".to_string());
 
-    let plugins = if settings.plugins_allowed.is_some() || settings.local_plugins_allowed.is_some() {
+    let plugins = if settings.plugins_allowed.is_some() || settings.local_plugins_allowed.is_some()
+    {
         Some(ExportPresetPlugins {
             allowed: settings.plugins_allowed.clone(),
             local_plugins: settings.local_plugins_allowed,
@@ -459,8 +460,7 @@ fn settings_to_export_document(settings: &AppSettings) -> ExportPresetDocument {
 pub async fn export_enterprise_preset(app: AppHandle) -> Result<Option<String>, String> {
     let settings = super::settings_store::get_app_settings(app.clone())?;
     let document = settings_to_export_document(&settings);
-    let json =
-        serde_json::to_string_pretty(&document).map_err(|error| error.to_string())?;
+    let json = serde_json::to_string_pretty(&document).map_err(|error| error.to_string())?;
 
     let selection = app
         .dialog()
@@ -542,7 +542,10 @@ mod preset_tests {
         assert_eq!(preset.permissions_network, Some(false));
         assert_eq!(preset.permissions_project_sync, Some(true));
         assert_eq!(preset.permissions_network_improba_cloud, Some(true));
-        assert_eq!(preset.cloud_endpoint.as_deref(), Some("https://cloud.example.test"));
+        assert_eq!(
+            preset.cloud_endpoint.as_deref(),
+            Some("https://cloud.example.test")
+        );
         assert_eq!(preset.cloud_org_id.as_deref(), Some("org-eti"));
         assert_eq!(preset.code_execute, Some(false));
         assert_eq!(preset.audit_retention_days, Some(90));
@@ -590,11 +593,12 @@ mod preset_tests {
         };
         let doc = settings_to_export_document(&settings);
         assert_eq!(doc.mode.as_deref(), Some("locked"));
-        assert_eq!(doc.ui.as_ref().and_then(|ui| ui.locale.as_deref()), Some("fr"));
         assert_eq!(
-            doc.provider_set
-                .as_ref()
-                .and_then(|ps| ps.id.as_deref()),
+            doc.ui.as_ref().and_then(|ui| ui.locale.as_deref()),
+            Some("fr")
+        );
+        assert_eq!(
+            doc.provider_set.as_ref().and_then(|ps| ps.id.as_deref()),
             Some("mistral-default")
         );
     }
@@ -641,8 +645,8 @@ mod preset_tests {
         let raw = fs::read_to_string(config_path).expect("cloud config");
         assert!(raw.contains("https://cloud.example.test"));
         assert!(raw.contains("org-eti"));
-        let registry = super::super::plugins::list_plugins_at(&app_data, &settings)
-            .expect("list plugins");
+        let registry =
+            super::super::plugins::list_plugins_at(&app_data, &settings).expect("list plugins");
         let cloud = registry
             .iter()
             .find(|entry| entry.manifest.id == "workproba.cloud")

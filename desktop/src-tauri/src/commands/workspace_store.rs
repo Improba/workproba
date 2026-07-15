@@ -683,21 +683,29 @@ mod workspace_store_tests {
         let space_id = "ws_test_client";
         let client_wp = client.join(WORKPROBA_DIR_NAME);
         fs::create_dir_all(client_wp.join(VERSIONS_DIR).join("sess_a")).expect("versions");
-        fs::write(client_wp.join(VERSIONS_DIR).join("sess_a").join("file.txt"), "v1")
-            .expect("version file");
+        fs::write(
+            client_wp.join(VERSIONS_DIR).join("sess_a").join("file.txt"),
+            "v1",
+        )
+        .expect("version file");
         fs::write(client_wp.join(MEMORY_DB_FILE), "sqlite-memory").expect("memory");
 
         let entry = registry_entry(space_id, &client);
         migrate_v1_to_v2_paths(&app_data, space_id, &client, &entry).expect("migrate");
 
         let space_root = app_data.join(SPACES_DIR).join(space_id);
-        assert!(space_root.join(VERSIONS_DIR).join("sess_a").join("file.txt").is_file());
+        assert!(space_root
+            .join(VERSIONS_DIR)
+            .join("sess_a")
+            .join("file.txt")
+            .is_file());
         assert!(space_root.join(MEMORY_DB_FILE).is_file());
         assert!(client_wp.join(MEMORY_DB_FILE).is_file());
 
-        let manifest: SpaceManifest =
-            serde_json::from_str(&fs::read_to_string(space_root.join(SPACE_MANIFEST_FILE)).unwrap())
-                .expect("space.json");
+        let manifest: SpaceManifest = serde_json::from_str(
+            &fs::read_to_string(space_root.join(SPACE_MANIFEST_FILE)).unwrap(),
+        )
+        .expect("space.json");
         assert_eq!(manifest.migrated_from_v1, Some(true));
         assert_eq!(manifest.migration_confirmed, Some(false));
 
@@ -715,15 +723,22 @@ mod workspace_store_tests {
             .join(space_id)
             .join(WORKPROBA_DIR_NAME);
         fs::create_dir_all(nested.join(VERSIONS_DIR).join("hash_abc")).expect("versions");
-        fs::write(nested.join(VERSIONS_DIR).join("hash_abc").join("doc.md"), "nested")
-            .expect("version file");
+        fs::write(
+            nested.join(VERSIONS_DIR).join("hash_abc").join("doc.md"),
+            "nested",
+        )
+        .expect("version file");
         fs::write(nested.join(MEMORY_DB_FILE), "nested-db").expect("memory");
 
         let entry = registry_entry(space_id, &client);
         migrate_v1_to_v2_paths(&app_data, space_id, &client, &entry).expect("migrate");
 
         let space_root = app_data.join(SPACES_DIR).join(space_id);
-        assert!(space_root.join(VERSIONS_DIR).join("hash_abc").join("doc.md").is_file());
+        assert!(space_root
+            .join(VERSIONS_DIR)
+            .join("hash_abc")
+            .join("doc.md")
+            .is_file());
         assert_eq!(
             fs::read_to_string(space_root.join(MEMORY_DB_FILE)).expect("read"),
             "nested-db"
