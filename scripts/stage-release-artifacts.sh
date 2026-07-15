@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Collect Tauri bundle outputs for CI artifact upload (one platform per call).
+# Portable Bash 3.2+ (macOS runners) — no mapfile.
 set -euo pipefail
 
 PLATFORM="${1:?platform label required}"
@@ -10,7 +11,10 @@ TARGET_ROOT="$ROOT_DIR/desktop/src-tauri/target"
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
-mapfile -t INSTALLERS < <(
+INSTALLERS=()
+while IFS= read -r file; do
+  [[ -n "$file" ]] && INSTALLERS+=("$file")
+done < <(
   find "$TARGET_ROOT" -type f \( \
     -path '*/release/bundle/dmg/*.dmg' \
     -o -path '*/release/bundle/deb/*.deb' \
