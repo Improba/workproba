@@ -119,7 +119,7 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 ## Experimental plugins
 
 - **Browser**: see [browser.md](./browser.md)
-- **Cloud plugin** (`workproba.cloud`): local mount sync via **`ProjectSyncPort`** and `project:sync` permission (PR 4). V3 scaffold: **`CloudControlPlaneClient`** (`enroll_to_cloud`, `sync_managed_regards` tools; `/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`) pulls signed regards via **`ManagedRegardsPort`**. Plan de contrôle SaaS: `workproba-cloud/` — see [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md). No direct project or personas namespace access.
+- **Cloud plugin** (`workproba.cloud`): local mount sync via **`ProjectSyncPort`** and `project:sync` permission (PR 4). V3 scaffold: **`CloudControlPlaneClient`** (`enroll_to_cloud`, `sync_managed_regards` tools; `/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`) pulls signed regards via **`ManagedRegardsPort`**. **`RemoteCapabilityGateway`** (`capability:remote`, `services/ai/app/plugins/ports/remote_capability_gateway.py`) : appels plugins distants avec délégation d'identité, minimisation des données (pas de conversations/fichiers locaux par défaut), timeouts et journal d'audit. Plan de contrôle SaaS: `workproba-cloud/` — see [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md). No direct project or personas namespace access.
 
 ## Local plugins
 

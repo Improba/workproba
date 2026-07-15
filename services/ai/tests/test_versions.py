@@ -16,6 +16,7 @@ from app.versions import (
     file_path_hash,
     list_versions,
     load_manifest,
+    purge_versions,
     restore_version,
     snapshot_before_overwrite,
     versions_dir_for_file,
@@ -184,3 +185,96 @@ def test_versions_http_list_and_restore(tmp_path: Path) -> None:
         assert restore_resp.json()["restored_path"] == "fichier.md"
 
     assert target.read_text(encoding="utf-8") == "original"
+
+
+def test_purge_keeps_last_n_versions(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+    target = project / "notes.md"
+    target.write_text("v0", encoding="utf-8")
+
+    for index in range(5):
+        snapshot_before_overwrite(
+            workspace_data_dir=ws_data,
+            project_root=project,
+            relative_path="notes.md",
+            label=f"v{index}",
+            max_versions=100,
+        )
+        target.write_text(f"v{index + 1}", encoding="utf-8")
+
+    result = purge_versions(
+        workspace_data_dir=ws_data,
+        file_path="notes.md",
+        keep_last=2,
+        older_than_days=None,
+    )
+    assert result["versions_removed"] == 3
+    versions = list_versions(workspace_data_dir=ws_data, file_path="notes.md")
+    assert len(versions) == 2
+
+
+def test_purge_older_than_days(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+    target = project / "archive.txt"
+    target.write_text("current", encoding="utf-8")
+
+    snapshot_before_overwrite(
+        workspace_data_dir=ws_data,
+        project_root=project,
+        relative_path="archive.txt",
+        max_versions=100,
+    )
+    version_dir = versions_dir_for_file(ws_data, "archive.txt")
+    manifest_path = version_dir / "manifest.json"
+    entries = load_manifest(manifest_path)
+    assert entries
+    entries[0]["created_at"] = "2020-01-01T00:00:00+00:00"
+    manifest_path.write_text(__import__("json").dumps(entries), encoding="utf-8")
+
+    result = purge_versions(
+        workspace_data_dir=ws_data,
+        file_path="archive.txt",
+        keep_last=None,
+        older_than_days=30,
+    )
+    assert result["versions_removed"] == 1
+    assert list_versions(workspace_data_dir=ws_data, file_path="archive.txt") == []
+
+
+def test_versions_http_purge(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+    target = project / "fichier.md"
+    target.write_text("v0", encoding="utf-8")
+    for _ in range(3):
+        snapshot_before_overwrite(
+            workspace_data_dir=ws_data,
+            project_root=project,
+            relative_path="fichier.md",
+            max_versions=100,
+        )
+        target.write_text("next", encoding="utf-8")
+
+    headers = {"X-Internal-Secret": "desktop-dev-secret"}
+    with TestClient(mainmod.app) as client:
+        purge_resp = client.post(
+            "/versions/purge",
+            json={
+                "workspace_data_dir": str(ws_data),
+                "file_path": "fichier.md",
+                "keep_last": 2,
+            },
+            headers=headers,
+        )
+        assert purge_resp.status_code == 200
+        body = purge_resp.json()
+        assert body["ok"] is True
+        assert body["versions_removed"] == 1

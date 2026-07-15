@@ -9,7 +9,7 @@ vi.mock('@services/aiSidecar', async (importOriginal) => {
   };
 });
 
-import { listFileVersions, restoreFileVersion } from '@services/aiSidecar';
+import { listFileVersions, purgeFileVersions, restoreFileVersion } from '@services/aiSidecar';
 
 describe('versions API (aiSidecar)', () => {
   beforeEach(() => {
@@ -76,5 +76,38 @@ describe('versions API (aiSidecar)', () => {
       }),
     );
     expect(ok).toBe(true);
+  });
+
+  it('purgeFileVersions appelle POST /versions/purge', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true, versions_removed: 2 }),
+    });
+
+    const result = await purgeFileVersions({
+      workspaceDataDir: '/data/ws',
+      filePath: 'doc.txt',
+      keepLast: 20,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://127.0.0.1:8765/versions/purge',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'Content-Type': 'application/json',
+          'X-Internal-Secret': 'desktop-dev-secret',
+        }),
+        body: JSON.stringify({
+          workspace_data_dir: '/data/ws',
+          file_path: 'doc.txt',
+          keep_last: 20,
+          older_than_days: null,
+        }),
+      }),
+    );
+    expect(result.ok).toBe(true);
+    expect(result.versionsRemoved).toBe(2);
   });
 });

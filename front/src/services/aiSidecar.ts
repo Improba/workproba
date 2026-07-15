@@ -885,6 +885,43 @@ export async function restoreFileVersion(opts: {
   }
 }
 
+export async function purgeFileVersions(opts: {
+  workspaceDataDir: string;
+  filePath?: string;
+  keepLast?: number;
+  olderThanDays?: number;
+}): Promise<{ ok: boolean; versionsRemoved: number }> {
+  if (opts.filePath && !isSafeRelativePath(opts.filePath)) {
+    return { ok: false, versionsRemoved: 0 };
+  }
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/versions/purge`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Secret': getDesktopSecret(),
+      },
+      body: JSON.stringify({
+        workspace_data_dir: opts.workspaceDataDir,
+        file_path: opts.filePath,
+        keep_last: opts.keepLast ?? 20,
+        older_than_days: opts.olderThanDays ?? null,
+      }),
+    });
+    if (!response.ok) return { ok: false, versionsRemoved: 0 };
+    const data = (await response.json()) as {
+      ok?: boolean;
+      versions_removed?: number;
+    };
+    return {
+      ok: data.ok !== false,
+      versionsRemoved: data.versions_removed ?? 0,
+    };
+  } catch {
+    return { ok: false, versionsRemoved: 0 };
+  }
+}
+
 // --- Personas (Vague 9) ---
 
 export interface PersonaInfo {
