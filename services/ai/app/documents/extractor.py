@@ -201,7 +201,9 @@ class LocalExtractor(DocumentExtractor):
         max_slides = self._limits.extract_max_pages
         slides_text: list[str] = []
         total_slides = len(presentation.slides)
-        for index, slide in enumerate(presentation.slides[:max_slides], start=1):
+        for index, slide in enumerate(presentation.slides, start=1):
+            if index > max_slides:
+                break
             parts: list[str] = [f"# Slide {index}"]
             for shape in slide.shapes:
                 text = getattr(shape, "text", None)

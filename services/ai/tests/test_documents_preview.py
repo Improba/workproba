@@ -12,6 +12,7 @@ from openpyxl import Workbook
 
 import app.auth as authmod
 import app.main as mainmod
+from app.documents.preview import _render_pptx_html
 
 
 @pytest.fixture(autouse=True)
@@ -110,6 +111,94 @@ def test_preview_rejects_path_traversal(tmp_path: Path) -> None:
             headers=_headers(),
         )
     assert resp.status_code == 403
+
+
+def test_preview_pptx(tmp_path: Path) -> None:
+    from pptx import Presentation
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Titre"
+    slide.placeholders[1].text = "Contenu slide"
+    path = tmp_path / "deck.pptx"
+    prs.save(path)
+
+    with TestClient(mainmod.app) as client:
+        resp = client.get(
+            "/documents/preview",
+            params={
+                "path": "deck.pptx",
+                "workspace_data_dir": str(tmp_path),
+                "project_path": str(tmp_path),
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "pptx"
+    assert "Titre" in data["html"]
+    assert "Contenu slide" in data["html"]
+
+
+def test_preview_pptx_empty_deck(tmp_path: Path) -> None:
+    from pptx import Presentation
+
+    prs = Presentation()
+    prs.slides.add_slide(prs.slide_layouts[6])
+    path = tmp_path / "empty.pptx"
+    prs.save(path)
+
+    with TestClient(mainmod.app) as client:
+        resp = client.get(
+            "/documents/preview",
+            params={
+                "path": "empty.pptx",
+                "workspace_data_dir": str(tmp_path),
+                "project_path": str(tmp_path),
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "pptx"
+    assert "Slide 1" in data["html"]
+    assert "<p>" not in data["html"]
+
+
+def test_preview_pptx_truncates_slides(tmp_path: Path) -> None:
+    from pptx import Presentation
+
+    from app.limits import Limits
+
+    prs = Presentation()
+    title_layout = prs.slide_layouts[1]
+    for index in range(55):
+        slide = prs.slides.add_slide(title_layout)
+        slide.shapes.title.text = f"Slide {index + 1}"
+    path = tmp_path / "long.pptx"
+    prs.save(path)
+
+    with TestClient(mainmod.app) as client:
+        resp = client.get(
+            "/documents/preview",
+            params={
+                "path": "long.pptx",
+                "workspace_data_dir": str(tmp_path),
+                "project_path": str(tmp_path),
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    html = resp.json()["html"]
+    assert "Slide 50" in html
+    assert "Slide 51" not in html
+
+    truncated = _render_pptx_html(
+        path.read_bytes(),
+        limits=Limits(extract_max_pages=3),
+    )
+    assert "Slide 3" in truncated
+    assert "Slide 4" not in truncated
 
 
 def test_preview_separate_project_and_data_dirs(tmp_path: Path) -> None:

@@ -22,6 +22,8 @@ def preview_type_for_path(path: Path) -> str:
         return "docx"
     if ext == ".xlsx":
         return "xlsx"
+    if ext == ".pptx":
+        return "pptx"
     if ext == ".pdf":
         return "pdf"
     if ext in _PREVIEW_IMAGE_EXTS:
@@ -68,6 +70,13 @@ async def render_preview(
             "type": "xlsx",
             "title": title,
             "html": _render_xlsx_html(content),
+        }
+
+    if preview_type == "pptx":
+        return {
+            "type": "pptx",
+            "title": title,
+            "html": _render_pptx_html(content, limits=limits),
         }
 
     if preview_type == "pdf":
@@ -160,3 +169,30 @@ def _render_xlsx_html(content: bytes) -> str:
     if not rows_html:
         return "<table></table>"
     return "<table>" + "".join(rows_html) + "</table>"
+
+
+def _render_pptx_html(content: bytes, *, limits: Limits = DEFAULT_LIMITS) -> str:
+    from pptx import Presentation
+
+    presentation = Presentation(BytesIO(content))
+    max_slides = limits.extract_max_pages
+    parts: list[str] = []
+
+    for index, slide in enumerate(presentation.slides, start=1):
+        if index > max_slides:
+            break
+        slide_parts: list[str] = [
+            f'<section class="wp-pptx-slide"><h2>Slide {index}</h2>',
+        ]
+        for shape in slide.shapes:
+            text = getattr(shape, "text", None)
+            if not text or not text.strip():
+                continue
+            for line in text.strip().splitlines():
+                stripped = line.strip()
+                if stripped:
+                    slide_parts.append(f"<p>{html.escape(stripped)}</p>")
+        slide_parts.append("</section>")
+        parts.extend(slide_parts)
+
+    return "\n".join(parts) if parts else "<p></p>"

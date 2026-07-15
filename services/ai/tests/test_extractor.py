@@ -38,6 +38,25 @@ def test_extract_docx() -> None:
     assert "Seconde ligne" in result.text
 
 
+def test_extract_pptx() -> None:
+    from pptx import Presentation
+
+    prs = Presentation()
+    slide = prs.slides.add_slide(prs.slide_layouts[1])
+    slide.shapes.title.text = "Intro"
+    slide.placeholders[1].text = "Points clés"
+    buf = BytesIO()
+    prs.save(buf)
+
+    extractor = LocalExtractor()
+    result = asyncio.run(
+        extractor.extract(content=buf.getvalue(), filename="deck.pptx", mime_type=None)
+    )
+    assert "Intro" in result.text
+    assert "Points clés" in result.text
+    assert result.metadata.get("slides_total") == 1
+
+
 def test_extract_unsupported_falls_back_gracefully() -> None:
     extractor = LocalExtractor()
     result = asyncio.run(

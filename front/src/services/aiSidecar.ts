@@ -470,6 +470,7 @@ export async function promoteSessionMemory(opts: {
 export type DocumentPreviewType =
   | 'docx'
   | 'xlsx'
+  | 'pptx'
   | 'pdf'
   | 'text'
   | 'image'

@@ -325,6 +325,16 @@ watch(
     font-weight: 600;
   }
 
+  :deep(.wp-pptx-slide) {
+    margin-bottom: var(--wp-space-4);
+    padding-bottom: var(--wp-space-3);
+    border-bottom: 1px solid var(--wp-border);
+
+    &:last-child {
+      border-bottom: none;
+    }
+  }
+
   :deep(p) {
     margin: 0 0 var(--wp-space-2);
   }

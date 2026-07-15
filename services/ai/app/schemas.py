@@ -529,7 +529,7 @@ class FileEntry(BaseModel):
 
 
 class DocumentPreviewResponse(BaseModel):
-    type: Literal["docx", "xlsx", "pdf", "text", "image", "unsupported"]
+    type: Literal["docx", "xlsx", "pptx", "pdf", "text", "image", "unsupported"]
     title: str
     html: str
 
