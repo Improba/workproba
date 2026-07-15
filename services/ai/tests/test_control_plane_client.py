@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -132,6 +133,86 @@ async def test_pull_and_install_regards(tmp_path: Path) -> None:
     assert result["activated"]["catalog_id"] == "cloud-regards"
     status = port.get_catalog_status()
     assert status["active"] is True
+
+
+@pytest.mark.asyncio
+async def test_enroll_device_persists_tokens(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/enroll":
+            body = json.loads(request.content.decode())
+            assert body == {"orgId": "org-99", "deviceName": "desk-paris"}
+            return httpx.Response(
+                200,
+                json={"deviceId": "dev_abc123", "accessToken": "wp_dev_token_xyz"},
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        result = await client.enroll_device(org_id="org-99", device_name="desk-paris")
+
+    assert result["deviceId"] == "dev_abc123"
+    tokens = client.load_tokens()
+    assert tokens["access_token"] == "wp_dev_token_xyz"
+    assert tokens["device_id"] == "dev_abc123"
+    assert tokens["org_id"] == "org-99"
+
+
+@pytest.mark.asyncio
+async def test_sync_artefact_endpoints_with_mock_transport(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    artefact_meta = {
+        "projectId": "proj-alpha",
+        "artifactId": "art-q1",
+        "version": "1.0.0",
+        "filename": "q1.pdf",
+        "checksum": "sha256:abc",
+        "size": 4096,
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/sync/artefacts" and request.method == "GET":
+            assert request.url.params.get("projectId") == "proj-alpha"
+            return httpx.Response(200, json={"items": [artefact_meta]})
+        if request.url.path == "/sync/artefacts" and request.method == "POST":
+            body = json.loads(request.content.decode())
+            assert body == artefact_meta
+            return httpx.Response(200, json=artefact_meta)
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        await client.authenticate(bearer_token="sync-token")
+        pushed = await client.push_sync_artefact_metadata(
+            project_id="proj-alpha",
+            artifact_id="art-q1",
+            version="1.0.0",
+            filename="q1.pdf",
+            checksum="sha256:abc",
+            size=4096,
+        )
+        listed = await client.list_sync_artefacts(project_id="proj-alpha")
+
+    assert pushed["artifactId"] == "art-q1"
+    assert listed["items"][0]["filename"] == "q1.pdf"
 
 
 def test_cloud_enroll_http(tmp_path: Path) -> None:

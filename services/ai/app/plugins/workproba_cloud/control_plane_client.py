@@ -149,6 +149,77 @@ class CloudControlPlaneClient:
             if owns_client:
                 await client.aclose()
 
+    async def _post_json(self, path: str, *, json_body: JsonDict) -> JsonDict:
+        client = await self._client()
+        owns_client = self._http_client is None
+        try:
+            response = await client.post(
+                path,
+                json=json_body,
+                headers=self._auth_headers(),
+            )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("invalid_control_plane_response")
+            return payload
+        finally:
+            if owns_client:
+                await client.aclose()
+
+    async def enroll_device(
+        self,
+        *,
+        org_id: str,
+        device_name: str,
+    ) -> JsonDict:
+        """Enrôle le poste desktop et persiste deviceId + accessToken."""
+        payload = await self._post_json(
+            "/devices/enroll",
+            json_body={"orgId": org_id, "deviceName": device_name},
+        )
+        tokens: JsonDict = {}
+        device_id = payload.get("deviceId")
+        access_token = payload.get("accessToken")
+        if isinstance(device_id, str) and device_id.strip():
+            tokens["device_id"] = device_id.strip()
+        if isinstance(access_token, str) and access_token.strip():
+            tokens["access_token"] = access_token.strip()
+            tokens["token_type"] = "bearer"
+        if isinstance(org_id, str) and org_id.strip():
+            tokens["org_id"] = org_id.strip()
+        if tokens:
+            self.save_tokens(tokens)
+        return payload
+
+    async def list_sync_artefacts(self, *, project_id: str | None = None) -> JsonDict:
+        params: JsonDict = {}
+        if project_id:
+            params["projectId"] = project_id
+        return await self._get_json("/sync/artefacts", params=params or None)
+
+    async def push_sync_artefact_metadata(
+        self,
+        *,
+        project_id: str,
+        artifact_id: str,
+        version: str,
+        filename: str,
+        checksum: str,
+        size: int,
+    ) -> JsonDict:
+        return await self._post_json(
+            "/sync/artefacts",
+            json_body={
+                "projectId": project_id,
+                "artifactId": artifact_id,
+                "version": version,
+                "filename": filename,
+                "checksum": checksum,
+                "size": size,
+            },
+        )
+
     async def fetch_regards_catalog(self, *, org_id: str | None = None) -> JsonDict:
         params: JsonDict = {}
         if org_id:
