@@ -83,6 +83,7 @@
         @plan-reject="() => approvePlan(false)"
         @personas-open="openExpertsPanel"
         @personas-meeting="openMeetingView"
+        @personas-discuss="openDiscussionView"
         @personas-another="(card) => openOpinionPicker(card.question)"
         @personas-to-discussion="openDiscussionFromOpinion"
       />

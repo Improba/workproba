@@ -77,66 +77,93 @@
         {{ errorMessage }}
       </p>
 
-      <div class="browser-panel__viewport">
-        <p v-if="loading && !screenshot" class="browser-panel__loading">
-          {{ t('common.loading') }}
-        </p>
-        <div v-else-if="screenshot" class="browser-panel__screenshot-wrap">
-          <img
-            ref="screenshotEl"
-            :src="screenshotSrc"
-            :alt="title || t('browser.pageView')"
-            class="browser-panel__screenshot"
-            @load="updateScreenshotWidth"
-          />
+      <div class="browser-panel__scroll">
+        <div class="browser-panel__viewport">
           <div
-            v-if="highlightStyle"
-            class="browser-panel__highlight"
-            :style="highlightStyle"
-            :aria-label="t('browser.highlightRef', { ref: highlight?.ref ?? '' })"
-          />
-          <div
-            v-if="agentTurnActive && !pilotagePaused"
-            class="browser-panel__live-badge"
+            v-if="loading && !screenshot"
+            class="browser-panel__loading"
             role="status"
+            :aria-label="loadingMessage"
           >
-            <span class="browser-panel__live-dot" aria-hidden="true" />
-            {{ t('browser.liveView') }}
+            <span class="browser-panel__spinner" aria-hidden="true" />
+            <p class="browser-panel__loading-title">{{ loadingMessage }}</p>
+            <p v-if="showSlowHint" class="browser-panel__loading-hint">
+              {{ t('browser.loadingSlow') }}
+            </p>
+            <p v-if="loadingElapsedSec >= 3" class="browser-panel__loading-hint">
+              {{ t('browser.loadingElapsed', { n: loadingElapsedSec }) }}
+            </p>
           </div>
-          <div
-            v-if="lastAiAction"
-            class="browser-panel__action-overlay"
-            :aria-label="t('browser.aiActionOverlay')"
-          >
-            <Lucide name="bot" size="12" color="accent" />
-            <span class="browser-panel__action-label">{{ lastAiAction.label }}</span>
+          <div v-else-if="screenshot" class="browser-panel__screenshot-wrap">
+            <img
+              ref="screenshotEl"
+              :src="screenshotSrc"
+              :alt="title || t('browser.pageView')"
+              class="browser-panel__screenshot"
+              :class="{ 'browser-panel__screenshot--dimmed': loading }"
+              @load="updateScreenshotWidth"
+            />
+            <div
+              v-if="loading"
+              class="browser-panel__loading-overlay"
+              role="status"
+              :aria-label="loadingMessage"
+            >
+              <span class="browser-panel__spinner" aria-hidden="true" />
+              <p class="browser-panel__loading-title">{{ loadingMessage }}</p>
+              <p v-if="showSlowHint" class="browser-panel__loading-hint">
+                {{ t('browser.loadingSlow') }}
+              </p>
+            </div>
+            <div
+              v-if="highlightStyle"
+              class="browser-panel__highlight"
+              :style="highlightStyle"
+              :aria-label="t('browser.highlightRef', { ref: highlight?.ref ?? '' })"
+            />
+            <div
+              v-if="agentTurnActive && !pilotagePaused"
+              class="browser-panel__live-badge"
+              role="status"
+            >
+              <span class="browser-panel__live-dot" aria-hidden="true" />
+              {{ t('browser.liveView') }}
+            </div>
+            <div
+              v-if="lastAiAction"
+              class="browser-panel__action-overlay"
+              :aria-label="t('browser.aiActionOverlay')"
+            >
+              <Lucide name="bot" size="12" color="accent" />
+              <span class="browser-panel__action-label">{{ lastAiAction.label }}</span>
+            </div>
+          </div>
+          <div v-else class="browser-panel__empty">
+            <Lucide name="globe" size="32" color="text-faint" />
+            <p>{{ t('browser.empty') }}</p>
           </div>
         </div>
-        <div v-else class="browser-panel__empty">
-          <Lucide name="globe" size="32" color="text-faint" />
-          <p>{{ t('browser.empty') }}</p>
-        </div>
+
+        <details v-if="snapshotYaml" class="browser-panel__snapshot">
+          <summary>{{ t('browser.snapshot') }}</summary>
+          <pre class="browser-panel__snapshot-body">{{ snapshotYaml }}</pre>
+        </details>
+
+        <details class="browser-panel__ai-hint">
+          <summary class="browser-panel__ai-summary">
+            <Lucide name="bot" size="14" color="accent" />
+            {{ t('browser.aiPilotTitle') }}
+          </summary>
+          <p class="browser-panel__ai-text">{{ t('browser.aiPilotHint') }}</p>
+          <ul class="browser-panel__ai-tools">
+            <li>{{ t('browser.aiToolNavigate') }}</li>
+            <li>{{ t('browser.aiToolClick') }}</li>
+            <li>{{ t('browser.aiToolType') }}</li>
+            <li>{{ t('browser.aiToolScroll') }}</li>
+            <li>{{ t('browser.aiToolExtract') }}</li>
+          </ul>
+        </details>
       </div>
-
-      <details v-if="snapshotYaml" class="browser-panel__snapshot">
-        <summary>{{ t('browser.snapshot') }}</summary>
-        <pre class="browser-panel__snapshot-body">{{ snapshotYaml }}</pre>
-      </details>
-
-      <section class="browser-panel__ai-hint" :aria-label="t('browser.aiPilotTitle')">
-        <h3 class="browser-panel__ai-title">
-          <Lucide name="bot" size="14" color="accent" />
-          {{ t('browser.aiPilotTitle') }}
-        </h3>
-        <p class="browser-panel__ai-text">{{ t('browser.aiPilotHint') }}</p>
-        <ul class="browser-panel__ai-tools">
-          <li>{{ t('browser.aiToolNavigate') }}</li>
-          <li>{{ t('browser.aiToolClick') }}</li>
-          <li>{{ t('browser.aiToolType') }}</li>
-          <li>{{ t('browser.aiToolScroll') }}</li>
-          <li>{{ t('browser.aiToolExtract') }}</li>
-        </ul>
-      </section>
     </template>
   </div>
 </template>
@@ -146,9 +173,15 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useBrowser } from '@composables/useBrowser';
+import { useShellSurfaces } from '@composables/useShellSurfaces';
 import { scaleHighlightStyle } from '@utils/browserHighlight';
 
+const BROWSER_TAB_KEY = 'workproba.browser:right_panel';
+const SLOW_HINT_DELAY_MS = 2500;
+const ELAPSED_TICK_MS = 1000;
+
 const { t } = useI18n();
+const { rightPanelTab } = useShellSurfaces();
 const {
   isBrowserPluginActive,
   currentUrl,
@@ -156,6 +189,8 @@ const {
   screenshot,
   snapshotYaml,
   loading,
+  loadingReason,
+  loadingStartedAt,
   error,
   pilotagePaused,
   lastAiAction,
@@ -173,6 +208,28 @@ const {
 const urlDraft = ref('');
 const screenshotEl = ref<HTMLImageElement | null>(null);
 const screenshotDisplayWidth = ref(0);
+const loadingElapsedSec = ref(0);
+const showSlowHint = ref(false);
+let elapsedTimer: ReturnType<typeof setInterval> | null = null;
+let slowHintTimer: ReturnType<typeof setTimeout> | null = null;
+let initStarted = false;
+
+const isTabActive = computed(() => rightPanelTab.value === BROWSER_TAB_KEY);
+
+const loadingMessage = computed(() => {
+  switch (loadingReason.value) {
+    case 'init':
+      return t('browser.loadingInit');
+    case 'navigate':
+      return t('browser.loadingNavigate');
+    case 'snapshot':
+      return t('browser.loadingSnapshot');
+    case 'action':
+      return t('browser.loadingAction');
+    default:
+      return t('common.loading');
+  }
+});
 
 watch(currentUrl, (url) => {
   if (url) urlDraft.value = url;
@@ -180,6 +237,32 @@ watch(currentUrl, (url) => {
 
 watch(screenshot, () => {
   updateScreenshotWidth();
+});
+
+watch(loading, (isLoading) => {
+  clearLoadingTimers();
+  if (!isLoading) {
+    loadingElapsedSec.value = 0;
+    showSlowHint.value = false;
+    return;
+  }
+  loadingElapsedSec.value = 0;
+  showSlowHint.value = false;
+  elapsedTimer = setInterval(() => {
+    if (loadingStartedAt.value) {
+      loadingElapsedSec.value = Math.floor((Date.now() - loadingStartedAt.value) / 1000);
+    }
+  }, ELAPSED_TICK_MS);
+  slowHintTimer = setTimeout(() => {
+    showSlowHint.value = true;
+  }, SLOW_HINT_DELAY_MS);
+});
+
+watch(isTabActive, (active) => {
+  if (active && !initStarted) {
+    initStarted = true;
+    void init();
+  }
 });
 
 const screenshotSrc = computed(() => {
@@ -205,6 +288,17 @@ const errorMessage = computed(() => {
   return t('browser.errorGeneric');
 });
 
+function clearLoadingTimers(): void {
+  if (elapsedTimer) {
+    clearInterval(elapsedTimer);
+    elapsedTimer = null;
+  }
+  if (slowHintTimer) {
+    clearTimeout(slowHintTimer);
+    slowHintTimer = null;
+  }
+}
+
 function updateScreenshotWidth(): void {
   screenshotDisplayWidth.value = screenshotEl.value?.clientWidth ?? 0;
 }
@@ -224,7 +318,10 @@ function togglePilotage(): void {
 }
 
 onMounted(() => {
-  void init();
+  if (isTabActive.value && !initStarted) {
+    initStarted = true;
+    void init();
+  }
   if (typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(() => {
       updateScreenshotWidth();
@@ -242,6 +339,7 @@ watch(screenshotEl, (el, _prev, onCleanup) => {
 });
 
 onUnmounted(() => {
+  clearLoadingTimers();
   resizeObserver?.disconnect();
   resizeObserver = null;
 });
@@ -258,7 +356,6 @@ onUnmounted(() => {
 
 .browser-panel__inactive,
 .browser-panel__empty {
-  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -268,6 +365,10 @@ onUnmounted(() => {
   color: var(--wp-text-faint);
   font-size: var(--wp-fs-sm);
   text-align: center;
+}
+
+.browser-panel__inactive {
+  flex: 1;
 }
 
 .browser-panel__toolbar {
@@ -377,10 +478,16 @@ onUnmounted(() => {
   font-size: var(--wp-fs-xs);
 }
 
-.browser-panel__viewport {
+.browser-panel__scroll {
   flex: 1;
   min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.browser-panel__viewport {
+  flex: none;
   background: var(--wp-surface-2);
   display: flex;
   align-items: flex-start;
@@ -388,9 +495,51 @@ onUnmounted(() => {
 }
 
 .browser-panel__loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--wp-space-2);
+  width: 100%;
+  min-height: 160px;
   padding: var(--wp-space-4);
+  text-align: center;
+}
+
+.browser-panel__loading-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-3);
+  background: color-mix(in srgb, var(--wp-surface) 72%, transparent);
+  text-align: center;
+}
+
+.browser-panel__spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: var(--wp-r-pill);
+  border: 2px solid var(--wp-accent-soft);
+  border-top-color: var(--wp-accent);
+  animation: browser-panel-spin 0.7s linear infinite;
+}
+
+.browser-panel__loading-title {
+  margin: 0;
+  color: var(--wp-text);
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+}
+
+.browser-panel__loading-hint {
+  margin: 0;
   color: var(--wp-text-faint);
-  font-size: var(--wp-fs-sm);
+  font-size: 10px;
+  line-height: var(--wp-lh-normal);
 }
 
 .browser-panel__screenshot-wrap {
@@ -402,6 +551,10 @@ onUnmounted(() => {
   max-width: 100%;
   height: auto;
   display: block;
+
+  &--dimmed {
+    opacity: 0.55;
+  }
 }
 
 .browser-panel__highlight {
@@ -438,6 +591,12 @@ onUnmounted(() => {
   border-radius: 50%;
   background: var(--wp-accent);
   animation: browser-live-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes browser-panel-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @keyframes browser-highlight-pulse {
@@ -483,16 +642,26 @@ onUnmounted(() => {
   white-space: nowrap;
 }
 
-.browser-panel__snapshot {
+.browser-panel__snapshot,
+.browser-panel__ai-hint {
   flex: none;
   border-top: 1px solid var(--wp-border);
   font-size: var(--wp-fs-xs);
+}
 
-  summary {
-    padding: var(--wp-space-2) var(--wp-space-3);
-    cursor: pointer;
-    color: var(--wp-text-muted);
-  }
+.browser-panel__snapshot summary,
+.browser-panel__ai-hint summary {
+  padding: var(--wp-space-2) var(--wp-space-3);
+  cursor: pointer;
+  color: var(--wp-text-muted);
+}
+
+.browser-panel__ai-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  font-weight: 600;
+  color: var(--wp-text);
 }
 
 .browser-panel__snapshot-body {
@@ -507,32 +676,16 @@ onUnmounted(() => {
   word-break: break-all;
 }
 
-.browser-panel__ai-hint {
-  flex: none;
-  padding: var(--wp-space-2) var(--wp-space-3);
-  border-top: 1px solid var(--wp-border);
-  background: var(--wp-surface);
-}
-
-.browser-panel__ai-title {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  margin: 0 0 var(--wp-space-1);
-  font-size: var(--wp-fs-xs);
-  font-weight: 600;
-  color: var(--wp-text);
-}
-
 .browser-panel__ai-text {
-  margin: 0 0 var(--wp-space-1);
+  margin: 0;
+  padding: 0 var(--wp-space-3) var(--wp-space-1);
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-muted);
 }
 
 .browser-panel__ai-tools {
   margin: 0;
-  padding-left: 1.25rem;
+  padding: 0 var(--wp-space-3) var(--wp-space-2) calc(var(--wp-space-3) + 1.25rem);
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-faint);
 }

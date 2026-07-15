@@ -104,7 +104,7 @@ import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useCloud } from '@composables/useCloud';
-import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import { PROJET_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import { pickProjectFolder } from '@composables/useDesktop';
 import {
   listProjetProjects,
@@ -112,7 +112,7 @@ import {
 } from '@services/aiSidecar';
 
 const { t } = useI18n();
-const { isCloudPluginActive, getPluginDataDir } = usePlugins();
+const { isCloudPluginActive, isProjetPluginActive, getPluginDataDir } = usePlugins();
 const {
   status,
   loading,
@@ -139,7 +139,11 @@ const lastSyncLabel = computed(() => {
 });
 
 async function refreshProjects(): Promise<void> {
-  const dataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
+  if (!isProjetPluginActive.value) {
+    projects.value = [];
+    return;
+  }
+  const dataDir = await getPluginDataDir(PROJET_PLUGIN_ID);
   if (!dataDir) {
     projects.value = [];
     return;
@@ -206,6 +210,12 @@ async function onSync(projectId: string): Promise<void> {
 watch(isCloudPluginActive, (active) => {
   if (active) {
     void bootstrap();
+  }
+});
+
+watch(isProjetPluginActive, () => {
+  if (isCloudPluginActive.value) {
+    void refreshProjects();
   }
 });
 

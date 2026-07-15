@@ -72,6 +72,7 @@ export default configure(function (/* ctx */) {
           '@assets': resolve(__dirname, './src/assets'),
           '@components': resolve(__dirname, './src/components'),
           '@composables': resolve(__dirname, './src/composables'),
+          '@capabilities': resolve(__dirname, './src/capabilities'),
           '@css': resolve(__dirname, './src/css'),
           '@i18n': resolve(__dirname, './src/i18n'),
           '@layouts': resolve(__dirname, './src/layouts'),

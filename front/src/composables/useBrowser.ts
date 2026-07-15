@@ -24,6 +24,8 @@ import { useAppSettings } from '@composables/useAppSettings';
 const LIVE_REFRESH_MS = 1200;
 const HIGHLIGHT_FADE_MS = 2500;
 
+export type BrowserLoadingReason = 'init' | 'navigate' | 'snapshot' | 'action';
+
 export interface BrowserState {
   active: boolean;
   currentUrl: string;
@@ -31,6 +33,8 @@ export interface BrowserState {
   screenshot: string | null;
   snapshotYaml: string;
   loading: boolean;
+  loadingReason: BrowserLoadingReason | null;
+  loadingStartedAt: number | null;
   error: string | null;
   pilotagePaused: boolean;
   lastAiAction: BrowserAiActionOverlay | null;
@@ -44,6 +48,8 @@ const screenshot = ref<string | null>(null);
 const snapshotYaml = ref('');
 const active = ref(false);
 const loading = ref(false);
+const loadingReason = ref<BrowserLoadingReason | null>(null);
+const loadingStartedAt = ref<number | null>(null);
 const error = ref<string | null>(null);
 const pilotagePaused = ref(false);
 const lastAiAction = ref<BrowserAiActionOverlay | null>(null);
@@ -112,6 +118,18 @@ function syncLiveRefresh(): void {
   }, LIVE_REFRESH_MS);
 }
 
+function beginLoading(reason: BrowserLoadingReason): void {
+  loading.value = true;
+  loadingReason.value = reason;
+  loadingStartedAt.value = Date.now();
+}
+
+function endLoading(): void {
+  loading.value = false;
+  loadingReason.value = null;
+  loadingStartedAt.value = null;
+}
+
 function registerBrowserWatches(isBrowserPluginActive: Ref<boolean>): void {
   if (browserWatchesRegistered) return;
   watch(isBrowserPluginActive, (pluginActive) => {
@@ -131,6 +149,8 @@ export interface UseBrowserReturn {
   snapshotYaml: Ref<string>;
   active: Ref<boolean>;
   loading: Ref<boolean>;
+  loadingReason: Ref<BrowserLoadingReason | null>;
+  loadingStartedAt: Ref<number | null>;
   error: Ref<string | null>;
   pilotagePaused: Ref<boolean>;
   lastAiAction: Ref<BrowserAiActionOverlay | null>;
@@ -186,16 +206,20 @@ export function useBrowser(): UseBrowserReturn {
     if (!isBrowserPluginActive.value) return;
     const dir = await ensureDataDir();
     if (!dir) return;
+    beginLoading('init');
+    error.value = null;
     try {
       const status = await browserStatus(dir);
       active.value = status.active;
       currentUrl.value = status.url ?? '';
       title.value = status.title ?? '';
       if (status.active) {
-        await snapshot();
+        await snapshot({ silent: true });
       }
     } catch {
       /* défensif : back peut être indisponible */
+    } finally {
+      endLoading();
     }
   }
 
@@ -208,7 +232,7 @@ export function useBrowser(): UseBrowserReturn {
     const trimmed = url.trim();
     if (!trimmed) return;
 
-    loading.value = true;
+    beginLoading('navigate');
     error.value = null;
     lastAiAction.value = null;
     highlight.value = null;
@@ -219,7 +243,7 @@ export function useBrowser(): UseBrowserReturn {
     } catch (err) {
       error.value = mapBrowserError(err);
     } finally {
-      loading.value = false;
+      endLoading();
     }
   }
 
@@ -229,7 +253,7 @@ export function useBrowser(): UseBrowserReturn {
     if (options.silent && !active.value) return;
 
     if (!options.silent) {
-      loading.value = true;
+      beginLoading('snapshot');
       error.value = null;
     }
     try {
@@ -243,7 +267,7 @@ export function useBrowser(): UseBrowserReturn {
       }
     } finally {
       if (!options.silent) {
-        loading.value = false;
+        endLoading();
       }
     }
   }
@@ -252,7 +276,7 @@ export function useBrowser(): UseBrowserReturn {
     const dir = await ensureDataDir();
     if (!dir) return;
 
-    loading.value = true;
+    beginLoading('action');
     error.value = null;
     lastAiAction.value = null;
     highlight.value = null;
@@ -263,7 +287,7 @@ export function useBrowser(): UseBrowserReturn {
     } catch (err) {
       error.value = mapBrowserError(err);
     } finally {
-      loading.value = false;
+      endLoading();
     }
   }
 
@@ -342,6 +366,8 @@ export function useBrowser(): UseBrowserReturn {
     snapshotYaml,
     active,
     loading,
+    loadingReason,
+    loadingStartedAt,
     error,
     pilotagePaused,
     lastAiAction,

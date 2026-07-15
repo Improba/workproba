@@ -19,13 +19,30 @@ vi.mock('@composables/usePluginSlots', () => ({
   }),
 }));
 
-vi.mock('@composables/usePlugins', () => ({
-  usePlugins: () => ({
-    isProjetPluginActive: ref(true),
-    isPersonasPluginActive: ref(false),
-    getPluginDataDir: vi.fn().mockResolvedValue(null),
+vi.mock('@composables/useAppSettings', () => ({
+  useAppSettings: () => ({
+    settingsLocked: ref(false),
+    settingsMode: ref('guided'),
   }),
 }));
+
+vi.mock('@composables/useShellSurfaces', () => ({
+  useShellSurfaces: () => ({
+    rightPanelTab: ref('files'),
+  }),
+}));
+
+vi.mock('@composables/usePlugins', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@composables/usePlugins')>();
+  return {
+    ...actual,
+    usePlugins: () => ({
+      isProjetPluginActive: ref(true),
+      isPersonasPluginActive: ref(false),
+      getPluginDataDir: vi.fn().mockResolvedValue(null),
+    }),
+  };
+});
 
 vi.mock('@composables/usePersonasActions', () => ({
   usePersonasActions: () => ({

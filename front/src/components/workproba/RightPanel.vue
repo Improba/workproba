@@ -27,7 +27,7 @@
           <span class="wp-right-panel__tab-label">{{ t('shell.preview') }}</span>
         </button>
         <button
-          v-for="tab in rightPanelPluginTabs"
+          v-for="tab in visiblePluginTabs"
           :key="tab.key"
           type="button"
           role="tab"
@@ -76,7 +76,7 @@
 
       <component
         :is="tab.component"
-        v-for="tab in rightPanelPluginTabs"
+        v-for="tab in visiblePluginTabs"
         :key="tab.key"
         v-show="activeTab === tab.key"
         :ref="(el: unknown) => setPluginRef(tab.pluginId, el)"
@@ -94,7 +94,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import FileExplorer from '@components/workproba/FileExplorer.vue';
@@ -102,7 +102,9 @@ import DocumentPreview from '@components/workproba/DocumentPreview.vue';
 import VersionsPanel from '@components/workproba/VersionsPanel.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { usePluginSlots } from '@composables/usePluginSlots';
-import { usePlugins } from '@composables/usePlugins';
+import { usePlugins, CLOUD_PLUGIN_ID } from '@composables/usePlugins';
+import { useAppSettings } from '@composables/useAppSettings';
+import { useShellSurfaces } from '@composables/useShellSurfaces';
 
 defineProps<{
   activePath: string | null;
@@ -117,8 +119,17 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const { isProjetPluginActive } = usePlugins();
 const { rightPanelPluginTabs } = usePluginSlots();
+const { settingsLocked, settingsMode } = useAppSettings();
+const { rightPanelTab: activeTab } = useShellSurfaces();
 
-const activeTab = ref<string>('files');
+const isGuided = computed(
+  () => settingsLocked.value || settingsMode.value !== 'advanced',
+);
+
+const visiblePluginTabs = computed(() => {
+  if (!isGuided.value) return rightPanelPluginTabs.value;
+  return rightPanelPluginTabs.value.filter((tab) => tab.pluginId !== CLOUD_PLUGIN_ID);
+});
 const selectedFilePath = ref<string | null>(null);
 const previewRefreshKey = ref(0);
 const publishDialogOpen = ref(false);
@@ -151,7 +162,7 @@ function onVersionRestored(): void {
   previewRefreshKey.value += 1;
 }
 
-watch(rightPanelPluginTabs, (tabs) => {
+watch(visiblePluginTabs, (tabs) => {
   const keys = new Set(['files', 'preview', ...tabs.map((tab) => tab.key)]);
   if (!keys.has(activeTab.value)) {
     activeTab.value = 'files';

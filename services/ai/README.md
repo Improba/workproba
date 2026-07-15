@@ -1,6 +1,6 @@
 # Workproba AI Core
 
-Python sidecar for the Workproba desktop application: agent loop, LLM providers, extraction, RAG, scoped memory, plugins, subprocess sandbox.
+Python sidecar for the Workproba desktop application: agent loop, LLM providers, extraction, RAG, scoped memory, **builtin plugins only** (local plugin runtime not loaded in V2). `run_code` exists but is **not exposed** in V2.
 
 Listens on `127.0.0.1:8765` (loopback only in production).
 

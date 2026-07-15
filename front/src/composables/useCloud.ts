@@ -28,9 +28,7 @@ export function useCloud(): UseCloudReturn {
   const { getPluginDataDir } = usePlugins();
 
   async function init(): Promise<void> {
-    if (!pluginDataDir) {
-      pluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
-    }
+    pluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
     await refreshStatus();
   }
 

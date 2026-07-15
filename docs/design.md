@@ -127,7 +127,7 @@ Light mode uses a **warm neutral** palette (cream surfaces, warm borders). Dark 
 | `--wp-primary`, `--wp-primary-soft` | Branding: teal (light) / gold (dark), via `var(--primary)` |
 | `--wp-accent`, `--wp-accent-strong`, `--wp-accent-soft` | Actions, focus, active tabs: cyan (light) / gold (dark) |
 | `--wp-canard`, `--wp-cyan`, `--wp-gold`, `--wp-violet` | Improba brand accents (theme-adjusted where noted in SCSS) |
-| `--wp-gold-soft`, `--wp-violet-soft` | Soft backgrounds for badges and Personas tab |
+| `--wp-gold-soft`, `--wp-violet-soft` | Soft backgrounds for badges and Regards métier sidebar tab |
 | `--wp-selection`, `--wp-selection-soft` | Text selection in chat |
 | `--wp-user-bubble-bg`, `--wp-user-bubble-text`, `--wp-user-bubble-border` | User message bubbles in chat |
 | `--wp-success`, `--wp-danger`, `--wp-danger-soft` | Semantic states |

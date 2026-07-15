@@ -30,9 +30,14 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 - **[stack.md](./stack.md)**: Component versions, ports, environment variables, dev commands
 - **[workspace-storage.md](./workspace-storage.md)**: Per-space storage and global user data (Space UX, `{app_data}/spaces/`, migration from legacy `workspaces/`)
 - **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, hybrid ranking, embedding cache, promotion, cross-session recall
-- **[plugins.md](./plugins.md)**: Plugin system, personas, UI integration
+- **[plugins.md](./plugins.md)**: Plugin system, capabilities, Regards métier — honest implementation status
 - **[browser.md](./browser.md)**: Browser plugin (Playwright, agent tools, live view, security)
 - **[web-search.md](./web-search.md)**: Core `web_search` tool (Mistral Conversations API, citations, network guard)
+
+## Product specs (roadmaps)
+
+- **[capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md)**: Capabilities hub (**PR 1–3 delivered**), product catalog, V2.2 spec + PR 4 backlog
+- **[contrat-plugin.md](../../workproba-improba/roadmaps/contrat-plugin.md)**: Plugin contract + implementation matrix
 
 ## Design & UI
 

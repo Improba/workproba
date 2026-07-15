@@ -103,7 +103,6 @@ pub fn builtin_manifests() -> Vec<PluginManifest> {
                 "settings:section".to_string(),
                 "hooks:subscribe".to_string(),
                 "storage:namespace".to_string(),
-                "storage:cross:workproba.projet".to_string(),
             ],
             default_enabled: false,
             ui_slots: vec![
@@ -169,7 +168,7 @@ pub fn builtin_manifests() -> Vec<PluginManifest> {
             permissions: vec![
                 "storage:namespace".to_string(),
                 "storage:cross:workproba.projet".to_string(),
-                "network:custom".to_string(),
+                "network:improba-cloud".to_string(),
                 "ui:panels".to_string(),
                 "settings:section".to_string(),
             ],
@@ -199,6 +198,7 @@ fn is_known_permission(permission: &str) -> bool {
         "core.providers.llm",
         "core.memory.search",
         "memory:forget",
+        "project:sync",
     ];
 
     if KNOWN.contains(&permission) {
@@ -677,6 +677,36 @@ mod plugins_tests {
         let json = serde_json::to_string_pretty(manifest).expect("serialize manifest");
         fs::write(folder.join(MANIFEST_FILE), json).expect("write manifest");
         folder
+    }
+
+    #[test]
+    fn builtin_manifest_permissions_projet_and_cloud() {
+        let manifests = builtin_manifests();
+        let projet = manifests
+            .iter()
+            .find(|m| m.id == "workproba.projet")
+            .expect("projet");
+        assert!(
+            !projet
+                .permissions
+                .contains(&"storage:cross:workproba.projet".to_string()),
+            "projet must not grant cross-self storage permission"
+        );
+
+        let cloud = manifests
+            .iter()
+            .find(|m| m.id == "workproba.cloud")
+            .expect("cloud");
+        assert!(
+            cloud
+                .permissions
+                .contains(&"network:improba-cloud".to_string()),
+            "cloud must use network:improba-cloud"
+        );
+        assert!(
+            !cloud.permissions.contains(&"network:custom".to_string()),
+            "cloud must not use network:custom"
+        );
     }
 
     #[test]

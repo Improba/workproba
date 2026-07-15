@@ -1,19 +1,29 @@
 # Workproba plugins
 
-> **Last updated:** 15/07/2026
+> **Last updated:** 15/07/2026 (V2.2 PR 1–3)
 
-Workproba extends the agent core with a **plugin system**: agent tools, HTTP endpoints, UI slots, and namespaced storage. The sidecar registry (`services/ai/app/plugins/registry.py`) is aligned with Tauri persistence (`desktop/src-tauri/src/commands/plugins.rs`).
+Workproba extends the agent core with a **plugin system** (technical layer): agent tools, HTTP endpoints, UI slots, and namespaced storage. User-facing discovery uses **activatable capabilities** (hub « Capacités », V2.2) — see [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
+
+## Implementation status (honest)
+
+| Layer | Role | Local plugin runtime |
+|---|---|---|
+| Tauri (`desktop/src-tauri/src/commands/plugins.rs`) | Persistence, activation, local folder copy | Install + registry only |
+| Sidecar (`services/ai/app/plugins/registry.py`) | Agent tools for **builtin IDs only** | Not loaded |
+| Front (`front/src/plugins/pluginSlotComponents.ts`) | Static Vue component map | Not loaded |
+
+Only **`right_panel`** and **`side_chat`** slots are generalized via `usePluginSlots.ts`. Other slots (`composer_actions`, etc.) are wired manually for builtins.
 
 ## Builtin plugins
 
-| ID | Enabled by default | Role |
-|---|---|---|
-| `workproba.personas` | yes | Professional personas (opinion, meeting, discussion) |
-| `workproba.projet` | no | Internal projects, artifact publishing |
-| `workproba.browser` | no | Automated web browsing (experimental) |
-| `workproba.cloud` | no | Optional cloud sync (experimental) |
+| ID | Enabled by default | Capability (guided UI) | Primary surface |
+|---|---|---|---|
+| `workproba.personas` | yes | Regards métier | Side chat; central view for crossed perspectives |
+| `workproba.projet` | no | Projets et livrables | Right panel, Project tab |
+| `workproba.browser` | no | Navigation web | Right panel, Browser tab |
+| `workproba.cloud` | no | Synchronisation (under Projects) | Nested under Project — not a top-level tab |
 
-Effective activation depends on user settings (`active_plugins` in Tauri settings). An enterprise preset can restrict the list (`plugins_allowed`).
+Effective activation depends on Tauri settings (`active_plugins`). Enterprise presets can restrict the list (`plugins_allowed`).
 
 ## Plugin data
 
@@ -21,6 +31,14 @@ Each plugin stores its data under:
 
 ```
 {app_data}/plugins/{plugin_id}/
+```
+
+Project plugin example (structured, not a single `data.json`):
+
+```
+{app_data}/plugins/workproba.projet/
+├── projects.json
+└── artefacts/{project_id}/...
 ```
 
 Personas example:
@@ -34,20 +52,28 @@ Personas example:
 
 ## UI integration
 
-| Slot | Key files | Usage |
-|---|---|---|
-| Right panel | `RightPanel.vue`, `ProjectPanel.vue` | Personas tab, project tab, dynamic plugin tabs (`usePluginSlots`) |
-| Chat composer | `ChatView.vue` | "+" menu: attachments + personas actions |
-| Side chat | `SideChatPanel.vue`, `PersonasSideChat.vue` | Discussion / opinion in side panel (`Ctrl+Shift+L`) |
-| Shared actions | `usePersonasActions.ts` | Switch to a chat session then trigger the action |
+| Slot | Status | Key files | Usage |
+|---|---|---|---|
+| Right panel | **Generalized** | `RightPanel.vue`, `usePluginSlots` | Active plugin tabs only (Project, Browser when enabled) — **no ghost tabs** for disabled modules |
+| Side chat | **Generalized** | `SideChatPanel.vue`, `PersonasSideChat.vue` | Regards métier opinion/discussion (`Ctrl+Shift+L`) |
+| Chat composer | Manual | `ChatView.vue` | `+` menu: attachments only ; chip **Regards** (three usages) when personas active |
+| Capabilities hub | **Delivered V2.2** | `CapabilitiesButton.vue`, `CapabilitiesDrawer.vue`, `useCapabilities.ts` | Titlebar drawer: discover, activate, open home surface |
+| Settings | Static | `PluginsPanel.vue` | Advanced mode: **Extensions** (technical details) |
 
 Useful shortcuts: `Ctrl+B` (right panel), `Ctrl+Shift+L` (side chat).
 
-## Personas plugin (`workproba.personas`)
+## Regards métier (`workproba.personas`)
 
 ### Concept
 
-Simulate **complementary professional perspectives** on a topic: HR, legal, CFO, engineer, etc. The builtin **Improba** set (`id: default`) is provided in code and is not editable. Custom sets can be created via the API.
+Simulate **complementary professional perspectives** (HR, legal, CFO, engineer, etc.). Guided UI vocabulary: « Regards métier », « Demander un avis », « Croiser plusieurs regards » — not « Personas » or « Consult experts ».
+
+### Surfaces
+
+- **Opinion / discussion**: side chat panel (not a generic right-panel Personas tab).
+- **Crossed perspectives (meeting)**: dedicated central full-screen view.
+
+See [personas-ui.md](../../workproba-improba/roadmaps/personas-ui.md).
 
 ### Limits
 
@@ -61,47 +87,33 @@ Simulate **complementary professional perspectives** on a topic: HR, legal, CFO,
 
 | Mode | SSE endpoint | Description |
 |---|---|---|
-| Opinion | `POST /plugins/personas/ask` | Each persona gives their opinion (parallel LLM calls; streaming preserved) |
-| Meeting | `POST /plugins/personas/meeting` | Multi-turn simulation |
-| Discussion | `POST /plugins/personas/discuss` | Guided multi-persona exchange |
-
-Optional parameter `include_memory` + `workspace_data_dir`: enriches context via project memory search (`search_combined`).
+| Opinion | `POST /plugins/personas/ask` | Each persona gives their opinion |
+| Meeting | `POST /plugins/personas/meeting` | Multi-turn simulation (central view) |
+| Discussion | `POST /plugins/personas/discuss` | Guided multi-persona exchange (side chat) |
 
 ### Agent tools
 
-If the plugin is active: `ask_personas`, `simulate_meeting`.
-
-### CRUD endpoints
-
-| Method | Route |
-|---|---|
-| GET/POST | `/plugins/personas/sets` |
-| DELETE | `/plugins/personas/sets/{set_id}` |
-| GET | `/plugins/personas/meetings`, `/plugins/personas/meetings/{id}` |
-| GET | `/plugins/personas/discussions`, `/plugins/personas/discussions/{id}` |
-| POST | `/plugins/personas/estimate-cost` |
-
-### Typical UX flow
-
-1. **From the composer**: "+" menu → personas action → switch to a chat session → `ChatPage` runs the action via `usePersonasNavigation`.
-2. **From the right panel**: Personas tab → choose set and action → `usePersonasActions` handles navigation.
-3. **Resume**: meeting/discussion identifiers stored in `sessionStorage` to relaunch or resume.
+If active: `ask_personas`, `simulate_meeting`.
 
 ## Project plugin (`workproba.projet`)
 
-Internal project management and artifact publishing from the explorer or document preview. Publishing requires user approval via the Human Approval Gate (`effect: publish`).
+Internal project management and artifact publishing. Disabled by default; discoverable via Capabilities hub. Contextual hint in document preview opens the hub (focus Projects). Publishing requires Human Approval Gate (`effect: publish`).
 
 Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins/projet/artefacts`.
 
 ## Experimental plugins
 
-- **Browser**: see [browser.md](./browser.md) (full guide: architecture, 8 agent tools, live UI, security, tests)
-- **Cloud:** `/plugins/cloud/status`, `/config`, `/sync`
+- **Browser**: see [browser.md](./browser.md)
+- **Cloud**: `/plugins/cloud/status`, `/config`, `/sync` — local folder sync scaffold. **PR 1–3**: `CloudPanel` lists projects via projet data dir; cloud tab hidden in guided mode; sync shown as nested capability in hub (`coming_soon` in guided). **PR 4**: typed `ProjectSyncPort` (sidecar still resolves projet dir directly today).
 
-Disabled by default; reserved for dev and advanced presets.
+## Local plugins
+
+Tauri can copy and register a local plugin folder. **Runtime loading (Python tools + Vue components) is not implemented in V2.** Hidden in production builds unless `VITE_LOCAL_PLUGIN_INSTALL=true` (dev builds always allow install).
 
 ## See also
 
-- [memory.md](./memory.md): scoped memory (used by personas with `include_memory`)
-- [architecture.md](./architecture.md): UI shell (sidebar, right panel)
-- [services/ai/README.md](../services/ai/README.md): full endpoint catalog
+- [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md): capabilities UX plan
+- [contrat-plugin.md](../../workproba-improba/roadmaps/contrat-plugin.md): contract + implementation matrix
+- [memory.md](./memory.md): scoped memory
+- [architecture.md](./architecture.md): UI shell
+- [services/ai/README.md](../services/ai/README.md): endpoint catalog

@@ -1,5 +1,7 @@
 # Browser plugin (`workproba.browser`)
 
+> **Capability (guided UI):** Navigation web — right panel tab when active. Hub Capacités for discovery (**V2.2 PR 2–3**). See [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
+
 > **Last updated:** 15 Jul 2026  
 > **Status:** shipped (experimental, opt-in, disabled by default), P2 differentiation priority
 

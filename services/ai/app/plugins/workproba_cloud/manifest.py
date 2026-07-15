@@ -5,7 +5,7 @@ VERSION = "0.1.0"
 PERMISSIONS = [
     "storage:namespace",
     "storage:cross:workproba.projet",
-    "network:custom",
+    "network:improba-cloud",
     "ui:panels",
     "settings:section",
 ]

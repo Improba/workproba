@@ -20,6 +20,14 @@ export function isUpcomingPluginId(id: string): boolean {
   return UPCOMING_PLUGIN_IDS.has(id);
 }
 
+/** Install local extension: dev builds or explicit VITE_LOCAL_PLUGIN_INSTALL=true. */
+export function localPluginInstallAvailable(): boolean {
+  return (
+    import.meta.env.DEV ||
+    import.meta.env.VITE_LOCAL_PLUGIN_INSTALL === 'true'
+  );
+}
+
 const plugins = ref<PluginInfo[]>([]);
 const loading = ref(false);
 const loadError = ref<string | null>(null);

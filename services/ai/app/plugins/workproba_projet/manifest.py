@@ -11,7 +11,6 @@ PERMISSIONS = [
     "settings:section",
     "hooks:subscribe",
     "storage:namespace",
-    "storage:cross:workproba.projet",
 ]
 
 TOOLS = ["publish_artifact", "list_projects", "create_project"]

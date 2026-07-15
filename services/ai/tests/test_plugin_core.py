@@ -10,6 +10,7 @@ from app.i18n import t
 from app.plugins.core import CoreAPI, clear_cross_audit_log, cross_audit_log
 from app.plugins.hooks import HookRegistry, PluginContext
 from app.plugins.registry import (
+    PLUGIN_WORKPROBA_CLOUD,
     PLUGIN_WORKPROBA_PROJET,
     build_plugin_contexts,
     get_builtin_plugins,
@@ -21,9 +22,15 @@ from app.plugins.registry import (
 def test_builtin_plugins_manifest() -> None:
     plugins = get_builtin_plugins()
     assert PLUGIN_WORKPROBA_PROJET in plugins
-    manifest = plugins[PLUGIN_WORKPROBA_PROJET]
-    assert "storage:namespace" in manifest.permissions
-    assert "publish_artifact" in manifest.tools
+    projet = plugins[PLUGIN_WORKPROBA_PROJET]
+    assert "storage:namespace" in projet.permissions
+    assert "storage:cross:workproba.projet" not in projet.permissions
+    assert "publish_artifact" in projet.tools
+
+    cloud = plugins[PLUGIN_WORKPROBA_CLOUD]
+    assert "network:improba-cloud" in cloud.permissions
+    assert "network:custom" not in cloud.permissions
+    assert "storage:cross:workproba.projet" in cloud.permissions
 
 
 def test_is_plugin_active_retrocompat() -> None:

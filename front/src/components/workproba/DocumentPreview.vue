@@ -42,6 +42,24 @@
         </div>
       </header>
 
+      <p
+        v-if="showProjectHint"
+        class="doc-preview__project-hint"
+        role="note"
+      >
+        <button type="button" class="doc-preview__project-hint-link" @click="onProjectHintAction">
+          {{ t('shell.projectOrganizeHint') }}
+        </button>
+        <button
+          type="button"
+          class="doc-preview__project-hint-dismiss"
+          :aria-label="t('shell.projectOrganizeHintDismiss')"
+          @click="dismissProjectHint"
+        >
+          {{ t('shell.projectOrganizeHintDismiss') }}
+        </button>
+      </p>
+
       <div v-if="preview.type === 'unsupported'" class="doc-preview__unsupported">
         <Lucide name="file-x" size="24" color="text-faint" />
         <p>{{ t('shell.previewUnsupported') }}</p>
@@ -87,6 +105,9 @@ import {
   isSafeRelativePath,
   type DocumentPreviewResult,
 } from '@services/aiSidecar';
+import { useShellSurfaces } from '@composables/useShellSurfaces';
+
+const PROJECT_HINT_STORAGE_KEY = 'workproba.ui.projectOrganizeHint.dismissed';
 
 const props = defineProps<{
   relativePath: string | null;
@@ -100,6 +121,25 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
+const { openCapabilities } = useShellSurfaces();
+
+const projectHintDismissed = ref(
+  typeof sessionStorage !== 'undefined'
+    && sessionStorage.getItem(PROJECT_HINT_STORAGE_KEY) === '1',
+);
+
+const showProjectHint = computed(
+  () => Boolean(props.relativePath) && !props.showPublish && !projectHintDismissed.value,
+);
+
+function dismissProjectHint(): void {
+  projectHintDismissed.value = true;
+  sessionStorage.setItem(PROJECT_HINT_STORAGE_KEY, '1');
+}
+
+function onProjectHintAction(): void {
+  openCapabilities('projects');
+}
 
 const loading = ref(false);
 const error = ref<string | null>(null);
@@ -237,6 +277,50 @@ watch(
   gap: var(--wp-space-3);
   padding: var(--wp-space-3);
   border-bottom: 1px solid var(--wp-border);
+}
+
+.doc-preview__project-hint {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wp-space-2);
+  margin: 0;
+  padding: var(--wp-space-2) var(--wp-space-3);
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-muted);
+  background: var(--wp-surface-2);
+  border-bottom: 1px solid var(--wp-border);
+}
+
+.doc-preview__project-hint-link {
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--wp-accent);
+  font-size: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover {
+    color: var(--wp-accent-strong);
+  }
+}
+
+.doc-preview__project-hint-dismiss {
+  flex: none;
+  padding: 2px 6px;
+  border: none;
+  background: transparent;
+  color: var(--wp-text-faint);
+  font-size: inherit;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--wp-text-muted);
+  }
 }
 
 .doc-preview__title {

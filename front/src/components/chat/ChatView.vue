@@ -114,46 +114,80 @@
                 </q-item-section>
               </q-item>
             </q-list>
+          </q-menu>
+        </button>
 
-            <template v-if="personasEnabled">
-              <q-separator class="chat-view__add-sep" />
-              <q-list dense>
-                <q-item
-                  clickable
-                  class="chat-view__add-item"
-                  @click="emit('personas-open')"
-                >
-                  <q-item-section avatar class="chat-view__add-icon">
-                    <Lucide name="users" size="16" color="wp-gold" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label class="chat-view__add-item-label">
-                      {{ t('personas.actions.consultExperts') }}
-                    </q-item-label>
-                    <q-item-label caption class="chat-view__add-item-hint">
-                      {{ t('personas.actions.consultExpertsHint') }}
-                    </q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item
-                  clickable
-                  class="chat-view__add-item"
-                  @click="emit('personas-meeting')"
-                >
-                  <q-item-section avatar class="chat-view__add-icon">
-                    <Lucide name="presentation" size="16" color="wp-gold" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label class="chat-view__add-item-label">
-                      {{ t('personas.actions.simulateMeeting') }}
-                    </q-item-label>
-                    <q-item-label caption class="chat-view__add-item-hint">
-                      {{ t('personas.actions.simulateMeetingHint') }}
-                    </q-item-label>
-                  </q-item-section>
-                </q-item>
-              </q-list>
-            </template>
+        <button
+          v-if="personasEnabled"
+          type="button"
+          class="chat-view__regards"
+          :aria-label="t('regards.chipAria')"
+          :title="t('regards.chip')"
+          aria-haspopup="menu"
+        >
+          <Lucide name="users" size="14" color="wp-gold" />
+          <span class="chat-view__regards-label">{{ t('regards.chip') }}</span>
+          <q-menu
+            anchor="bottom left"
+            self="top left"
+            :offset="[0, 8]"
+            class="chat-view__regards-menu"
+            transition-show="jump-down"
+            transition-hide="jump-up"
+          >
+            <q-list dense>
+              <q-item
+                clickable
+                class="chat-view__regards-item"
+                @click="emit('personas-open')"
+              >
+                <q-item-section avatar class="chat-view__regards-icon">
+                  <Lucide name="message-circle-question" size="16" color="wp-gold" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label class="chat-view__regards-item-label">
+                    {{ t('regards.ask') }}
+                  </q-item-label>
+                  <q-item-label caption class="chat-view__regards-item-hint">
+                    {{ t('regards.askHint') }}
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+              <q-item
+                clickable
+                class="chat-view__regards-item"
+                @click="emit('personas-meeting')"
+              >
+                <q-item-section avatar class="chat-view__regards-icon">
+                  <Lucide name="presentation" size="16" color="wp-gold" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label class="chat-view__regards-item-label">
+                    {{ t('regards.cross') }}
+                  </q-item-label>
+                  <q-item-label caption class="chat-view__regards-item-hint">
+                    {{ t('regards.crossHint') }}
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+              <q-item
+                clickable
+                class="chat-view__regards-item"
+                @click="emit('personas-discuss')"
+              >
+                <q-item-section avatar class="chat-view__regards-icon">
+                  <Lucide name="messages-square" size="16" color="wp-gold" />
+                </q-item-section>
+                <q-item-section>
+                  <q-item-label class="chat-view__regards-item-label">
+                    {{ t('regards.discuss') }}
+                  </q-item-label>
+                  <q-item-label caption class="chat-view__regards-item-hint">
+                    {{ t('regards.discussHint') }}
+                  </q-item-label>
+                </q-item-section>
+              </q-item>
+            </q-list>
           </q-menu>
         </button>
 
@@ -266,6 +300,7 @@ const emit = defineEmits<{
   'update:reasoningModel': [model: string];
   'personas-open': [];
   'personas-meeting': [];
+  'personas-discuss': [];
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
 }>();
@@ -713,9 +748,7 @@ onUnmounted(() => {
   }
 }
 
-/* Menu « + » : regroupe les actions (joindre un fichier, personas)
-   pour désencombrer la barre du composer. Reprise visuelle du menu
-   de ChatModelControl pour la cohérence. */
+/* Menu « + » : pièces jointes uniquement (V2.2). Regards = chip dédié. */
 .chat-view__add-menu {
   min-width: 240px;
   border-radius: var(--wp-r-md);
@@ -736,6 +769,80 @@ onUnmounted(() => {
 
 .chat-view__add-sep {
   margin: 4px 0;
+}
+
+.chat-view__regards {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  height: 2rem;
+  padding: 0 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--wp-gold) 35%, var(--wp-border));
+  border-radius: var(--wp-r-pill);
+  background: color-mix(in srgb, var(--wp-gold) 8%, var(--wp-surface-3));
+  color: var(--wp-text);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  transition:
+    background var(--wp-dur) var(--wp-ease),
+    border-color var(--wp-dur) var(--wp-ease),
+    transform var(--wp-dur) var(--wp-ease);
+
+  &:hover {
+    background: color-mix(in srgb, var(--wp-gold) 14%, var(--wp-surface-2));
+    border-color: var(--wp-gold);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wp-gold) 25%, transparent);
+  }
+}
+
+.chat-view__regards-label {
+  white-space: nowrap;
+}
+
+.chat-view__regards-menu {
+  min-width: 240px;
+  border-radius: var(--wp-r-md);
+  background: var(--wp-surface);
+  border: 1px solid var(--wp-border);
+  box-shadow: var(--wp-shadow-2);
+  padding: 4px;
+}
+
+.chat-view__regards-item {
+  min-height: 40px;
+  padding: 6px 8px;
+  border-radius: var(--wp-r-sm);
+  color: var(--wp-text);
+
+  &:hover {
+    background: var(--wp-surface-2);
+  }
+}
+
+.chat-view__regards-icon {
+  min-width: 28px;
+  padding-right: 4px;
+  justify-content: center;
+}
+
+.chat-view__regards-item-label {
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.chat-view__regards-item-hint {
+  font-size: 0.72rem;
+  color: var(--wp-text-faint);
+  line-height: 1.25;
+  margin-top: 2px;
 }
 
 .chat-view__add-item {

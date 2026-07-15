@@ -3,14 +3,16 @@
     <WorkprobaTitleBar
       :workspace-title="workspaceTitle"
       :active-path="activePath"
-      :files-open="filesOpen"
+      :right-panel-open="rightPanelOpen"
+      :capabilities-open="capabilitiesOpen"
       :sidebar-rail="sidebarRail"
       :sidecar-state="sidecarState"
       :side-chat-open="sideChatOpen"
       :has-side-chat="hasSideChat"
-      @toggle-files="toggleFiles()"
+      @toggle-right-panel="toggleRightPanel()"
+      @toggle-capabilities="toggleCapabilities()"
       @toggle-sidebar="sidebarRail = !sidebarRail"
-      @toggle-side-chat="toggleSideChat"
+      @toggle-side-chat="onToggleSideChat"
       @open-shortcuts="shortcutsHelpOpen = true"
     />
 
@@ -30,29 +32,32 @@
       <RightPanel
         :active-path="activePath"
         :workspace-data-dir="activeDataDir"
-        :open="filesOpen"
-        @toggle="toggleFiles()"
+        :open="rightPanelOpen"
+        @toggle="toggleRightPanel()"
       />
 
       <SideChatPanel />
+
+      <CapabilitiesDrawer />
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
 import WorkprobaTitleBar from '@components/workproba/WorkprobaTitleBar.vue';
 import WorkspaceSidebar from '@components/workproba/WorkspaceSidebar.vue';
 import RightPanel from '@components/workproba/RightPanel.vue';
 import SideChatPanel from '@components/workproba/SideChatPanel.vue';
 import KeyboardShortcutsHelp from '@components/workproba/KeyboardShortcutsHelp.vue';
+import CapabilitiesDrawer from '@components/capabilities/CapabilitiesDrawer.vue';
 import { useProject } from '@composables/useProject';
 import { useSidecarHealth } from '@composables/useSidecarHealth';
 import { useAppSettings } from '@composables/useAppSettings';
 import { useUiTheme } from '@composables/useUiTheme';
 import { PERSONAS_PLUGIN_ID } from '@composables/usePlugins';
 import { usePluginSlots } from '@composables/usePluginSlots';
-import { useSideChat } from '@composables/useSideChat';
+import { useShellSurfaces } from '@composables/useShellSurfaces';
 
 useSidecarHealth();
 
@@ -70,41 +75,39 @@ defineProps<{
 const { activePath, workspaceTitle, activeDataDir } = useProject();
 
 const sidebarRail = ref(false);
-const filesOpen = ref(false);
 const shortcutsHelpOpen = ref(false);
 
-const { sideChatOpen, openSideChat, closeSideChat, hasSideChat } = useSideChat();
+const {
+  rightPanelOpen,
+  capabilitiesOpen,
+  sideChatOpen,
+  toggleRightPanel,
+  toggleSideChat,
+  openCapabilities,
+  closeCapabilities,
+  closeSideChat,
+} = useShellSurfaces();
+
 const { sideChatPluginPanels } = usePluginSlots();
 
 const firstSideChatPluginId = computed(
   () => sideChatPluginPanels.value[0]?.pluginId ?? PERSONAS_PLUGIN_ID,
 );
 
-function toggleSideChat(): void {
-  if (sideChatOpen.value) {
-    closeSideChat();
-    return;
-  }
-  filesOpen.value = false;
-  openSideChat(firstSideChatPluginId.value);
+const hasSideChat = computed(() => sideChatPluginPanels.value.length > 0);
+
+function onToggleSideChat(): void {
+  toggleSideChat(firstSideChatPluginId.value);
 }
 
-function toggleFiles(): void {
-  if (filesOpen.value) {
-    filesOpen.value = false;
+function toggleCapabilities(): void {
+  if (capabilitiesOpen.value) {
+    closeCapabilities();
     return;
   }
   closeSideChat();
-  filesOpen.value = true;
+  openCapabilities();
 }
-
-watch(sideChatOpen, (open) => {
-  if (open) filesOpen.value = false;
-});
-
-watch(filesOpen, (open) => {
-  if (open && sideChatOpen.value) closeSideChat();
-});
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -116,17 +119,25 @@ function applyResponsive(): void {
   const w = window.innerWidth;
   if (w < 820) {
     sidebarRail.value = true;
-    filesOpen.value = false;
+    rightPanelOpen.value = false;
+    closeCapabilities();
   } else if (w < 1100) {
-    filesOpen.value = false;
+    rightPanelOpen.value = false;
   }
 }
 
 function onKeydown(e: KeyboardEvent): void {
-  if (e.key === 'Escape' && shortcutsHelpOpen.value) {
-    e.preventDefault();
-    shortcutsHelpOpen.value = false;
-    return;
+  if (e.key === 'Escape') {
+    if (shortcutsHelpOpen.value) {
+      e.preventDefault();
+      shortcutsHelpOpen.value = false;
+      return;
+    }
+    if (capabilitiesOpen.value) {
+      e.preventDefault();
+      closeCapabilities();
+      return;
+    }
   }
 
   if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey && !isTypingTarget(e.target)) {
@@ -150,20 +161,17 @@ function onKeydown(e: KeyboardEvent): void {
   if (!mod) return;
   if (key === 'b') {
     e.preventDefault();
-    toggleFiles();
+    toggleRightPanel();
   } else if (key === '\\') {
     e.preventDefault();
     sidebarRail.value = !sidebarRail.value;
   } else if (e.shiftKey && key === 'l' && hasSideChat.value) {
     e.preventDefault();
-    toggleSideChat();
+    onToggleSideChat();
   }
 }
 
 async function reloadWebview(): Promise<void> {
-  // Tauri v2 n'expose plus de méthode `reload` sur l'API Window/Webview
-  // (ni dans les types, ni au runtime). `window.location.reload()` recharge
-  // le webview courant, qu'on soit en app desktop ou en navigateur web.
   window.location.reload();
 }
 

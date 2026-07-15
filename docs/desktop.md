@@ -1,7 +1,7 @@
 # Workproba Desktop
 
 > **Status:** Product decision: desktop pivot
-> **Last updated:** 14/07/2026
+> **Last updated:** 15/07/2026
 
 ## Decision
 
@@ -21,8 +21,8 @@ The AI agent remains in **Python** (sidecar). Rust does not replace Python: it p
 
 The user **opens a space** (a local folder on disk). The Imp (agent) works inside it:
 
-- reads and modifies Word, Excel, PDF;
-- runs code **under the hood** in a local subprocess sandbox;
+- reads and modifies Word, Excel, PDF via **fixed agent tools** (python-docx, openpyxl, etc.);
+- does **not** execute arbitrary user- or model-generated code in V2 (`run_code` dormant);
 - relies on **memory** indexed from folder documents.
 
 Main UI concepts:
@@ -32,7 +32,8 @@ Main UI concepts:
 | **Space** | A local folder the user works in (display title renameable in sidebar) |
 | **Conversation** | Exchange with the Imp |
 | **Memory** | What the tool knows about the space (per-space RAG + user/project memories) |
-| **Personas** | Simulated professional perspectives (plugin: opinion / meeting / discussion) |
+| **Regards métier** | Simulated professional perspectives (plugin `workproba.personas`: opinion, crossed perspectives, discussion) |
+| **Capacités** | Activatable integrated features (hub in titlebar, **delivered V2.2 PR 2–3**); technical plugins under the hood |
 
 ## Desktop architecture
 
@@ -46,7 +47,7 @@ Main UI concepts:
 ┌──────────────────────────┐    ┌─────────────────────────────┐
 │  Python sidecar          │    │  Tauri / Rust               │
 │  127.0.0.1:8765          │    │  folder · open_path · etc.  │
-│  agent · RAG · sandbox   │    └──────────────┬──────────────┘
+│  agent · RAG · fixed tools │    └──────────────┬──────────────┘
 └──────────────┬───────────┘                   │ read/write
                │                                ▼
                ▼                    ┌─────────────────────────────┐
@@ -94,7 +95,7 @@ Workproba metadata lives in the **application folder**, not in the client folder
    includes the active **provider set** with conversation **model + reasoning**
    overrides (persisted in session), clamped against the set model catalogue.
    See [provider-sets-reasoning.md](./provider-sets-reasoning.md).
-5. Python runs the agent loop: LLM, file tools, local search, subprocess sandbox.
+5. Python runs the agent loop: LLM, fixed file/Office tools, local search (`run_code` not exposed in V2).
 6. Before sensitive actions (file write, publish, network, code execution), the sidecar
    emits `confirmation_request` (effect-oriented headline + protections). The user approves
    or denies in `ConfirmationCard`; the front calls `POST /agent/confirm`. On deny or
@@ -110,7 +111,7 @@ Workproba metadata lives in the **application folder**, not in the client folder
 |---|---|---|
 | UI | TypeScript / Quasar | Chat, files, results, onboarding |
 | Desktop shell | Rust / Tauri | Window, OS APIs, filesystem, packaging |
-| AI core | Python / FastAPI | Agent loop, extraction, RAG, subprocess sandbox |
+| AI core | Python / FastAPI | Agent loop, extraction, RAG, fixed tool implementations |
 | Local data | `{app_data}/spaces/{id}/.workproba/` | Sessions, versions, memory |
 | Cloud (archived) | `legacy/` | Former NestJS stack |
 
@@ -141,17 +142,17 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 |---|---|---|
 | **A** | Done | Tauri scaffold, folder commands, docs |
 | **B** | Done | Open a space UI, file list, local sessions |
-| **C** | Done | Direct Python SSE, `LocalProjectClient`, subprocess sandbox |
+| **C** | Done | Direct Python SSE, `LocalProjectClient`, fixed agent tools (`run_code` not exposed in V2) |
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
-| **D+** | Done | Scoped user/project memory, plugins (personas), attachments, document preview, audit, Human Approval Gate (effect-oriented), Work Event Bus (`work_*` SSE) |
+| **D+** | Done | Scoped user/project memory, builtin plugins (Regards métier), attachments, document preview, audit, Human Approval Gate, Work Event Bus |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
 | **F** | To do | Optional cloud sync (NestJS) |
 
 ### Phase D: validation
 
-- **Sidecar (Python)**: streaming chat, file tools, RAG, scoped memory, personas plugins, work events, effect gate. pytest: **634 tests** (see [testing.md](./testing.md)).
+- **Sidecar (Python)**: streaming chat, fixed file/Office tools, RAG, scoped memory, builtin plugins, work events, effect gate. pytest: **634 tests** (see [testing.md](./testing.md)).
 - **Rust shell**: venv-aware sidecar spawn + `ai_sidecar_status` + `protocol-asset` for image preview. `cargo check` OK.
-- **Front**: `WorkprobaLayout` (sidebar, right panel, side chat), `useSidecarHealth`, personas plugin integrated in composer.
+- **Front**: `WorkprobaLayout` (sidebar, right panel, side chat, Capabilities drawer), `useSidecarHealth`, Regards chip in composer (**V2.2 PR 3**).
 - **End-to-end desktop run**: `make dev`, open a space, test chat, memory, personas, document preview, confirmation on file write.
 
 ## Remaining work

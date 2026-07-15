@@ -81,6 +81,7 @@ export default defineConfig({
       '@assets': path.resolve(__dirname, 'src/assets'),
       '@components': path.resolve(__dirname, 'src/components'),
       '@composables': path.resolve(__dirname, 'src/composables'),
+      '@capabilities': path.resolve(__dirname, 'src/capabilities'),
       '@css': path.resolve(__dirname, 'src/css'),
       '@i18n': path.resolve(__dirname, 'src/i18n'),
       '@layouts': path.resolve(__dirname, 'src/layouts'),

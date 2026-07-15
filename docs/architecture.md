@@ -1,10 +1,10 @@
 # Workproba architecture
 
-> **Last updated:** 15/07/2026
+> **Last updated:** 15/07/2026 (V2.2 PR 1–3)
 
 ## Overview
 
-**Workproba** is a desktop application (macOS, Linux, Windows): the user **opens a space** (a local folder on disk); the agent manipulates files in place, relies on locally indexed memory, and runs code under the hood in an isolated sandbox.
+**Workproba** is a desktop application (macOS, Linux, Windows): the user **opens a space** (a local folder on disk); the agent manipulates files in place, relies on locally indexed memory, and calls **fixed, controlled tools** (Office writers, file ops, RAG). Workproba V2 **does not execute arbitrary user- or model-generated code** (`run_code` is dormant).
 
 > **Terminology:** The user-facing concept is **Space**. Internal code and `registry.json` still use `workspace_id` / `ws_…` and a `workspaces` array. Metadata paths use `{app_data}/spaces/`.
 
@@ -16,7 +16,7 @@ Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./wor
 |---|---|---|
 | Desktop shell | Tauri 2 (Rust) | Window, native filesystem, per-space storage, packaging |
 | Frontend | Quasar 2 + Vue 3 | Webview UI (chat, files) |
-| AI core | Python 3.12 + FastAPI (sidecar) | Agent loop, extraction, RAG, sandbox |
+| AI core | Python 3.12 + FastAPI (sidecar) | Agent loop, extraction, RAG, fixed tool implementations |
 | Local data | `{app_data}/` (spaces, user, plugins, audit) | Conversations, versions, memory, plugins |
 | Agent | Pydantic AI (native models) | Type-safe chat/agent, tools, streaming |
 | LLM | OpenAIChatModel (OpenAI-compat) + AnthropicModel | Local Ollama, Mistral cloud, vLLM, OpenAI, Anthropic |
@@ -45,7 +45,7 @@ Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./wor
 
 1. The user opens a space (folder picker; UI: "Open a space").
 2. Quasar sends the message via SSE to `127.0.0.1:8765`.
-3. Python runs the agent loop (LLM, file tools, subprocess sandbox).
+3. Python runs the agent loop (LLM, fixed file/Office tools; `run_code` not exposed in V2).
 4. Sessions are persisted in `{app_data}/spaces/{id}/.workproba/`.
 5. Each turn: the sidecar prepares memories and session candidates once, ranks them (hybrid semantic + lexical when an embedding model is configured, with an LRU embedding cache), then injects explicit memories and relevant prior session summaries; project RAG is available via `search_kb`. Session summaries are promoted to shared project memory in the background (see [memory.md](./memory.md)).
 
@@ -93,18 +93,21 @@ Implementation: `app/agent/work_events.py`. Labels are localized (`work.capabili
 The main layout (`WorkprobaLayout.vue`) organizes the screen:
 
 ```
-WorkprobaTitleBar
+WorkprobaTitleBar          ← Capabilities hub button, engine chip, panel toggles
 ├── WorkspaceSidebar (left, responsive rail mode)
-├── central zone (router-view: chat, settings, onboarding)
-├── RightPanel (right, Ctrl+B): files · preview · personas · plugins
-└── SideChatPanel (Ctrl+Shift+L): lateral personas discussion
+├── central zone (router-view: chat, settings, onboarding, crossed-regards view)
+├── RightPanel (right, Ctrl+B): Files · Preview · active capability tabs only
+├── SideChatPanel (Ctrl+Shift+L): Regards métier opinion/discussion
+└── CapabilitiesDrawer (non-modal, Escape to close): discover / activate capabilities
 ```
 
 **Sidebar** (`WorkspaceSidebar.vue`): spaces → conversations tree, renameable display titles, streaming indicator, user profile, memory and model settings access.
 
-**Right panel** (`RightPanel.vue`): file explorer, document preview (`DocumentPreview` + `VersionsPanel`), Personas tab if plugin active, dynamic plugin tabs.
+**Right panel** (`RightPanel.vue`): file explorer, document preview, **plugin tabs for active capabilities only** (Project, Browser when enabled). Cloud tab hidden in guided mode. Inactive modules are discoverable via the Capabilities hub, not as ghost tabs.
 
-**Chat** (`ChatView.vue`): pill composer, "+" menu (attachments + personas actions), model/reasoning control, file drag-and-drop.
+**Chat** (`ChatView.vue`): pill composer, "+" menu (attachments only), compact **Regards** chip when personas active, model/reasoning control, file drag-and-drop.
+
+**Capabilities** (`useCapabilities.ts`, `useShellSurfaces.ts`): product catalog maps capabilities to plugin activation (Tauri) and shell navigation (right panel tab, side chat). `activateAndOpen()` activates plugins then opens the documented home surface.
 
 ## Attachments and document preview
 
@@ -113,9 +116,9 @@ WorkprobaTitleBar
 - **Image preview**: Tauri `convertFileSrc` with `protocol-asset` feature (`tauri.conf.json` → `assetProtocol`).
 - **Diff before write**: `POST /documents/preview-change`.
 
-## Plugins
+## Plugins and capabilities
 
-Four builtin plugins (personas enabled by default). See [plugins.md](./plugins.md).
+Four builtin plugins; guided UX presents them as **activatable capabilities** (Regards métier, Projets et livrables, Navigation web, Synchronisation). Technical plugin details in advanced Settings → Extensions. See [plugins.md](./plugins.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
 ## Active modules
 

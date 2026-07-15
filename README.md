@@ -17,10 +17,10 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 - **Agent chat**: SSE streaming, model and reasoning per conversation, attachments, composite "+" menu
 - **Human approval**: effect-oriented confirmation before file writes, publishing, network access, or code execution
 - **Scoped memory**: global user memories + project memories, local RAG, agent `remember` tool
-- **Personas plugin**: professional perspectives, simulated meetings, discussions (Improba builtin set)
-- **Spaces**: spaces/conversations sidebar (renameable titles), right panel (files, preview, personas), side chat
+- **Activatable capabilities**: Regards métier, projects & deliverables, web navigation, project sync (integrated plugins; not a third-party extension marketplace in V2)
+- **Personas / Regards métier**: professional perspectives, simulated meetings, discussions (Improba builtin set)
+- **Spaces**: sidebar, right panel (files, preview, active capabilities), side chat for Regards
 - **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write
-- **Plugins**: project, browser, cloud (extensible, activatable in settings)
 
 ## License
 

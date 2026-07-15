@@ -4,9 +4,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import WorkprobaLayout from '../../../src/layouts/WorkprobaLayout.vue';
 
 const sideChatOpen = ref(false);
+const rightPanelOpen = ref(false);
+const capabilitiesOpen = ref(false);
 const openSideChat = vi.fn();
 const closeSideChat = vi.fn();
-const hasSideChat = ref(true);
+const toggleSideChat = vi.fn();
+const toggleRightPanel = vi.fn();
+const openCapabilities = vi.fn();
+const closeCapabilities = vi.fn();
 const sideChatPluginPanels = ref([{ pluginId: 'workproba.personas', key: 'workproba.personas:side_chat' }]);
 
 vi.mock('@composables/useDesktop', () => ({
@@ -33,21 +38,28 @@ vi.mock('@composables/usePluginSlots', () => ({
   }),
 }));
 
-vi.mock('@composables/useSideChat', () => ({
-  useSideChat: () => ({
+vi.mock('@composables/useShellSurfaces', () => ({
+  useShellSurfaces: () => ({
+    rightPanelOpen,
+    capabilitiesOpen,
     sideChatOpen,
-    openSideChat,
+    toggleRightPanel,
+    toggleSideChat,
+    openCapabilities,
+    closeCapabilities,
     closeSideChat,
-    hasSideChat,
   }),
 }));
 
 describe('WorkprobaLayout side chat', () => {
   afterEach(() => {
     sideChatOpen.value = false;
+    rightPanelOpen.value = false;
+    capabilitiesOpen.value = false;
     openSideChat.mockClear();
     closeSideChat.mockClear();
-    hasSideChat.value = true;
+    toggleSideChat.mockClear();
+    sideChatPluginPanels.value = [{ pluginId: 'workproba.personas', key: 'workproba.personas:side_chat' }];
   });
 
   it('bascule le side chat via Ctrl+Shift+L', async () => {
@@ -60,6 +72,7 @@ describe('WorkprobaLayout side chat', () => {
           RightPanel: true,
           SideChatPanel: true,
           KeyboardShortcutsHelp: true,
+          CapabilitiesDrawer: true,
         },
       },
     });
@@ -68,19 +81,13 @@ describe('WorkprobaLayout side chat', () => {
     window.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true }),
     );
-    expect(openSideChat).toHaveBeenCalledWith('workproba.personas');
-
-    sideChatOpen.value = true;
-    window.dispatchEvent(
-      new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true }),
-    );
-    expect(closeSideChat).toHaveBeenCalled();
+    expect(toggleSideChat).toHaveBeenCalledWith('workproba.personas');
 
     wrapper.unmount();
   });
 
   it('n’écoute pas Ctrl+Shift+L quand hasSideChat est faux', async () => {
-    hasSideChat.value = false;
+    sideChatPluginPanels.value = [];
     const wrapper = shallowMount(WorkprobaLayout, {
       slots: { default: '<div />' },
       global: {
@@ -90,6 +97,7 @@ describe('WorkprobaLayout side chat', () => {
           RightPanel: true,
           SideChatPanel: true,
           KeyboardShortcutsHelp: true,
+          CapabilitiesDrawer: true,
         },
       },
     });
@@ -98,7 +106,7 @@ describe('WorkprobaLayout side chat', () => {
     window.dispatchEvent(
       new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true }),
     );
-    expect(openSideChat).not.toHaveBeenCalled();
+    expect(toggleSideChat).not.toHaveBeenCalled();
 
     wrapper.unmount();
   });
@@ -116,13 +124,14 @@ describe('WorkprobaLayout side chat', () => {
           RightPanel: true,
           SideChatPanel: true,
           KeyboardShortcutsHelp: true,
+          CapabilitiesDrawer: true,
         },
       },
     });
     await flushPromises();
 
     await wrapper.find('.toggle-side-chat').trigger('click');
-    expect(openSideChat).toHaveBeenCalledWith('workproba.personas');
+    expect(toggleSideChat).toHaveBeenCalledWith('workproba.personas');
 
     wrapper.unmount();
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });

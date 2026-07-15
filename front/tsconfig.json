@@ -20,6 +20,7 @@
       "@boot/*": ["src/boot/*"],
       "@assets/*": ["src/assets/*"],
       "@components/*": ["src/components/*"],
+      "@capabilities/*": ["src/capabilities/*"],
       "@composables/*": ["src/composables/*"],
       "@css/*": ["src/css/*"],
       "@i18n/*": ["src/i18n/*"],

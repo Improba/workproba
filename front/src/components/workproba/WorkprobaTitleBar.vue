@@ -70,35 +70,40 @@
         </div>
       </q-dialog>
 
+      <CapabilitiesButton
+        :open="capabilitiesOpen"
+        @toggle="$emit('toggle-capabilities')"
+      />
+
       <button
         v-if="hasSideChat"
         type="button"
         class="wp-titlebar__btn"
         :class="{ 'wp-titlebar__btn--active': sideChatOpen }"
-        :aria-label="expertsAriaLabel"
-        :title="expertsAriaLabel"
+        :aria-label="regardsAriaLabel"
+        :title="regardsAriaLabel"
         @click="$emit('toggle-side-chat')"
       >
         <q-tooltip anchor="bottom middle" self="top middle" :offset="[0, 6]">
-          {{ expertsAriaLabel }}
+          {{ regardsAriaLabel }}
         </q-tooltip>
         <Lucide name="users" size="16" :color="sideChatOpen ? 'accent' : 'text-muted'" />
-        <span class="wp-sr-only">{{ expertsAriaLabel }}</span>
+        <span class="wp-sr-only">{{ regardsAriaLabel }}</span>
       </button>
 
       <button
         type="button"
         class="wp-titlebar__btn"
-        :class="{ 'wp-titlebar__btn--active': filesOpen }"
+        :class="{ 'wp-titlebar__btn--active': rightPanelOpen }"
         :aria-label="filesAriaLabel"
         :title="filesAriaLabel"
-        @click="$emit('toggle-files')"
+        @click="$emit('toggle-right-panel')"
       >
         <q-tooltip anchor="bottom middle" self="top middle" :offset="[0, 6]">
           {{ filesAriaLabel }}
         </q-tooltip>
         <Lucide
-          :name="filesOpen ? 'panel-right-close' : 'panel-right-open'"
+          :name="rightPanelOpen ? 'panel-right-close' : 'panel-right-open'"
           size="16"
           color="text-muted"
         />
@@ -155,13 +160,15 @@ import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import ThemeToggler from '@lib-improba/components/layouts/theme-toggler/ThemeToggler.vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+import CapabilitiesButton from '@components/capabilities/CapabilitiesButton.vue';
 import { useAppSettings } from '@composables/useAppSettings';
 import { capabilityLabels, guidedPresetLabel, localizedSetName } from '@utils/providerSets';
 
 const props = defineProps<{
   workspaceTitle: string | null;
   activePath: string | null;
-  filesOpen: boolean;
+  rightPanelOpen: boolean;
+  capabilitiesOpen?: boolean;
   sidebarRail: boolean;
   sideChatOpen?: boolean;
   hasSideChat?: boolean;
@@ -169,7 +176,8 @@ const props = defineProps<{
 }>();
 
 defineEmits<{
-  (e: 'toggle-files'): void;
+  (e: 'toggle-right-panel'): void;
+  (e: 'toggle-capabilities'): void;
   (e: 'toggle-sidebar'): void;
   (e: 'toggle-side-chat'): void;
   (e: 'open-shortcuts'): void;
@@ -182,7 +190,7 @@ const { t } = useI18n();
 const sidecarDialogOpen = ref(false);
 
 const filesAriaLabel = computed(() =>
-  props.filesOpen
+  props.rightPanelOpen
     ? t('shell.titlebarHideFiles')
     : t('shell.titlebarShowFiles'),
 );
@@ -193,10 +201,10 @@ const sidebarAriaLabel = computed(() =>
     : t('shell.titlebarHideSidebar'),
 );
 
-const expertsAriaLabel = computed(() =>
+const regardsAriaLabel = computed(() =>
   props.sideChatOpen
-    ? t('shell.titlebarHideExperts')
-    : t('shell.titlebarShowExperts'),
+    ? t('shell.titlebarHideRegards')
+    : t('shell.titlebarShowRegards'),
 );
 
 const sidecarState = computed(() => props.sidecarState ?? 'idle');

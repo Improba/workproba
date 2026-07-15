@@ -66,13 +66,13 @@
           </div>
           <q-toggle
             v-if="canToggle(plugin)"
-            :model-value="plugin.enabled && !isUpcomingPlugin(plugin)"
+            :model-value="plugin.enabledScoped && !isUpcomingPlugin(plugin)"
             :disable="togglingId === plugin.manifest.id || isUpcomingPlugin(plugin)"
             :aria-label="toggleAria(plugin)"
             @update:model-value="(v: boolean) => onToggle(plugin, v)"
           />
           <span v-else-if="settingsLocked" class="plugins-panel__locked">
-            {{ plugin.enabled ? t('settings.plugins.statusActive') : t('settings.plugins.statusInactive') }}
+            {{ plugin.enabledScoped ? t('settings.plugins.statusActive') : t('settings.plugins.statusInactive') }}
           </span>
         </div>
 
@@ -101,7 +101,10 @@
       </li>
     </ul>
 
-    <footer v-if="showAdvanced && !settingsLocked" class="plugins-panel__footer">
+    <footer
+      v-if="showAdvanced && !settingsLocked && localPluginInstallAvailable()"
+      class="plugins-panel__footer"
+    >
       <button
         type="button"
         class="plugins-panel__install"
@@ -122,7 +125,14 @@ import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useAppSettings } from '@composables/useAppSettings';
 import { pickProjectFolder, isDesktopApp } from '@composables/useDesktop';
-import { isUpcomingPluginId, BROWSER_PLUGIN_ID, CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import {
+  isUpcomingPluginId,
+  BROWSER_PLUGIN_ID,
+  CLOUD_PLUGIN_ID,
+  localPluginInstallAvailable,
+  PERSONAS_PLUGIN_ID,
+  usePlugins,
+} from '@composables/usePlugins';
 import type { PluginInfo, PluginSource } from '@composables/useDesktop.types';
 
 const { t, te } = useI18n();
@@ -200,7 +210,7 @@ function toggleAria(plugin: PluginInfo): string {
   if (isUpcomingPlugin(plugin)) {
     return t('settings.plugins.upcoming');
   }
-  return plugin.enabled
+  return plugin.enabledScoped
     ? t('settings.plugins.deactivate', { name: pluginLabel(plugin) })
     : t('settings.plugins.activate', { name: pluginLabel(plugin) });
 }
