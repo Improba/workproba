@@ -9,9 +9,7 @@ use tauri_plugin_dialog::DialogExt;
 
 use super::fs_watch::start_fs_watch;
 use super::settings_store::get_app_settings;
-use super::workspace_store::{
-    self, ConversationSession, WorkspaceInfo, WORKPROBA_DIR_NAME,
-};
+use super::workspace_store::{self, ConversationSession, WorkspaceInfo, WORKPROBA_DIR_NAME};
 
 const LAST_PROJECT_FILE: &str = "last-project.json";
 
@@ -228,10 +226,7 @@ pub fn find_conversation_by_id(
 }
 
 #[tauri::command]
-pub fn save_conversation(
-    app: AppHandle,
-    session: ConversationSession,
-) -> Result<(), String> {
+pub fn save_conversation(app: AppHandle, session: ConversationSession) -> Result<(), String> {
     workspace_store::save_conversation(&app, session)
 }
 
@@ -272,23 +267,52 @@ fn icon_kind(path: &Path) -> String {
         .and_then(|ext| ext.to_str())
         .map(str::to_ascii_lowercase)
     {
-        Some(ext) if matches!(ext.as_str(), "xls" | "xlsx" | "csv" | "ods") => "spreadsheet".to_string(),
-        Some(ext) if matches!(ext.as_str(), "doc" | "docx" | "odt" | "rtf") => "document".to_string(),
+        Some(ext) if matches!(ext.as_str(), "xls" | "xlsx" | "csv" | "ods") => {
+            "spreadsheet".to_string()
+        }
+        Some(ext) if matches!(ext.as_str(), "doc" | "docx" | "odt" | "rtf") => {
+            "document".to_string()
+        }
         Some(ext) if matches!(ext.as_str(), "ppt" | "pptx" | "odp") => "presentation".to_string(),
         Some(ext) if matches!(ext.as_str(), "pdf") => "pdf".to_string(),
-        Some(ext) if matches!(ext.as_str(), "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp") => {
+        Some(ext)
+            if matches!(
+                ext.as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp" | "svg" | "bmp"
+            ) =>
+        {
             "image".to_string()
         }
         Some(ext) if matches!(ext.as_str(), "md" | "txt" | "rst") => "text".to_string(),
-        Some(ext) if matches!(
-            ext.as_str(),
-            "js" | "ts" | "tsx" | "jsx" | "py" | "rs" | "go" | "java" | "c" | "cpp" | "h" | "json"
-                | "yaml" | "yml" | "toml" | "sh" | "html" | "css" | "scss" | "vue"
-        ) =>
+        Some(ext)
+            if matches!(
+                ext.as_str(),
+                "js" | "ts"
+                    | "tsx"
+                    | "jsx"
+                    | "py"
+                    | "rs"
+                    | "go"
+                    | "java"
+                    | "c"
+                    | "cpp"
+                    | "h"
+                    | "json"
+                    | "yaml"
+                    | "yml"
+                    | "toml"
+                    | "sh"
+                    | "html"
+                    | "css"
+                    | "scss"
+                    | "vue"
+            ) =>
         {
             "code".to_string()
         }
-        Some(ext) if matches!(ext.as_str(), "zip" | "tar" | "gz" | "rar" | "7z") => "archive".to_string(),
+        Some(ext) if matches!(ext.as_str(), "zip" | "tar" | "gz" | "rar" | "7z") => {
+            "archive".to_string()
+        }
         _ => "file".to_string(),
     }
 }
@@ -306,7 +330,9 @@ pub fn list_dir_entries(
     let project_root = PathBuf::from(&project_path);
     if !project_root.is_dir() {
         log::warn!("list_dir_entries: pas un dossier: {project_path:?}");
-        return Err(format!("Le dossier de l'espace n'existe pas : {project_path}"));
+        return Err(format!(
+            "Le dossier de l'espace n'existe pas : {project_path}"
+        ));
     }
 
     let target_dir = if dir_relative_path.is_empty() {
@@ -371,7 +397,10 @@ pub fn list_dir_entries(
     entries.sort_by(|a, b| match (a.is_dir, b.is_dir) {
         (true, false) => std::cmp::Ordering::Less,
         (false, true) => std::cmp::Ordering::Greater,
-        _ => a.name.to_ascii_lowercase().cmp(&b.name.to_ascii_lowercase()),
+        _ => a
+            .name
+            .to_ascii_lowercase()
+            .cmp(&b.name.to_ascii_lowercase()),
     });
 
     log::info!(
@@ -400,7 +429,10 @@ pub fn reveal_in_os(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open").arg(&target).spawn().map_err(|e| e.to_string())?;
+        Command::new("xdg-open")
+            .arg(&target)
+            .spawn()
+            .map_err(|e| e.to_string())?;
     }
     #[cfg(target_os = "macos")]
     {
@@ -429,7 +461,9 @@ pub fn reveal_in_os(path: String) -> Result<(), String> {
 pub fn list_documents(project_path: String) -> Result<Vec<DocumentEntry>, String> {
     let project_root = PathBuf::from(&project_path);
     if !project_root.is_dir() {
-        return Err(format!("Le dossier de l'espace n'existe pas : {project_path}"));
+        return Err(format!(
+            "Le dossier de l'espace n'existe pas : {project_path}"
+        ));
     }
 
     let mut entries = Vec::new();

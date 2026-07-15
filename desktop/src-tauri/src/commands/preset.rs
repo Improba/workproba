@@ -274,10 +274,7 @@ mod preset_tests {
         assert!(preset.settings_locked);
         assert_eq!(preset.locale.as_deref(), Some("fr"));
         assert!(preset.locale_locked);
-        assert_eq!(
-            preset.plugins_allowed.as_ref().map(|v| v.len()),
-            Some(2)
-        );
+        assert_eq!(preset.plugins_allowed.as_ref().map(|v| v.len()), Some(2));
         assert_eq!(preset.local_plugins_allowed, Some(false));
         assert_eq!(preset.permissions_network, Some(false));
         assert_eq!(preset.code_execute, Some(false));

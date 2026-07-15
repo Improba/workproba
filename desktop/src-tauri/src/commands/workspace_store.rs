@@ -90,9 +90,7 @@ pub fn migrate_workspaces_to_spaces(app_data: &Path) -> Result<(), String> {
     let spaces = app_data.join(SPACES_DIR);
     if legacy.is_dir() && !spaces.exists() {
         fs::rename(&legacy, &spaces).map_err(|error| {
-            format!(
-                "Impossible de migrer {WORKSPACES_DIR} vers {SPACES_DIR} : {error}"
-            )
+            format!("Impossible de migrer {WORKSPACES_DIR} vers {SPACES_DIR} : {error}")
         })?;
     }
     Ok(())
@@ -203,7 +201,10 @@ fn entry_to_info(app: &AppHandle, entry: &RegistryEntry) -> Result<WorkspaceInfo
     })
 }
 
-pub fn lookup_workspace(app: &AppHandle, folder_path: &Path) -> Result<Option<WorkspaceInfo>, String> {
+pub fn lookup_workspace(
+    app: &AppHandle,
+    folder_path: &Path,
+) -> Result<Option<WorkspaceInfo>, String> {
     if !folder_path.is_dir() {
         return Ok(None);
     }
@@ -221,7 +222,10 @@ pub fn lookup_workspace(app: &AppHandle, folder_path: &Path) -> Result<Option<Wo
     }
 }
 
-pub fn open_or_create_workspace(app: &AppHandle, folder_path: &Path) -> Result<WorkspaceInfo, String> {
+pub fn open_or_create_workspace(
+    app: &AppHandle,
+    folder_path: &Path,
+) -> Result<WorkspaceInfo, String> {
     if !folder_path.is_dir() {
         return Err(format!(
             "Le dossier de l'espace n'existe pas : {}",
@@ -317,10 +321,15 @@ pub fn get_workspace_data_dir_for_folder(
 }
 
 fn conversation_path(data_dir: &Path, session_id: &str) -> PathBuf {
-    data_dir.join(CONVERSATIONS_DIR).join(format!("{session_id}.json"))
+    data_dir
+        .join(CONVERSATIONS_DIR)
+        .join(format!("{session_id}.json"))
 }
 
-pub fn list_conversations(app: &AppHandle, workspace_id: &str) -> Result<Vec<ConversationSession>, String> {
+pub fn list_conversations(
+    app: &AppHandle,
+    workspace_id: &str,
+) -> Result<Vec<ConversationSession>, String> {
     let data_dir = workspace_data_dir(app, workspace_id)?;
     let conversations_dir = data_dir.join(CONVERSATIONS_DIR);
     if !conversations_dir.is_dir() {
@@ -451,7 +460,11 @@ mod workspace_store_tests {
         let spaces = root.join(SPACES_DIR);
         assert!(spaces.is_dir());
         assert!(!legacy.exists());
-        assert!(spaces.join("ws_test").join(".workproba").join("manifest.json").is_file());
+        assert!(spaces
+            .join("ws_test")
+            .join(".workproba")
+            .join("manifest.json")
+            .is_file());
 
         let _ = fs::remove_dir_all(root);
     }

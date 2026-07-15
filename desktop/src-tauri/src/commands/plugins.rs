@@ -4,8 +4,8 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-use super::settings_store::{load_settings, AppSettings, SettingsMode};
 use super::audit::log_audit_event;
+use super::settings_store::{load_settings, AppSettings, SettingsMode};
 use crate::commands::atomic_io::atomic_write;
 
 const PLUGINS_DIR: &str = "plugins";
@@ -270,9 +270,7 @@ fn plugin_allowed_by_preset(settings: &AppSettings, plugin_id: &str) -> bool {
 fn permissions_allowed(settings: &AppSettings, manifest: &PluginManifest) -> Result<(), String> {
     if is_locked(settings) {
         if manifest.permissions.iter().any(|p| p == "code:execute") {
-            return Err(
-                "Permission code:execute interdite en mode verrouillé".to_string(),
-            );
+            return Err("Permission code:execute interdite en mode verrouillé".to_string());
         }
         if settings.permissions_network == Some(false)
             && manifest
@@ -340,10 +338,7 @@ fn save_registry(app_data: &Path, registry: &PluginRegistry) -> Result<(), Strin
     atomic_write(&path, &json)
 }
 
-fn registry_entry<'a>(
-    registry: &'a PluginRegistry,
-    plugin_id: &str,
-) -> Option<&'a RegistryEntry> {
+fn registry_entry<'a>(registry: &'a PluginRegistry, plugin_id: &str) -> Option<&'a RegistryEntry> {
     registry.plugins.iter().find(|e| e.id == plugin_id)
 }
 
@@ -429,9 +424,7 @@ pub fn list_plugins_at(app_data: &Path, settings: &AppSettings) -> Result<Vec<Pl
     let registry = load_registry(app_data)?;
     let mut infos: Vec<PluginInfo> = builtin_manifests()
         .into_iter()
-        .map(|manifest| {
-            build_plugin_info(settings, manifest, PluginSource::Builtin, &registry)
-        })
+        .map(|manifest| build_plugin_info(settings, manifest, PluginSource::Builtin, &registry))
         .collect();
 
     for manifest in discover_local_manifests(app_data)? {
@@ -453,11 +446,11 @@ pub fn list_plugins_at(app_data: &Path, settings: &AppSettings) -> Result<Vec<Pl
     Ok(infos)
 }
 
-fn find_manifest(app_data: &Path, plugin_id: &str) -> Result<(PluginManifest, PluginSource), String> {
-    if let Some(manifest) = builtin_manifests()
-        .into_iter()
-        .find(|m| m.id == plugin_id)
-    {
+fn find_manifest(
+    app_data: &Path,
+    plugin_id: &str,
+) -> Result<(PluginManifest, PluginSource), String> {
+    if let Some(manifest) = builtin_manifests().into_iter().find(|m| m.id == plugin_id) {
         return Ok((manifest, PluginSource::Builtin));
     }
 
@@ -493,10 +486,7 @@ pub fn activate_plugin_at(
     Ok(())
 }
 
-pub fn deactivate_plugin_at(
-    app_data: &Path,
-    plugin_id: &str,
-) -> Result<(), String> {
+pub fn deactivate_plugin_at(app_data: &Path, plugin_id: &str) -> Result<(), String> {
     let (manifest, source) = find_manifest(app_data, plugin_id)?;
     let mut registry = load_registry(app_data)?;
     upsert_registry_entry(&mut registry, manifest.id, false, &source);
@@ -553,17 +543,10 @@ pub fn install_local_plugin_at(
     }
 
     if builtin_manifests().iter().any(|m| m.id == manifest.id) {
-        return Err(format!(
-            "Conflit avec un plugin builtin : {}",
-            manifest.id
-        ));
+        return Err(format!("Conflit avec un plugin builtin : {}", manifest.id));
     }
 
-    if manifest
-        .permissions
-        .iter()
-        .any(|p| p == "plugin.local")
-    {
+    if manifest.permissions.iter().any(|p| p == "plugin.local") {
         return Err("Permission plugin.local réservée au chargeur, pas au manifeste".to_string());
     }
 

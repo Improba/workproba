@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-  workproba_desktop_lib::run();
+    workproba_desktop_lib::run();
 }

@@ -112,50 +112,67 @@ fn handle_notify_event(app: &AppHandle, root: &Path, event: Event) {
     }
 }
 
-fn emit_rename_events(
-    app: &AppHandle,
-    root: &Path,
-    mode: RenameMode,
-    paths: &[PathBuf],
-) {
+fn emit_rename_events(app: &AppHandle, root: &Path, mode: RenameMode, paths: &[PathBuf]) {
     match mode {
         RenameMode::Both if paths.len() >= 2 => {
-            if let Some(old_payload) = build_payload(root, &EventKind::Remove(RemoveKind::Any), &paths[0]) {
-                emit_fs_change(app, FsChangePayload {
-                    kind: "delete".to_string(),
-                    ..old_payload
-                });
+            if let Some(old_payload) =
+                build_payload(root, &EventKind::Remove(RemoveKind::Any), &paths[0])
+            {
+                emit_fs_change(
+                    app,
+                    FsChangePayload {
+                        kind: "delete".to_string(),
+                        ..old_payload
+                    },
+                );
             }
-            if let Some(new_payload) = build_payload(root, &EventKind::Create(CreateKind::Any), &paths[1]) {
-                emit_fs_change(app, FsChangePayload {
-                    kind: "create".to_string(),
-                    ..new_payload
-                });
+            if let Some(new_payload) =
+                build_payload(root, &EventKind::Create(CreateKind::Any), &paths[1])
+            {
+                emit_fs_change(
+                    app,
+                    FsChangePayload {
+                        kind: "create".to_string(),
+                        ..new_payload
+                    },
+                );
             }
         }
         RenameMode::From => {
             for path in paths {
-                if let Some(payload) = build_payload(root, &EventKind::Remove(RemoveKind::Any), path) {
-                    emit_fs_change(app, FsChangePayload {
-                        kind: "delete".to_string(),
-                        ..payload
-                    });
+                if let Some(payload) =
+                    build_payload(root, &EventKind::Remove(RemoveKind::Any), path)
+                {
+                    emit_fs_change(
+                        app,
+                        FsChangePayload {
+                            kind: "delete".to_string(),
+                            ..payload
+                        },
+                    );
                 }
             }
         }
         RenameMode::To => {
             for path in paths {
-                if let Some(payload) = build_payload(root, &EventKind::Create(CreateKind::Any), path) {
-                    emit_fs_change(app, FsChangePayload {
-                        kind: "create".to_string(),
-                        ..payload
-                    });
+                if let Some(payload) =
+                    build_payload(root, &EventKind::Create(CreateKind::Any), path)
+                {
+                    emit_fs_change(
+                        app,
+                        FsChangePayload {
+                            kind: "create".to_string(),
+                            ..payload
+                        },
+                    );
                 }
             }
         }
         _ => {
             for path in paths {
-                if let Some(payload) = build_payload(root, &EventKind::Modify(ModifyKind::Any), path) {
+                if let Some(payload) =
+                    build_payload(root, &EventKind::Modify(ModifyKind::Any), path)
+                {
                     emit_fs_change(app, payload);
                 }
             }
@@ -212,9 +229,7 @@ fn should_ignore_relative(relative: &str) -> bool {
     }
 
     relative.split('/').any(|segment| {
-        segment.is_empty()
-            || segment.starts_with('.')
-            || segment == WORKPROBA_DIR_NAME
+        segment.is_empty() || segment.starts_with('.') || segment == WORKPROBA_DIR_NAME
     })
 }
 

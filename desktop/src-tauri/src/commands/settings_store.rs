@@ -386,7 +386,8 @@ pub fn load_settings(app: &AppHandle) -> Result<AppSettings, String> {
         super::preset::apply_enterprise_preset(app_data, &mut settings);
         return Ok(settings);
     }
-    let mut settings: AppSettings = serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+    let mut settings: AppSettings =
+        serde_json::from_str(&raw).map_err(|error| error.to_string())?;
     // Migration / robustesse : on force la version courante.
     settings.version = SETTINGS_VERSION;
     migrate_provider_sets(&mut settings);
@@ -404,10 +405,7 @@ fn migrate_provider_sets(settings: &mut AppSettings) {
     }
 
     let chat_id = settings.active_chat_provider_id.as_deref();
-    let embed_id = settings
-        .active_embedding_provider_id
-        .as_deref()
-        .or(chat_id);
+    let embed_id = settings.active_embedding_provider_id.as_deref().or(chat_id);
 
     let chat_entry = chat_id
         .and_then(|id| settings.providers.iter().find(|p| p.id == id))
@@ -423,16 +421,19 @@ fn migrate_provider_sets(settings: &mut AppSettings) {
 
     let migrated_id = format!("migrated-{}", chat.id);
     let embeddings = embed_entry.and_then(|entry| {
-        entry.embedding_model.as_ref().map(|model| ProviderSetEmbeddingsEntry {
-            provider: entry.provider.clone(),
-            model: model.clone(),
-            api_key_ref: None,
-            api_key: entry.api_key.clone(),
-            base_url: entry
-                .embedding_base_url
-                .clone()
-                .or_else(|| entry.base_url.clone()),
-        })
+        entry
+            .embedding_model
+            .as_ref()
+            .map(|model| ProviderSetEmbeddingsEntry {
+                provider: entry.provider.clone(),
+                model: model.clone(),
+                api_key_ref: None,
+                api_key: entry.api_key.clone(),
+                base_url: entry
+                    .embedding_base_url
+                    .clone()
+                    .or_else(|| entry.base_url.clone()),
+            })
     });
 
     let migrated = ProviderSetEntry {
@@ -642,7 +643,10 @@ mod settings_tests {
             ..AppSettings::default()
         };
         migrate_provider_sets(&mut settings);
-        assert_eq!(settings.sets.as_ref().map(|s| s.len()), Some(existing.len()));
+        assert_eq!(
+            settings.sets.as_ref().map(|s| s.len()),
+            Some(existing.len())
+        );
     }
 
     #[test]
