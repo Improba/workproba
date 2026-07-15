@@ -168,12 +168,12 @@ async def _stream_personas_parallel(
     try:
         for done in asyncio.as_completed(tasks):
             yield await done
-    except Exception:
-        for task in tasks:
-            if not task.done():
-                task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
-        raise
+    finally:
+        pending = [task for task in tasks if not task.done()]
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
 
 def _discuss_transcript_lines(messages: list[JsonDict], *, locale: str) -> list[str]:

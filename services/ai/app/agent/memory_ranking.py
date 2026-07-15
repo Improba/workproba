@@ -148,14 +148,16 @@ def _hybrid_scores(
     for overlap, index, item, lexical_norm in lexical_scores:
         lexical_component = lexical_norm / max_lexical
         semantic_component = 0.0
-        if query_embedding is not None and item_embeddings is not None:
+        if query_embedding is not None:
             key = _memory_item_key(item) if "content" in item else str(item.get("id") or "")
-            vector = item_embeddings.get(key)
+            vector = item_embeddings.get(key) if item_embeddings else None
             if vector is not None:
                 semantic_component = cosine_similarity(query_embedding, vector)
                 if semantic_component < min_semantic_score and overlap <= 0:
                     continue
-        if query_embedding is None and overlap <= 0:
+            elif overlap <= 0:
+                continue
+        elif overlap <= 0:
             continue
         hybrid = (
             semantic_weight * semantic_component

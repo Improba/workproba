@@ -95,3 +95,65 @@ def test_rank_sessions_hybrid_uses_session_id_embeddings() -> None:
         min_overlap=2,
     )
     assert ranked[0]["id"] == "s2"
+
+
+def test_rank_memories_hybrid_ignores_unembedded_items_without_lexical_match() -> None:
+    items = [
+        _item("La réunion projet est demain", "unembedded"),
+        _item("Allocation budgétaire annuelle validée", "semantic"),
+    ]
+
+    ranked = rank_memories_hybrid(
+        items,
+        "enveloppe financière annuelle",
+        k=2,
+        query_embedding=(1.0, 0.0),
+        item_embeddings={
+            "semantic": (0.95, 0.05),
+        },
+        semantic_weight=0.9,
+        min_semantic_score=0.2,
+    )
+
+    assert [item["id"] for item in ranked] == ["semantic"]
+
+
+def test_rank_sessions_hybrid_ignores_unembedded_items_without_lexical_match() -> None:
+    sessions = [
+        {"id": "unembedded", "title": "Notes diverses", "summary": "Sans lien"},
+        {"id": "semantic", "title": "Pilotage financier", "summary": "Allocation budgétaire validée"},
+    ]
+
+    ranked = rank_sessions_hybrid(
+        sessions,
+        "enveloppe financière annuelle",
+        k=2,
+        query_embedding=(1.0, 0.0),
+        session_embeddings={
+            "semantic": (0.95, 0.05),
+        },
+        semantic_weight=0.9,
+        min_semantic_score=0.2,
+        min_overlap=2,
+    )
+
+    assert [session["id"] for session in ranked] == ["semantic"]
+
+
+def test_rank_memories_hybrid_excludes_zero_overlap_when_query_embedding_only() -> None:
+    items = [
+        _item("La réunion projet est demain", "unembedded"),
+        _item("Suivi enveloppe financière interne", "lexical"),
+    ]
+
+    ranked = rank_memories_hybrid(
+        items,
+        "enveloppe financière",
+        k=2,
+        query_embedding=(1.0, 0.0),
+        item_embeddings=None,
+        semantic_weight=0.9,
+        min_semantic_score=0.2,
+    )
+
+    assert [item["id"] for item in ranked] == ["lexical"]

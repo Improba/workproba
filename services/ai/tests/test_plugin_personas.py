@@ -675,3 +675,52 @@ async def test_generate_opinions_parallelizes_llm_calls(
     )
     assert in_flight["max"] >= 2
 
+
+@pytest.mark.asyncio
+async def test_stream_ask_cancels_pending_personas_when_consumer_closes(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slow_started = asyncio.Event()
+    slow_cancelled = asyncio.Event()
+
+    async def tracked_run(
+        *,
+        settings: Any,
+        provider_set: Any,
+        system_prompt: str,
+        user_prompt: str,
+        locale: str,
+    ) -> str:
+        _ = (settings, provider_set, user_prompt, locale)
+        if "rh" in system_prompt.lower():
+            slow_started.set()
+            try:
+                await asyncio.sleep(10)
+            except asyncio.CancelledError:
+                slow_cancelled.set()
+                raise
+        await slow_started.wait()
+        return "Rapide"
+
+    monkeypatch.setattr(orchestrator, "_run_persona_prompt", tracked_run)
+
+    stream = orchestrator.stream_ask(
+        plugin_data_dir=plugin_dir,
+        persona_ids=["01", "03"],
+        question="Question test",
+        context="",
+        settings=object(),
+        provider_set=None,
+        locale="fr",
+        rag_store=None,
+    )
+    try:
+        async for event in stream:
+            if event.get("type") == "persona_opinion":
+                break
+    finally:
+        await stream.aclose()
+
+    await asyncio.wait_for(slow_started.wait(), timeout=0.2)
+    await asyncio.wait_for(slow_cancelled.wait(), timeout=0.2)

@@ -6,6 +6,7 @@ from typing import Any
 
 import pytest
 
+from app.agent.tools import ToolContext
 from app.limits import DEFAULT_LIMITS
 from app.schemas import ProviderSet, ProviderSetChat
 from app.web_search.backends import (
@@ -16,6 +17,7 @@ from app.web_search.backends import (
 )
 from app.web_search.engine import search_web
 from app.web_search.errors import WebSearchError
+from app.web_search.support import web_search_available
 
 
 @pytest.fixture(autouse=True)
@@ -146,3 +148,40 @@ async def test_search_web_unavailable_for_unregistered_provider() -> None:
             locale="fr",
             limits=DEFAULT_LIMITS,
         )
+
+
+def _tool_context_for_provider(provider: str, *, network: bool = True) -> ToolContext:
+    return ToolContext(
+        tenant_id="t",
+        project_id="p",
+        session_id="s",
+        documents=[],
+        provider_set=ProviderSet(
+            id=f"{provider}-test",
+            chat=ProviderSetChat(provider=provider, model="test-model"),
+        ),
+        permissions_network=network,
+    )
+
+
+def test_web_search_available_uses_registered_backend() -> None:
+    async def custom_backend(
+        query: str,
+        *,
+        provider_set: Any = None,
+        locale: str = "fr",
+        limits: Any = None,
+        premium: bool = False,
+    ) -> dict[str, Any]:
+        _ = (query, provider_set, locale, limits, premium)
+        return {"outputs": []}
+
+    register_web_search_backend("openai", custom_backend)
+
+    assert web_search_available(_tool_context_for_provider("openai")) is True
+    assert web_search_available(_tool_context_for_provider("ollama")) is False
+    assert web_search_available(_tool_context_for_provider("openai", network=False)) is False
+
+
+def test_web_search_available_mistral_by_default() -> None:
+    assert web_search_available(_tool_context_for_provider("mistral")) is True
