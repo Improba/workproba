@@ -149,6 +149,7 @@
     <PersonasPicker
       v-model:open="pickerOpen"
       :personas="selectablePersonas"
+      :provenance="activeSet?.provenance ?? null"
       :loading="loading"
       :title="t('personas.sideChat.changePersonas')"
       :confirm-label="t('personas.sideChat.changePersonas')"
@@ -174,7 +175,7 @@ import PersonasConfidentialityHint from '@components/personas/PersonasConfidenti
 import MessageTextPart from '@components/chat/MessageTextPart.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
-import { useProject } from '@composables/useProject';
+import { useSpace } from '@composables/useSpace';
 import {
   discussionMessagesToStored,
   formatDiscussionMarkdown,
@@ -197,6 +198,7 @@ const emit = defineEmits<{
 const { t, locale } = useI18n();
 const {
   selectablePersonas,
+  activeSet,
   loading,
   loadError,
   refresh,
@@ -206,7 +208,7 @@ const {
   findPersona,
 } = usePersonas();
 const { getPluginDataDir, isPersonasPluginActive, isProjetPluginActive } = usePlugins();
-const { activeDataDir } = useProject();
+const { activeDataDir } = useSpace();
 const { consumeInitial, peekInitial, launchToken } = useSideChat();
 const { startMeeting } = usePersonasActions();
 

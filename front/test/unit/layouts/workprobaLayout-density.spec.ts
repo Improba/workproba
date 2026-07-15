@@ -17,11 +17,11 @@ vi.mock('@composables/useDesktop', () => ({
   isDesktopApp: () => true,
 }));
 
-vi.mock('@composables/useProject', () => ({
-  useProject: () => ({
+vi.mock('@composables/useSpace', () => ({
+  useSpace: () => ({
     activePath: ref<string | null>(null),
     activeDataDir: ref<string | null>(null),
-    workspaceTitle: ref<string | null>('Projet test'),
+    spaceTitle: ref<string | null>('Projet test'),
   }),
 }));
 

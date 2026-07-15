@@ -2,7 +2,7 @@ import { computed, ref, watch, type Ref } from 'vue';
 import { useDebounceFn } from '@vueuse/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
-import { useProject } from '@composables/useProject';
+import { useSpace } from '@composables/useSpace';
 import { buildActiveProviderSet, useAppSettings } from '@composables/useAppSettings';
 import { ensureProviderSetEmbeddingsReady } from '@utils/providerSetNotify';
 import {
@@ -71,7 +71,7 @@ async function runIndex(opts: {
 }
 
 async function triggerFull(): Promise<void> {
-  const { activePath, activeDataDir } = useProject();
+  const { activePath, activeDataDir } = useSpace();
   const projectPath = activePath.value;
   if (!projectPath) return;
 
@@ -98,7 +98,7 @@ async function triggerFull(): Promise<void> {
 }
 
 async function triggerPaths(paths: string[]): Promise<void> {
-  const { activePath, activeDataDir } = useProject();
+  const { activePath, activeDataDir } = useSpace();
   const projectPath = activePath.value;
   if (!projectPath || paths.length === 0) return;
 
@@ -145,11 +145,11 @@ function ensureStarted(): void {
   if (started) return;
   started = true;
 
-  const { activeWorkspaceId } = useProject();
+  const { activeSpaceId } = useSpace();
   const { activeSet } = useAppSettings();
 
   const triggerKey = computed(() => {
-    const ws = activeWorkspaceId.value ?? '';
+    const ws = activeSpaceId.value ?? '';
     const set = activeSet.value;
     if (!set?.embeddings) return `${ws}::none`;
     const embed = set.embeddings;

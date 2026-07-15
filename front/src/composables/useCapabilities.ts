@@ -31,6 +31,7 @@ function isPluginBlockedByPreset(
   pluginsAllowed: string[] | null | undefined,
   permissionsNetwork: boolean,
   permissionsProjectSync: boolean,
+  permissionsNetworkImprobaCloud: boolean,
 ): boolean {
   if (!settingsLocked) return false;
   if (pluginsAllowed?.length && !pluginsAllowed.includes(pluginId)) return true;
@@ -38,6 +39,9 @@ function isPluginBlockedByPreset(
     !permissionsNetwork
     && (pluginId === BROWSER_PLUGIN_ID || pluginId === CLOUD_PLUGIN_ID)
   ) {
+    return true;
+  }
+  if (!permissionsNetworkImprobaCloud && pluginId === CLOUD_PLUGIN_ID) {
     return true;
   }
   if (!permissionsProjectSync && pluginId === CLOUD_PLUGIN_ID) {
@@ -68,6 +72,7 @@ function computeCapabilityState(
   pluginsAllowed: string[] | null | undefined,
   permissionsNetwork: boolean,
   permissionsProjectSync: boolean,
+  permissionsNetworkImprobaCloud: boolean,
 ): CapabilityState {
   const guided = isGuidedMode(settingsLocked, settingsMode);
   const requiredPluginIds = collectRequiredPluginIds(definition);
@@ -78,7 +83,14 @@ function computeCapabilityState(
   }
 
   const blockedPlugins = requiredPluginIds.filter((id) =>
-    isPluginBlockedByPreset(id, settingsLocked, pluginsAllowed, permissionsNetwork, permissionsProjectSync),
+    isPluginBlockedByPreset(
+      id,
+      settingsLocked,
+      pluginsAllowed,
+      permissionsNetwork,
+      permissionsProjectSync,
+      permissionsNetworkImprobaCloud,
+    ),
   );
   const capabilityPluginsActive = definition.pluginIds.every((id) =>
     activePluginIds.has(id),
@@ -114,7 +126,7 @@ export interface UseCapabilitiesReturn {
 
 export function useCapabilities(): UseCapabilitiesReturn {
   const { plugins, activePluginIds, activatePlugin, deactivatePlugin } = usePlugins();
-  const { settings, settingsLocked, settingsMode, permissionsNetwork, permissionsProjectSync } = useAppSettings();
+  const { settings, settingsLocked, settingsMode, permissionsNetwork, permissionsProjectSync, permissionsNetworkImprobaCloud } = useAppSettings();
 
   const {
     openRightPanel,
@@ -139,6 +151,7 @@ export function useCapabilities(): UseCapabilitiesReturn {
         settings.value.pluginsAllowed ?? null,
         permissionsNetwork.value,
         permissionsProjectSync.value,
+        permissionsNetworkImprobaCloud.value,
       ),
     };
   }

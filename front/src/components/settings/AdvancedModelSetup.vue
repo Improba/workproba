@@ -1,5 +1,16 @@
 <template>
   <section class="advanced-setup">
+    <div class="advanced-setup__preferences">
+      <h3 class="advanced-setup__preferences-title">{{ t('settings.advancedAgentPrefs') }}</h3>
+      <q-toggle
+        :model-value="confirmBeforeWrite"
+        :disable="settingsLocked || savingConfirm"
+        :label="t('settings.confirmBeforeWriteLabel')"
+        @update:model-value="onConfirmBeforeWrite"
+      />
+      <p class="advanced-setup__preferences-hint">{{ t('settings.confirmBeforeWriteHint') }}</p>
+    </div>
+
     <div class="advanced-setup__toolbar">
       <button type="button" class="advanced-setup__guided-link" @click="emit('switch-to-guided')">
         {{ t('settings.advancedBackToGuided') }}
@@ -163,16 +174,32 @@ import { capabilityLabels, cloneProviderSet, emptyCustomSet, localizedSetDescrip
 
 const emit = defineEmits<{ 'switch-to-guided': [] }>();
 
-const { sets, settings, setActiveSet, createSet, updateSet, deleteSet } = useAppSettings();
+const { sets, settings, setActiveSet, createSet, updateSet, deleteSet, confirmBeforeWrite, setConfirmBeforeWrite, settingsLocked } = useAppSettings();
 const { t } = useI18n();
 
 const formOpen = ref(false);
 const editing = ref<ProviderSet | null>(null);
 const showKey = ref(false);
 const testingId = ref<string | null>(null);
+const savingConfirm = ref(false);
 const testResults = reactive<Record<string, ProviderSetTestResult>>({});
 
 const activeSetId = computed(() => settings.value.activeSetId ?? null);
+
+async function onConfirmBeforeWrite(enabled: boolean): Promise<void> {
+  if (settingsLocked.value || savingConfirm.value) return;
+  savingConfirm.value = true;
+  try {
+    await setConfirmBeforeWrite(enabled);
+  } catch (err) {
+    Notify.create({
+      message: err instanceof Error ? err.message : t('settings.confirmBeforeWriteChangeFailed'),
+      color: 'negative',
+    });
+  } finally {
+    savingConfirm.value = false;
+  }
+}
 
 const providerOptions = [
   { label: 'Mistral', value: 'mistral' },
@@ -363,6 +390,27 @@ async function onTestAll(set: ProviderSet): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.advanced-setup__preferences {
+  padding: 12px 14px;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-md);
+  background: var(--wp-surface);
+}
+
+.advanced-setup__preferences-title {
+  margin: 0 0 8px;
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  color: var(--wp-text);
+}
+
+.advanced-setup__preferences-hint {
+  margin: 6px 0 0;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
+  max-width: 56ch;
 }
 
 .advanced-setup__toolbar {

@@ -47,7 +47,7 @@ import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useAppSettings } from '@composables/useAppSettings';
 import { useLlmSessionContext } from '@composables/useLlmSessionContext';
-import { useProject } from '@composables/useProject';
+import { useSpace } from '@composables/useSpace';
 import {
   applyAttachmentStatusEvent,
   type AttachmentStatusEntry,
@@ -68,7 +68,7 @@ const props = defineProps<{
 
 const { t, locale } = useI18n();
 const route = useRoute();
-const { activePath, activeDataDir } = useProject();
+const { activePath, activeDataDir } = useSpace();
 const { sets, activeSet, setActiveSet } = useAppSettings();
 const { buildContextProviderSet } = useLlmSessionContext();
 

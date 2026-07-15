@@ -54,23 +54,48 @@
         <p>{{ t('enterprise.freeMode') }}</p>
       </section>
 
+      <section v-if="canExportPreset" class="enterprise-settings__export">
+        <h2 class="enterprise-settings__section-title">
+          {{ t('enterprise.exportPreset') }}
+        </h2>
+        <p class="enterprise-settings__export-hint">{{ t('enterprise.exportPresetHint') }}</p>
+        <button
+          type="button"
+          class="enterprise-settings__export-btn"
+          :disabled="exporting"
+          @click="onExportPreset"
+        >
+          <Lucide name="download" size="16" color="text-muted" />
+          {{ exporting ? t('common.loading') : t('enterprise.exportPreset') }}
+        </button>
+      </section>
+
       <AuditPanel :workspace-data-dir="workspaceDataDir" />
     </template>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import SettingsSubnav from '@components/settings/SettingsSubnav.vue';
 import AuditPanel from '@components/settings/AuditPanel.vue';
 import { useEnterprise } from '@composables/useEnterprise';
-import { useProject } from '@composables/useProject';
+import { useSpace } from '@composables/useSpace';
+import { useAppSettings } from '@composables/useAppSettings';
+import { exportEnterprisePreset } from '@composables/useDesktop';
 
 const { t } = useI18n();
 const { presetActive, preset, loading, refresh } = useEnterprise();
-const { activeDataDir } = useProject();
+const { activeDataDir } = useSpace();
+const { settingsMode, settingsLocked } = useAppSettings();
+
+const exporting = ref(false);
+const canExportPreset = computed(
+  () => settingsMode.value === 'advanced' && !settingsLocked.value,
+);
 
 const workspaceDataDir = computed(() => activeDataDir.value);
 
@@ -84,6 +109,34 @@ const localeLabel = computed(() => {
 onMounted(() => {
   void refresh();
 });
+
+async function onExportPreset(): Promise<void> {
+  if (exporting.value) return;
+  exporting.value = true;
+  try {
+    const path = await exportEnterprisePreset();
+    if (!path) {
+      Notify.create({
+        message: t('enterprise.exportPresetCancelled'),
+        color: 'dark',
+        timeout: 2000,
+      });
+      return;
+    }
+    Notify.create({
+      message: t('enterprise.exportPresetSuccess', { path }),
+      color: 'dark',
+      timeout: 3000,
+    });
+  } catch (err) {
+    Notify.create({
+      message: err instanceof Error ? err.message : t('enterprise.exportPresetFailed'),
+      classes: 'bg-danger text-white',
+    });
+  } finally {
+    exporting.value = false;
+  }
+}
 </script>
 
 <style scoped lang="scss">
@@ -167,5 +220,38 @@ onMounted(() => {
   background: var(--wp-surface);
   color: var(--wp-text-muted);
   font-size: var(--wp-fs-sm);
+}
+
+.enterprise-settings__export {
+  margin-bottom: 1.25rem;
+}
+
+.enterprise-settings__export-hint {
+  margin: 0 0 10px;
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-text-muted);
+}
+
+.enterprise-settings__export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-md);
+  background: var(--wp-surface);
+  color: var(--wp-text);
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background: var(--wp-surface-2);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
 }
 </style>

@@ -472,16 +472,11 @@ pub fn list_documents(project_path: String) -> Result<Vec<DocumentEntry>, String
     Ok(entries)
 }
 
-fn open_path_in_os(path: &Path) -> Result<(), String> {
+fn open_target_in_os(target: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         Command::new("cmd")
-            .args([
-                "/C",
-                "start",
-                "",
-                &path.to_string_lossy().replace('/', "\\"),
-            ])
+            .args(["/C", "start", "", target])
             .spawn()
             .map_err(|error| error.to_string())?;
     }
@@ -489,7 +484,7 @@ fn open_path_in_os(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         Command::new("open")
-            .arg(path)
+            .arg(target)
             .spawn()
             .map_err(|error| error.to_string())?;
     }
@@ -497,17 +492,21 @@ fn open_path_in_os(path: &Path) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
         Command::new("xdg-open")
-            .arg(path)
+            .arg(target)
             .spawn()
             .map_err(|error| error.to_string())?;
     }
 
     #[cfg(not(any(target_os = "linux", target_os = "macos", target_os = "windows")))]
     {
-        return Err("Ouverture de fichier non supportée sur cette plateforme".to_string());
+        return Err("Ouverture non supportée sur cette plateforme".to_string());
     }
 
     Ok(())
+}
+
+fn open_path_in_os(path: &Path) -> Result<(), String> {
+    open_target_in_os(&path.to_string_lossy())
 }
 
 #[tauri::command]
@@ -518,6 +517,19 @@ pub fn open_path(path: String) -> Result<(), String> {
     }
 
     open_path_in_os(&path_buf)
+}
+
+#[tauri::command]
+pub fn open_external_url(url: String) -> Result<(), String> {
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        return Err("URL vide".to_string());
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.starts_with("http://") && !lower.starts_with("https://") {
+        return Err("Seules les URL http(s) sont autorisées".to_string());
+    }
+    open_target_in_os(trimmed)
 }
 
 fn persist_last_project_path(app: &AppHandle, workspace: &WorkspaceInfo) -> Result<(), String> {

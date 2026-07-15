@@ -93,6 +93,10 @@ async def test_web_search_tool_returns_results(plugin_dir: Path) -> None:
     assert result["count"] == 2
     assert result["backend"] == "mock"
     assert result["results"][0]["url"].startswith("https://")
+    first = result["results"][0]
+    assert isinstance(first.get("title"), str) and first["title"]
+    assert isinstance(first.get("snippet"), str)
+    assert isinstance(result.get("citations"), list)
     assert deps.web_search_calls == 1
 
 
@@ -129,7 +133,14 @@ async def test_web_search_tool_blocked_in_locked_mode(plugin_dir: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_web_search_unavailable_without_mistral(plugin_dir: Path) -> None:
+async def test_web_search_unavailable_without_mistral(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "app.web_search.support.resolve_tavily_api_key",
+        lambda explicit_key=None: None,
+    )
     deps = ToolDeps(
         context=ToolContext(
             tenant_id="t",

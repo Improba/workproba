@@ -61,6 +61,11 @@ class Settings(BaseSettings):
         validation_alias="INTERNAL_SECRET",
     )
 
+    tavily_api_key: str | None = Field(
+        default=None,
+        validation_alias="TAVILY_API_KEY",
+    )
+
     # Timeout global d'un tour agent (LLM + outils + attente de confirmation).
     turn_timeout_seconds: int = Field(
         default=180,

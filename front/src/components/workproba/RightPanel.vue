@@ -64,6 +64,7 @@
         :workspace-data-dir="workspaceDataDir"
         :show-publish="isProjetPluginActive"
         @publish="onPublishFile"
+        @restored="onVersionRestored"
       />
 
       <VersionsPanel

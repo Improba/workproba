@@ -32,6 +32,15 @@
             <span>{{ t('plugin.workproba.projet.publishAction') }}</span>
           </button>
           <button
+            v-if="previousVersionId"
+            type="button"
+            class="doc-preview__restore"
+            :disabled="restoring"
+            @click="restorePreviousVersion"
+          >
+            {{ restoring ? t('common.inProgress') : t('shell.previewRestorePrevious') }}
+          </button>
+          <button
             type="button"
             class="doc-preview__open-os"
             @click="openInOs"
@@ -103,9 +112,12 @@ import { isDesktopApp, openLocalFile } from '@composables/useDesktop';
 import {
   fetchDocumentPreview,
   isSafeRelativePath,
+  listFileVersions,
+  restoreFileVersion,
   type DocumentPreviewResult,
 } from '@services/aiSidecar';
 import { useShellSurfaces } from '@composables/useShellSurfaces';
+import { Notify } from 'quasar';
 
 const PROJECT_HINT_STORAGE_KEY = 'workproba.ui.projectOrganizeHint.dismissed';
 
@@ -118,6 +130,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'publish', relativePath: string): void;
+  (e: 'restored', relativePath: string): void;
 }>();
 
 const { t } = useI18n();
@@ -145,6 +158,8 @@ const loading = ref(false);
 const error = ref<string | null>(null);
 const preview = ref<DocumentPreviewResult | null>(null);
 const imageSrc = ref<string | null>(null);
+const previousVersionId = ref<string | null>(null);
+const restoring = ref(false);
 
 const sanitizedHtml = computed(() => {
   const html = preview.value?.html?.trim();
@@ -161,6 +176,51 @@ async function resolveImageSrc(relativePath: string): Promise<string | null> {
     return convertFileSrc(fullPath);
   } catch {
     return null;
+  }
+}
+
+async function loadVersions(): Promise<void> {
+  const path = props.relativePath;
+  const dataDir = props.workspaceDataDir;
+  if (!path || !dataDir) {
+    previousVersionId.value = null;
+    return;
+  }
+  try {
+    const versions = await listFileVersions({
+      workspaceDataDir: dataDir,
+      filePath: path,
+    });
+    previousVersionId.value = versions.length > 1 ? versions[1].version_id : null;
+  } catch {
+    previousVersionId.value = null;
+  }
+}
+
+async function restorePreviousVersion(): Promise<void> {
+  const path = props.relativePath;
+  const versionId = previousVersionId.value;
+  if (!path || !versionId || !props.projectPath || !props.workspaceDataDir) return;
+  const confirmed = window.confirm(t('shell.versions.confirmRestaurer'));
+  if (!confirmed) return;
+  restoring.value = true;
+  try {
+    const ok = await restoreFileVersion({
+      workspaceDataDir: props.workspaceDataDir,
+      projectPath: props.projectPath,
+      filePath: path,
+      versionId,
+    });
+    if (!ok) {
+      Notify.create({ message: t('shell.versions.restoreFailed'), color: 'negative' });
+      return;
+    }
+    Notify.create({ message: t('shell.versions.restauré'), color: 'positive', timeout: 2500 });
+    emit('restored', path);
+    await loadPreview();
+    await loadVersions();
+  } finally {
+    restoring.value = false;
   }
 }
 
@@ -214,6 +274,7 @@ watch(
   () => [props.relativePath, props.projectPath, props.workspaceDataDir] as const,
   () => {
     void loadPreview();
+    void loadVersions();
   },
   { immediate: true },
 );
@@ -340,6 +401,7 @@ watch(
 }
 
 .doc-preview__publish,
+.doc-preview__restore,
 .doc-preview__open-os {
   flex: none;
   display: inline-flex;

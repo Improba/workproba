@@ -280,6 +280,14 @@ fn permissions_allowed(settings: &AppSettings, manifest: &PluginManifest) -> Res
         {
             return Err("Permission réseau interdite par le preset".to_string());
         }
+        if settings.permissions_network_improba_cloud == Some(false)
+            && manifest
+                .permissions
+                .iter()
+                .any(|p| p == "network:improba-cloud")
+        {
+            return Err("Permission network:improba-cloud interdite par le preset".to_string());
+        }
         if settings.permissions_project_sync == Some(false)
             && manifest.permissions.iter().any(|p| p == "project:sync")
         {
@@ -512,6 +520,92 @@ pub fn get_plugin_data_dir_at(app_data: &Path, plugin_id: &str) -> Result<String
     Ok(dir.to_string_lossy().to_string())
 }
 
+const CLOUD_PLUGIN_ID: &str = "workproba.cloud";
+const CLOUD_CONFIG_FILE: &str = "config.json";
+
+pub fn write_cloud_plugin_config(
+    app_data: &Path,
+    endpoint: Option<&str>,
+    org_id: Option<&str>,
+) -> Result<(), String> {
+    if endpoint.is_none() && org_id.is_none() {
+        return Ok(());
+    }
+    let data_dir = plugin_data_dir(app_data, CLOUD_PLUGIN_ID);
+    fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+    let config_path = data_dir.join(CLOUD_CONFIG_FILE);
+    let mut config: serde_json::Value = if config_path.is_file() {
+        let raw = fs::read_to_string(&config_path).unwrap_or_default();
+        serde_json::from_str(&raw).unwrap_or_else(|_| serde_json::json!({}))
+    } else {
+        serde_json::json!({})
+    };
+    if let Some(url) = endpoint.filter(|value| !value.trim().is_empty()) {
+        config["base_url"] = serde_json::Value::String(url.trim().to_string());
+    }
+    if let Some(org) = org_id.filter(|value| !value.trim().is_empty()) {
+        config["org_id"] = serde_json::Value::String(org.trim().to_string());
+    }
+    let json = serde_json::to_string_pretty(&config).map_err(|e| e.to_string())?;
+    atomic_write(&config_path, &json)
+}
+
+fn cloud_preset_should_enable(settings: &AppSettings, preset: &super::preset::EnterprisePreset) -> bool {
+    let network_improba_cloud = preset
+        .permissions_network_improba_cloud
+        .or(settings.permissions_network_improba_cloud)
+        .unwrap_or(false);
+    let project_sync = preset
+        .permissions_project_sync
+        .or(settings.permissions_project_sync)
+        .unwrap_or(false);
+    if !network_improba_cloud || !project_sync {
+        return false;
+    }
+    if !is_locked(settings) && !preset.settings_locked {
+        return false;
+    }
+    match &preset.plugins_allowed {
+        Some(allowed) => allowed.iter().any(|id| id == CLOUD_PLUGIN_ID),
+        None => settings
+            .plugins_allowed
+            .as_ref()
+            .map(|allowed| allowed.iter().any(|id| id == CLOUD_PLUGIN_ID))
+            .unwrap_or(true),
+    }
+}
+
+pub fn apply_preset_cloud_policy(
+    app_data: &Path,
+    settings: &AppSettings,
+    preset: &super::preset::EnterprisePreset,
+) {
+    let endpoint = preset
+        .cloud_endpoint
+        .as_deref()
+        .or(settings.cloud_endpoint.as_deref());
+    let org_id = preset
+        .cloud_org_id
+        .as_deref()
+        .or(settings.cloud_org_id.as_deref());
+    let _ = write_cloud_plugin_config(app_data, endpoint, org_id);
+
+    if !preset.settings_locked && !is_locked(settings) {
+        return;
+    }
+
+    if cloud_preset_should_enable(settings, preset) {
+        let _ = activate_plugin_at(app_data, settings, CLOUD_PLUGIN_ID);
+        return;
+    }
+
+    if preset.permissions_network_improba_cloud == Some(false)
+        || preset.permissions_project_sync == Some(false)
+    {
+        let _ = deactivate_plugin_at(app_data, CLOUD_PLUGIN_ID);
+    }
+}
+
 fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     fs::create_dir_all(dst).map_err(|e| e.to_string())?;
     for entry in fs::read_dir(src).map_err(|e| e.to_string())? {
@@ -724,6 +818,21 @@ mod plugins_tests {
             !cloud.permissions.contains(&"network:custom".to_string()),
             "cloud must not use network:custom"
         );
+    }
+
+    #[test]
+    fn cloud_activation_blocked_when_network_improba_cloud_preset_false() {
+        let app_data = temp_app_data();
+        let settings = AppSettings {
+            settings_locked: Some(true),
+            permissions_project_sync: Some(true),
+            permissions_network_improba_cloud: Some(false),
+            ..AppSettings::default()
+        };
+
+        let err = activate_plugin_at(&app_data, &settings, "workproba.cloud")
+            .expect_err("cloud blocked by network_improba_cloud preset");
+        assert!(err.contains("network:improba-cloud"));
     }
 
     #[test]

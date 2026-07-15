@@ -55,6 +55,8 @@ const pilotagePaused = ref(false);
 const lastAiAction = ref<BrowserAiActionOverlay | null>(null);
 const highlight = ref<BrowserHighlightState | null>(null);
 const agentTurnActive = ref(false);
+const visitHistory = ref<string[]>([]);
+const MAX_VISIT_HISTORY = 30;
 let pluginDataDir: string | null = null;
 let liveRefreshTimer: ReturnType<typeof setInterval> | null = null;
 let highlightFadeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -80,11 +82,28 @@ function scheduleHighlightFade(): void {
   }, HIGHLIGHT_FADE_MS);
 }
 
+function pushVisitHistory(url: string): void {
+  const trimmed = url.trim();
+  if (!trimmed || trimmed === 'about:blank') return;
+  if (visitHistory.value[0] === trimmed) return;
+  visitHistory.value = [
+    trimmed,
+    ...visitHistory.value.filter((entry) => entry !== trimmed),
+  ].slice(0, MAX_VISIT_HISTORY);
+}
+
+function clearVisitHistory(): void {
+  visitHistory.value = [];
+}
+
 function applySnapshotResult(
   data: Record<string, unknown>,
   options: { markActive?: boolean } = {},
 ): void {
-  if (typeof data.url === 'string') currentUrl.value = data.url;
+  if (typeof data.url === 'string') {
+    currentUrl.value = data.url;
+    pushVisitHistory(data.url);
+  }
   if (typeof data.title === 'string') title.value = data.title;
   if (typeof data.screenshot_b64 === 'string' && data.screenshot_b64) {
     screenshot.value = data.screenshot_b64;
@@ -156,6 +175,7 @@ export interface UseBrowserReturn {
   lastAiAction: Ref<BrowserAiActionOverlay | null>;
   highlight: Ref<BrowserHighlightState | null>;
   agentTurnActive: Ref<boolean>;
+  visitHistory: Ref<string[]>;
   isBrowserPluginActive: ComputedRef<boolean>;
   init: () => Promise<void>;
   navigate: (url: string) => Promise<void>;
@@ -169,6 +189,7 @@ export interface UseBrowserReturn {
   resumePilotage: () => void;
   setAgentTurnActive: (active: boolean) => void;
   applyToolResult: (toolName: string, result: unknown, isError?: boolean) => void;
+  clearVisitHistory: () => void;
 }
 
 export function useBrowser(): UseBrowserReturn {
@@ -303,6 +324,7 @@ export function useBrowser(): UseBrowserReturn {
       snapshotYaml.value = '';
       currentUrl.value = '';
       title.value = '';
+      visitHistory.value = [];
       lastAiAction.value = null;
       highlight.value = null;
       clearHighlightFadeTimer();
@@ -386,6 +408,8 @@ export function useBrowser(): UseBrowserReturn {
     resumePilotage,
     setAgentTurnActive,
     applyToolResult,
+    visitHistory,
+    clearVisitHistory,
   };
 }
 

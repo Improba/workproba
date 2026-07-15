@@ -1,6 +1,7 @@
-# Per-space storage
+# Space storage (espace)
 
-> **Last updated:** 14/07/2026
+> **Last updated:** 15/07/2026  
+> **Terminology:** UI label **space** / FR **espace**; internal identifiers may still use `workspace_id` in code and `registry.json`.
 
 ## Terminology
 

@@ -34,6 +34,8 @@ export interface ChatProposedPlan {
   rationale: string;
   /** approved | rejected | pending */
   status?: 'pending' | 'approved' | 'rejected';
+  /** true when this plan replaces a prior plan in the same turn */
+  isReplan?: boolean;
 }
 
 /** Codes d'erreur stables émis par le sidecar, le backend ou le front. */
@@ -168,6 +170,21 @@ export type ChatMessagePart =
   | ChatToolCallPart
   | ChatThinkingPart;
 
+/** Citation mémoire (souvenir injecté ou rappelé par l'agent). */
+export interface MemoryCitation {
+  id: string;
+  snippet: string;
+  source?: string;
+  scope?: 'user' | 'project';
+}
+
+/** Source web citée après un appel `web_search`. */
+export interface WebSearchCitation {
+  url: string;
+  title: string;
+  snippet?: string;
+}
+
 export interface ChatMessage {
   id: string;
   parentId?: string | null;
@@ -184,6 +201,8 @@ export interface ChatMessage {
   pendingConfirmation?: ChatConfirmation | null;
   /** Plan proposé par l'agent (mode planification). */
   pendingPlan?: ChatProposedPlan | null;
+  /** Au moins un plan a déjà été proposé dans ce tour (replan). */
+  planSeenInTurn?: boolean;
   /** Texte de raisonnement persisté (rejoué au backend lors des tours suivants). */
   thinking?: string | null;
   /** Pièces jointes au message (côté user). Snapshots métadonnées après envoi. */
@@ -191,6 +210,8 @@ export interface ChatMessage {
   streaming?: boolean;
   /** Carte d'avis personas (mode 1, distincte du message assistant). */
   personasOpinion?: PersonasOpinionCard | null;
+  /** Souvenirs cités lors de la génération (injection mémoire agent). */
+  memoryCitations?: MemoryCitation[];
   /** Compteur interne pour le virtual scroller pendant le streaming. */
   _contentRev?: number;
   createdAt: string;
@@ -237,6 +258,7 @@ export type ChatStreamEventType =
   | 'plan_proposed'
   | 'compaction'
   | 'fallback'
+  | 'memory_citations'
   | 'done'
   | 'error';
 
@@ -327,6 +349,10 @@ export interface ChatCompactionInfo {
   summaryFailed?: boolean;
 }
 
+export interface ChatStreamMemoryCitationsData {
+  citations: MemoryCitation[];
+}
+
 export interface ChatStreamDoneData {
   content: string;
   input_tokens?: number | null;
@@ -370,6 +396,7 @@ export type ChatStreamEvent =
   | { type: 'plan_proposed'; data: ChatStreamPlanProposedData }
   | { type: 'compaction'; data: ChatStreamCompactionData }
   | { type: 'fallback'; data: ChatStreamFallbackData }
+  | { type: 'memory_citations'; data: ChatStreamMemoryCitationsData }
   | { type: 'work_started'; data: ChatStreamWorkStartedData }
   | { type: 'work_terminal'; data: ChatStreamWorkTerminalData }
   | { type: 'done'; data: ChatStreamDoneData }
@@ -389,7 +416,7 @@ export interface PersonasOpinionBlock {
   avatarColor: string;
   avatarIcon?: string;
   content: string;
-  memoryCitations?: string[];
+  memoryCitations?: MemoryCitation[];
   memoryCited?: boolean;
   streaming?: boolean;
 }

@@ -8,6 +8,7 @@ import type {
   ChatMessagePart,
   ChatPlanStep,
   ChatProposedPlan,
+  MemoryCitation,
   ChatStreamCompactionData,
   ChatStreamEvent,
   ChatStreamFallbackData,
@@ -136,6 +137,26 @@ function parsePlanSteps(raw: unknown): ChatPlanStep[] {
     .filter((s): s is ChatPlanStep => s !== null);
 }
 
+function parseMemoryCitations(raw: unknown): MemoryCitation[] {
+  if (!Array.isArray(raw)) return [];
+  const citations: MemoryCitation[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const id = String(record.id ?? '').trim();
+    const snippet = String(record.snippet ?? '').trim();
+    if (!id || !snippet) continue;
+    const scope = record.scope === 'user' ? 'user' : 'project';
+    citations.push({
+      id,
+      snippet,
+      source: typeof record.source === 'string' ? record.source : undefined,
+      scope,
+    });
+  }
+  return citations;
+}
+
 /** Mappe un event SSE Python vers le format interne du front (testable). */
 export function mapPythonSseEvent(
   event: RawChatStreamEvent,
@@ -224,6 +245,13 @@ export function mapPythonSseEvent(
         type: 'thinking_end',
         data: {
           thinkingId: String(data.thinking_id ?? ''),
+        },
+      };
+    case 'memory_citations':
+      return {
+        type: 'memory_citations',
+        data: {
+          citations: parseMemoryCitations(data.citations),
         },
       };
     case 'done':
@@ -646,6 +674,12 @@ export function applyStreamEvent(
       }
       break;
     }
+    case 'memory_citations': {
+      if (event.data.citations.length) {
+        assistant.memoryCitations = event.data.citations;
+      }
+      break;
+    }
     case 'done': {
       assistant.streaming = false;
       const finalContent = event.data.content;
@@ -695,11 +729,14 @@ export function applyStreamEvent(
       break;
     }
     case 'plan_proposed': {
+      const isReplan = Boolean(assistant.planSeenInTurn);
+      assistant.planSeenInTurn = true;
       const plan: ChatProposedPlan = {
         planId: event.data.planId,
         steps: event.data.steps,
         rationale: event.data.rationale,
         status: 'pending',
+        isReplan,
       };
       assistant.pendingPlan = plan;
       onConfirmationRequest?.();
@@ -875,7 +912,7 @@ export async function resolveAgentPluginDataDir(
 export function useChatStream(
   options: UseChatStreamOptions,
 ): UseChatStreamReturn {
-  const { locale, settingsLocked, permissionsNetwork } = useAppSettings();
+  const { locale, settingsLocked, permissionsNetwork, confirmBeforeWriteEffective } = useAppSettings();
   const { activePluginIds, getPluginDataDir } = usePlugins();
   // ref (profond) : les objets messages sont réactifs, donc muter
   // `assistant.content` déclenche directement le rendu. Pas de clonage du
@@ -1243,6 +1280,7 @@ export function useChatStream(
           locale.value,
         ),
         options.browserPilotagePaused?.value ?? false,
+        confirmBeforeWriteEffective.value,
       );
 
       const workspaceDataDir = options.workspaceDataDir?.value;

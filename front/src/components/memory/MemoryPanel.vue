@@ -96,7 +96,12 @@
     </div>
 
     <ul v-else class="memory-panel__list" role="list">
-      <li v-for="item in displayItems" :key="item.id" class="memory-panel__item">
+      <li
+        v-for="item in displayItems"
+        :key="item.id"
+        class="memory-panel__item"
+        :class="{ 'memory-panel__item--highlight': item.id === props.highlightMemoryId }"
+      >
         <p class="memory-panel__content">{{ item.content }}</p>
         <div class="memory-panel__meta">
           <span v-if="item.source" class="memory-panel__source">{{ sourceLabel(item.source) }}</span>
@@ -181,6 +186,7 @@ import type { MemoryItem, MemoryScope } from '@services/aiSidecar';
 
 const props = defineProps<{
   workspaceDataDir: string | null;
+  highlightMemoryId?: string | null;
 }>();
 
 const { t, locale } = useI18n();
@@ -532,6 +538,11 @@ onMounted(() => {
   border-left: 3px solid var(--wp-violet);
   border-radius: var(--wp-r-md);
   background: var(--wp-surface);
+}
+
+.memory-panel__item--highlight {
+  background: var(--wp-violet-soft);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--wp-violet) 35%, transparent);
 }
 
 .memory-panel__content {

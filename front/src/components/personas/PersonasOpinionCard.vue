@@ -49,22 +49,17 @@
           :streaming="!!opinion.streaming"
         />
         <p
-          v-if="opinion.memoryCited"
+          v-if="opinion.memoryCited && !opinion.memoryCitations?.length"
           class="personas-opinion-card__memory"
         >
           <Lucide name="brain" size="12" color="wp-violet" />
           <span>{{ t('personas.opinion.memoryCited') }}</span>
         </p>
-        <ul
+        <MemoryCitationsBar
           v-else-if="opinion.memoryCitations?.length"
           class="personas-opinion-card__citations"
-          role="list"
-        >
-          <li v-for="(cite, i) in opinion.memoryCitations" :key="i">
-            <Lucide name="brain" size="12" color="wp-violet" />
-            <span>{{ cite }}</span>
-          </li>
-        </ul>
+          :citations="opinion.memoryCitations"
+        />
       </section>
 
       <footer v-if="!card.streaming" class="personas-opinion-card__actions">
@@ -93,6 +88,7 @@ import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
 import MessageTextPart from '@components/chat/MessageTextPart.vue';
+import MemoryCitationsBar from '@components/chat/MemoryCitationsBar.vue';
 import type { PersonasOpinionCard } from '#types';
 
 defineProps<{
@@ -242,23 +238,7 @@ const expanded = ref(true);
 }
 
 .personas-opinion-card__citations {
-  list-style: none;
   margin: var(--wp-space-2) 0 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-1);
-
-  li {
-    display: flex;
-    align-items: flex-start;
-    gap: var(--wp-space-2);
-    font-size: var(--wp-fs-xs);
-    color: var(--wp-violet);
-    padding: var(--wp-space-1) var(--wp-space-2);
-    background: var(--wp-violet-soft);
-    border-radius: var(--wp-r-sm);
-  }
 }
 
 .personas-opinion-card__actions {

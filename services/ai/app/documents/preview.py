@@ -80,17 +80,10 @@ async def render_preview(
         }
 
     if preview_type == "pdf":
-        extractor = LocalExtractor(limits=limits)
-        extracted = await extractor.extract(
-            content=content,
-            filename=path.name,
-            mime_type="application/pdf",
-        )
-        text = html.escape(extracted.text or "")
         return {
             "type": "pdf",
             "title": title,
-            "html": f"<pre>{text}</pre>",
+            "html": _render_pdf_html(content, limits=limits),
         }
 
     text = content.decode("utf-8", errors="replace")
@@ -101,6 +94,13 @@ async def render_preview(
         "title": title,
         "html": f"<pre>{html.escape(text)}</pre>",
     }
+
+
+def _render_pdf_html(content: bytes, *, limits: Limits = DEFAULT_LIMITS) -> str:
+    extractor = LocalExtractor(limits=limits)
+    extracted = extractor._extract_pdf(content, "preview.pdf")
+    text = html.escape(extracted.text or "")
+    return f"<pre>{text}</pre>"
 
 
 def _render_docx_html(content: bytes) -> str:

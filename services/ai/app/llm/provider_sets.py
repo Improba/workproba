@@ -64,7 +64,12 @@ MISTRAL_BUILTIN_SET = ProviderSet(
     ),
     ocr=ProviderSetOcr(provider="mistral", mode="auto"),
     vision=ProviderSetVision(mode="chat"),
-    capabilities=ProviderSetCapabilities(reasoning="medium", vision=True, tools=True),
+    capabilities=ProviderSetCapabilities(
+        reasoning="medium",
+        vision=True,
+        tools=True,
+        web_search=True,
+    ),
     is_default=True,
     is_builtin=True,
 )
@@ -87,7 +92,12 @@ OLLAMA_BUILTIN_SET = ProviderSet(
     ),
     ocr=None,
     vision=ProviderSetVision(mode="chat"),
-    capabilities=ProviderSetCapabilities(reasoning="low", vision=False, tools=True),
+    capabilities=ProviderSetCapabilities(
+        reasoning="low",
+        vision=False,
+        tools=True,
+        web_search=True,
+    ),
     is_default=False,
     is_builtin=True,
 )
@@ -191,8 +201,21 @@ def resolve_vision_mode(provider_set: ProviderSet) -> str:
 
 
 def set_capabilities(provider_set: ProviderSet) -> ProviderSetCapabilities:
-    """Capacités déclarées du set (reasoning, vision, tools)."""
-    return provider_set.capabilities
+    """Capacités effectives du set (reasoning, vision, tools, web_search)."""
+    caps = provider_set.capabilities.model_copy()
+    if caps.web_search:
+        return caps
+    chat = provider_set.chat
+    if chat and chat.provider:
+        from app.web_search.support import provider_has_web_search_backend
+
+        if provider_has_web_search_backend(chat.provider):
+            return caps.model_copy(update={"web_search": True})
+    return caps
+
+
+def web_search_is_supported(provider_set: ProviderSet) -> bool:
+    return set_capabilities(provider_set).web_search
 
 
 def ocr_is_supported(provider_set: ProviderSet) -> bool:

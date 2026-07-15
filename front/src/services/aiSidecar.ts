@@ -55,6 +55,7 @@ export interface AgentTurnPayload {
   plugin_data_dir?: string;
   settings_locked?: boolean;
   permissions_network?: boolean;
+  confirm_before_write?: boolean;
   browser_pilotage_paused?: boolean;
 }
 
@@ -240,6 +241,7 @@ export function buildAgentTurnPayload(
   pluginDataDir?: string | null,
   security?: SidecarSecurityContext | null,
   browserPilotagePaused?: boolean | null,
+  confirmBeforeWrite?: boolean | null,
 ): AgentTurnPayload {
   const projectDocs = documents.map((doc) => ({
     id: doc.relativePath,
@@ -285,6 +287,7 @@ export function buildAgentTurnPayload(
     settings_locked: security?.settingsLocked ?? undefined,
     permissions_network: security?.permissionsNetwork ?? undefined,
     browser_pilotage_paused: browserPilotagePaused ? true : undefined,
+    confirm_before_write: confirmBeforeWrite === false ? false : undefined,
   };
 }
 
@@ -789,24 +792,33 @@ export async function fetchPreviewChange(opts: {
   workspaceDataDir: string;
   projectPath: string;
   filePath: string;
-  proposedContent: string;
+  proposedContent?: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
 }): Promise<PreviewChangeResult | null> {
   if (!isSafeRelativePath(opts.filePath)) {
     return null;
   }
   try {
+    const body: Record<string, unknown> = {
+      workspace_data_dir: opts.workspaceDataDir,
+      project_path: opts.projectPath,
+      file_path: opts.filePath,
+      proposed_content: opts.proposedContent ?? '',
+    };
+    if (opts.toolName) {
+      body.tool_name = opts.toolName;
+    }
+    if (opts.toolArgs) {
+      body.tool_args = opts.toolArgs;
+    }
     const response = await fetch(`${getAiSidecarUrl()}/documents/preview-change`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Secret': getDesktopSecret(),
       },
-      body: JSON.stringify({
-        workspace_data_dir: opts.workspaceDataDir,
-        project_path: opts.projectPath,
-        file_path: opts.filePath,
-        proposed_content: opts.proposedContent,
-      }),
+      body: JSON.stringify(body),
     });
     if (!response.ok) return null;
     return (await response.json()) as PreviewChangeResult;
@@ -885,10 +897,15 @@ export interface PersonaInfo {
   avatar_icon?: string;
 }
 
+export type PersonaSetProvenance = 'managed' | 'personal' | 'integrated';
+
 export interface PersonaSet {
   id: string;
   name: string;
   personas: PersonaInfo[];
+  provenance?: PersonaSetProvenance;
+  managed_catalog_id?: string;
+  managed_version?: string;
 }
 
 function parseSseEvents(buffer: string): {

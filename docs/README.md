@@ -29,6 +29,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 - **[provider-sets-reasoning.md](./provider-sets-reasoning.md)**: Provider set catalog, reasoning effort clamping (Mistral none/high), front/back alignment
 - **[stack.md](./stack.md)**: Component versions, ports, environment variables, dev commands
 - **[workspace-storage.md](./workspace-storage.md)**: Per-space storage and global user data (Space UX, `{app_data}/spaces/`, migration from legacy `workspaces/`)
+- **[capacites.md](./capacites.md)**: Activatable capabilities hub (guided mode, FR/EN UI)
 - **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, hybrid ranking, embedding cache, promotion, cross-session recall
 - **[plugins.md](./plugins.md)**: Plugin system, capabilities, Regards métier — honest implementation status
 - **[browser.md](./browser.md)**: Browser plugin (Playwright, agent tools, live view, security)

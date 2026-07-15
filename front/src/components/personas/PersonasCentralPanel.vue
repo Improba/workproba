@@ -110,6 +110,13 @@
                 @click="onSelectSet(set.id)"
               >
                 <span class="personas-central__set-name">{{ set.name }}</span>
+                <span
+                  v-if="set.provenance"
+                  class="personas-central__set-provenance"
+                  :data-provenance="set.provenance"
+                >
+                  {{ personaSetProvenanceLabel(set.provenance) }}
+                </span>
                 <span class="personas-central__set-count">
                   {{ t('personas.panel.personaCount', { count: set.personas.length }) }}
                 </span>
@@ -127,6 +134,13 @@
           </ul>
           <button type="button" class="personas-central__set-create" @click="openSetEditor()">
             {{ t('personas.sets.edit.create') }}
+          </button>
+          <button
+            type="button"
+            class="personas-central__set-create personas-central__set-create--persona"
+            @click="openPersonaEditor()"
+          >
+            {{ t('personas.personaEditor.createAction') }}
           </button>
           <p class="personas-central__set-note">{{ t('personas.sets.edit.localOnlyNote') }}</p>
           <p class="personas-central__cost">
@@ -176,6 +190,12 @@
         </footer>
       </form>
     </q-dialog>
+
+    <PersonaCustomEditorDialog
+      v-model:open="personaEditorOpen"
+      :persona="editingPersona"
+      @save="onSavePersonaEditor"
+    />
   </div>
 </template>
 
@@ -187,9 +207,11 @@ import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
 import PersonasConfidentialityHint from '@components/personas/PersonasConfidentialityHint.vue';
 import PersonasHistoryPanel from '@components/personas/PersonasHistoryPanel.vue';
+import PersonaCustomEditorDialog from '@components/personas/PersonaCustomEditorDialog.vue';
 import { useAppSettings } from '@composables/useAppSettings';
 import {
   estimateSessionCalls,
+  personaSetProvenanceLabel,
   usePersonas,
   type DiscussionMessage,
 } from '@composables/usePersonas';
@@ -227,6 +249,7 @@ const {
   listDiscussions,
   listCustomSets,
   saveCustomSet,
+  saveCustomPersona,
 } = usePersonas();
 
 const historyRef = ref<InstanceType<typeof PersonasHistoryPanel> | null>(null);
@@ -237,6 +260,8 @@ const editingSet = ref<PersonaSet | null>(null);
 const setEditorName = ref('');
 const setEditorPersonaIds = ref<string[]>([]);
 const advancedOpen = ref(false);
+const personaEditorOpen = ref(false);
+const editingPersona = ref<PersonaInfo | null>(null);
 
 const showAdvanced = computed(() => settingsMode.value === 'advanced');
 
@@ -301,6 +326,31 @@ async function saveSetEditor(): Promise<void> {
   });
   setActiveSet(id);
   setEditorOpen.value = false;
+}
+
+function openPersonaEditor(persona?: PersonaInfo): void {
+  editingPersona.value = persona ?? null;
+  personaEditorOpen.value = true;
+}
+
+async function onSavePersonaEditor(payload: {
+  id?: string;
+  name: string;
+  role: string;
+  systemPrompt: string;
+}): Promise<void> {
+  if (!props.pluginDataDir) {
+    Notify.create({ message: t('personas.errors.unavailable'), color: 'negative' });
+    return;
+  }
+  try {
+    await saveCustomPersona(props.pluginDataDir, payload);
+    personaEditorOpen.value = false;
+    editingPersona.value = null;
+    Notify.create({ message: t('personas.personaEditor.saved'), color: 'positive', timeout: 2000 });
+  } catch {
+    Notify.create({ message: t('personas.personaEditor.saveFailed'), color: 'negative' });
+  }
 }
 
 function onResumeDiscussion(payload: {
@@ -635,6 +685,21 @@ defineExpose({
   font-size: var(--wp-fs-sm);
   font-weight: 600;
   color: var(--wp-text);
+}
+
+.personas-central__set-provenance {
+  align-self: flex-start;
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-surface-2);
+  color: var(--wp-text-muted);
+
+  &[data-provenance='managed'] {
+    color: var(--wp-gold);
+    background: var(--wp-gold-soft);
+  }
 }
 
 .personas-central__set-count {

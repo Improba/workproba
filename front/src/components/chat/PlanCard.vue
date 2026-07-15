@@ -3,11 +3,13 @@
     class="plan-card"
     data-testid="plan-card"
     role="region"
-    :aria-label="t('chat.plan.proposed')"
+    :aria-label="plan.isReplan ? t('chat.plan.updated') : t('chat.plan.proposed')"
   >
     <header class="plan-card__header">
       <Lucide name="list-checks" size="16" color="accent" />
-      <h3 class="plan-card__title">{{ t('chat.plan.proposed') }}</h3>
+      <h3 class="plan-card__title">
+        {{ plan.isReplan ? t('chat.plan.updated') : t('chat.plan.proposed') }}
+      </h3>
     </header>
 
     <p v-if="plan.rationale" class="plan-card__rationale">

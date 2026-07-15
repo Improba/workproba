@@ -36,6 +36,7 @@ vi.mock('@composables/useAppSettings', () => ({
     locale: ref('fr'),
     settingsLocked: ref(false),
     permissionsNetwork: ref(true),
+    confirmBeforeWriteEffective: ref(true),
   }),
 }));
 
@@ -236,6 +237,31 @@ describe('useChatStream — feedbacks', () => {
       },
     });
     expect(result.data.humanSummary).toBe('3 fichiers trouvés');
+  });
+
+  it('mappe memory_citations vers des citations structurées', () => {
+    const mapped = mapPythonSseEvent({
+      type: 'memory_citations',
+      data: {
+        citations: [
+          {
+            id: 'mem-1',
+            snippet: 'Budget Q3 validé',
+            source: 'manual',
+            scope: 'project',
+          },
+        ],
+      },
+    });
+    expect(mapped?.type).toBe('memory_citations');
+    expect(mapped?.data.citations).toEqual([
+      {
+        id: 'mem-1',
+        snippet: 'Budget Q3 validé',
+        source: 'manual',
+        scope: 'project',
+      },
+    ]);
   });
 
   it('mappe work_started et ignore les autres work_* sans crasher', () => {

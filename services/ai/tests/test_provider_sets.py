@@ -22,6 +22,7 @@ from app.llm.provider_sets import (
     set_capabilities,
     supported_reasoning_efforts_for_set,
     vision_is_supported,
+    web_search_is_supported,
 )
 from app.main import resolve_embedding_config
 from app.schemas import (
@@ -149,6 +150,7 @@ def test_provider_set_from_front_sidecar_fixture() -> None:
     assert medium.reasoning_efforts == ["none", "high"]
     assert large.reasoning_efforts == ["none"]
     assert small.context_window == 256000
+    assert parsed.capabilities.web_search is True
 
 
 def test_supported_reasoning_efforts_for_set() -> None:
@@ -172,9 +174,16 @@ def test_capabilities_and_vision_helpers() -> None:
     caps = set_capabilities(MISTRAL_BUILTIN_SET)
     assert caps.vision is True
     assert caps.tools is True
+    assert caps.web_search is True
     assert resolve_vision_mode(MISTRAL_BUILTIN_SET) == "chat"
     assert ocr_is_supported(MISTRAL_BUILTIN_SET)
     assert vision_is_supported(MISTRAL_BUILTIN_SET)
+
+
+def test_ollama_builtin_web_search_capability() -> None:
+    caps = set_capabilities(OLLAMA_BUILTIN_SET)
+    assert caps.web_search is True
+    assert web_search_is_supported(OLLAMA_BUILTIN_SET)
 
 
 def test_ollama_builtin_vision_not_supported() -> None:

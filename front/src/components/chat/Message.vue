@@ -153,6 +153,16 @@
         @publish="openOpinionPublish"
       />
 
+      <MemoryCitationsBar
+        v-if="message.role === 'assistant' && message.memoryCitations?.length"
+        :citations="message.memoryCitations"
+      />
+
+      <WebSearchCitationsBar
+        v-if="message.role === 'assistant' && webSearchCitations.length"
+        :citations="webSearchCitations"
+      />
+
       <PublishToProjectDialog
         v-if="message.personasOpinion"
         v-model:open="opinionPublishOpen"
@@ -229,6 +239,9 @@ import ToolCallCard from '@components/chat/ToolCallCard.vue';
 import ConfirmationCard from '@components/chat/ConfirmationCard.vue';
 import PlanCard from '@components/chat/PlanCard.vue';
 import PersonasOpinionCard from '@components/personas/PersonasOpinionCard.vue';
+import MemoryCitationsBar from '@components/chat/MemoryCitationsBar.vue';
+import WebSearchCitationsBar from '@components/chat/WebSearchCitationsBar.vue';
+import { extractWebSearchCitations } from '@utils/webSearchCitations';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { usePlugins } from '@composables/usePlugins';
 import { formatOpinionMarkdown } from '@composables/usePersonas';
@@ -280,6 +293,8 @@ const opinionPublishMarkdown = computed(() =>
     ? formatOpinionMarkdown(props.message.personasOpinion)
     : '',
 );
+
+const webSearchCitations = computed(() => extractWebSearchCitations(props.message));
 
 const opinionPublishName = computed(() => {
   const topic = props.message.personasOpinion?.question ?? t('personas.opinion.header', { topic: '' });

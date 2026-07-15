@@ -19,11 +19,11 @@ vi.mock('@composables/useDesktop', () => ({
   saveAppSettings: vi.fn(async (s: unknown) => s),
 }));
 
-vi.mock('@composables/useProject', () => ({
-  useProject: () => ({
+vi.mock('@composables/useSpace', () => ({
+  useSpace: () => ({
     activePath: ref<string | null>(null),
     activeDataDir: ref<string | null>(null),
-    workspaceTitle: ref<string | null>('Projet test'),
+    spaceTitle: ref<string | null>('Projet test'),
   }),
 }));
 
@@ -68,7 +68,7 @@ describe('WorkprobaLayout side chat', () => {
       global: {
         stubs: {
           WorkprobaTitleBar: true,
-          WorkspaceSidebar: true,
+          SpaceSidebar: true,
           RightPanel: true,
           SideChatPanel: true,
           KeyboardShortcutsHelp: true,
@@ -93,7 +93,7 @@ describe('WorkprobaLayout side chat', () => {
       global: {
         stubs: {
           WorkprobaTitleBar: true,
-          WorkspaceSidebar: true,
+          SpaceSidebar: true,
           RightPanel: true,
           SideChatPanel: true,
           KeyboardShortcutsHelp: true,
@@ -120,7 +120,7 @@ describe('WorkprobaLayout side chat', () => {
           WorkprobaTitleBar: {
             template: '<button class="toggle-side-chat" @click="$emit(\'toggle-side-chat\')" />',
           },
-          WorkspaceSidebar: true,
+          SpaceSidebar: true,
           RightPanel: true,
           SideChatPanel: true,
           KeyboardShortcutsHelp: true,

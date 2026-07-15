@@ -5,12 +5,13 @@ VERSION = "0.1.0"
 PERMISSIONS = [
     "storage:namespace",
     "project:sync",
+    "regards:managed",
     "network:improba-cloud",
     "ui:panels",
     "settings:section",
 ]
 
-TOOLS = ["sync_to_cloud"]
+TOOLS = ["sync_to_cloud", "enroll_to_cloud", "sync_managed_regards"]
 
 HOOKS: list[str] = []
 

@@ -41,14 +41,16 @@ function sidecarCatalogFields(chat: Record<string, unknown>) {
 }
 
 describe('providerSets serialization contract', () => {
-  it('providerSetToSidecar produit du snake_case avec le catalogue Mistral', () => {
+    it('providerSetToSidecar produit du snake_case avec le catalogue Mistral', () => {
     const sidecar = providerSetToSidecar(MISTRAL_BUILTIN_SET);
     const chat = sidecar.chat as Record<string, unknown>;
+    const caps = sidecar.capabilities as Record<string, unknown>;
 
     expect(sidecar.id).toBe('mistral-default');
     expect(sidecar.is_default).toBe(true);
     expect(sidecar.is_builtin).toBe(true);
     expect(chat.provider).toBe('mistral');
+    expect(caps.web_search).toBe(true);
     expect(chat.api_key_ref).toBe('secrets/mistral');
     expect(chat.base_url).toBe('https://api.mistral.ai/v1');
 

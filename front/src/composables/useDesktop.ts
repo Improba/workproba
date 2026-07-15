@@ -86,6 +86,21 @@ export async function openPath(path: string): Promise<void> {
   await tauriInvoke<void>('open_path', { path });
 }
 
+/** Ouvre une URL http(s) dans le navigateur système (Tauri) ou via `window.open`. */
+export async function openExternalUrl(url: string): Promise<void> {
+  const trimmed = url.trim();
+  if (!trimmed) return;
+  if (isDesktopApp()) {
+    try {
+      await tauriInvoke<void>('open_external_url', { url: trimmed });
+      return;
+    } catch {
+      // Fallback si la commande Tauri est indisponible (tests, webview partielle).
+    }
+  }
+  window.open(trimmed, '_blank', 'noopener,noreferrer');
+}
+
 export async function revealInOs(path: string): Promise<void> {
   if (!isDesktopApp()) return;
   await tauriInvoke<void>('reveal_in_os', { path });
@@ -189,6 +204,13 @@ export async function getEnterprisePreset(): Promise<EnterprisePreset | null> {
   } catch {
     return null;
   }
+}
+
+export async function exportEnterprisePreset(): Promise<string | null> {
+  if (!isDesktopApp()) {
+    throw new Error('exportEnterprisePreset nécessite l’application bureau Tauri');
+  }
+  return tauriInvoke<string | null>('export_enterprise_preset');
 }
 
 export type { LocalDirEntry, LocalDocumentEntry, WorkspaceInfo, LlmProviderEntry, LlmProviderName, AppSettings, AppLocale, ProviderSet, PluginInfo, PluginManifest, PluginSource, EnterprisePreset };

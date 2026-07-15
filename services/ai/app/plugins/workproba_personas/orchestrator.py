@@ -56,23 +56,35 @@ async def _memory_context(
     query: str,
     *,
     locale: str,
-) -> str:
+) -> tuple[str, list[JsonDict]]:
     if rag_store is None or not query.strip():
-        return ""
+        return "", []
     try:
         hits = await rag_store.search_combined(query=query, limit=4)
     except Exception as exc:  # noqa: BLE001
         logger.warning("personas memory search failed: %s", exc)
-        return ""
+        return "", []
     if not hits:
-        return ""
+        return "", []
     lines = [t(locale, "personas.memory_context_header")]
+    citations: list[JsonDict] = []
     for hit in hits:
         title = hit.get("title") or hit.get("document_id") or ""
         content = str(hit.get("content") or "").strip()
         if content:
             lines.append(f"- [{title}] {content[:400]}")
-    return "\n".join(lines)
+            memory_id = str(hit.get("memory_id") or hit.get("id") or title or "")
+            if memory_id:
+                snippet = content if len(content) <= 120 else f"{content[:119]}…"
+                citations.append(
+                    {
+                        "id": memory_id,
+                        "snippet": snippet,
+                        "source": str(hit.get("source") or title or ""),
+                        "scope": str(hit.get("memory_scope") or "project"),
+                    }
+                )
+    return "\n".join(lines), citations
 
 
 def _build_agent(
@@ -104,7 +116,12 @@ async def _run_persona_prompt(
     return output.strip() if isinstance(output, str) else str(output).strip()
 
 
-def _persona_opinion_entry(persona: JsonDict, content: str, *, memory_text: str) -> JsonDict:
+def _persona_opinion_entry(
+    persona: JsonDict,
+    content: str,
+    *,
+    memory_citations: list[JsonDict],
+) -> JsonDict:
     name = str(persona.get("name") or persona.get("id") or "")
     return {
         "persona_id": persona.get("id"),
@@ -113,7 +130,8 @@ def _persona_opinion_entry(persona: JsonDict, content: str, *, memory_text: str)
         "avatar_color": persona.get("avatar_color"),
         "avatar_icon": persona.get("avatar_icon"),
         "content": content,
-        "memory_citations": bool(memory_text),
+        "memory_citations": memory_citations,
+        "memory_cited": bool(memory_citations),
     }
 
 
@@ -213,7 +231,9 @@ async def generate_opinions(
     if not personas:
         raise ValueError("personas_not_found")
 
-    memory_text = await _memory_context(rag_store, f"{question}\n{context}", locale=locale)
+    memory_text, memory_citations = await _memory_context(
+        rag_store, f"{question}\n{context}", locale=locale
+    )
     user_prompt = prompts.build_opinion_user_prompt(
         question=question,
         context=context,
@@ -229,7 +249,9 @@ async def generate_opinions(
         locale=locale,
     )
     for persona, content in parallel_results:
-        opinions.append(_persona_opinion_entry(persona, content, memory_text=memory_text))
+        opinions.append(
+            _persona_opinion_entry(persona, content, memory_citations=memory_citations)
+        )
     return opinions, warnings
 
 
@@ -253,7 +275,9 @@ async def stream_ask(
         yield {"type": "error", "code": "personas_not_found"}
         return
 
-    memory_text = await _memory_context(rag_store, f"{question}\n{context}", locale=locale)
+    memory_text, memory_citations = await _memory_context(
+        rag_store, f"{question}\n{context}", locale=locale
+    )
     user_prompt = prompts.build_opinion_user_prompt(
         question=question,
         context=context,
@@ -269,7 +293,7 @@ async def stream_ask(
     ):
         yield {
             "type": "persona_opinion",
-            **_persona_opinion_entry(persona, content, memory_text=memory_text),
+            **_persona_opinion_entry(persona, content, memory_citations=memory_citations),
         }
     yield {"type": "done"}
 
@@ -316,7 +340,9 @@ async def stream_meeting(
         yield {"type": "error", "code": "personas_not_found", "meeting_id": resolved_meeting_id}
         return
 
-    memory_text = await _memory_context(rag_store, f"{topic}\n{context}", locale=locale)
+    memory_text, _memory_citations = await _memory_context(
+        rag_store, f"{topic}\n{context}", locale=locale
+    )
     turns: list[JsonDict] = []
 
     yield {
@@ -448,7 +474,9 @@ async def stream_discuss(
 
     memory_text = ""
     if include_memory:
-        memory_text = await _memory_context(rag_store, f"{message}\n{context}", locale=locale)
+        memory_text, _ = await _memory_context(
+            rag_store, f"{message}\n{context}", locale=locale
+        )
     responses: list[JsonDict] = []
     working_messages = list(messages)
 

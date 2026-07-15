@@ -131,7 +131,7 @@ export default [
     },
     rules: {
       '@intlify/vue-i18n/no-raw-text': [
-        'warn',
+        'error',
         {
           ignorePattern: '^[-#:()&*%+]+$',
           ignoreNodes: ['v-icon', 'q-icon'],

@@ -46,6 +46,8 @@ Personas example:
 ```
 {app_data}/plugins/workproba.personas/
 ├── sets.json
+├── managed/{catalog_id}/{version}/catalog.json
+├── managed/state.json
 ├── meetings/{meeting_id}/transcript.json
 └── discussions/{discussion_id}/messages.json
 ```
@@ -95,6 +97,19 @@ See [personas-ui.md](../../workproba-improba/roadmaps/personas-ui.md).
 
 If active: `ask_personas`, `simulate_meeting`.
 
+### ManagedRegardsPort (V3 scaffold)
+
+Enterprise regards catalogs are installed in the **personas plugin namespace only**. The cloud plugin never reads `workproba.personas/` directly; it calls the typed port with permission `regards:managed`.
+
+| Operation | HTTP (sidecar) | Storage |
+|---|---|---|
+| List installed catalogs | `GET /plugins/personas/managed` | `managed/{catalog_id}/{version}/` |
+| Install signed bundle | `POST /plugins/personas/managed/install` | verifies Ed25519 or HMAC-SHA256 |
+| Activate catalog | `POST /plugins/personas/managed/{id}/activate` | `managed/state.json` |
+| Remove revoked version | `DELETE /plugins/personas/managed/{id}/{version}` | deletes version dir |
+
+Active managed catalogs appear in `GET /plugins/personas/sets` with `provenance: "managed"` (UI badge: administré). Builtin set uses `integrated`; custom sets use `personal`.
+
 ## Project plugin (`workproba.projet`)
 
 Internal project management and artifact publishing. Disabled by default; discoverable via Capabilities hub. Contextual hint in document preview opens the hub (focus Projects). Publishing requires Human Approval Gate (`effect: publish`).
@@ -104,7 +119,7 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 ## Experimental plugins
 
 - **Browser**: see [browser.md](./browser.md)
-- **Cloud plugin** (`workproba.cloud`): local mount sync via **`ProjectSyncPort`** and `project:sync` permission (PR 4). V3: plan de contrôle SaaS via `workproba-cloud/` — see [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md). No direct project namespace access. Bidirectional sync deferred to V3.
+- **Cloud plugin** (`workproba.cloud`): local mount sync via **`ProjectSyncPort`** and `project:sync` permission (PR 4). V3 scaffold: **`CloudControlPlaneClient`** (`enroll_to_cloud`, `sync_managed_regards` tools; `/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`) pulls signed regards via **`ManagedRegardsPort`**. Plan de contrôle SaaS: `workproba-cloud/` — see [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md). No direct project or personas namespace access.
 
 ## Local plugins
 

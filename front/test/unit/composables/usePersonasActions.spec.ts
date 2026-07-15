@@ -23,9 +23,9 @@ vi.mock('vue-router', () => ({
   useRoute: () => routeRef.value,
 }));
 
-vi.mock('@composables/useProject', () => ({
-  useProject: () => ({
-    activeWorkspaceId: ref('ws-1'),
+vi.mock('@composables/useSpace', () => ({
+  useSpace: () => ({
+    activeSpaceId: ref('ws-1'),
     activePath: ref('/tmp/project'),
   }),
 }));

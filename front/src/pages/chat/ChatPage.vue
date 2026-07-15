@@ -112,7 +112,7 @@ import { setLlmSessionContext } from '@composables/useLlmSessionContext';
 import { buildSessionAwareLlmConfigs, buildUtilityLlmConfig } from '@utils/llmRouting';
 import { isProvisionalConversationTitle } from '@utils/conversationTitle';
 import { openLocalFile } from '@composables/useDesktop';
-import { useProject } from '@composables/useProject';
+import { useSpace } from '@composables/useSpace';
 import { clearExpansionState } from '@composables/useToolCallExpansion';
 import { createSessionLoadGuard } from '@composables/useSessionLoadGuard';
 import { bumpSessions } from '@composables/useSessionSync';
@@ -160,7 +160,7 @@ const lastSummaryTurn = ref(0);
 const chatViewRef = ref<InstanceType<typeof ChatView> | null>(null);
 const sessionLoadGuard = createSessionLoadGuard();
 
-const { activePath, activeDataDir, workspaceTitle, documents } = useProject();
+const { activePath, activeDataDir, spaceTitle, documents } = useSpace();
 const { settingsMode, settingsLocked, activeChatRouting, activeSet } = useAppSettings();
 const { setStreaming, setSidecarState } = useChatActivity();
 const { isPersonasPluginActive, isProjetPluginActive, getPluginDataDir } = usePlugins();
@@ -257,7 +257,7 @@ const {
   sessionId: toRef(() => sessionId.value),
   projectPath: activePath,
   workspaceDataDir: activeDataDir,
-  workspaceTitle,
+  spaceTitle,
   documents,
   uiMode,
   reasoningEffort: sessionReasoningOverride,

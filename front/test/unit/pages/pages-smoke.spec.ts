@@ -8,14 +8,14 @@ vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));
 
-vi.mock('@composables/useProject', () => ({
-  useProject: () => ({
+vi.mock('@composables/useSpace', () => ({
+  useSpace: () => ({
     activePath: ref<string | null>(null),
-    activeWorkspaceId: ref<string | null>(null),
+    activeSpaceId: ref<string | null>(null),
     loading: ref(false),
     error: ref<string | null>(null),
     openSpace: vi.fn(),
-    workspaceTitle: ref<string | null>(null),
+    spaceTitle: ref<string | null>(null),
   }),
 }));
 

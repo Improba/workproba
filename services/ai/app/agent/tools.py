@@ -87,6 +87,93 @@ def _retry(exc: Exception) -> ModelRetry:
     return ModelRetry(f"{type(exc).__name__}: {exc}")
 
 
+def select_memories_for_injection(
+    *,
+    workspace_data_dir: Path | None,
+    query: str,
+    prepared_tagged_memories: tuple[dict, ...] | list[dict] | None = None,
+    memory_query_embedding: tuple[float, ...] | None = None,
+    memory_item_embeddings: dict[str, tuple[float, ...]] | None = None,
+) -> list[dict]:
+    """Sélectionne les souvenirs injectés dans le prompt agent (ordre d'injection)."""
+    from app.agent.memory_ranking import (
+        dedupe_memories_keep_order,
+        rank_memories_hybrid,
+    )
+    from app.config import get_settings
+
+    if workspace_data_dir is None:
+        return []
+
+    settings = get_settings()
+    topk = settings.memory_prompt_topk
+    recent_floor = settings.memory_prompt_recent_floor
+
+    if prepared_tagged_memories is not None:
+        tagged = list(prepared_tagged_memories)
+    else:
+        from app.memory_stores import open_memory_store_for_scope
+
+        def _collect(scope: str) -> list[dict]:
+            try:
+                store = open_memory_store_for_scope(scope, workspace_data_dir)
+            except Exception:
+                return []
+            try:
+                return [{**item, "_scope": scope} for item in store.list_memories()]
+            finally:
+                store.close()
+
+        tagged = dedupe_memories_keep_order(_collect("user") + _collect("project"))
+
+    if not tagged:
+        return []
+
+    chronological = list(reversed(tagged))
+    recent = chronological[-recent_floor:] if recent_floor > 0 else []
+    remaining_k = max(0, topk - len(recent))
+    ranked = rank_memories_hybrid(
+        chronological,
+        query,
+        remaining_k,
+        query_embedding=memory_query_embedding,
+        item_embeddings=memory_item_embeddings,
+        semantic_weight=settings.memory_ranking_semantic_weight,
+        min_semantic_score=settings.memory_ranking_min_semantic_score,
+    )
+    recent_keys = {
+        str(item.get("content", "")).strip().lower() for item in recent
+    }
+    selected = recent + [
+        item
+        for item in ranked
+        if str(item.get("content", "")).strip().lower() not in recent_keys
+    ]
+    return selected[:topk]
+
+
+def memory_citations_from_items(items: list[dict], *, snippet_len: int = 120) -> list[dict]:
+    """Formate les souvenirs sélectionnés pour l'UI (citations cliquables)."""
+    citations: list[dict] = []
+    for item in items:
+        content = str(item.get("content", "")).strip().replace("\n", " ")
+        if not content:
+            continue
+        memory_id = str(item.get("id") or item.get("memory_id") or "")
+        if not memory_id:
+            continue
+        snippet = content if len(content) <= snippet_len else f"{content[: snippet_len - 1]}…"
+        citations.append(
+            {
+                "id": memory_id,
+                "snippet": snippet,
+                "source": str(item.get("source") or ""),
+                "scope": str(item.get("_scope") or "project"),
+            }
+        )
+    return citations
+
+
 def _normalize_relative_path(file_path: str) -> str:
     normalized = file_path.replace("\\", "/")
     while normalized.startswith("./"):
@@ -414,10 +501,6 @@ def build_agent(
         niveau, sans outil de lecture explicite. La persistance est assurée par
         deux bases SQLite distinctes ouvertes sans embeddings (souvenirs only).
         """
-        from app.agent.memory_ranking import (
-            dedupe_memories_keep_order,
-            rank_memories_hybrid,
-        )
         from app.config import get_settings
 
         data_dir = ctx.deps.context.workspace_data_dir
@@ -426,55 +509,15 @@ def build_agent(
             return ""
 
         settings = get_settings()
-        topk = settings.memory_prompt_topk
-        recent_floor = settings.memory_prompt_recent_floor
-        query = ctx.deps.context.last_user_query
-
-        if ctx.deps.context.prepared_tagged_memories is not None:
-            tagged = list(ctx.deps.context.prepared_tagged_memories)
-        elif data_dir is not None:
-            from app.memory_stores import open_memory_store_for_scope
-
-            def _collect(scope: str) -> list[dict]:
-                try:
-                    store = open_memory_store_for_scope(scope, data_dir)
-                except Exception:
-                    return []
-                try:
-                    return [
-                        {**item, "_scope": scope}
-                        for item in store.list_memories()
-                    ]
-                finally:
-                    store.close()
-
-            tagged = dedupe_memories_keep_order(_collect("user") + _collect("project"))
-        else:
-            tagged = []
-        if not tagged:
-            return ""
-
-        chronological = list(reversed(tagged))
-        recent = chronological[-recent_floor:] if recent_floor > 0 else []
-        remaining_k = max(0, topk - len(recent))
-        ranked = rank_memories_hybrid(
-            chronological,
-            query,
-            remaining_k,
-            query_embedding=ctx.deps.context.memory_query_embedding,
-            item_embeddings=ctx.deps.context.memory_item_embeddings,
-            semantic_weight=settings.memory_ranking_semantic_weight,
-            min_semantic_score=settings.memory_ranking_min_semantic_score,
+        selected = select_memories_for_injection(
+            workspace_data_dir=data_dir,
+            query=ctx.deps.context.last_user_query,
+            prepared_tagged_memories=ctx.deps.context.prepared_tagged_memories,
+            memory_query_embedding=ctx.deps.context.memory_query_embedding,
+            memory_item_embeddings=ctx.deps.context.memory_item_embeddings,
         )
-        recent_keys = {
-            str(item.get("content", "")).strip().lower() for item in recent
-        }
-        selected = recent + [
-            item
-            for item in ranked
-            if str(item.get("content", "")).strip().lower() not in recent_keys
-        ]
-        selected = selected[:topk]
+        if not selected:
+            return ""
 
         from app.agent.untrusted import wrap_untrusted_content
 
@@ -720,6 +763,25 @@ def build_agent(
             raise _retry(exc) from exc
 
         ctx.deps.web_search_calls += 1
+        if ctx.deps.context.plugin_data_dir is not None:
+            from app.agent.work_events import audit_details_with_work_id
+            from app.audit import log_event, resolve_app_data_dir
+
+            log_event(
+                resolve_app_data_dir(ctx.deps.context.plugin_data_dir),
+                "web_search.query",
+                "agent",
+                audit_details_with_work_id(
+                    {
+                        "query": result.get("query", query),
+                        "backend": result.get("backend"),
+                        "count": result.get("count", 0),
+                    },
+                    ctx.deps.context.work_id,
+                    session_id=ctx.deps.context.session_id,
+                ),
+                enabled=ctx.deps.context.audit_enabled,
+            )
         return result
 
     @agent.tool

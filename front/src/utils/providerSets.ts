@@ -62,7 +62,7 @@ export const MISTRAL_BUILTIN_SET: ProviderSet = {
   },
   ocr: { provider: 'mistral', mode: 'auto' },
   vision: { mode: 'chat' },
-  capabilities: { reasoning: 'medium', vision: true, tools: true },
+  capabilities: { reasoning: 'medium', vision: true, tools: true, webSearch: true },
   isDefault: true,
   isBuiltin: true,
 };
@@ -85,7 +85,7 @@ export const OLLAMA_BUILTIN_SET: ProviderSet = {
   },
   ocr: null,
   vision: { mode: 'chat' },
-  capabilities: { reasoning: 'low', vision: false, tools: true },
+  capabilities: { reasoning: 'low', vision: false, tools: true, webSearch: true },
   isDefault: false,
   isBuiltin: true,
 };
@@ -113,29 +113,43 @@ export function resolveSets(stored: ProviderSet[] | null | undefined): ProviderS
 /** Complète un set stocké avec le catalogue modèles du builtin homologue (migration douce). */
 export function enrichSetFromBuiltin(set: ProviderSet): ProviderSet {
   const template = BUILTIN_PROVIDER_SETS.find((b) => b.id === set.id);
-  if (!template?.chat.models?.length) return set;
 
-  if (!set.chat.models?.length) {
-    return {
-      ...set,
-      chat: { ...set.chat, models: template.chat.models },
+  let enriched = set;
+  if (template?.chat.models?.length) {
+    if (!set.chat.models?.length) {
+      enriched = {
+        ...set,
+        chat: { ...set.chat, models: template.chat.models },
+      };
+    } else {
+      const templateByModel = new Map(template.chat.models.map((m) => [m.model, m]));
+      const mergedModels = set.chat.models.map((stored) => {
+        const fresh = templateByModel.get(stored.model);
+        return fresh ? { ...stored, ...fresh } : stored;
+      });
+      for (const fresh of template.chat.models) {
+        if (!mergedModels.some((m) => m.model === fresh.model)) {
+          mergedModels.push(fresh);
+        }
+      }
+      enriched = {
+        ...set,
+        chat: { ...set.chat, models: mergedModels },
+      };
+    }
+  }
+
+  if (template) {
+    enriched = {
+      ...enriched,
+      capabilities: {
+        ...enriched.capabilities,
+        webSearch: enriched.capabilities.webSearch || template.capabilities.webSearch,
+      },
     };
   }
 
-  const templateByModel = new Map(template.chat.models.map((m) => [m.model, m]));
-  const mergedModels = set.chat.models.map((stored) => {
-    const fresh = templateByModel.get(stored.model);
-    return fresh ? { ...stored, ...fresh } : stored;
-  });
-  for (const fresh of template.chat.models) {
-    if (!mergedModels.some((m) => m.model === fresh.model)) {
-      mergedModels.push(fresh);
-    }
-  }
-  return {
-    ...set,
-    chat: { ...set.chat, models: mergedModels },
-  };
+  return enriched;
 }
 
 export function resolveActiveSet(
@@ -355,7 +369,7 @@ export function emptyCustomSet(): ProviderSet {
     },
     ocr: { provider: 'mistral', mode: 'auto' },
     vision: { mode: 'chat' },
-    capabilities: { reasoning: 'medium', vision: true, tools: true },
+    capabilities: { reasoning: 'medium', vision: true, tools: true, webSearch: true },
     isDefault: false,
     isBuiltin: false,
   };
@@ -420,6 +434,9 @@ export function capabilityLabels(
     if (caps.tools) {
       labels.push(t('settings.engine.capabilityTools'));
     }
+    if (caps.webSearch) {
+      labels.push(t('settings.engine.capabilityWebSearch'));
+    }
     return labels;
   }
 
@@ -428,6 +445,7 @@ export function capabilityLabels(
   if (set.embeddings) labels.push('embeddings');
   if (caps.reasoning) labels.push(`reasoning:${caps.reasoning}`);
   if (caps.tools) labels.push('tools');
+  if (caps.webSearch) labels.push('web_search');
   return labels;
 }
 
@@ -464,6 +482,7 @@ export function providerSetToSidecar(set: ProviderSet): Record<string, unknown> 
       reasoning: set.capabilities.reasoning,
       vision: set.capabilities.vision,
       tools: set.capabilities.tools,
+      web_search: set.capabilities.webSearch,
     },
     is_default: set.isDefault,
     is_builtin: set.isBuiltin,
@@ -516,7 +535,7 @@ export function normalizeStoredSet(raw: ProviderSet | Record<string, unknown>): 
     return enrichSetFromBuiltin({
       ...cloneProviderSet(set),
       vision: set.vision ?? { mode: 'none' },
-      capabilities: set.capabilities ?? { reasoning: 'medium', vision: false, tools: true },
+      capabilities: set.capabilities ?? { reasoning: 'medium', vision: false, tools: true, webSearch: false },
     });
   }
   return enrichSetFromBuiltin(sidecarSetToProviderSet(raw as Record<string, unknown>));
@@ -590,6 +609,7 @@ export function sidecarSetToProviderSet(raw: Record<string, unknown>): ProviderS
         : 'medium') as ProviderSetCapabilities['reasoning'],
       vision: Boolean(capsRaw.vision),
       tools: capsRaw.tools !== false,
+      webSearch: Boolean(capsRaw.web_search ?? capsRaw.webSearch),
     },
     isDefault: Boolean(raw.is_default ?? raw.isDefault),
     isBuiltin: Boolean(raw.is_builtin ?? raw.isBuiltin),

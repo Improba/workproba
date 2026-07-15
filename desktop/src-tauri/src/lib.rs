@@ -6,7 +6,9 @@ use commands::{
     ensure_workproba_dir, find_conversation_by_id, get_active_project_path, get_app_settings,
     get_conversation, get_enterprise_preset, get_plugin_data_dir, get_workproba_dir,
     get_workspace_data_dir, get_workspace_info, install_local_plugin, is_preset_active,
+    export_enterprise_preset,
     list_conversations, list_dir_entries, list_documents, list_plugins, list_workspaces, open_path,
+    open_external_url,
     pick_project_folder, restore_last_project_path, reveal_in_os, save_app_settings,
     save_conversation, set_active_project_path, uninstall_local_plugin, update_workspace_title,
     FsWatchState, ProjectState,
@@ -65,6 +67,7 @@ pub fn run() {
             list_documents,
             list_dir_entries,
             open_path,
+            open_external_url,
             reveal_in_os,
             start_ai_sidecar,
             ai_sidecar_status,
@@ -78,6 +81,7 @@ pub fn run() {
             uninstall_local_plugin,
             get_enterprise_preset,
             is_preset_active,
+            export_enterprise_preset,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

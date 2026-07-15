@@ -26,9 +26,13 @@ def _reset_backends() -> None:
     from app.web_search import engine as engine_module
 
     engine_module.register_web_search_backend("mistral", engine_module._mistral_registered_backend)
+    engine_module.register_web_search_backend("ollama", engine_module._tavily_registered_backend)
+    engine_module.register_web_search_backend("tavily", engine_module._tavily_registered_backend)
     yield
     clear_web_search_backends()
     engine_module.register_web_search_backend("mistral", engine_module._mistral_registered_backend)
+    engine_module.register_web_search_backend("ollama", engine_module._tavily_registered_backend)
+    engine_module.register_web_search_backend("tavily", engine_module._tavily_registered_backend)
 
 
 @pytest.mark.asyncio
@@ -164,7 +168,11 @@ def _tool_context_for_provider(provider: str, *, network: bool = True) -> ToolCo
     )
 
 
-def test_web_search_available_uses_registered_backend() -> None:
+def test_web_search_available_uses_registered_backend(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "app.web_search.support.resolve_tavily_api_key",
+        lambda explicit_key=None: None,
+    )
     async def custom_backend(
         query: str,
         *,

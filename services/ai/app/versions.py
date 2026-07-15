@@ -34,7 +34,10 @@ def file_path_hash(relative_path: str) -> str:
 
 
 def versions_dir_for_file(workspace_data_dir: Path, relative_path: str) -> Path:
-    return workspace_data_dir / VERSIONS_DIR / file_path_hash(relative_path)
+    from app.memory_stores import workspace_storage_root
+
+    root = workspace_storage_root(workspace_data_dir)
+    return root / VERSIONS_DIR / file_path_hash(relative_path)
 
 
 def load_manifest(manifest_path: Path) -> list[JsonDict]:
