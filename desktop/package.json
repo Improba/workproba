@@ -1,6 +1,6 @@
 {
   "name": "workproba-desktop",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "Coque bureau Tauri d'Workproba (macOS, Linux, Windows)",
   "scripts": {
