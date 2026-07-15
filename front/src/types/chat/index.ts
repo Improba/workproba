@@ -168,6 +168,14 @@ export type ChatMessagePart =
   | ChatToolCallPart
   | ChatThinkingPart;
 
+/** Citation mémoire (souvenir injecté ou rappelé par l'agent). */
+export interface MemoryCitation {
+  id: string;
+  snippet: string;
+  source?: string;
+  scope?: 'user' | 'project';
+}
+
 export interface ChatMessage {
   id: string;
   parentId?: string | null;
@@ -191,6 +199,8 @@ export interface ChatMessage {
   streaming?: boolean;
   /** Carte d'avis personas (mode 1, distincte du message assistant). */
   personasOpinion?: PersonasOpinionCard | null;
+  /** Souvenirs cités lors de la génération (injection mémoire agent). */
+  memoryCitations?: MemoryCitation[];
   /** Compteur interne pour le virtual scroller pendant le streaming. */
   _contentRev?: number;
   createdAt: string;
@@ -237,6 +247,7 @@ export type ChatStreamEventType =
   | 'plan_proposed'
   | 'compaction'
   | 'fallback'
+  | 'memory_citations'
   | 'done'
   | 'error';
 
@@ -327,6 +338,10 @@ export interface ChatCompactionInfo {
   summaryFailed?: boolean;
 }
 
+export interface ChatStreamMemoryCitationsData {
+  citations: MemoryCitation[];
+}
+
 export interface ChatStreamDoneData {
   content: string;
   input_tokens?: number | null;
@@ -370,6 +385,7 @@ export type ChatStreamEvent =
   | { type: 'plan_proposed'; data: ChatStreamPlanProposedData }
   | { type: 'compaction'; data: ChatStreamCompactionData }
   | { type: 'fallback'; data: ChatStreamFallbackData }
+  | { type: 'memory_citations'; data: ChatStreamMemoryCitationsData }
   | { type: 'work_started'; data: ChatStreamWorkStartedData }
   | { type: 'work_terminal'; data: ChatStreamWorkTerminalData }
   | { type: 'done'; data: ChatStreamDoneData }
@@ -389,7 +405,7 @@ export interface PersonasOpinionBlock {
   avatarColor: string;
   avatarIcon?: string;
   content: string;
-  memoryCitations?: string[];
+  memoryCitations?: MemoryCitation[];
   memoryCited?: boolean;
   streaming?: boolean;
 }

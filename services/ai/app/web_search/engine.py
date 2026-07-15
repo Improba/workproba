@@ -11,6 +11,11 @@ from app.web_search import config
 from app.web_search.backends import register_web_search_backend, run_registered_backend
 from app.web_search.errors import WebSearchError
 from app.web_search.mistral_backend import search_mistral
+from app.web_search.tavily_backend import (
+    parse_tavily_response,
+    resolve_tavily_api_key,
+    search_tavily,
+)
 
 SearchBackend = Callable[..., Awaitable[dict[str, Any]]]
 
@@ -51,6 +56,45 @@ async def _mistral_registered_backend(
 
 
 register_web_search_backend("mistral", _mistral_registered_backend)
+
+
+async def _tavily_registered_backend(
+    query: str,
+    *,
+    provider_set: ProviderSet | None,
+    locale: str,
+    limits: Limits,
+    premium: bool = False,
+) -> dict[str, Any]:
+    _ = (provider_set, locale, premium)
+    api_key = resolve_tavily_api_key()
+    if not api_key:
+        raise WebSearchError("web_search_unavailable")
+    raw = await search_tavily(
+        query,
+        api_key=api_key,
+        timeout_s=limits.web_search_timeout_s,
+        max_results=limits.web_search_max_results,
+    )
+    parsed = parse_tavily_response(raw, max_results=limits.web_search_max_results)
+    return _finalize(query, parsed, backend="tavily")
+
+
+register_web_search_backend("ollama", _tavily_registered_backend)
+register_web_search_backend("tavily", _tavily_registered_backend)
+
+
+async def _try_tavily_fallback(
+    query: str,
+    *,
+    limits: Limits,
+) -> dict[str, Any]:
+    return await _tavily_registered_backend(
+        query,
+        provider_set=None,
+        locale="fr",
+        limits=limits,
+    )
 
 
 class WebCitation(TypedDict):
@@ -215,11 +259,16 @@ async def search_web(
             premium=premium,
         )
     except KeyError:
+        if resolve_tavily_api_key():
+            return await _try_tavily_fallback(normalized, limits=limits)
         raise WebSearchError("web_search_unavailable") from None
-    except WebSearchError:
+    except WebSearchError as exc:
+        if registered == "mistral" and resolve_tavily_api_key():
+            try:
+                return await _try_tavily_fallback(normalized, limits=limits)
+            except WebSearchError:
+                raise exc
         raise
-    except Exception as exc:
-        raise WebSearchError("web_search_unavailable") from exc
 
     if isinstance(raw, dict) and "query" in raw and "results" in raw:
         return raw

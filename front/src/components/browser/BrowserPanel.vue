@@ -67,6 +67,21 @@
             {{ t('browser.go') }}
           </button>
         </form>
+        <section v-if="visitHistory.length" class="browser-panel__history">
+          <header class="browser-panel__history-head">
+            <h3 class="browser-panel__history-title">{{ t('browser.historyTitle') }}</h3>
+            <button type="button" class="browser-panel__history-clear" @click="clearVisitHistory">
+              {{ t('browser.historyClear') }}
+            </button>
+          </header>
+          <ul class="browser-panel__history-list" role="list">
+            <li v-for="entry in visitHistory" :key="entry">
+              <button type="button" class="browser-panel__history-link" @click="openHistoryUrl(entry)">
+                {{ entry }}
+              </button>
+            </li>
+          </ul>
+        </section>
       </div>
 
       <p v-if="pilotagePaused" class="browser-panel__paused" role="status">
@@ -196,6 +211,8 @@ const {
   lastAiAction,
   highlight,
   agentTurnActive,
+  visitHistory,
+  clearVisitHistory,
   init,
   navigate,
   refresh,
@@ -307,6 +324,11 @@ let resizeObserver: ResizeObserver | null = null;
 
 function onNavigate(): void {
   void navigate(urlDraft.value.trim());
+}
+
+function openHistoryUrl(url: string): void {
+  urlDraft.value = url;
+  void navigate(url);
 }
 
 function togglePilotage(): void {
@@ -688,5 +710,65 @@ onUnmounted(() => {
   padding: 0 var(--wp-space-3) var(--wp-space-2) calc(var(--wp-space-3) + 1.25rem);
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-faint);
+}
+
+.browser-panel__history {
+  margin-top: var(--wp-space-2);
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border-top: 1px solid var(--wp-border);
+}
+
+.browser-panel__history-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--wp-space-2);
+  margin-bottom: var(--wp-space-1);
+}
+
+.browser-panel__history-title {
+  margin: 0;
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  color: var(--wp-text-muted);
+}
+
+.browser-panel__history-clear {
+  border: none;
+  background: transparent;
+  color: var(--wp-text-faint);
+  font-size: var(--wp-fs-xs);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--wp-text-muted);
+  }
+}
+
+.browser-panel__history-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 6rem;
+  overflow: auto;
+}
+
+.browser-panel__history-link {
+  display: block;
+  width: 100%;
+  padding: 2px 0;
+  border: none;
+  background: transparent;
+  color: var(--wp-accent);
+  font-size: var(--wp-fs-xs);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 </style>

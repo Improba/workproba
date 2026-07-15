@@ -50,7 +50,8 @@
   "capabilities": {
     "reasoning": "medium",
     "vision": true,
-    "tools": true
+    "tools": true,
+    "web_search": true
   },
   "is_default": true,
   "is_builtin": true,

@@ -8,7 +8,7 @@
   "scripts": {
     "generator": "ts-node -T generator/run.ts",
     "lint": "eslint .",
-    "lint:i18n": "eslint --rule \"@intlify/vue-i18n/no-raw-text: warn\" src/",
+    "lint:i18n": "eslint src/",
     "format": "prettier --write \"**/*.{js,ts,vue,scss,html,md,json}\" --ignore-path .gitignore",
     "test:unit": "vitest run test/unit --coverage",
     "test:e2e": "yarn run playwright:install && playwright test e2e",

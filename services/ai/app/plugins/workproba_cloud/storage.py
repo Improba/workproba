@@ -41,6 +41,13 @@ def get_mount_path(plugin_data_dir: Path) -> str | None:
     return None
 
 
+def get_control_plane_base_url(plugin_data_dir: Path) -> str | None:
+    raw = load_config(plugin_data_dir).get("base_url")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
+
+
 def status(plugin_data_dir: Path) -> dict[str, Any]:
     mount_path = get_mount_path(plugin_data_dir)
     config = load_config(plugin_data_dir)

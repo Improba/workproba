@@ -253,4 +253,41 @@ describe('Message accessibilité', () => {
     expect(wrapper.find('.chat-message__thinking-placeholder').exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it('affiche les citations mémoire sur un message assistant', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-mem',
+          role: 'assistant',
+          content: 'Réponse avec mémoire.',
+          memoryCitations: [
+            {
+              id: 'mem-42',
+              snippet: 'Budget validé.',
+              source: 'agent',
+              scope: 'project',
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+          MemoryCitationsBar: {
+            props: ['citations'],
+            template: '<ul class="memory-citations-stub" />',
+          },
+        },
+      },
+    });
+
+    expect(wrapper.find('.memory-citations-stub').exists()).toBe(true);
+    wrapper.unmount();
+  });
 });

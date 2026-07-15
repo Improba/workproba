@@ -101,6 +101,8 @@ pub struct ProviderSetCapabilitiesEntry {
     pub vision: bool,
     #[serde(default = "default_tools_true")]
     pub tools: bool,
+    #[serde(default)]
+    pub web_search: bool,
 }
 
 fn default_tools_true() -> bool {
@@ -167,6 +169,7 @@ pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
                 reasoning: Some("medium".to_string()),
                 vision: true,
                 tools: true,
+                web_search: true,
             }),
             is_default: true,
             is_builtin: true,
@@ -199,6 +202,7 @@ pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
                 reasoning: Some("low".to_string()),
                 vision: false,
                 tools: true,
+                web_search: true,
             }),
             is_default: false,
             is_builtin: true,
@@ -271,6 +275,9 @@ pub struct AppSettings {
     /// Préférence d'affichage des appels d'outil dans le chat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_call_view: Option<ToolCallViewMode>,
+    /// Demander confirmation avant écriture fichier (mode avancé). Défaut true.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub confirm_before_write: Option<bool>,
     /// Mode de l'écran de réglages (guidé / avancé).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub settings_mode: Option<SettingsMode>,
@@ -317,6 +324,15 @@ pub struct AppSettings {
     /// Autorise la synchronisation projet via port typé (preset verrouillé).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions_project_sync: Option<bool>,
+    /// Autorise le réseau Improba Cloud (preset verrouillé).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions_network_improba_cloud: Option<bool>,
+    /// Endpoint du plan de contrôle cloud (preset).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_endpoint: Option<String>,
+    /// Identifiant d'organisation cloud (preset).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_org_id: Option<String>,
     /// Autorise l'exécution de code (preset verrouillé).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_execute: Option<bool>,
@@ -344,6 +360,7 @@ impl Default for AppSettings {
             sets: None,
             active_set_id: None,
             tool_call_view: None,
+            confirm_before_write: None,
             settings_mode: None,
             settings_locked: None,
             density: None,
@@ -358,6 +375,9 @@ impl Default for AppSettings {
             local_plugins_allowed: None,
             permissions_network: None,
             permissions_project_sync: None,
+            permissions_network_improba_cloud: None,
+            cloud_endpoint: None,
+            cloud_org_id: None,
             code_execute: None,
             audit_retention_days: None,
             audit_enabled: None,
@@ -566,6 +586,7 @@ mod settings_tests {
             sets: None,
             active_set_id: None,
             tool_call_view: None,
+            confirm_before_write: None,
             settings_mode: None,
             settings_locked: None,
             density: None,
@@ -580,6 +601,9 @@ mod settings_tests {
             local_plugins_allowed: None,
             permissions_network: None,
             permissions_project_sync: None,
+            permissions_network_improba_cloud: None,
+            cloud_endpoint: None,
+            cloud_org_id: None,
             code_execute: None,
             audit_retention_days: None,
             audit_enabled: None,
@@ -708,6 +732,7 @@ pub fn save_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSet
         sets,
         active_set_id,
         tool_call_view: settings.tool_call_view,
+        confirm_before_write: settings.confirm_before_write,
         settings_mode: settings.settings_mode,
         settings_locked: settings.settings_locked,
         density: settings.density,
@@ -722,6 +747,9 @@ pub fn save_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSet
         local_plugins_allowed: settings.local_plugins_allowed,
         permissions_network: settings.permissions_network,
         permissions_project_sync: settings.permissions_project_sync,
+        permissions_network_improba_cloud: settings.permissions_network_improba_cloud,
+        cloud_endpoint: settings.cloud_endpoint,
+        cloud_org_id: settings.cloud_org_id,
         code_execute: settings.code_execute,
         audit_retention_days: settings.audit_retention_days,
         audit_enabled: settings.audit_enabled,

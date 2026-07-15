@@ -107,7 +107,9 @@ async def test_stream_ask_injects_memory_context(plugin_dir: Path) -> None:
     ]
     assert captured_queries == ["Quel budget ?\n"]
     opinion = next(event for event in events if event.get("type") == "persona_opinion")
-    assert opinion.get("memory_citations") is True
+    assert opinion.get("memory_cited") is True
+    assert isinstance(opinion.get("memory_citations"), list)
+    assert len(opinion.get("memory_citations") or []) >= 1
 
 
 @pytest.mark.asyncio
@@ -126,7 +128,8 @@ async def test_stream_ask_without_rag_store_skips_memory(plugin_dir: Path) -> No
         )
     ]
     opinion = next(event for event in events if event.get("type") == "persona_opinion")
-    assert opinion.get("memory_citations") is False
+    assert opinion.get("memory_cited") is False
+    assert opinion.get("memory_citations") == []
 
 
 @pytest.mark.asyncio

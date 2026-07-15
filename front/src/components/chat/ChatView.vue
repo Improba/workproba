@@ -79,6 +79,13 @@
         :attachments="attachments"
         @remove="removeAttachment"
       />
+      <label
+        v-if="canIndexAttachments"
+        class="chat-view__memory-index"
+      >
+        <input v-model="indexAttachmentsInMemory" type="checkbox" />
+        <span>{{ t('chat.attachment.indexInMemory') }}</span>
+      </label>
       <form class="chat-view__composer-form" @submit.prevent="handleSubmit">
         <input
           ref="fileInputRef"
@@ -277,6 +284,7 @@ import {
   useChatAttachments,
 } from '@composables/useChatAttachments';
 import type { ChatAttachment, ChatMessage, ReasoningEffort } from '#types';
+import { addMemoryItem } from '@services/aiSidecar';
 import type { QInput } from 'quasar';
 import { hasSetModelChoice, supportsReasoningForSet } from '@utils/providerSetModels';
 import { supportsReasoning } from '@utils/reasoningSupport';
@@ -343,6 +351,11 @@ const {
 
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const dragCounter = ref(0);
+const indexAttachmentsInMemory = ref(false);
+
+const canIndexAttachments = computed(
+  () => Boolean(props.workspaceDataDir) && hasAttachments.value,
+);
 
 const { activeSet } = useAppSettings();
 
@@ -536,13 +549,40 @@ function handleSubmit(): void {
     return;
   if (isReading.value) return;
   const ready = attachments.value.filter((a) => a.status === 'ready');
+  const shouldIndex = indexAttachmentsInMemory.value;
   emit('send', text, ready);
+  if (shouldIndex) {
+    void indexReadyAttachments(ready);
+  }
   draft.value = '';
   clearAttachments();
+  indexAttachmentsInMemory.value = false;
   // L'utilisateur vient d'envoyer : on force le rappel en bas.
   userDetached.value = false;
   isPinned.value = true;
   void scrollToBottomStable();
+}
+
+async function indexReadyAttachments(ready: ChatAttachment[]): Promise<void> {
+  const dataDir = props.workspaceDataDir;
+  if (!dataDir) return;
+  for (const att of ready) {
+    if (att.kind !== 'text' || !att.contentBase64) continue;
+    try {
+      const binary = atob(att.contentBase64);
+      const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+      const text = new TextDecoder().decode(bytes).trim();
+      if (!text) continue;
+      await addMemoryItem(
+        dataDir,
+        text.slice(0, 8000),
+        'project',
+        [`attachment:${att.fileName}`],
+      );
+    } catch {
+      /* non bloquant */
+    }
+  }
 }
 
 function openFilePicker(): void {
@@ -798,6 +838,20 @@ onUnmounted(() => {
   margin: 0 auto;
   padding: 0.6rem 1.25rem 0.5rem;
   background: var(--wp-surface);
+}
+
+.chat-view__memory-index {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin: 0 0 var(--wp-space-1);
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-violet);
+  cursor: pointer;
+
+  input {
+    accent-color: var(--wp-violet);
+  }
 }
 
 /* Pilule : [+] [champ texte] à gauche, [modèle] [send] à droite.

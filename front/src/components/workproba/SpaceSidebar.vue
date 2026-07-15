@@ -14,7 +14,7 @@
         </button>
       </div>
 
-      <!-- Arbre workspaces / sessions -->
+      <!-- Arbre espaces / sessions -->
       <div class="wp-sidebar__tree">
         <div v-if="recentWorkspaces.length === 0" class="wp-sidebar__empty">
           <p>{{ t('shell.noSpaces') }}</p>
@@ -27,16 +27,16 @@
         <section
           v-for="ws in recentWorkspaces"
           :key="ws.id"
-          class="wp-ws"
-          :class="{ 'wp-ws--active': ws.id === activeWorkspaceId }"
+          class="wp-space"
+          :class="{ 'wp-space--active': ws.id === activeSpaceId }"
         >
-          <div class="wp-ws__row">
+          <div class="wp-space__row">
             <button
               type="button"
-              class="wp-ws__chevron"
+              class="wp-space__chevron"
               :title="isExpanded(ws.id) ? t('common.collapse') : t('common.expand')"
               :aria-expanded="isExpanded(ws.id)"
-              :aria-controls="`wp-ws-children-${ws.id}`"
+              :aria-controls="`wp-space-children-${ws.id}`"
               @click="toggleExpand(ws)"
             >
               <Lucide
@@ -48,17 +48,17 @@
 
             <button
               type="button"
-              class="wp-ws__label"
+              class="wp-space__label"
               :title="t('shell.spacePathHint', { path: ws.folderPath })"
               @click="onActivate(ws)"
             >
               <Lucide name="layers" size="16" color="wp-text-muted" />
-              <span class="wp-ws__name">{{ ws.title || basename(ws.folderPath) }}</span>
+              <span class="wp-space__name">{{ ws.title || basename(ws.folderPath) }}</span>
             </button>
 
             <button
               type="button"
-              class="wp-ws__action"
+              class="wp-space__action"
               :title="t('shell.renameSpace')"
               @click.stop="openRenameDialog(ws)"
             >
@@ -66,9 +66,9 @@
             </button>
 
             <button
-              v-if="ws.id === activeWorkspaceId"
+              v-if="ws.id === activeSpaceId"
               type="button"
-              class="wp-ws__action"
+              class="wp-space__action"
               :title="t('common.newConversation')"
               @click.stop="onNewConversation"
             >
@@ -76,14 +76,14 @@
             </button>
           </div>
 
-          <div v-if="isExpanded(ws.id)" class="wp-ws__children" :id="`wp-ws-children-${ws.id}`">
-            <div v-if="isLoading(ws.id)" class="wp-ws__hint">{{ t('common.loading') }}</div>
+          <div v-if="isExpanded(ws.id)" class="wp-space__children" :id="`wp-space-children-${ws.id}`">
+            <div v-if="isLoading(ws.id)" class="wp-space__hint">{{ t('common.loading') }}</div>
 
-            <div v-else-if="sessionsFor(ws.id).length === 0" class="wp-ws__hint">
+            <div v-else-if="sessionsFor(ws.id).length === 0" class="wp-space__hint">
               <button
-                v-if="ws.id === activeWorkspaceId"
+                v-if="ws.id === activeSpaceId"
                 type="button"
-                class="wp-ws__inline-cta"
+                class="wp-space__inline-cta"
                 @click="onNewConversation"
               >
                 <Lucide name="plus" size="13" color="text-invert" />
@@ -92,7 +92,7 @@
               <template v-else>{{ t('shell.noConversations') }}</template>
             </div>
 
-            <div v-else class="wp-ws__convos">
+            <div v-else class="wp-space__convos">
               <button
                 v-for="session in visibleSessions(ws.id)"
                 :key="session.id"
@@ -112,7 +112,7 @@
               <button
                 v-if="sessionsFor(ws.id).length > PREVIEW_COUNT"
                 type="button"
-                class="wp-ws__more"
+                class="wp-space__more"
                 @click="toggleConvos(ws.id)"
               >
                 {{ isConvosExpanded(ws.id) ? t('common.seeLess') : t('common.seeMore', { count: sessionsFor(ws.id).length - visibleSessions(ws.id).length }) }}
@@ -242,7 +242,11 @@
               <Lucide name="x" size="16" color="text-muted" />
             </button>
           </header>
-          <MemoryPanel :key="memoryDialogKey" :workspace-data-dir="activeDataDir" />
+          <MemoryPanel
+            :key="memoryDialogKey"
+            :workspace-data-dir="activeDataDir"
+            :highlight-memory-id="memoryHighlightId"
+          />
         </div>
       </q-dialog>
     </div>
@@ -262,7 +266,7 @@
       <button
         class="wp-rail-btn"
         :title="t('common.newConversation')"
-        :disabled="!activeWorkspaceId"
+        :disabled="!activeSpaceId"
         @click="onNewConversation"
       >
         <Lucide name="message-square-plus" size="18" color="wp-text-muted" />
@@ -292,7 +296,7 @@ import { useI18n } from 'vue-i18n';
 import { useRoute, useRouter } from 'vue-router';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import { useProject } from '@composables/useProject';
+import { useSpace } from '@composables/useSpace';
 import { useUserProfile } from '@composables/useUserProfile';
 import { listWorkspaces } from '@composables/useDesktop';
 import type { WorkspaceInfo } from '@composables/useDesktop.types';
@@ -300,6 +304,7 @@ import { createSession, listSessions, type LocalSession } from '@services/worksp
 import { bumpSessions, useSessionSync } from '@composables/useSessionSync';
 import { HOME_ROUTE } from '@router/meta';
 import MemoryPanel from '@components/memory/MemoryPanel.vue';
+import { useMemoryPanel } from '@composables/useMemoryPanel';
 
 const props = defineProps<{
   rail?: boolean;
@@ -316,13 +321,13 @@ const { t, locale } = useI18n();
 
 const {
   activePath,
-  activeWorkspaceId,
+  activeSpaceId,
   activeDataDir,
   openSpace,
-  switchWorkspace,
+  switchSpace,
   renameSpace,
   initFromStoredPath,
-} = useProject();
+} = useSpace();
 
 const recentWorkspaces = ref<WorkspaceInfo[]>([]);
 const expanded = reactive<Record<string, boolean>>({});
@@ -342,6 +347,8 @@ const renameTitleDraft = ref('');
 const renameSaving = ref(false);
 const memoryDialogOpen = ref(false);
 const memoryDialogKey = ref(0);
+const memoryHighlightId = ref<string | null>(null);
+const { panelRequest, clearMemoryPanelRequest } = useMemoryPanel();
 const profileNameDraft = ref(profile.value.name);
 const profileOrgDraft = ref(profile.value.organisation);
 
@@ -447,7 +454,7 @@ async function ensureSessionsLoaded(ws: WorkspaceInfo): Promise<void> {
 const refreshInFlight = new Map<string, Promise<void>>();
 
 async function refreshActiveSessions(): Promise<void> {
-  const id = activeWorkspaceId.value;
+  const id = activeSpaceId.value;
   const path = activePath.value;
   if (!id || !path) return;
 
@@ -483,18 +490,18 @@ async function toggleExpand(ws: WorkspaceInfo): Promise<void> {
 }
 
 async function onActivate(ws: WorkspaceInfo): Promise<void> {
-  if (ws.id === activeWorkspaceId.value) {
+  if (ws.id === activeSpaceId.value) {
     expanded[ws.id] = true;
     return;
   }
   expanded[ws.id] = true;
-  await switchWorkspace(ws.folderPath);
+  await switchSpace(ws.folderPath);
 }
 
 async function onOpenSpace(): Promise<void> {
   await openSpace();
   await refreshWorkspaces();
-  const id = activeWorkspaceId.value;
+  const id = activeSpaceId.value;
   if (id) expanded[id] = true;
 }
 
@@ -529,7 +536,7 @@ async function onSaveRename(): Promise<void> {
 }
 
 async function onNewConversation(): Promise<void> {
-  if (!activeWorkspaceId.value || !activePath.value) {
+  if (!activeSpaceId.value || !activePath.value) {
     Notify.create({
       message: t('shell.conversationCreateFailed'),
       classes: 'bg-danger text-white',
@@ -537,10 +544,10 @@ async function onNewConversation(): Promise<void> {
     return;
   }
   try {
-    const session = await createSession(activeWorkspaceId.value, activePath.value);
-    prependSession(activeWorkspaceId.value, session);
+    const session = await createSession(activeSpaceId.value, activePath.value);
+    prependSession(activeSpaceId.value, session);
     bumpSessions();
-    expanded[activeWorkspaceId.value] = true;
+    expanded[activeSpaceId.value] = true;
     await router.push({
       name: 'chat_session',
       params: { id: session.id },
@@ -556,8 +563,8 @@ async function onNewConversation(): Promise<void> {
 
 function onOpenSession(session: LocalSession): void {
   if (session.id === currentSessionId.value) return;
-  if (session.workspaceId !== activeWorkspaceId.value) {
-    void switchWorkspace(session.projectPath)
+  if (session.workspaceId !== activeSpaceId.value) {
+    void switchSpace(session.projectPath)
       .then(() => router.push({ name: 'chat_session', params: { id: session.id } }))
       .catch(() =>
         Notify.create({
@@ -580,8 +587,19 @@ function onOpenMemory(): void {
   memoryDialogOpen.value = true;
 }
 
+watch(panelRequest, (request) => {
+  if (!request) return;
+  memoryHighlightId.value = request.memoryId ?? null;
+  onOpenMemory();
+  clearMemoryPanelRequest();
+});
+
+watch(memoryDialogOpen, (open) => {
+  if (!open) memoryHighlightId.value = null;
+});
+
 watch(
-  activeWorkspaceId,
+  activeSpaceId,
   (id) => {
     if (!id) return;
     expanded[id] = true;
@@ -607,7 +625,7 @@ onMounted(async () => {
   await initFromStoredPath();
   await refreshWorkspaces();
   // Sans espace ouvert, seule la page chat est inaccessible ; réglages et accueil restent valides.
-  if (!activeWorkspaceId.value && route.name === 'chat_session') {
+  if (!activeSpaceId.value && route.name === 'chat_session') {
     void router.push({ name: HOME_ROUTE });
   }
 });
@@ -713,11 +731,11 @@ onMounted(async () => {
 }
 
 /* Noeud workspace */
-.wp-ws + .wp-ws {
+.wp-space + .wp-space {
   margin-top: 2px;
 }
 
-.wp-ws__row {
+.wp-space__row {
   display: flex;
   align-items: center;
   gap: var(--wp-space-1);
@@ -725,11 +743,11 @@ onMounted(async () => {
   border-radius: var(--wp-r-sm);
 }
 
-.wp-ws--active > .wp-ws__row {
+.wp-space--active > .wp-space__row {
   background: var(--wp-selection-soft);
 }
 
-.wp-ws__chevron {
+.wp-space__chevron {
   flex: none;
   width: 22px;
   height: 22px;
@@ -747,7 +765,7 @@ onMounted(async () => {
   }
 }
 
-.wp-ws__label {
+.wp-space__label {
   flex: 1;
   min-width: 0;
   display: flex;
@@ -761,7 +779,7 @@ onMounted(async () => {
   border-radius: var(--wp-r-sm);
 }
 
-.wp-ws__name {
+.wp-space__name {
   font-family: var(--wp-font-head);
   font-weight: 700;
   font-size: var(--wp-fs-sm);
@@ -771,11 +789,11 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-.wp-ws--active .wp-ws__name {
+.wp-space--active .wp-space__name {
   color: var(--wp-text);
 }
 
-.wp-ws__action {
+.wp-space__action {
   flex: none;
   width: 22px;
   height: 22px;
@@ -794,8 +812,8 @@ onMounted(async () => {
     opacity: 1;
   }
 
-  .wp-ws__row:hover &,
-  .wp-ws--active & {
+  .wp-space__row:hover &,
+  .wp-space--active & {
     opacity: 1;
   }
 
@@ -813,17 +831,17 @@ onMounted(async () => {
 }
 
 /* Sessions imbriquées */
-.wp-ws__children {
+.wp-space__children {
   padding: var(--wp-space-1) 0 var(--wp-space-2) 24px;
 }
 
-.wp-ws__hint {
+.wp-space__hint {
   padding: var(--wp-space-2);
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-faint);
 }
 
-.wp-ws__inline-cta {
+.wp-space__inline-cta {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -906,7 +924,7 @@ onMounted(async () => {
   color: var(--wp-text-faint);
 }
 
-.wp-ws__more {
+.wp-space__more {
   display: inline-flex;
   align-items: center;
   padding: var(--wp-space-1) var(--wp-space-3) var(--wp-space-1)

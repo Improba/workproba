@@ -23,6 +23,7 @@ const settingsLocked = ref(false);
 const settingsMode = ref<'guided' | 'advanced'>('guided');
 const permissionsNetwork = ref(true);
 const permissionsProjectSync = ref(true);
+const permissionsNetworkImprobaCloud = ref(true);
 const settings = ref({
   version: 1,
   providers: [],
@@ -31,6 +32,7 @@ const settings = ref({
   pluginsAllowed: null as string[] | null,
   permissionsNetwork: true,
   permissionsProjectSync: true,
+  permissionsNetworkImprobaCloud: true,
 });
 
 const openRightPanel = vi.fn();
@@ -57,6 +59,7 @@ vi.mock('@composables/useAppSettings', () => ({
     settingsMode,
     permissionsNetwork,
     permissionsProjectSync,
+    permissionsNetworkImprobaCloud,
   }),
 }));
 
@@ -111,6 +114,7 @@ describe('useCapabilities', () => {
     settingsMode.value = 'guided';
     permissionsNetwork.value = true;
     permissionsProjectSync.value = true;
+    permissionsNetworkImprobaCloud.value = true;
     activatePlugin.mockClear();
     deactivatePlugin.mockClear();
     openRightPanel.mockClear();

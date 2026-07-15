@@ -1,7 +1,7 @@
 import { useRoute, useRouter } from 'vue-router';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
-import { useProject } from '@composables/useProject';
+import { useSpace } from '@composables/useSpace';
 import {
   usePersonasNavigation,
   type PersonasNavAction,
@@ -41,7 +41,7 @@ export function usePersonasActions() {
   const router = useRouter();
   const route = useRoute();
   const { locale, t } = useI18n();
-  const { activeWorkspaceId, activePath } = useProject();
+  const { activeSpaceId, activePath } = useSpace();
   const { requestAction } = usePersonasNavigation();
   const { getFormattedContext } = useMainChatContext();
   const { openSideChat } = useSideChat();
@@ -52,7 +52,7 @@ export function usePersonasActions() {
     const fromActiveChat = getFormattedContext(locale.value).trim();
     if (fromActiveChat) return fromActiveChat;
 
-    const workspaceId = activeWorkspaceId.value;
+    const workspaceId = activeSpaceId.value;
     const projectPath = activePath.value;
     if (!workspaceId || !projectPath) return '';
 
@@ -112,7 +112,7 @@ export function usePersonasActions() {
 
   async function ensureChatSession(): Promise<boolean> {
     if (route.name === 'chat_session') return true;
-    const workspaceId = activeWorkspaceId.value;
+    const workspaceId = activeSpaceId.value;
     const projectPath = activePath.value;
     if (!workspaceId || !projectPath) {
       Notify.create({ message: t('errors.noSpaceOpen'), color: 'negative' });

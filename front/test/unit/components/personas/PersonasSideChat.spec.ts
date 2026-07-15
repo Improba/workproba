@@ -43,8 +43,8 @@ vi.mock('@composables/usePlugins', () => ({
   }),
 }));
 
-vi.mock('@composables/useProject', () => ({
-  useProject: () => ({
+vi.mock('@composables/useSpace', () => ({
+  useSpace: () => ({
     activeDataDir: ref('/tmp/workspace'),
   }),
 }));

@@ -2,7 +2,16 @@
   <q-dialog :model-value="open" @update:model-value="(v: boolean) => emit('update:open', v)">
     <div class="personas-picker" role="dialog" :aria-label="title">
       <header class="personas-picker__head">
-        <h2 class="personas-picker__title">{{ title }}</h2>
+        <div class="personas-picker__head-text">
+          <h2 class="personas-picker__title">{{ title }}</h2>
+          <span
+            v-if="provenance"
+            class="personas-picker__provenance"
+            :data-provenance="provenance"
+          >
+            {{ provenanceLabel }}
+          </span>
+        </div>
         <button
           type="button"
           class="personas-picker__close"
@@ -129,8 +138,13 @@ import { useDebounceFn } from '@vueuse/core';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
 import PersonasConfidentialityHint from '@components/personas/PersonasConfidentialityHint.vue';
-import { usePersonas } from '@composables/usePersonas';
-import type { PersonaInfo, PersonasCostEstimate, PersonasEstimateMode } from '@services/aiSidecar';
+import { personaSetProvenanceLabel, usePersonas } from '@composables/usePersonas';
+import type {
+  PersonaInfo,
+  PersonaSetProvenance,
+  PersonasCostEstimate,
+  PersonasEstimateMode,
+} from '@services/aiSidecar';
 
 const props = withDefaults(
   defineProps<{
@@ -139,6 +153,7 @@ const props = withDefaults(
     loading?: boolean;
     title: string;
     subtitle?: string;
+    provenance?: PersonaSetProvenance | null;
     confirmLabel: string;
     showTopic?: boolean;
     topicLabel?: string;
@@ -167,8 +182,11 @@ const props = withDefaults(
     initialPersonaIds: () => [],
     initialTopic: '',
     initialRounds: 3,
+    provenance: null,
   },
 );
+
+const provenanceLabel = computed(() => personaSetProvenanceLabel(props.provenance ?? undefined));
 
 const emit = defineEmits<{
   'update:open': [value: boolean];
@@ -303,6 +321,27 @@ function onConfirm(): void {
   align-items: center;
   justify-content: space-between;
   margin-bottom: var(--wp-space-2);
+}
+
+.personas-picker__head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.personas-picker__provenance {
+  align-self: flex-start;
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-surface-2);
+  color: var(--wp-text-muted);
+
+  &[data-provenance='managed'] {
+    color: var(--wp-gold);
+    background: var(--wp-gold-soft);
+  }
 }
 
 .personas-picker__title {

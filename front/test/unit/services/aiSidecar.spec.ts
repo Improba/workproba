@@ -171,6 +171,56 @@ describe('aiSidecar payload', () => {
     expect(payload.permissions_network).toBe(false);
   });
 
+  it('buildAgentTurnPayload inclut confirm_before_write quand désactivé', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [],
+      [],
+      null,
+      null,
+      null,
+      'advanced',
+      null,
+      true,
+      [],
+      'fr',
+      null,
+      null,
+      null,
+      { settingsLocked: false, permissionsNetwork: true, locale: 'fr' },
+      false,
+      false,
+    );
+    expect(payload.confirm_before_write).toBe(false);
+  });
+
+  it('buildAgentTurnPayload omet confirm_before_write quand activé', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [],
+      [],
+      null,
+      null,
+      null,
+      'advanced',
+      null,
+      true,
+      [],
+      'fr',
+      null,
+      null,
+      null,
+      { settingsLocked: false, permissionsNetwork: true, locale: 'fr' },
+      false,
+      true,
+    );
+    expect(payload.confirm_before_write).toBeUndefined();
+  });
+
   it('buildAgentTurnPayload inclut browser_pilotage_paused quand actif', () => {
     const payload = buildAgentTurnPayload(
       'sess-1',

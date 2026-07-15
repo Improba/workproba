@@ -153,6 +153,11 @@
         @publish="openOpinionPublish"
       />
 
+      <MemoryCitationsBar
+        v-if="message.role === 'assistant' && message.memoryCitations?.length"
+        :citations="message.memoryCitations"
+      />
+
       <PublishToProjectDialog
         v-if="message.personasOpinion"
         v-model:open="opinionPublishOpen"
@@ -229,6 +234,7 @@ import ToolCallCard from '@components/chat/ToolCallCard.vue';
 import ConfirmationCard from '@components/chat/ConfirmationCard.vue';
 import PlanCard from '@components/chat/PlanCard.vue';
 import PersonasOpinionCard from '@components/personas/PersonasOpinionCard.vue';
+import MemoryCitationsBar from '@components/chat/MemoryCitationsBar.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { usePlugins } from '@composables/usePlugins';
 import { formatOpinionMarkdown } from '@composables/usePersonas';

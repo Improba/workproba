@@ -21,6 +21,7 @@
         :key="pickerKey"
         :open="true"
         :personas="personas"
+        :provenance="activeSet?.provenance ?? null"
         :loading="loading"
         :title="t('personas.meeting.configTitle')"
         :subtitle="t('personas.meeting.configSubtitle')"
@@ -176,7 +177,7 @@ const emit = defineEmits<{
 }>();
 
 const { t, locale } = useI18n();
-const { findPersona } = usePersonas();
+const { findPersona, activeSet } = usePersonas();
 
 const phase = ref<'config' | 'running'>(props.meetingState ? 'running' : 'config');
 const starting = ref(false);

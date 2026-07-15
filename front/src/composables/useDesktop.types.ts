@@ -102,6 +102,7 @@ export interface ProviderSetCapabilities {
   reasoning: ProviderSetCapabilitiesReasoning;
   vision: boolean;
   tools: boolean;
+  webSearch: boolean;
 }
 
 export interface ProviderSet {
@@ -148,6 +149,9 @@ export interface EnterprisePreset {
   localPluginsAllowed?: boolean | null;
   permissionsNetwork?: boolean | null;
   permissionsProjectSync?: boolean | null;
+  permissionsNetworkImprobaCloud?: boolean | null;
+  cloudEndpoint?: string | null;
+  cloudOrgId?: string | null;
   codeExecute?: boolean | null;
   auditRetentionDays?: number | null;
   auditEnabled?: boolean | null;
@@ -161,6 +165,8 @@ export interface AppSettings {
   activeChatProviderId?: string | null;
   activeEmbeddingProviderId?: string | null;
   toolCallView?: ToolCallViewMode;
+  /** Demander confirmation avant écriture fichier (mode avancé). Défaut true. */
+  confirmBeforeWrite?: boolean | null;
   settingsMode?: SettingsMode;
   settingsLocked?: boolean;
   density?: DensityMode;
@@ -184,6 +190,12 @@ export interface AppSettings {
   permissionsNetwork?: boolean | null;
   /** Autorise la synchronisation projet (preset verrouillé). Absent = autorisé. */
   permissionsProjectSync?: boolean | null;
+  /** Autorise le réseau Improba Cloud (preset verrouillé). Absent = autorisé. */
+  permissionsNetworkImprobaCloud?: boolean | null;
+  /** Endpoint du plan de contrôle cloud (preset). */
+  cloudEndpoint?: string | null;
+  /** Identifiant d'organisation cloud (preset). */
+  cloudOrgId?: string | null;
   /** Plugins locaux autorisés (preset verrouillé). */
   localPluginsAllowed?: boolean | null;
   /** Liste blanche de plugins (preset verrouillé). */

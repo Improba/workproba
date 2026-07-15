@@ -3,6 +3,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
+use tauri_plugin_dialog::DialogExt;
+use uuid::Uuid;
 
 use super::audit::log_audit_event;
 use super::settings_store::AppSettings;
@@ -27,6 +29,12 @@ pub struct EnterprisePreset {
     pub permissions_network: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub permissions_project_sync: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub permissions_network_improba_cloud: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_endpoint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cloud_org_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub code_execute: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -55,6 +63,16 @@ struct RawPermissions {
     code_execute: Option<bool>,
     #[serde(default, rename = "project_sync")]
     project_sync: Option<bool>,
+    #[serde(default, rename = "network_improba_cloud")]
+    network_improba_cloud: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawCloud {
+    #[serde(default)]
+    endpoint: Option<String>,
+    #[serde(default, rename = "org_id")]
+    org_id: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -95,6 +113,8 @@ struct RawEnterprisePreset {
     audit: Option<RawAudit>,
     #[serde(default)]
     provider_set: Option<RawProviderSet>,
+    #[serde(default)]
+    cloud: Option<RawCloud>,
     #[serde(flatten)]
     flat: EnterprisePreset,
 }
@@ -134,6 +154,17 @@ pub fn parse_enterprise_preset(raw: &str) -> Result<EnterprisePreset, String> {
         }
         if preset.permissions_project_sync.is_none() {
             preset.permissions_project_sync = permissions.project_sync;
+        }
+        if preset.permissions_network_improba_cloud.is_none() {
+            preset.permissions_network_improba_cloud = permissions.network_improba_cloud;
+        }
+    }
+    if let Some(cloud) = nested.cloud {
+        if preset.cloud_endpoint.is_none() {
+            preset.cloud_endpoint = cloud.endpoint;
+        }
+        if preset.cloud_org_id.is_none() {
+            preset.cloud_org_id = cloud.org_id;
         }
     }
     if let Some(ui) = nested.ui {
@@ -194,6 +225,15 @@ pub fn apply_preset_to_settings(settings: &mut AppSettings, preset: &EnterpriseP
     if let Some(project_sync) = preset.permissions_project_sync {
         settings.permissions_project_sync = Some(project_sync);
     }
+    if let Some(network_improba_cloud) = preset.permissions_network_improba_cloud {
+        settings.permissions_network_improba_cloud = Some(network_improba_cloud);
+    }
+    if let Some(endpoint) = &preset.cloud_endpoint {
+        settings.cloud_endpoint = Some(endpoint.clone());
+    }
+    if let Some(org_id) = &preset.cloud_org_id {
+        settings.cloud_org_id = Some(org_id.clone());
+    }
     if let Some(code_execute) = preset.code_execute {
         settings.code_execute = Some(code_execute);
     }
@@ -216,6 +256,7 @@ pub fn apply_enterprise_preset(app_data: &Path, settings: &mut AppSettings) {
         return;
     };
     apply_preset_to_settings(settings, &preset);
+    super::plugins::apply_preset_cloud_policy(app_data, settings, &preset);
     let preset_path = enterprise_preset_path(app_data);
     let _ = log_audit_event(
         app_data,
@@ -243,6 +284,212 @@ pub fn is_preset_active(app: AppHandle) -> Result<bool, String> {
     Ok(load_enterprise_preset_at(&app_data).is_some())
 }
 
+#[derive(Debug, Serialize)]
+struct ExportPresetPlugins {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    allowed: Option<Vec<String>>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "local_plugins")]
+    local_plugins: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+struct ExportPresetPermissions {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    network: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "code_execute")]
+    code_execute: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "project_sync")]
+    project_sync: Option<bool>,
+    #[serde(
+        skip_serializing_if = "Option::is_none",
+        rename = "network_improba_cloud"
+    )]
+    network_improba_cloud: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+struct ExportPresetCloud {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    endpoint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "org_id")]
+    org_id: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct ExportPresetUi {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    locale: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "locale_locked")]
+    locale_locked: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+struct ExportPresetAudit {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "retention_days")]
+    retention_days: Option<u32>,
+}
+
+#[derive(Debug, Serialize)]
+struct ExportPresetProviderSet {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    locked: Option<bool>,
+}
+
+#[derive(Debug, Serialize)]
+struct ExportPresetDocument {
+    preset_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    plugins: Option<ExportPresetPlugins>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    permissions: Option<ExportPresetPermissions>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ui: Option<ExportPresetUi>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    audit: Option<ExportPresetAudit>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "provider_set")]
+    provider_set: Option<ExportPresetProviderSet>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    cloud: Option<ExportPresetCloud>,
+}
+
+fn export_preset_title(app: &AppHandle) -> &'static str {
+    match super::settings_store::load_settings(app)
+        .ok()
+        .and_then(|settings| settings.locale)
+        .as_deref()
+    {
+        Some("fr") => "Exporter un preset enterprise",
+        _ => "Export enterprise preset",
+    }
+}
+
+fn settings_to_export_document(settings: &AppSettings) -> ExportPresetDocument {
+    let mode = settings
+        .settings_locked
+        .filter(|locked| *locked)
+        .map(|_| "locked".to_string());
+
+    let plugins = if settings.plugins_allowed.is_some() || settings.local_plugins_allowed.is_some() {
+        Some(ExportPresetPlugins {
+            allowed: settings.plugins_allowed.clone(),
+            local_plugins: settings.local_plugins_allowed,
+        })
+    } else {
+        None
+    };
+
+    let permissions = if settings.permissions_network.is_some()
+        || settings.permissions_project_sync.is_some()
+        || settings.permissions_network_improba_cloud.is_some()
+        || settings.code_execute.is_some()
+    {
+        Some(ExportPresetPermissions {
+            network: settings.permissions_network,
+            code_execute: settings.code_execute,
+            project_sync: settings.permissions_project_sync,
+            network_improba_cloud: settings.permissions_network_improba_cloud,
+        })
+    } else {
+        None
+    };
+
+    let cloud = if settings.cloud_endpoint.is_some() || settings.cloud_org_id.is_some() {
+        Some(ExportPresetCloud {
+            endpoint: settings.cloud_endpoint.clone(),
+            org_id: settings.cloud_org_id.clone(),
+        })
+    } else {
+        None
+    };
+
+    let ui = if settings.locale.is_some() || settings.locale_locked.is_some() {
+        Some(ExportPresetUi {
+            locale: settings.locale.clone(),
+            locale_locked: settings.locale_locked,
+        })
+    } else {
+        None
+    };
+
+    let audit = if settings.audit_enabled.is_some() || settings.audit_retention_days.is_some() {
+        Some(ExportPresetAudit {
+            enabled: settings.audit_enabled,
+            retention_days: settings.audit_retention_days,
+        })
+    } else {
+        None
+    };
+
+    let provider_set = if settings.provider_sets_locked.is_some()
+        || settings.active_set_id.is_some()
+        || settings.allowed_provider_set_ids.is_some()
+    {
+        let id = settings
+            .allowed_provider_set_ids
+            .as_ref()
+            .and_then(|ids| ids.first().cloned())
+            .or_else(|| settings.active_set_id.clone());
+        Some(ExportPresetProviderSet {
+            id,
+            locked: settings.provider_sets_locked,
+        })
+    } else {
+        None
+    };
+
+    ExportPresetDocument {
+        preset_id: format!("workproba-export-{}", Uuid::new_v4()),
+        mode,
+        plugins,
+        permissions,
+        ui,
+        audit,
+        provider_set,
+        cloud,
+    }
+}
+
+#[tauri::command]
+pub async fn export_enterprise_preset(app: AppHandle) -> Result<Option<String>, String> {
+    let settings = super::settings_store::get_app_settings(app.clone())?;
+    let document = settings_to_export_document(&settings);
+    let json =
+        serde_json::to_string_pretty(&document).map_err(|error| error.to_string())?;
+
+    let selection = app
+        .dialog()
+        .file()
+        .set_title(export_preset_title(&app))
+        .set_file_name("enterprise.workproba-preset")
+        .add_filter("Workproba preset", &["workproba-preset"])
+        .blocking_save_file();
+
+    let Some(path) = selection else {
+        return Ok(None);
+    };
+
+    let path_buf = path.to_string();
+    fs::write(&path_buf, json).map_err(|error| error.to_string())?;
+
+    let app_data = app_data_root(&app)?;
+    let _ = log_audit_event(
+        &app_data,
+        "preset.exported",
+        "admin",
+        serde_json::json!({
+            "path": path_buf,
+        }),
+    );
+
+    Ok(Some(path_buf))
+}
+
 #[cfg(test)]
 mod preset_tests {
     use super::*;
@@ -260,13 +507,18 @@ mod preset_tests {
             "preset_id": "improba-eti-rh-2026",
             "mode": "locked",
             "plugins": {
-                "allowed": ["workproba.projet", "workproba.personas"],
+                "allowed": ["workproba.projet", "workproba.personas", "workproba.cloud"],
                 "local_plugins": false
             },
             "permissions": {
                 "network": false,
                 "code_execute": false,
-                "project_sync": true
+                "project_sync": true,
+                "network_improba_cloud": true
+            },
+            "cloud": {
+                "endpoint": "https://cloud.example.test",
+                "org_id": "org-eti"
             },
             "ui": {
                 "locale": "fr",
@@ -285,10 +537,13 @@ mod preset_tests {
         assert!(preset.settings_locked);
         assert_eq!(preset.locale.as_deref(), Some("fr"));
         assert!(preset.locale_locked);
-        assert_eq!(preset.plugins_allowed.as_ref().map(|v| v.len()), Some(2));
+        assert_eq!(preset.plugins_allowed.as_ref().map(|v| v.len()), Some(3));
         assert_eq!(preset.local_plugins_allowed, Some(false));
         assert_eq!(preset.permissions_network, Some(false));
         assert_eq!(preset.permissions_project_sync, Some(true));
+        assert_eq!(preset.permissions_network_improba_cloud, Some(true));
+        assert_eq!(preset.cloud_endpoint.as_deref(), Some("https://cloud.example.test"));
+        assert_eq!(preset.cloud_org_id.as_deref(), Some("org-eti"));
         assert_eq!(preset.code_execute, Some(false));
         assert_eq!(preset.audit_retention_days, Some(90));
         assert_eq!(preset.audit_enabled, Some(true));
@@ -319,6 +574,32 @@ mod preset_tests {
     }
 
     #[test]
+    fn settings_to_export_document_maps_fields() {
+        let settings = AppSettings {
+            settings_locked: Some(true),
+            locale: Some("fr".to_string()),
+            locale_locked: Some(true),
+            permissions_network: Some(false),
+            permissions_project_sync: Some(true),
+            code_execute: Some(false),
+            audit_enabled: Some(true),
+            audit_retention_days: Some(90),
+            provider_sets_locked: Some(true),
+            active_set_id: Some("mistral-default".to_string()),
+            ..AppSettings::default()
+        };
+        let doc = settings_to_export_document(&settings);
+        assert_eq!(doc.mode.as_deref(), Some("locked"));
+        assert_eq!(doc.ui.as_ref().and_then(|ui| ui.locale.as_deref()), Some("fr"));
+        assert_eq!(
+            doc.provider_set
+                .as_ref()
+                .and_then(|ps| ps.id.as_deref()),
+            Some("mistral-default")
+        );
+    }
+
+    #[test]
     fn load_enterprise_preset_from_file() {
         let app_data = temp_app_data();
         let presets = presets_dir(&app_data);
@@ -331,5 +612,41 @@ mod preset_tests {
         let preset = load_enterprise_preset_at(&app_data).expect("load");
         assert!(preset.settings_locked);
         assert_eq!(preset.permissions_network, Some(false));
+    }
+
+    #[test]
+    fn apply_preset_cloud_policy_writes_config_and_enables_plugin() {
+        let app_data = temp_app_data();
+        let settings = AppSettings {
+            settings_locked: Some(true),
+            permissions_project_sync: Some(true),
+            permissions_network_improba_cloud: Some(true),
+            plugins_allowed: Some(vec!["workproba.cloud".to_string()]),
+            ..AppSettings::default()
+        };
+        let preset = EnterprisePreset {
+            settings_locked: true,
+            permissions_project_sync: Some(true),
+            permissions_network_improba_cloud: Some(true),
+            cloud_endpoint: Some("https://cloud.example.test".to_string()),
+            cloud_org_id: Some("org-eti".to_string()),
+            plugins_allowed: Some(vec!["workproba.cloud".to_string()]),
+            ..EnterprisePreset::default()
+        };
+        super::super::plugins::apply_preset_cloud_policy(&app_data, &settings, &preset);
+        let config_path = app_data
+            .join("plugins")
+            .join("workproba.cloud")
+            .join("config.json");
+        let raw = fs::read_to_string(config_path).expect("cloud config");
+        assert!(raw.contains("https://cloud.example.test"));
+        assert!(raw.contains("org-eti"));
+        let registry = super::super::plugins::list_plugins_at(&app_data, &settings)
+            .expect("list plugins");
+        let cloud = registry
+            .iter()
+            .find(|entry| entry.manifest.id == "workproba.cloud")
+            .expect("cloud plugin");
+        assert!(cloud.enabled);
     }
 }

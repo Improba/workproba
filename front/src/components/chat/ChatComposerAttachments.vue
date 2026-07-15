@@ -33,7 +33,7 @@
         <button
           type="button"
           class="chat-attachments__remove"
-          :aria-label="`Retirer ${att.fileName}`"
+          :aria-label="t('chat.attachment.removeAria', { name: att.fileName })"
           @click="emit('remove', att.id)"
         >
           <Lucide name="x" size="14" color="wp-text-muted" />

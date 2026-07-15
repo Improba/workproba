@@ -681,7 +681,9 @@ def build_rag_store(
         return None
 
     if workspace_data_dir is not None:
-        db_path = workspace_data_dir / "memory.db"
+        from app.memory_stores import resolve_project_memory_db_path
+
+        db_path = resolve_project_memory_db_path(workspace_data_dir)
     else:
         db_path = project_root / ".workproba" / "memory.db"
 
@@ -1166,6 +1168,32 @@ class PersonasSetResponse(BaseModel):
     set: dict[str, Any]
 
 
+class ManagedRegardsInstallRequest(BaseModel):
+    plugin_data_dir: str
+    signed_bundle: dict[str, Any]
+    locale: str = "fr"
+
+
+class ManagedRegardsActivateRequest(BaseModel):
+    plugin_data_dir: str
+    catalog_id: str
+    version: str | None = None
+    locale: str = "fr"
+
+
+class ManagedRegardsListResponse(BaseModel):
+    catalogs: list[dict[str, Any]]
+    status: dict[str, Any]
+
+
+class ManagedRegardsInstallResponse(BaseModel):
+    installed: dict[str, Any]
+
+
+class ManagedRegardsActivateResponse(BaseModel):
+    activated: dict[str, Any]
+
+
 class PersonasAskRequest(BaseModel):
     plugin_data_dir: str
     persona_ids: list[str]
@@ -1300,7 +1328,9 @@ def _memory_store_for_workspace(
     )
     if rag is not None:
         return rag
-    return open_memory_store(workspace_data_dir / "memory.db")
+    from app.memory_stores import resolve_project_memory_db_path
+
+    return open_memory_store(resolve_project_memory_db_path(workspace_data_dir))
 
 
 def _memory_store_for_scope(
@@ -1332,7 +1362,8 @@ async def personas_list_sets(
 
     from app.plugins.workproba_personas import storage as personas_storage
 
-    sets = personas_storage.list_sets(_resolve_plugin_data_dir(plugin_data_dir))
+    plugin_dir = _resolve_plugin_data_dir(plugin_data_dir)
+    sets = personas_storage.list_sets(plugin_dir)
     return PersonasSetsResponse(sets=sets)
 
 
@@ -1382,6 +1413,99 @@ async def personas_delete_set(
     plugin_dir = _resolve_plugin_data_dir(plugin_data_dir)
     if not personas_storage.delete_custom_set(plugin_dir, set_id):
         raise HTTPException(status_code=404, detail="Set not found")
+    return OkResponse(ok=True)
+
+
+@app.get("/plugins/personas/managed", response_model=ManagedRegardsListResponse)
+async def personas_list_managed(
+    request: Request,
+    plugin_data_dir: str,
+    locale: str = "fr",
+) -> ManagedRegardsListResponse:
+    """Liste les catalogues Regards administrés installés localement."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(locale)
+
+    from app.plugins.ports.managed_regards import create_personas_managed_port
+
+    plugin_dir = _resolve_plugin_data_dir(plugin_data_dir)
+    port = create_personas_managed_port(plugin_dir)
+    return ManagedRegardsListResponse(
+        catalogs=port.list_managed_catalogs(),
+        status=port.get_catalog_status(),
+    )
+
+
+@app.post("/plugins/personas/managed/install", response_model=ManagedRegardsInstallResponse)
+async def personas_install_managed(
+    request: Request,
+    payload: ManagedRegardsInstallRequest,
+) -> ManagedRegardsInstallResponse:
+    """Installe une version de catalogue signée dans le namespace personas."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(payload.locale)
+
+    from app.plugins.ports.managed_regards import SignedBundle, create_personas_managed_port
+
+    plugin_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    port = create_personas_managed_port(plugin_dir)
+    try:
+        installed = port.install_catalog_version(SignedBundle.from_dict(payload.signed_bundle))
+    except ValueError as exc:
+        code = str(exc)
+        status = 400
+        if code == "invalid_signature":
+            status = 403
+        raise HTTPException(status_code=status, detail=code) from exc
+    return ManagedRegardsInstallResponse(installed=installed)
+
+
+@app.post(
+    "/plugins/personas/managed/{catalog_id}/activate",
+    response_model=ManagedRegardsActivateResponse,
+)
+async def personas_activate_managed(
+    request: Request,
+    catalog_id: str,
+    payload: ManagedRegardsActivateRequest,
+) -> ManagedRegardsActivateResponse:
+    """Active un catalogue Regards administré installé."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(payload.locale)
+
+    from app.plugins.ports.managed_regards import create_personas_managed_port
+
+    plugin_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    port = create_personas_managed_port(plugin_dir)
+    try:
+        activated = port.activate_catalog(catalog_id, payload.version)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return ManagedRegardsActivateResponse(activated=activated)
+
+
+@app.delete("/plugins/personas/managed/{catalog_id}/{version}", response_model=OkResponse)
+async def personas_remove_managed_version(
+    request: Request,
+    catalog_id: str,
+    version: str,
+    plugin_data_dir: str,
+    locale: str = "fr",
+) -> OkResponse:
+    """Supprime une version révoquée d'un catalogue administré."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(locale)
+
+    from app.plugins.ports.managed_regards import create_personas_managed_port
+
+    plugin_dir = _resolve_plugin_data_dir(plugin_data_dir)
+    port = create_personas_managed_port(plugin_dir)
+    if not port.remove_revoked_version(catalog_id, version):
+        raise HTTPException(status_code=404, detail="catalog_version_not_found")
     return OkResponse(ok=True)
 
 
@@ -2144,6 +2268,34 @@ class CloudSyncResponse(BaseModel):
     last_sync: str | None = None
 
 
+class CloudEnrollRequest(BaseModel):
+    plugin_data_dir: str
+    base_url: str
+    bearer_token: str | None = None
+    device_code: str | None = None
+    org_id: str | None = None
+    locale: str = "fr"
+
+
+class CloudEnrollResponse(BaseModel):
+    authenticated: bool
+    method: str | None = None
+    pending: bool = False
+    org_id: str | None = None
+
+
+class CloudSyncRegardsRequest(BaseModel):
+    plugin_data_dir: str
+    org_id: str | None = None
+    locale: str = "fr"
+
+
+class CloudSyncRegardsResponse(BaseModel):
+    installed: list[dict[str, Any]]
+    activated: dict[str, Any] | None = None
+    count: int = 0
+
+
 def _resolve_app_data_from_workspace(raw: str) -> Path:
     path = Path(raw).expanduser().resolve()
     if not path.is_dir():
@@ -2325,4 +2477,75 @@ async def cloud_sync_endpoint(
         synced=list(result.get("synced") or []),
         mount_path=result.get("mount_path"),
         last_sync=result.get("last_sync"),
+    )
+
+
+@app.post("/plugins/cloud/enroll", response_model=CloudEnrollResponse)
+async def cloud_enroll_endpoint(
+    request: Request,
+    payload: CloudEnrollRequest,
+) -> CloudEnrollResponse:
+    """Enrôle le poste auprès du plan de contrôle cloud (bearer ou device code stub)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    locale = normalize_locale(payload.locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+
+    cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    cloud_storage.save_config(cloud_dir, {"base_url": payload.base_url.rstrip("/")})
+    client = CloudControlPlaneClient(
+        base_url=payload.base_url,
+        plugin_data_dir=cloud_dir,
+    )
+    try:
+        result = await client.authenticate(
+            bearer_token=payload.bearer_token,
+            device_code=payload.device_code,
+            org_id=payload.org_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    _ = locale
+    return CloudEnrollResponse(
+        authenticated=bool(result.get("authenticated")),
+        method=str(result.get("method")) if result.get("method") else None,
+        pending=bool(result.get("pending")),
+        org_id=str(result.get("org_id")) if result.get("org_id") else None,
+    )
+
+
+@app.post("/plugins/cloud/sync-regards", response_model=CloudSyncRegardsResponse)
+async def cloud_sync_regards_endpoint(
+    request: Request,
+    payload: CloudSyncRegardsRequest,
+) -> CloudSyncRegardsResponse:
+    """Télécharge les catalogues signés et les installe via ManagedRegardsPort."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    locale = normalize_locale(payload.locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.regards_access import open_managed_regards_port_for_cloud
+
+    cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not base_url:
+        raise HTTPException(status_code=400, detail=t(locale, "cloud.not_configured"))
+
+    try:
+        client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+        port = open_managed_regards_port_for_cloud(cloud_dir.parent)
+        result = await client.pull_and_install_regards(port, org_id=payload.org_id)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return CloudSyncRegardsResponse(
+        installed=list(result.get("installed") or []),
+        activated=result.get("activated"),
+        count=int(result.get("count") or 0),
     )

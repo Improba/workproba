@@ -226,7 +226,18 @@ def delete_custom_set(plugin_data_dir: Path, set_id: str) -> bool:
 
 
 def list_sets(plugin_data_dir: Path) -> list[JsonDict]:
-    return [builtin_persona_set(), *load_custom_sets(plugin_data_dir)]
+    result: list[JsonDict] = [{**builtin_persona_set(), "provenance": "integrated"}]
+    for item in load_custom_sets(plugin_data_dir):
+        result.append({**item, "provenance": "personal"})
+    try:
+        from app.plugins.ports.managed_regards import create_personas_managed_port
+
+        managed = create_personas_managed_port(plugin_data_dir).active_persona_set()
+        if managed is not None:
+            result.append(managed)
+    except OSError:
+        pass
+    return result
 
 
 def _persona_index(plugin_data_dir: Path) -> dict[str, JsonDict]:

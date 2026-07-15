@@ -120,6 +120,18 @@ const toolCallView = computed<ToolCallViewMode>(
   () => settings.value.toolCallView ?? 'human',
 );
 
+const confirmBeforeWrite = computed<boolean>(
+  () => settings.value.confirmBeforeWrite !== false,
+);
+
+/** Valeur effective envoyée au sidecar : toujours true en mode guidé ou verrouillé. */
+const confirmBeforeWriteEffective = computed<boolean>(() => {
+  if (settingsLocked.value || settingsMode.value !== 'advanced') {
+    return true;
+  }
+  return confirmBeforeWrite.value;
+});
+
 const onboardingDone = computed<boolean>(
   () => settings.value.onboardingDone ?? false,
 );
@@ -138,6 +150,10 @@ const permissionsNetwork = computed<boolean>(
 
 const permissionsProjectSync = computed<boolean>(
   () => settings.value.permissionsProjectSync !== false,
+);
+
+const permissionsNetworkImprobaCloud = computed<boolean>(
+  () => settings.value.permissionsNetworkImprobaCloud !== false,
 );
 
 const density = computed<DensityMode>(
@@ -333,11 +349,14 @@ export interface UseAppSettingsReturn {
   activeChatProvider: typeof activeChatProvider;
   activeEmbeddingProvider: typeof activeEmbeddingProvider;
   toolCallView: typeof toolCallView;
+  confirmBeforeWrite: typeof confirmBeforeWrite;
+  confirmBeforeWriteEffective: typeof confirmBeforeWriteEffective;
   onboardingDone: typeof onboardingDone;
   settingsMode: typeof settingsMode;
   settingsLocked: typeof settingsLocked;
   permissionsNetwork: typeof permissionsNetwork;
   permissionsProjectSync: typeof permissionsProjectSync;
+  permissionsNetworkImprobaCloud: typeof permissionsNetworkImprobaCloud;
   density: typeof density;
   uiTheme: typeof uiTheme;
   locale: typeof locale;
@@ -350,6 +369,7 @@ export interface UseAppSettingsReturn {
   updateSet: (set: ProviderSet) => Promise<AppSettings>;
   deleteSet: (id: string) => Promise<AppSettings>;
   setToolCallView: (view: ToolCallViewMode) => Promise<AppSettings>;
+  setConfirmBeforeWrite: (enabled: boolean) => Promise<AppSettings>;
   setOnboardingDone: (done: boolean) => Promise<void>;
   setSettingsMode: (mode: SettingsMode) => Promise<AppSettings>;
   setDensity: (mode: DensityMode) => Promise<AppSettings>;
@@ -452,6 +472,13 @@ export function useAppSettings(): UseAppSettingsReturn {
     return save({ ...settings.value, toolCallView: view });
   }
 
+  async function setConfirmBeforeWrite(enabled: boolean): Promise<AppSettings> {
+    if (settingsLocked.value || settingsMode.value !== 'advanced') {
+      return settings.value;
+    }
+    return save({ ...settings.value, confirmBeforeWrite: enabled });
+  }
+
   async function setSettingsMode(mode: SettingsMode): Promise<AppSettings> {
     return save({ ...settings.value, settingsMode: mode });
   }
@@ -487,11 +514,14 @@ export function useAppSettings(): UseAppSettingsReturn {
     activeChatProvider,
     activeEmbeddingProvider,
     toolCallView,
+    confirmBeforeWrite,
+    confirmBeforeWriteEffective,
     onboardingDone,
     settingsMode,
     settingsLocked,
     permissionsNetwork,
     permissionsProjectSync,
+    permissionsNetworkImprobaCloud,
     density,
     uiTheme,
     locale,
@@ -504,6 +534,7 @@ export function useAppSettings(): UseAppSettingsReturn {
     updateSet,
     deleteSet,
     setToolCallView,
+    setConfirmBeforeWrite,
     setOnboardingDone,
     setSettingsMode,
     setDensity,

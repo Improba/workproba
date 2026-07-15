@@ -44,7 +44,12 @@ from app.agent.confirmation import (
 )
 from app.agent.human import build_human_summary
 from app.agent.plan import PlanGate, plan_registry
-from app.agent.tools import ToolContext, ToolDeps
+from app.agent.tools import (
+    ToolContext,
+    ToolDeps,
+    memory_citations_from_items,
+    select_memories_for_injection,
+)
 from app.agent.work_events import (
     audit_details_with_work_id,
     derive_work_event,
@@ -67,6 +72,8 @@ from app.schemas import (
     ChatMessage,
     DoneEvent,
     ErrorEvent,
+    MemoryCitationInfo,
+    MemoryCitationsEvent,
     ThinkingDeltaEvent,
     ThinkingEndEvent,
     ThinkingStartEvent,
@@ -344,7 +351,7 @@ class AgentLoop:
             project_client=self._project_client,
             sandbox_runner=self._sandbox_runner,
             limits=self._limits,
-            confirmation_gate=gate,
+            confirmation_gate=gate if request.confirm_before_write else None,
             plan_gate=plan_gate,
         )
         history = to_model_messages(
@@ -368,6 +375,21 @@ class AgentLoop:
                 work_id=work_id,
                 objective=request.message[:200],
             )
+            if workspace_data_dir is not None and request.message.strip():
+                selected_memories = select_memories_for_injection(
+                    workspace_data_dir=workspace_data_dir,
+                    query=request.message,
+                    prepared_tagged_memories=prepared_tagged_memories,
+                    memory_query_embedding=memory_query_embedding,
+                    memory_item_embeddings=memory_item_embeddings,
+                )
+                citation_payload = memory_citations_from_items(selected_memories)
+                if citation_payload:
+                    yield MemoryCitationsEvent(
+                        citations=[
+                            MemoryCitationInfo(**item) for item in citation_payload
+                        ]
+                    )
 
         if request.audit_enabled and not is_fallback_attempt:
             from app.audit import log_event, resolve_app_data_dir

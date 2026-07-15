@@ -116,6 +116,7 @@ class ProviderSetCapabilities(BaseModel):
     reasoning: ProviderSetCapabilitiesReasoning = "medium"
     vision: bool = False
     tools: bool = True
+    web_search: bool = False
 
 
 class ProviderSet(BaseModel):
@@ -202,6 +203,7 @@ class AgentTurnRequest(BaseModel):
     audit_retention_days: int | None = None
     audit_enabled: bool | None = None
     browser_pilotage_paused: bool = False
+    confirm_before_write: bool = True
 
     @field_validator("locale", mode="before")
     @classmethod
@@ -398,6 +400,18 @@ class AttachmentStatusEvent(BaseModel):
     label_locale: str
 
 
+class MemoryCitationInfo(BaseModel):
+    id: str
+    snippet: str
+    source: str = ""
+    scope: str = "project"
+
+
+class MemoryCitationsEvent(BaseModel):
+    type: Literal["memory_citations"] = "memory_citations"
+    citations: list[MemoryCitationInfo] = Field(default_factory=list)
+
+
 class DoneEvent(BaseModel):
     type: Literal["done"] = "done"
     content: str
@@ -478,6 +492,7 @@ AgentEvent = Annotated[
     | TurnStartEvent
     | FallbackEvent
     | AttachmentStatusEvent
+    | MemoryCitationsEvent
     | DoneEvent
     | ErrorEvent
     | WorkStartedEvent

@@ -1,6 +1,6 @@
 import { computed, ref, type ComputedRef, type Ref } from 'vue';
 import { Notify } from 'quasar';
-import type { PersonasOpinionCard } from '#types';
+import type { MemoryCitation, PersonasOpinionCard } from '#types';
 import {
   askPersonasOpinion,
   buildSidecarSecurityContext,
@@ -16,6 +16,7 @@ import {
   startPersonasMeeting,
   type PersonaInfo,
   type PersonaSet,
+  type PersonaSetProvenance,
   type PersonasCostEstimate,
   type PersonasEstimateMode,
   type PersonasMeetingTranscriptTurn,
@@ -30,9 +31,26 @@ import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 const MEETINGS_STORAGE_KEY = 'workproba.personas.meetings';
 const DISCUSSIONS_STORAGE_KEY = 'workproba.personas.discussions';
 const CUSTOM_SETS_STORAGE_KEY = 'workproba.personas.customSets';
+const PERSONAL_PERSONAS_SET_ID = 'custom_personal';
 const ACTIVE_SET_STORAGE_KEY = 'workproba.personas.activeSetId';
 const BUILTIN_SET_ID = 'default';
 const MAX_STORED_MEETINGS = 50;
+
+export function personaSetProvenanceLabel(
+  provenance: PersonaSetProvenance | string | undefined,
+): string {
+  switch (provenance) {
+    case 'managed':
+      return t('personas.panel.provenanceManaged');
+    case 'personal':
+      return t('personas.panel.provenancePersonal');
+    case 'integrated':
+      return t('personas.panel.provenanceIntegrated');
+    default:
+      return '';
+  }
+}
+
 const MAX_STORED_DISCUSSIONS = 50;
 
 export interface StoredMeeting {
@@ -173,6 +191,10 @@ export interface UsePersonasReturn {
   syncHistory: (pluginDataDir: string) => Promise<void>;
   listCustomSets: () => PersonaSet[];
   saveCustomSet: (pluginDataDir: string, set: PersonaSet) => Promise<void>;
+  saveCustomPersona: (
+    pluginDataDir: string,
+    payload: { id?: string; name: string; role: string; systemPrompt: string },
+  ) => Promise<void>;
   deleteCustomSet: (pluginDataDir: string, setId: string) => Promise<void>;
   findPersona: (personaId: string) => PersonaInfo | undefined;
 }
@@ -374,6 +396,25 @@ export function discussionMessagesToStored(
   };
 }
 
+function parseOpinionMemoryCitations(raw: unknown): MemoryCitation[] {
+  if (!Array.isArray(raw)) return [];
+  const citations: MemoryCitation[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue;
+    const record = item as Record<string, unknown>;
+    const id = String(record.id ?? '').trim();
+    const snippet = String(record.snippet ?? '').trim();
+    if (!id || !snippet) continue;
+    citations.push({
+      id,
+      snippet,
+      source: typeof record.source === 'string' ? record.source : undefined,
+      scope: record.scope === 'user' ? 'user' : 'project',
+    });
+  }
+  return citations;
+}
+
 /** Convertit le résultat outil `ask_personas` en carte d'avis inline. */
 export function toolResultToOpinionCard(
   question: string,
@@ -390,7 +431,8 @@ export function toolResultToOpinionCard(
     opinions: rawOpinions.map((item) => {
       const opinion = item as Record<string, unknown>;
       const personaId = String(opinion.persona_id ?? '');
-      const memoryCited = opinion.memory_citations === true;
+      const memoryCitations = parseOpinionMemoryCitations(opinion.memory_citations);
+      const memoryCited = opinion.memory_cited === true || memoryCitations.length > 0;
       return {
         personaId,
         personaName: String(opinion.persona_name ?? personaId),
@@ -398,6 +440,7 @@ export function toolResultToOpinionCard(
         avatarColor: String(opinion.avatar_color ?? 'var(--wp-gold)'),
         avatarIcon: String(opinion.avatar_icon ?? ''),
         content: String(opinion.content ?? ''),
+        memoryCitations,
         memoryCited,
         streaming: false,
       };
@@ -596,7 +639,11 @@ export function usePersonas(): UsePersonasReturn {
               if (data.content) {
                 block.content = String(data.content);
               }
-              if (data.memory_citations === true) {
+              const citations = parseOpinionMemoryCitations(data.memory_citations);
+              if (citations.length) {
+                block.memoryCitations = citations;
+                block.memoryCited = true;
+              } else if (data.memory_cited === true) {
                 block.memoryCited = true;
               }
             }
@@ -937,6 +984,36 @@ export function usePersonas(): UsePersonasReturn {
     }
   }
 
+  async function saveCustomPersona(
+    pluginDataDir: string,
+    payload: { id?: string; name: string; role: string; systemPrompt: string },
+  ): Promise<void> {
+    const personaId = payload.id ?? `custom_p_${Date.now().toString(36)}`;
+    const persona: PersonaInfo = {
+      id: personaId,
+      name: payload.name,
+      role: payload.role,
+      description: '',
+      system_prompt: payload.systemPrompt,
+      avatar_color: '#A566FF',
+      avatar_icon: 'user',
+    };
+    const existing =
+      sets.value.find((set) => set.id === PERSONAL_PERSONAS_SET_ID) ??
+      readCustomSets().find((set) => set.id === PERSONAL_PERSONAS_SET_ID);
+    const nextPersonas = [
+      ...(existing?.personas.filter((item) => item.id !== personaId) ?? []),
+      persona,
+    ];
+    await saveCustomSet(pluginDataDir, {
+      id: PERSONAL_PERSONAS_SET_ID,
+      name: existing?.name || t('personas.personaEditor.personalSetName'),
+      personas: nextPersonas,
+      provenance: 'personal',
+    });
+    setActiveSet(PERSONAL_PERSONAS_SET_ID);
+  }
+
   async function deleteCustomSet(pluginDataDir: string, setId: string): Promise<void> {
     try {
       await deletePersonasSet(pluginDataDir, setId);
@@ -983,6 +1060,7 @@ export function usePersonas(): UsePersonasReturn {
     syncHistory,
     listCustomSets,
     saveCustomSet,
+    saveCustomPersona,
     deleteCustomSet,
     findPersona,
   };

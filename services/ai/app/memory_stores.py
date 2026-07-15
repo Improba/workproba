@@ -16,6 +16,26 @@ MemoryScope = str  # "user" | "project"
 VALID_SCOPES: frozenset[str] = frozenset({"user", "project"})
 
 
+def workspace_storage_root(workspace_data_dir: Path) -> Path:
+    """Racine canonique V2 d'un espace (parent de `.workproba` si besoin)."""
+    resolved = workspace_data_dir.expanduser().resolve()
+    if resolved.name == ".workproba":
+        return resolved.parent
+    return resolved
+
+
+def resolve_project_memory_db_path(workspace_data_dir: Path) -> Path:
+    """Résout `memory.db` : plat (V2) prioritaire, puis imbriqué sous `.workproba`."""
+    resolved = workspace_data_dir.expanduser().resolve()
+    flat = workspace_storage_root(resolved) / "memory.db"
+    nested = resolved / "memory.db"
+    if flat.is_file():
+        return flat
+    if nested.is_file():
+        return nested
+    return flat
+
+
 def user_memory_db_path(workspace_data_dir: Path) -> Path:
     """Chemin de la base de mémoire globale user (dérivée du workspace_data_dir)."""
     user_dir = resolve_user_data_dir(workspace_data_dir)
@@ -24,8 +44,8 @@ def user_memory_db_path(workspace_data_dir: Path) -> Path:
 
 
 def project_memory_db_path(workspace_data_dir: Path) -> Path:
-    """Chemin de la base de mémoire projet (dans le dossier de données du workspace)."""
-    return workspace_data_dir / "memory.db"
+    """Chemin de la base de mémoire projet (canonique V2 ou legacy imbriqué)."""
+    return resolve_project_memory_db_path(workspace_data_dir)
 
 
 def memory_db_path_for_scope(scope: MemoryScope, workspace_data_dir: Path) -> Path:

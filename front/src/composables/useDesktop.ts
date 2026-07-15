@@ -191,4 +191,11 @@ export async function getEnterprisePreset(): Promise<EnterprisePreset | null> {
   }
 }
 
+export async function exportEnterprisePreset(): Promise<string | null> {
+  if (!isDesktopApp()) {
+    throw new Error('exportEnterprisePreset nécessite l’application bureau Tauri');
+  }
+  return tauriInvoke<string | null>('export_enterprise_preset');
+}
+
 export type { LocalDirEntry, LocalDocumentEntry, WorkspaceInfo, LlmProviderEntry, LlmProviderName, AppSettings, AppLocale, ProviderSet, PluginInfo, PluginManifest, PluginSource, EnterprisePreset };

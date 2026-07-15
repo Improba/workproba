@@ -30,6 +30,15 @@
         </q-tooltip>
       </button>
 
+      <span
+        v-if="capabilitiesSummary"
+        class="wp-titlebar__caps"
+        :title="capabilitiesTooltip"
+        :aria-label="capabilitiesAriaLabel"
+      >
+        {{ capabilitiesSummary }}
+      </span>
+
       <q-dialog v-model="sidecarDialogOpen">
         <div class="wp-sidecar-dialog">
           <header class="wp-sidecar-dialog__head">
@@ -248,6 +257,21 @@ const activeSetCapabilities = computed(() => {
   return capabilityLabels(set, labelMode.value, t);
 });
 
+const capabilitiesSummary = computed(() => {
+  const caps = activeSetCapabilities.value;
+  if (!caps.length) return '';
+  if (caps.length === 1) return caps[0] ?? '';
+  return `${caps[0]} ${t('shell.titlebarSep')} +${caps.length - 1}`;
+});
+
+const capabilitiesTooltip = computed(() => activeSetCapabilities.value.join(' · '));
+
+const capabilitiesAriaLabel = computed(() =>
+  t('shell.titlebarCapabilitiesAria', {
+    list: capabilitiesTooltip.value,
+  }),
+);
+
 const providerLabel = computed(() => {
   const set = activeSet.value;
   if (set) {
@@ -393,6 +417,20 @@ function goHome(): void {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.wp-titlebar__caps {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--wp-surface-2);
+  border: 1px solid var(--wp-border);
+  color: var(--wp-text-muted);
+  font-size: var(--wp-fs-xs);
+  line-height: var(--wp-lh-tight);
 }
 
 .wp-titlebar__chip-dot {

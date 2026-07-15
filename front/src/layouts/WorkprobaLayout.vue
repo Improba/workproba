@@ -1,7 +1,7 @@
 <template>
   <div class="wp-shell" :data-density="density">
     <WorkprobaTitleBar
-      :workspace-title="workspaceTitle"
+      :workspace-title="spaceTitle"
       :active-path="activePath"
       :right-panel-open="rightPanelOpen"
       :capabilities-open="capabilitiesOpen"
@@ -19,7 +19,7 @@
     <KeyboardShortcutsHelp v-model:open="shortcutsHelpOpen" />
 
     <div class="wp-shell__body">
-      <WorkspaceSidebar
+      <SpaceSidebar
         :rail="sidebarRail"
         :streaming="streaming"
         @expand="sidebarRail = false"
@@ -47,12 +47,12 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import WorkprobaTitleBar from '@components/workproba/WorkprobaTitleBar.vue';
-import WorkspaceSidebar from '@components/workproba/WorkspaceSidebar.vue';
+import SpaceSidebar from '@components/workproba/SpaceSidebar.vue';
 import RightPanel from '@components/workproba/RightPanel.vue';
 import SideChatPanel from '@components/workproba/SideChatPanel.vue';
 import KeyboardShortcutsHelp from '@components/workproba/KeyboardShortcutsHelp.vue';
 import CapabilitiesDrawer from '@components/capabilities/CapabilitiesDrawer.vue';
-import { useProject } from '@composables/useProject';
+import { useSpace } from '@composables/useSpace';
 import { useSidecarHealth } from '@composables/useSidecarHealth';
 import { useAppSettings } from '@composables/useAppSettings';
 import { useUiTheme } from '@composables/useUiTheme';
@@ -73,7 +73,7 @@ defineProps<{
   sidecarState?: 'connected' | 'idle' | 'working' | 'error';
 }>();
 
-const { activePath, workspaceTitle, activeDataDir } = useProject();
+const { activePath, spaceTitle, activeDataDir } = useSpace();
 
 const sidebarRail = ref(false);
 const shortcutsHelpOpen = ref(false);

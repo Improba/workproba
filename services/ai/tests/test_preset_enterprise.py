@@ -11,12 +11,18 @@ NESTED_PRESET = {
     "preset_id": "improba-eti-rh-2026",
     "mode": "locked",
     "plugins": {
-        "allowed": ["workproba.projet", "workproba.personas"],
+        "allowed": ["workproba.projet", "workproba.personas", "workproba.cloud"],
         "local_plugins": False,
     },
     "permissions": {
         "network": False,
         "code_execute": False,
+        "project_sync": True,
+        "network_improba_cloud": True,
+    },
+    "cloud": {
+        "endpoint": "https://cloud.example.test",
+        "org_id": "org-eti",
     },
     "ui": {
         "locale": "fr",
@@ -31,14 +37,20 @@ NESTED_PRESET = {
 
 def _map_preset(raw: dict) -> dict:
     """Miroir simplifié du mapping Rust pour tests Python."""
+    permissions = raw.get("permissions", {})
+    cloud = raw.get("cloud", {})
     return {
         "settings_locked": raw.get("mode") == "locked",
         "locale_locked": bool(raw.get("ui", {}).get("locale_locked")),
         "locale": raw.get("ui", {}).get("locale"),
         "plugins_allowed": raw.get("plugins", {}).get("allowed"),
         "local_plugins_allowed": raw.get("plugins", {}).get("local_plugins"),
-        "permissions_network": raw.get("permissions", {}).get("network"),
-        "code_execute": raw.get("permissions", {}).get("code_execute"),
+        "permissions_network": permissions.get("network"),
+        "permissions_project_sync": permissions.get("project_sync"),
+        "permissions_network_improba_cloud": permissions.get("network_improba_cloud"),
+        "cloud_endpoint": cloud.get("endpoint"),
+        "cloud_org_id": cloud.get("org_id"),
+        "code_execute": permissions.get("code_execute"),
         "audit_retention_days": raw.get("audit", {}).get("retention_days"),
         "audit_enabled": raw.get("audit", {}).get("enabled"),
     }
@@ -49,9 +61,17 @@ def test_parse_nested_enterprise_preset_schema() -> None:
     assert mapped["settings_locked"] is True
     assert mapped["locale"] == "fr"
     assert mapped["permissions_network"] is False
+    assert mapped["permissions_project_sync"] is True
+    assert mapped["permissions_network_improba_cloud"] is True
+    assert mapped["cloud_endpoint"] == "https://cloud.example.test"
+    assert mapped["cloud_org_id"] == "org-eti"
     assert mapped["code_execute"] is False
     assert mapped["audit_retention_days"] == 90
-    assert mapped["plugins_allowed"] == ["workproba.projet", "workproba.personas"]
+    assert mapped["plugins_allowed"] == [
+        "workproba.projet",
+        "workproba.personas",
+        "workproba.cloud",
+    ]
 
 
 def test_agent_turn_request_accepts_preset_context() -> None:

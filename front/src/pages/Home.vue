@@ -140,7 +140,7 @@ import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import OpenSpaceButton from '@components/workspace/OpenSpaceButton.vue';
 import ChatView from '@components/chat/ChatView.vue';
 import { useUserProfile } from '@composables/useUserProfile';
-import { useProject } from '@composables/useProject';
+import { useSpace } from '@composables/useSpace';
 import { useAppSettings } from '@composables/useAppSettings';
 import { usePlugins } from '@composables/usePlugins';
 import { setPendingChatLaunch } from '@composables/usePendingChatLaunch';
@@ -153,7 +153,7 @@ import type { ChatAttachment, ReasoningEffort } from '#types';
 const router = useRouter();
 const { t, locale } = useI18n();
 
-const { activePath, activeWorkspaceId, activeDataDir, loading, error, openSpace } = useProject();
+const { activePath, activeSpaceId, activeDataDir, loading, error, openSpace } = useSpace();
 const { settingsLocked, activeChatRouting, activeSet } = useAppSettings();
 const { isPersonasPluginActive } = usePlugins();
 
@@ -230,14 +230,14 @@ const sessionsReady = ref(false);
 const { sessionVersion } = useSessionSync();
 
 async function refreshSessions(): Promise<void> {
-  if (!activePath.value || !activeWorkspaceId.value) {
+  if (!activePath.value || !activeSpaceId.value) {
     recentSessions.value = [];
     sessionsReady.value = true;
     return;
   }
   try {
     recentSessions.value = (await listSessions(
-      activeWorkspaceId.value,
+      activeSpaceId.value,
       activePath.value,
     )).slice(0, 8);
   } finally {
@@ -245,7 +245,7 @@ async function refreshSessions(): Promise<void> {
   }
 }
 
-watch([activePath, activeWorkspaceId], () => {
+watch([activePath, activeSpaceId], () => {
   sessionsReady.value = false;
   void refreshSessions();
 }, { immediate: true });
@@ -282,7 +282,7 @@ function startConversationFromComposer(
   prompt: string,
   attachments: ChatAttachment[],
 ): void {
-  if (!activePath.value || !activeWorkspaceId.value) {
+  if (!activePath.value || !activeSpaceId.value) {
     Notify.create({
       message: t('shell.conversationCreateFailed'),
       classes: 'bg-danger text-white',
@@ -292,7 +292,7 @@ function startConversationFromComposer(
   void (async () => {
     try {
       const session = await createSession(
-        activeWorkspaceId.value!,
+        activeSpaceId.value!,
         activePath.value!,
       );
       setPendingChatLaunch({
