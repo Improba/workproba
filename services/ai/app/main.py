@@ -690,6 +690,8 @@ def build_rag_store(
         embedding_model=embedding_model,
         embedding_base_url=embedding_base_url,
         embedding_api_key=embedding_api_key,
+        embedding_batch_size=settings.limits.embedding_batch_size,
+        embedding_batch_max_chars=settings.limits.embedding_batch_max_chars,
     )
 
 

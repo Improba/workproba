@@ -103,8 +103,8 @@ describe('WorkprobaLayout side chat', () => {
     wrapper.unmount();
   });
 
-  it('replie l’explorateur de fichiers à l’ouverture du side chat sur écran étroit', async () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 900 });
+  it('replie l’explorateur de fichiers à l’ouverture du side chat', async () => {
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
     const wrapper = shallowMount(WorkprobaLayout, {
       slots: { default: '<div />' },
       global: {

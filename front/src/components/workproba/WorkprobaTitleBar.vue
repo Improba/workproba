@@ -6,12 +6,6 @@
       <span v-if="workspaceTitle" class="wp-titlebar__workspace" :title="activePath ?? ''">
         {{ workspaceTitle }}
       </span>
-      <template v-if="displayName">
-        <span class="wp-titlebar__sep">{{ t('shell.titlebarSep') }}</span>
-        <span class="wp-titlebar__user" :title="userTitle">
-          {{ displayName }}<template v-if="displayOrganisation"><span class="wp-titlebar__sep">{{ t('shell.titlebarSep') }}</span>{{ displayOrganisation }}</template>
-        </span>
-      </template>
     </div>
 
     <div class="wp-titlebar__right">
@@ -75,21 +69,23 @@
           </footer>
         </div>
       </q-dialog>
+
       <button
         v-if="hasSideChat"
         type="button"
         class="wp-titlebar__btn"
         :class="{ 'wp-titlebar__btn--active': sideChatOpen }"
-        :aria-label="t('shell.sideChat.toggle')"
-        :title="t('shell.sideChat.toggle')"
+        :aria-label="expertsAriaLabel"
+        :title="expertsAriaLabel"
         @click="$emit('toggle-side-chat')"
       >
         <q-tooltip anchor="bottom middle" self="top middle" :offset="[0, 6]">
-          {{ t('shell.sideChat.toggle') }}
+          {{ expertsAriaLabel }}
         </q-tooltip>
-        <Lucide name="message-square" size="16" color="text-muted" />
-        <span class="wp-sr-only">{{ t('shell.sideChat.toggle') }}</span>
+        <Lucide name="users" size="16" :color="sideChatOpen ? 'accent' : 'text-muted'" />
+        <span class="wp-sr-only">{{ expertsAriaLabel }}</span>
       </button>
+
       <button
         type="button"
         class="wp-titlebar__btn"
@@ -108,38 +104,47 @@
         />
         <span class="wp-sr-only">{{ filesAriaLabel }}</span>
       </button>
+
       <button
         type="button"
         class="wp-titlebar__btn"
-        :class="{ 'wp-titlebar__btn--active': !sidebarRail }"
-        :aria-label="sidebarAriaLabel"
-        :title="sidebarAriaLabel"
-        @click="$emit('toggle-sidebar')"
+        :aria-label="t('shell.titlebarMenu')"
+        :title="t('shell.titlebarMenu')"
+        aria-haspopup="menu"
       >
-        <q-tooltip anchor="bottom middle" self="top middle" :offset="[0, 6]">
-          {{ sidebarAriaLabel }}
-        </q-tooltip>
-        <Lucide
-          :name="sidebarRail ? 'panel-left-open' : 'panel-left-close'"
-          size="16"
-          color="text-muted"
-        />
-        <span class="wp-sr-only">{{ sidebarAriaLabel }}</span>
+        <Lucide name="ellipsis" size="16" color="text-muted" />
+        <span class="wp-sr-only">{{ t('shell.titlebarMenu') }}</span>
+        <q-menu anchor="bottom right" self="top right" :offset="[0, 6]">
+          <q-list dense class="wp-titlebar__menu">
+            <q-item clickable @click="$emit('toggle-sidebar')">
+              <q-item-section avatar>
+                <Lucide
+                  :name="sidebarRail ? 'panel-left-open' : 'panel-left-close'"
+                  size="16"
+                  color="text-muted"
+                />
+              </q-item-section>
+              <q-item-section>{{ sidebarAriaLabel }}</q-item-section>
+            </q-item>
+            <q-item clickable @click="$emit('open-shortcuts')">
+              <q-item-section avatar>
+                <Lucide name="keyboard" size="16" color="text-muted" />
+              </q-item-section>
+              <q-item-section>{{ t('shell.titlebarShortcuts') }}</q-item-section>
+            </q-item>
+            <q-separator />
+            <q-item class="wp-titlebar__theme-item">
+              <q-item-section avatar>
+                <Lucide name="sun-moon" size="16" color="text-muted" />
+              </q-item-section>
+              <q-item-section>{{ t('shell.titlebarTheme') }}</q-item-section>
+              <q-item-section side>
+                <ThemeToggler />
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-menu>
       </button>
-      <button
-        type="button"
-        class="wp-titlebar__btn"
-        :aria-label="t('shell.titlebarShortcuts')"
-        :title="t('shell.titlebarShortcutsTooltip')"
-        @click="$emit('open-shortcuts')"
-      >
-        <q-tooltip anchor="bottom middle" self="top middle" :offset="[0, 6]">
-          {{ t('shell.titlebarShortcutsTooltip') }}
-        </q-tooltip>
-        <Lucide name="keyboard" size="16" color="text-muted" />
-        <span class="wp-sr-only">{{ t('shell.titlebarShortcuts') }}</span>
-      </button>
-      <ThemeToggler />
     </div>
   </div>
 </template>
@@ -151,7 +156,6 @@ import { useRouter } from 'vue-router';
 import ThemeToggler from '@lib-improba/components/layouts/theme-toggler/ThemeToggler.vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useAppSettings } from '@composables/useAppSettings';
-import { useUserProfile } from '@composables/useUserProfile';
 import { capabilityLabels, guidedPresetLabel, localizedSetName } from '@utils/providerSets';
 
 const props = defineProps<{
@@ -172,16 +176,8 @@ defineEmits<{
 }>();
 
 const { activeSet, activeChatProvider, activeEmbeddingProvider, settingsMode, settingsLocked } = useAppSettings();
-const { displayName, displayOrganisation } = useUserProfile();
 const router = useRouter();
 const { t } = useI18n();
-
-const userTitle = computed(() => {
-  if (displayOrganisation.value) {
-    return `${displayName.value} — ${displayOrganisation.value}`;
-  }
-  return displayName.value;
-});
 
 const sidecarDialogOpen = ref(false);
 
@@ -195,6 +191,12 @@ const sidebarAriaLabel = computed(() =>
   props.sidebarRail
     ? t('shell.titlebarShowSidebar')
     : t('shell.titlebarHideSidebar'),
+);
+
+const expertsAriaLabel = computed(() =>
+  props.sideChatOpen
+    ? t('shell.titlebarHideExperts')
+    : t('shell.titlebarShowExperts'),
 );
 
 const sidecarState = computed(() => props.sidecarState ?? 'idle');
@@ -326,17 +328,7 @@ function onOpenSettings(): void {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 36vw;
-}
-
-.wp-titlebar__user {
-  font-size: var(--wp-fs-sm);
-  line-height: var(--wp-lh-normal);
-  color: var(--wp-text-faint);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 28vw;
+  max-width: 48vw;
 }
 
 .wp-titlebar__right {
@@ -548,5 +540,9 @@ function onOpenSettings(): void {
   &--active {
     color: var(--wp-accent);
   }
+}
+
+.wp-titlebar__theme-item {
+  min-width: 220px;
 }
 </style>

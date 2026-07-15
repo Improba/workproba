@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -121,6 +123,32 @@ def test_builtin_mistral_chat_models_catalog() -> None:
     assert small.hint == "Hybride : chat, code et raisonnement à la demande. Rapide et économique."
     assert medium.hint == "Modèle frontier pour agents, code long et workflows multi-étapes."
     assert large.hint == "Flagship multilingue et multimodal. Qualité maximale."
+
+
+def test_provider_set_from_front_sidecar_fixture() -> None:
+    fixture_path = Path(__file__).parent / "fixtures" / "mistral_builtin_sidecar.json"
+    data = json.loads(fixture_path.read_text(encoding="utf-8"))
+    parsed = ProviderSet.model_validate(data)
+    assert parsed.id == "mistral-default"
+    assert parsed.chat is not None
+    assert parsed.chat.provider == "mistral"
+    models = parsed.chat.models
+    assert models is not None
+    assert [m.model for m in models] == [
+        "mistral-small-latest",
+        "mistral-medium-latest",
+        "mistral-large-latest",
+    ]
+    small = next(m for m in models if m.model == "mistral-small-latest")
+    medium = next(m for m in models if m.model == "mistral-medium-latest")
+    large = next(m for m in models if m.model == "mistral-large-latest")
+    assert small.hint == "Hybride : chat, code et raisonnement à la demande. Rapide et économique."
+    assert medium.hint == "Modèle frontier pour agents, code long et workflows multi-étapes."
+    assert large.hint == "Flagship multilingue et multimodal. Qualité maximale."
+    assert small.reasoning_efforts == ["none", "high"]
+    assert medium.reasoning_efforts == ["none", "high"]
+    assert large.reasoning_efforts == ["none"]
+    assert small.context_window == 256000
 
 
 def test_supported_reasoning_efforts_for_set() -> None:

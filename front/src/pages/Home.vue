@@ -54,68 +54,7 @@
       </div>
     </q-dialog>
 
-    <section
-      v-if="showFirstLaunchOnboarding"
-      class="home-page__onboarding home-page__onboarding--guided"
-    >
-      <h1 class="home-page__welcome">
-        {{ t('home.welcomeTitle') }}
-      </h1>
-
-      <ol class="home-page__steps">
-        <li class="home-page__step">
-          <span class="home-page__step-badge">{{ t('home.stepBadge', { n: 1 }) }}</span>
-          <span class="home-page__step-icon" aria-hidden="true">
-            <Lucide name="layers" size="22" color="wp-accent" />
-          </span>
-          <div class="home-page__step-body">
-            <p class="home-page__step-title">{{ t('home.step1Title') }}</p>
-            <p class="home-page__step-text">
-              {{ t('home.step1Text') }}
-            </p>
-            <OpenSpaceButton :loading="loading" @click="openSpace" />
-          </div>
-        </li>
-
-        <li class="home-page__step">
-          <span class="home-page__step-badge">{{ t('home.stepBadge', { n: 2 }) }}</span>
-          <span class="home-page__step-icon" aria-hidden="true">
-            <Lucide name="messages-square" size="22" color="wp-accent" />
-          </span>
-          <div class="home-page__step-body">
-            <p class="home-page__step-title">{{ t('home.step2Title') }}</p>
-            <p class="home-page__step-text">
-              {{ t('home.step2Text') }}
-            </p>
-          </div>
-        </li>
-
-        <li class="home-page__step">
-          <span class="home-page__step-badge">{{ t('home.stepBadge', { n: 3 }) }}</span>
-          <span class="home-page__step-icon" aria-hidden="true">
-            <Lucide name="file-plus" size="22" color="wp-accent" />
-          </span>
-          <div class="home-page__step-body">
-            <p class="home-page__step-title">{{ t('home.step3Title') }}</p>
-            <p class="home-page__step-text">
-              {{ t('home.step3Text') }}
-            </p>
-          </div>
-        </li>
-      </ol>
-
-      <button
-        type="button"
-        class="home-page__skip"
-        @click="skipOnboarding"
-      >
-        {{ t('home.skipOnboarding') }}
-      </button>
-
-      <p v-if="error" class="home-page__error">{{ error }}</p>
-    </section>
-
-    <section v-else-if="!activePath && sessionsChecked" class="home-page__onboarding">
+    <section v-if="!activePath && sessionsChecked" class="home-page__onboarding">
       <h1 class="home-page__title">{{ t('home.welcomeShort') }}</h1>
       <p class="home-page__lead">
         {{ t('home.openSpaceLead') }}
@@ -124,31 +63,10 @@
       <p v-if="error" class="home-page__error">{{ error }}</p>
     </section>
 
-    <section v-else class="home-page__workspace">
-      <header class="home-page__header">
-        <div class="home-page__header-text">
-          <h1 class="home-page__title">{{ workspaceTitle || t('home.spaceTitle') }}</h1>
-          <p class="home-page__path" :title="activePath ?? undefined">
-            {{ activePath ? t('shell.spacePathHint', { path: activePath }) : '' }}
-          </p>
-        </div>
-        <div class="home-page__actions">
-          <OpenSpaceButton
-            :loading="loading"
-            :label="t('common.changeSpace')"
-            @click="openSpace"
-          />
-          <button
-            type="button"
-            class="home-page__new-chat"
-            :disabled="loading"
-            @click="startNewConversation"
-          >
-            <Lucide name="message-square-plus" size="sm" color="wp-canard" />
-            {{ t('common.newConversation') }}
-          </button>
-        </div>
-      </header>
+    <section v-else-if="activePath" class="home-page__workspace">
+      <h1 class="home-page__hero">{{ t('home.heroQuestion') }}</h1>
+
+      <HomeComposer :disabled="loading" @submit="startConversationWithPrompt" />
 
       <p v-if="error" class="home-page__error">{{ error }}</p>
 
@@ -173,22 +91,6 @@
           </li>
         </ul>
       </section>
-
-      <section v-else class="home-page__empty">
-        <p class="home-page__empty-text">
-          {{ t('home.emptyConversations') }}
-        </p>
-        <StartPrompts @select="startConversationWithPrompt" />
-        <button
-          type="button"
-          class="home-page__new-chat home-page__new-chat--secondary"
-          :disabled="loading"
-          @click="startNewConversation"
-        >
-          <Lucide name="message-square-plus" size="sm" color="wp-canard" />
-          {{ t('home.startEmptyConversation') }}
-        </button>
-      </section>
     </section>
   </div>
 </template>
@@ -200,10 +102,8 @@ import { useRouter } from 'vue-router';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import OpenSpaceButton from '@components/workspace/OpenSpaceButton.vue';
-import StartPrompts from '@components/chat/StartPrompts.vue';
-import { useAppSettings } from '@composables/useAppSettings';
+import HomeComposer from '@components/home/HomeComposer.vue';
 import { useUserProfile } from '@composables/useUserProfile';
-import { listWorkspaces } from '@composables/useDesktop';
 import { useProject } from '@composables/useProject';
 import { createSession, listSessions, type LocalSession } from '@services/workspaceSession';
 import { bumpSessions } from '@composables/useSessionSync';
@@ -211,16 +111,7 @@ import { bumpSessions } from '@composables/useSessionSync';
 const router = useRouter();
 const { t, locale } = useI18n();
 
-const {
-  activePath,
-  activeWorkspaceId,
-  workspaceTitle,
-  loading,
-  error,
-  openSpace,
-} = useProject();
-
-const { onboardingDone, loaded: settingsLoaded, setOnboardingDone } = useAppSettings();
+const { activePath, activeWorkspaceId, loading, error, openSpace } = useProject();
 
 const {
   needsOnboarding: needsProfileOnboarding,
@@ -252,18 +143,7 @@ async function submitProfileOnboarding(): Promise<void> {
 }
 
 const recentSessions = ref<LocalSession[]>([]);
-const hasAnySessions = ref(false);
 const sessionsChecked = ref(false);
-
-const showFirstLaunchOnboarding = computed(
-  () =>
-    settingsLoaded.value
-    && sessionsChecked.value
-    && !activePath.value
-    && !hasAnySessions.value
-    && !onboardingDone.value
-    && !needsProfileOnboarding.value,
-);
 
 async function refreshSessions(): Promise<void> {
   if (!activePath.value || !activeWorkspaceId.value) {
@@ -276,26 +156,12 @@ async function refreshSessions(): Promise<void> {
   )).slice(0, 8);
 }
 
-async function checkAnySessions(): Promise<void> {
-  const workspaces = await listWorkspaces();
-  for (const workspace of workspaces) {
-    const sessions = await listSessions(workspace.id, workspace.folderPath);
-    if (sessions.length > 0) {
-      hasAnySessions.value = true;
-      sessionsChecked.value = true;
-      return;
-    }
-  }
-  hasAnySessions.value = false;
-  sessionsChecked.value = true;
-}
-
 watch([activePath, activeWorkspaceId], () => {
   void refreshSessions();
 }, { immediate: true });
 
 onMounted(() => {
-  void checkAnySessions();
+  sessionsChecked.value = true;
 });
 
 function formatDate(iso: string): string {
@@ -307,33 +173,8 @@ function formatDate(iso: string): string {
   });
 }
 
-function startNewConversation(): void {
-  if (!activePath.value || !activeWorkspaceId.value) {
-    Notify.create({
-      message: t('shell.conversationCreateFailed'),
-      classes: 'bg-danger text-white',
-    });
-    return;
-  }
-  void (async () => {
-    try {
-      const session = await createSession(
-        activeWorkspaceId.value!,
-        activePath.value!,
-      );
-      bumpSessions();
-      await router.push({
-        name: 'chat_session',
-        params: { id: session.id },
-        state: { focusComposer: true },
-      });
-    } catch (err) {
-      Notify.create({
-        message: err instanceof Error ? err.message : t('shell.conversationCreateFailed'),
-        classes: 'bg-danger text-white',
-      });
-    }
-  })();
+function openSession(sessionId: string): void {
+  void router.push({ name: 'chat_session', params: { id: sessionId } });
 }
 
 function startConversationWithPrompt(prompt: string): void {
@@ -364,14 +205,6 @@ function startConversationWithPrompt(prompt: string): void {
     }
   })();
 }
-
-function openSession(sessionId: string): void {
-  void router.push({ name: 'chat_session', params: { id: sessionId } });
-}
-
-function skipOnboarding(): void {
-  void setOnboardingDone(true);
-}
 </script>
 
 <style scoped lang="scss">
@@ -398,127 +231,19 @@ function skipOnboarding(): void {
   padding-top: 2rem;
 }
 
-.home-page__onboarding--guided {
-  gap: 1.75rem;
-}
-
-.home-page__welcome {
+.home-page__onboarding .home-page__title,
+.home-page__hero {
   margin: 0;
   font-family: var(--wp-font-head);
-  font-size: var(--wp-fs-display, 2rem);
+  font-size: var(--wp-fs-xl);
   font-weight: 700;
   line-height: 1.25;
   color: var(--wp-text);
+  text-align: center;
 }
 
-.home-page__onboarding .home-page__title {
-  font-family: var(--wp-font-head);
-  font-size: 2rem;
-  font-weight: 700;
-}
-
-.home-page__steps {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.home-page__step {
-  display: grid;
-  grid-template-columns: auto auto 1fr;
-  gap: 0.85rem 1rem;
-  align-items: start;
-  padding: 1rem 1.1rem;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-r-lg);
-  background: var(--wp-surface);
-}
-
-.home-page__step-badge {
-  grid-row: 1 / span 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border-radius: 999px;
-  background: var(--wp-accent-soft);
-  color: var(--wp-canard);
-  font-size: 0.8125rem;
-  font-weight: 700;
-}
-
-.home-page__step-icon {
-  grid-row: 1 / span 2;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--wp-r-md);
-  background: var(--wp-surface-2);
-}
-
-.home-page__step-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.home-page__step-title {
-  margin: 0;
-  font-family: var(--wp-font-head);
-  font-size: 1rem;
-  font-weight: 700;
-  color: var(--wp-text);
-}
-
-.home-page__step-text {
-  margin: 0;
-  font-size: 0.875rem;
-  color: var(--wp-text-muted);
-  line-height: 1.45;
-}
-
-.home-page__skip {
-  align-self: flex-start;
-  border: none;
-  background: none;
-  padding: 0;
-  font-size: 0.875rem;
-  color: var(--wp-text-muted);
-  text-decoration: underline;
-  cursor: pointer;
-  transition: color var(--wp-dur) var(--wp-ease);
-
-  &:hover {
-    color: var(--wp-text);
-  }
-}
-
-.home-page__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.home-page__header-text {
-  min-width: 0;
-  flex: 1;
-}
-
-.home-page__title {
-  margin: 0;
-  font-family: var(--wp-font-head);
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--wp-text);
+.home-page__hero {
+  margin-bottom: 0.25rem;
 }
 
 .home-page__lead {
@@ -526,53 +251,6 @@ function skipOnboarding(): void {
   font-size: 0.9375rem;
   color: var(--wp-text-muted);
   line-height: 1.6;
-}
-
-.home-page__path {
-  margin: 0.35rem 0 0;
-  font-size: 0.8125rem;
-  color: var(--wp-text-faint);
-  word-break: break-all;
-}
-
-.home-page__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.home-page__new-chat {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  padding: 0.6rem 1rem;
-  border: none;
-  border-radius: var(--wp-r-md);
-  background: var(--wp-accent);
-  color: var(--wp-canard);
-  font-size: 0.92rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--wp-dur) var(--wp-ease);
-
-  &:hover:not(:disabled) {
-    background: var(--wp-accent-strong);
-  }
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-}
-
-.home-page__new-chat--secondary {
-  background: var(--wp-surface-2);
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text);
-
-  &:hover:not(:disabled) {
-    background: var(--wp-surface-3);
-  }
 }
 
 .home-page__error {
@@ -586,17 +264,20 @@ function skipOnboarding(): void {
 }
 
 .home-page__section-title {
-  margin: 0;
+  margin: 0.5rem 0 0;
   font-family: var(--wp-font-head);
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: var(--wp-text);
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  color: var(--wp-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
 .home-page__sessions {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  margin-top: 0.5rem;
 }
 
 .home-page__session-list {
@@ -641,20 +322,6 @@ function skipOnboarding(): void {
   font-size: 0.8125rem;
   color: var(--wp-text-muted);
   white-space: nowrap;
-}
-
-.home-page__empty {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 1rem;
-  padding: 1.5rem 0;
-}
-
-.home-page__empty-text {
-  margin: 0;
-  font-size: 0.9375rem;
-  color: var(--wp-text-muted);
 }
 
 .home-page__profile-dialog {

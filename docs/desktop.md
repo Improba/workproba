@@ -149,7 +149,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 ### Phase D: validation
 
-- **Sidecar (Python)**: streaming chat, file tools, RAG, scoped memory, personas plugins. pytest suite: see [testing.md](./testing.md) (`pytest -q` for current count).
+- **Sidecar (Python)**: streaming chat, file tools, RAG, scoped memory, personas plugins, work events, effect gate. pytest: **634 tests** (see [testing.md](./testing.md)).
 - **Rust shell**: venv-aware sidecar spawn + `ai_sidecar_status` + `protocol-asset` for image preview. `cargo check` OK.
 - **Front**: `WorkprobaLayout` (sidebar, right panel, side chat), `useSidecarHealth`, personas plugin integrated in composer.
 - **End-to-end desktop run**: `make dev`, open a space, test chat, memory, personas, document preview, confirmation on file write.
@@ -171,9 +171,11 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 ### Functional (beyond initial release, to prioritize)
 
-- **OCR / scanned PDFs**: `LocalExtractor` handles text PDF (pdfplumber), Word/Excel/PowerPoint. OCR (Docling and/or Mistral OCR) not implemented: required for scanned PDFs and images. User decision already made ("Docling for OCR"): integrate Docling as heavy extractor with Mistral OCR fallback.
-- **Durable (Temporal/Inngest)**: deferred. Current agent loop is synchronous (one SSE turn). No long workflow resume/persistence on crash. Reintroduce if long tasks (large corpus indexing, batch processing) justify it.
-- **Configurable approval policy**: gate is always on for mapped sensitive tools; a global "auto-approve" setting is not implemented yet.
+- **OCR / scanned PDFs**: Mistral OCR path exists when the active provider set supports it; Docling integration deferred. User decision ("Docling for OCR") remains open for a heavy local extractor.
+- **V1→V2 storage migration** (T-V2-15b): legacy `.workproba/` under client folders not yet migrated to canonical `app_data/spaces/`.
+- **Durable (Temporal/Inngest)**: deferred. Current agent loop is synchronous (one SSE turn). No long workflow resume/persistence on crash.
+- **Configurable approval policy**: effect gate is always on for mapped sensitive tools; a global "auto-approve" setting is not implemented yet.
+- **Office diff before write**: `preview_change` works for text/markdown; binary Office diff not yet available (T-V2-14).
 
 ### Quality / integration
 

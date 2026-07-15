@@ -27,19 +27,6 @@
           <span class="wp-right-panel__tab-label">{{ t('shell.preview') }}</span>
         </button>
         <button
-          v-if="isPersonasPluginActive"
-          type="button"
-          role="tab"
-          class="wp-right-panel__tab wp-right-panel__tab--personas"
-          :class="{ 'wp-right-panel__tab--active': activeTab === 'personas' }"
-          :aria-selected="activeTab === 'personas'"
-          :aria-label="t('personas.panel.title')"
-          @click="onPersonasTab"
-        >
-          <Lucide name="users" size="15" :color="activeTab === 'personas' ? 'wp-gold' : 'text-muted'" />
-          <span class="wp-right-panel__tab-label">{{ t('personas.panel.title') }}</span>
-        </button>
-        <button
           v-for="tab in rightPanelPluginTabs"
           :key="tab.key"
           type="button"
@@ -87,19 +74,6 @@
         @restored="onVersionRestored"
       />
 
-      <PersonasCentralPanel
-        v-if="isPersonasPluginActive"
-        v-show="activeTab === 'personas'"
-        class="wp-right-panel__personas"
-        :plugin-active="isPersonasPluginActive"
-        :plugin-data-dir="personasDataDir"
-        @ask-opinion="onAskOpinion"
-        @meeting="onStartMeeting"
-        @discuss="onDiscuss"
-        @relaunch-meeting="onRelaunchMeeting"
-        @resume-discussion="onResumeDiscussion"
-      />
-
       <component
         :is="tab.component"
         v-for="tab in rightPanelPluginTabs"
@@ -127,10 +101,8 @@ import FileExplorer from '@components/workproba/FileExplorer.vue';
 import DocumentPreview from '@components/workproba/DocumentPreview.vue';
 import VersionsPanel from '@components/workproba/VersionsPanel.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
-import PersonasCentralPanel from '@components/personas/PersonasCentralPanel.vue';
 import { usePluginSlots } from '@composables/usePluginSlots';
-import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
-import { usePersonasActions } from '@composables/usePersonasActions';
+import { usePlugins } from '@composables/usePlugins';
 
 defineProps<{
   activePath: string | null;
@@ -143,15 +115,8 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const { isProjetPluginActive, isPersonasPluginActive, getPluginDataDir } = usePlugins();
+const { isProjetPluginActive } = usePlugins();
 const { rightPanelPluginTabs } = usePluginSlots();
-const {
-  askOpinion,
-  startMeeting,
-  discuss,
-  relaunchMeeting,
-  resumeDiscussion,
-} = usePersonasActions();
 
 const activeTab = ref<string>('files');
 const selectedFilePath = ref<string | null>(null);
@@ -159,7 +124,6 @@ const previewRefreshKey = ref(0);
 const publishDialogOpen = ref(false);
 const publishSourcePath = ref<string | null>(null);
 const pluginRefs = new Map<string, { refresh?: () => void | Promise<void> }>();
-const personasDataDir = ref<string | null>(null);
 
 function setPluginRef(pluginId: string, el: unknown): void {
   if (el) {
@@ -187,54 +151,8 @@ function onVersionRestored(): void {
   previewRefreshKey.value += 1;
 }
 
-async function ensurePersonasDataDir(): Promise<void> {
-  if (personasDataDir.value) return;
-  try {
-    personasDataDir.value = await getPluginDataDir(PERSONAS_PLUGIN_ID);
-  } catch {
-    personasDataDir.value = null;
-  }
-}
-
-watch(
-  () => isPersonasPluginActive.value,
-  (active) => {
-    if (active) void ensurePersonasDataDir();
-  },
-  { immediate: true },
-);
-
-function onPersonasTab(): void {
-  activeTab.value = 'personas';
-  void ensurePersonasDataDir();
-}
-
-function onAskOpinion(personaIds: string[]): void {
-  void askOpinion(personaIds);
-}
-
-function onStartMeeting(): void {
-  void startMeeting();
-}
-
-function onDiscuss(personaIds: string[]): void {
-  void discuss(personaIds);
-}
-
-function onRelaunchMeeting(config: { personaIds: string[]; topic: string; rounds: number }): void {
-  void relaunchMeeting(config);
-}
-
-function onResumeDiscussion(payload: {
-  discussionId: string;
-  personaIds: string[];
-  messages: import('@composables/usePersonas').DiscussionMessage[];
-}): void {
-  void resumeDiscussion(payload);
-}
-
 watch(rightPanelPluginTabs, (tabs) => {
-  const keys = new Set(['files', 'preview', 'personas', ...tabs.map((tab) => tab.key)]);
+  const keys = new Set(['files', 'preview', ...tabs.map((tab) => tab.key)]);
   if (!keys.has(activeTab.value)) {
     activeTab.value = 'files';
   }
@@ -315,19 +233,9 @@ defineExpose({
 
 .wp-right-panel__files,
 .wp-right-panel__preview,
-.wp-right-panel__plugin-pane,
-.wp-right-panel__personas {
+.wp-right-panel__plugin-pane {
   flex: 1;
   min-height: 0;
-}
-
-.wp-right-panel__personas {
-  overflow-y: auto;
-}
-
-.wp-right-panel__tab--personas.wp-right-panel__tab--active {
-  color: var(--wp-gold);
-  border-bottom-color: var(--wp-gold);
 }
 
 .wp-right-panel__preview {

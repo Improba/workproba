@@ -8,10 +8,7 @@
       @drop.prevent="onDrop"
     >
       <div v-if="messages.length === 0" class="chat-view__empty">
-        <p class="chat-view__empty-hint">
-          {{ t('chat.emptyHint') }}
-        </p>
-        <StartPrompts @select="applyPrompt" />
+        <StartPrompts variant="chips" @select="applyPrompt" />
       </div>
 
       <MessageList
@@ -120,22 +117,21 @@
 
             <template v-if="personasEnabled">
               <q-separator class="chat-view__add-sep" />
-                  <div class="chat-view__add-head">{{ t('chat.addMenuPersonas') }}</div>
               <q-list dense>
                 <q-item
                   clickable
                   class="chat-view__add-item"
-                  @click="emit('personas-ask')"
+                  @click="emit('personas-open')"
                 >
                   <q-item-section avatar class="chat-view__add-icon">
                     <Lucide name="users" size="16" color="wp-gold" />
                   </q-item-section>
                   <q-item-section>
                     <q-item-label class="chat-view__add-item-label">
-                      {{ t('personas.actions.askOpinion') }}
+                      {{ t('personas.actions.consultExperts') }}
                     </q-item-label>
                     <q-item-label caption class="chat-view__add-item-hint">
-                      {{ t('personas.actions.askOpinionHint') }}
+                      {{ t('personas.actions.consultExpertsHint') }}
                     </q-item-label>
                   </q-item-section>
                 </q-item>
@@ -153,23 +149,6 @@
                     </q-item-label>
                     <q-item-label caption class="chat-view__add-item-hint">
                       {{ t('personas.actions.simulateMeetingHint') }}
-                    </q-item-label>
-                  </q-item-section>
-                </q-item>
-                <q-item
-                  clickable
-                  class="chat-view__add-item"
-                  @click="emit('personas-discuss')"
-                >
-                  <q-item-section avatar class="chat-view__add-icon">
-                    <Lucide name="message-circle" size="16" color="wp-gold" />
-                  </q-item-section>
-                  <q-item-section>
-                    <q-item-label class="chat-view__add-item-label">
-                      {{ t('personas.actions.discuss') }}
-                    </q-item-label>
-                    <q-item-label caption class="chat-view__add-item-hint">
-                      {{ t('personas.actions.discussHint') }}
                     </q-item-label>
                   </q-item-section>
                 </q-item>
@@ -285,9 +264,8 @@ const emit = defineEmits<{
   'plan-reject': [];
   'update:reasoningEffort': [value: ReasoningEffort];
   'update:reasoningModel': [model: string];
-  'personas-ask': [];
+  'personas-open': [];
   'personas-meeting': [];
-  'personas-discuss': [];
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
 }>();

@@ -82,6 +82,8 @@ def _make_tree(root: Path) -> None:
     (root / ".git" / "config").write_text("git", encoding="utf-8")
     (root / "node_modules").mkdir()
     (root / "node_modules" / "x.js").write_text("module.exports=1", encoding="utf-8")
+    (root / "vendor").mkdir()
+    (root / "vendor" / "lib.php").write_text("<?php", encoding="utf-8")
     # Secret
     (root / ".env").write_text("MISTRAL_API_KEY=secret", encoding="utf-8")
     # Binaire opaque non Office -> ignoré
@@ -125,6 +127,7 @@ def test_index_workspace_skips_ignored_dirs_and_secrets(tmp_path: Path) -> None:
     indexed_ids = {item["document_id"] for item in store.indexed}
     assert not any(p.startswith(".git") for p in indexed_ids)
     assert not any(p.startswith("node_modules") for p in indexed_ids)
+    assert not any(p.startswith("vendor") for p in indexed_ids)
     assert ".env" not in indexed_ids
     # Les chemins sensibles (`.env`) sont filtrés avant collecte : jamais scannés.
     assert ".env" not in report.skipped_paths

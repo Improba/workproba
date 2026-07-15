@@ -1,6 +1,6 @@
 # Core web search (`web_search`)
 
-> **Last updated:** 14 Jul 2026  
+> **Last updated:** 15 Jul 2026  
 > **Status:** implemented (Mistral path); Tavily fallback and provider-set capabilities pending
 
 The **`web_search`** agent tool lets the assistant look up **recent or external facts** on the public web and return **citable sources**. It is a **core agent tool**, not a plugin. The browser plugin (`workproba.browser`) remains separate for page interaction (click, type, auth flows).
@@ -201,7 +201,7 @@ An initial implementation shipped as opt-in plugin `workproba.web_search`. Produ
 |---|---|
 | T-V2-WS-3 | Tavily fallback for non-Mistral sets (e.g. Ollama) |
 | T-V2-WS-4 | `capabilities.web_search` on provider sets + UI badges |
-| T-V2-WS-5 | Audit log + inline citation chips in assistant messages |
+| T-V2-WS-5 | Audit log + inline citation chips in assistant messages (audit via effect gate partial) |
 
 Full spec and implementation plan: [workproba-improba/roadmaps/web-search.md](../../workproba-improba/roadmaps/web-search.md).
 

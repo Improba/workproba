@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -42,8 +44,60 @@ def test_rag_store_disabled_when_no_embedding_model(tmp_path: Path) -> None:
         embedding_api_key="key",
     )
     # search avant indexage -> dim inconnue -> liste vide (pas d'appel embedding).
-    import asyncio
-
     results = asyncio.run(store.search(query="x", limit=5))
     assert results == []
+    store.close()
+
+
+def test_embed_batches_api_calls(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    batch_sizes: list[int] = []
+
+    async def fake_aembedding(**kwargs: Any) -> Any:
+        batch = kwargs["input"]
+        batch_sizes.append(len(batch))
+        dim = 4
+        return type(
+            "EmbeddingResponse",
+            (),
+            {"data": [{"embedding": [0.0] * dim} for _ in batch]},
+        )()
+
+    monkeypatch.setattr("app.rag.store.litellm.aembedding", fake_aembedding)
+
+    store = RagStore(
+        db_path=tmp_path / "memory.db",
+        embedding_model="mistral/mistral-embed",
+        embedding_batch_size=10,
+        embedding_batch_max_chars=100_000,
+    )
+    vectors = asyncio.run(store._embed(["chunk"] * 25))
+    assert len(vectors) == 25
+    assert batch_sizes == [10, 10, 5]
+    store.close()
+
+
+def test_embed_batches_respects_char_budget(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    batch_sizes: list[int] = []
+
+    async def fake_aembedding(**kwargs: Any) -> Any:
+        batch = kwargs["input"]
+        batch_sizes.append(len(batch))
+        dim = 4
+        return type(
+            "EmbeddingResponse",
+            (),
+            {"data": [{"embedding": [0.0] * dim} for _ in batch]},
+        )()
+
+    monkeypatch.setattr("app.rag.store.litellm.aembedding", fake_aembedding)
+
+    store = RagStore(
+        db_path=tmp_path / "memory.db",
+        embedding_model="mistral/mistral-embed",
+        embedding_batch_size=100,
+        embedding_batch_max_chars=2500,
+    )
+    vectors = asyncio.run(store._embed(["x" * 1200] * 5))
+    assert len(vectors) == 5
+    assert batch_sizes == [2, 2, 1]
     store.close()

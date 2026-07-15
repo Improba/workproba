@@ -8,7 +8,7 @@
       :sidecar-state="sidecarState"
       :side-chat-open="sideChatOpen"
       :has-side-chat="hasSideChat"
-      @toggle-files="filesOpen = !filesOpen"
+      @toggle-files="toggleFiles()"
       @toggle-sidebar="sidebarRail = !sidebarRail"
       @toggle-side-chat="toggleSideChat"
       @open-shortcuts="shortcutsHelpOpen = true"
@@ -31,7 +31,7 @@
         :active-path="activePath"
         :workspace-data-dir="activeDataDir"
         :open="filesOpen"
-        @toggle="filesOpen = !filesOpen"
+        @toggle="toggleFiles()"
       />
 
       <SideChatPanel />
@@ -40,7 +40,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import WorkprobaTitleBar from '@components/workproba/WorkprobaTitleBar.vue';
 import WorkspaceSidebar from '@components/workproba/WorkspaceSidebar.vue';
 import RightPanel from '@components/workproba/RightPanel.vue';
@@ -70,7 +70,7 @@ defineProps<{
 const { activePath, workspaceTitle, activeDataDir } = useProject();
 
 const sidebarRail = ref(false);
-const filesOpen = ref(true);
+const filesOpen = ref(false);
 const shortcutsHelpOpen = ref(false);
 
 const { sideChatOpen, openSideChat, closeSideChat, hasSideChat } = useSideChat();
@@ -85,11 +85,26 @@ function toggleSideChat(): void {
     closeSideChat();
     return;
   }
+  filesOpen.value = false;
   openSideChat(firstSideChatPluginId.value);
-  if (window.innerWidth < 1100) {
-    filesOpen.value = false;
-  }
 }
+
+function toggleFiles(): void {
+  if (filesOpen.value) {
+    filesOpen.value = false;
+    return;
+  }
+  closeSideChat();
+  filesOpen.value = true;
+}
+
+watch(sideChatOpen, (open) => {
+  if (open) filesOpen.value = false;
+});
+
+watch(filesOpen, (open) => {
+  if (open && sideChatOpen.value) closeSideChat();
+});
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -135,7 +150,7 @@ function onKeydown(e: KeyboardEvent): void {
   if (!mod) return;
   if (key === 'b') {
     e.preventDefault();
-    filesOpen.value = !filesOpen.value;
+    toggleFiles();
   } else if (key === '\\') {
     e.preventDefault();
     sidebarRail.value = !sidebarRail.value;

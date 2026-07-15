@@ -4,7 +4,7 @@ Index of **Workproba** project documentation: local-folder work assistant (Claud
 
 ## CI / CD
 
-Operational since **14/07/2026** (commit `1155d2d`).
+Operational since **14/07/2026** (commit `1155d2d`). **Voie B** (Work Event Bus + Human Approval Gate) shipped **15/07/2026**.
 
 | Workflow | Trigger | Role |
 |---|---|---|

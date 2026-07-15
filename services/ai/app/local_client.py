@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from app.documents.extractor import LocalExtractor, is_binary_document
-from app.limits import DEFAULT_LIMITS, Limits
+from app.limits import DEFAULT_LIMITS, Limits, WORKSPACE_IGNORED_DIRS
 from app.project_client import ProjectClient
 from app.rag.store import RagStoreProtocol
 from app.schemas import (
@@ -22,8 +22,8 @@ from app.versions import snapshot_before_overwrite
 logger = logging.getLogger(__name__)
 
 
-# Dossiers ignorés lors du scan de recherche (substring fallback).
-IGNORED_DIRS = {".git", ".workproba", ".venv", "__pycache__", "node_modules"}
+# Dossiers ignorés lors de l'indexation RAG et du scan search_kb (substring).
+IGNORED_DIRS = WORKSPACE_IGNORED_DIRS
 
 # Fichiers texte sans extension courants à indexer (match sur le nom, case-insensitive).
 _INDEXABLE_TEXT_NAMES = {"makefile", "dockerfile", "rakefile", "gemfile", ".gitignore"}

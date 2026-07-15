@@ -259,6 +259,14 @@ cd services/ai
 .venv/bin/pytest tests/test_provider_sets.py tests/test_llm_config.py tests/test_compaction.py -q
 ```
 
+Shared JSON fixture for the front ↔ sidecar contract:
+
+| File | Role |
+|---|---|
+| `services/ai/tests/fixtures/mistral_builtin_sidecar.json` | Canonical `providerSetToSidecar(MISTRAL_BUILTIN_SET)` payload |
+| `front/test/unit/utils/providerSetsSerialization.spec.ts` | Round-trip + fixture parse (Vitest) |
+| `tests/test_provider_sets.py::test_provider_set_from_front_sidecar_fixture` | Pydantic validation of the same fixture |
+
 Covers: builtin catalogue, `supported_reasoning_efforts_for_set`, provider_set-aware `build_model_settings`, Mistral large heuristic without set.
 
 ## Manual verification checklist

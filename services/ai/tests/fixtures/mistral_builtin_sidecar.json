@@ -1,0 +1,67 @@
+{
+  "id": "mistral-default",
+  "name": "Mistral",
+  "description": "Cloud Improba, tout-intégré.",
+  "badges": [
+    "Cloud Improba",
+    "Recommandé"
+  ],
+  "chat": {
+    "provider": "mistral",
+    "model": "mistral-small-latest",
+    "reasoning": "auto",
+    "api_key_ref": "secrets/mistral",
+    "base_url": "https://api.mistral.ai/v1",
+    "models": [
+      {
+        "model": "mistral-small-latest",
+        "label": "Mistral Small",
+        "hint": "Hybride : chat, code et raisonnement à la demande. Rapide et économique.",
+        "context_window": 256000,
+        "reasoning_efforts": [
+          "none",
+          "high"
+        ]
+      },
+      {
+        "model": "mistral-medium-latest",
+        "label": "Mistral Medium",
+        "hint": "Modèle frontier pour agents, code long et workflows multi-étapes.",
+        "context_window": 256000,
+        "reasoning_efforts": [
+          "none",
+          "high"
+        ]
+      },
+      {
+        "model": "mistral-large-latest",
+        "label": "Mistral Large",
+        "hint": "Flagship multilingue et multimodal. Qualité maximale.",
+        "context_window": 256000,
+        "reasoning_efforts": [
+          "none"
+        ]
+      }
+    ]
+  },
+  "vision": {
+    "mode": "chat"
+  },
+  "capabilities": {
+    "reasoning": "medium",
+    "vision": true,
+    "tools": true
+  },
+  "is_default": true,
+  "is_builtin": true,
+  "embeddings": {
+    "provider": "mistral",
+    "model": "mistral-embed",
+    "api_key_ref": "secrets/mistral",
+    "base_url": "https://api.mistral.ai/v1"
+  },
+  "ocr": {
+    "provider": "mistral",
+    "mode": "auto"
+  }
+}

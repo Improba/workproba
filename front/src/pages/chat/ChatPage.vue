@@ -81,9 +81,8 @@
         @confirm-deny="() => confirm('deny')"
         @plan-approve="() => approvePlan(true)"
         @plan-reject="() => approvePlan(false)"
-        @personas-ask="openOpinionPicker"
+        @personas-open="openExpertsPanel"
         @personas-meeting="openMeetingView"
-        @personas-discuss="openDiscussionView"
         @personas-another="(card) => openOpinionPicker(card.question)"
         @personas-to-discussion="openDiscussionFromOpinion"
       />
@@ -675,6 +674,14 @@ function abortActiveMeeting(): void {
 
 function buildConversationContext(): string {
   return formatMainChatContext(messages.value, { locale: locale.value });
+}
+
+function openExpertsPanel(): void {
+  void loadPersonasIfNeeded().then(() => {
+    openSideChat(PERSONAS_PLUGIN_ID, {
+      conversationContext: buildConversationContext(),
+    });
+  });
 }
 
 function openOpinionPicker(

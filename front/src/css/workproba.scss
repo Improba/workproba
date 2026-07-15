@@ -54,7 +54,7 @@
   --wp-space-6: 24px;
 
   /* Typo */
-  --wp-font-ui: 'Varela Round', system-ui, sans-serif;
+  --wp-font-ui: 'Inter', system-ui, sans-serif;
   --wp-font-head: 'Inter', system-ui, sans-serif;
   --wp-font-chat: 'Inter', system-ui, sans-serif;
   --wp-font-mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -126,8 +126,8 @@
     --wp-accent: var(--accent);
     --wp-accent-strong: var(--accent-high);
     --wp-accent-soft: var(--accent-lower);
-    --wp-selection: var(--accent);
-    --wp-selection-soft: var(--accent-lower);
+    --wp-selection: var(--primary);
+    --wp-selection-soft: var(--primary-lower);
     --wp-user-bubble-bg: var(--primary-lower);
     --wp-user-bubble-text: var(--text);
     --wp-user-bubble-border: var(--primary-low);

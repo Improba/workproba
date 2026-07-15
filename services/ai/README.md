@@ -153,7 +153,7 @@ Full documentation: [docs/web-search.md](../../docs/web-search.md).
 
 ## Workspace RAG indexing
 
-`POST /agent/index-workspace` walks the project folder, extracts text from eligible files (text + Office: PDF/DOCX/XLSX/PPTX) and indexes them in the workspace `RagStore` (`memory.db`, project scope). Sensitive folders (`.git`, `node_modules`, …) and forbidden paths (`.env`, …) are ignored. Limits: `INDEX_MAX_FILES` / `INDEX_MAX_FILE_BYTES` / `INDEX_MAX_TOTAL_CHARS`. If RAG is disabled (no embedding model), returns `enabled=false` without error.
+`POST /agent/index-workspace` walks the project folder, extracts text from eligible files (text + Office: PDF/DOCX/XLSX/PPTX) and indexes them in the workspace `RagStore` (`memory.db`, project scope). Sensitive folders (`.git`, `node_modules`, `vendor`, …) and forbidden paths (`.env`, …) are ignored. Embeddings are sent in batches (`EMBEDDING_BATCH_SIZE`, `EMBEDDING_BATCH_MAX_CHARS`). Limits: `INDEX_MAX_FILES` / `INDEX_MAX_FILE_BYTES` / `INDEX_MAX_TOTAL_CHARS`. If RAG is disabled (no embedding model), returns `enabled=false` without error.
 
 ## Agent tools
 

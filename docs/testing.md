@@ -52,7 +52,7 @@ WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 
 ### Current coverage
 
-Run `pytest -q` for the up-to-date count (about **606 offline tests** + a few skips, plus 2 live). Covers: agent, approval gate, work events, scoped memory (hybrid ranking + embedding cache), plugins, documents, audit, attachments, RAG, HTTP SSE.
+Run `pytest -q` for the up-to-date count (**634 offline tests** + a few skips, plus 2 live). Covers: agent, approval gate, work events, scoped memory (hybrid ranking + embedding cache), plugins, documents, audit, attachments, RAG, HTTP SSE, web search.
 
 ## Frontend (`front/`)
 
@@ -70,7 +70,7 @@ Framework: **Vitest 4** + `@vue/test-utils`, `happy-dom` environment.
 ```bash
 cd front
 
-yarn test:unit                 # vitest run + coverage
+yarn test:unit                 # vitest run + coverage (334 tests)
 npx vitest run test/unit --no-coverage   # quick without coverage
 yarn test:e2e                  # Playwright (smoke)
 ```

@@ -18,6 +18,8 @@ import litellm
 import sqlite_vec
 
 from app.audit import log_event, resolve_app_data_dir
+from app.embed_batching import iter_embedding_batches
+from app.limits import DEFAULT_LIMITS
 
 _EMBEDDING_DIM_UNKNOWN = -1
 
@@ -84,11 +86,15 @@ class RagStore:
         embedding_model: str,
         embedding_base_url: str | None = None,
         embedding_api_key: str | None = None,
+        embedding_batch_size: int = DEFAULT_LIMITS.embedding_batch_size,
+        embedding_batch_max_chars: int = DEFAULT_LIMITS.embedding_batch_max_chars,
     ) -> None:
         self._db_path = db_path
         self._embedding_model = embedding_model
         self._embedding_base_url = embedding_base_url
         self._embedding_api_key = embedding_api_key
+        self._embedding_batch_size = max(1, embedding_batch_size)
+        self._embedding_batch_max_chars = max(1, embedding_batch_max_chars)
         self._conn: sqlite3.Connection | None = None
         self._dim: int = _EMBEDDING_DIM_UNKNOWN
 
@@ -183,16 +189,29 @@ class RagStore:
     async def _embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        kwargs: dict[str, Any] = {
-            "model": self._embedding_model,
-            "input": texts,
-        }
-        if self._embedding_base_url:
-            kwargs["api_base"] = self._embedding_base_url
-        if self._embedding_api_key:
-            kwargs["api_key"] = self._embedding_api_key
-        response = await litellm.aembedding(**kwargs)
-        return [item["embedding"] for item in response.data]
+        vectors: list[list[float]] = []
+        for batch in iter_embedding_batches(
+            texts,
+            max_items=self._embedding_batch_size,
+            max_chars=self._embedding_batch_max_chars,
+        ):
+            kwargs: dict[str, Any] = {
+                "model": self._embedding_model,
+                "input": batch,
+            }
+            if self._embedding_base_url:
+                kwargs["api_base"] = self._embedding_base_url
+            if self._embedding_api_key:
+                kwargs["api_key"] = self._embedding_api_key
+            response = await litellm.aembedding(**kwargs)
+            data = response.data
+            if not isinstance(data, list) or len(data) != len(batch):
+                raise RuntimeError(
+                    f"embedding provider returned {len(data) if isinstance(data, list) else 0} "
+                    f"vectors for {len(batch)} inputs"
+                )
+            vectors.extend(item["embedding"] for item in data)
+        return vectors
 
     async def index_document(
         self,

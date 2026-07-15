@@ -250,14 +250,14 @@
     <!-- Mode rail replié -->
     <div v-else class="wp-sidebar__rail">
       <button class="wp-rail-btn" :title="t('shell.spacesTitle')" @click="$emit('expand')">
-        <Lucide name="layers" size="18" color="wp-text-muted" />
+        <Lucide name="panel-left-open" size="18" color="wp-text-muted" />
       </button>
       <button
         class="wp-rail-btn"
         :title="t('common.openSpaceEllipsis')"
         @click="onOpenSpace"
       >
-        <Lucide name="layers" size="18" color="wp-text-muted" />
+        <Lucide name="folder-plus" size="18" color="wp-text-muted" />
       </button>
       <button
         class="wp-rail-btn"
@@ -789,6 +789,10 @@ onMounted(async () => {
   color: var(--wp-text-muted);
   opacity: 0;
   transition: opacity 120ms var(--wp-ease), background 120ms var(--wp-ease), color 120ms var(--wp-ease);
+
+  &:focus-visible {
+    opacity: 1;
+  }
 
   .wp-ws__row:hover &,
   .wp-ws--active & {

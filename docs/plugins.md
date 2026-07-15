@@ -1,6 +1,6 @@
 # Workproba plugins
 
-> **Last updated:** 14/07/2026
+> **Last updated:** 15/07/2026
 
 Workproba extends the agent core with a **plugin system**: agent tools, HTTP endpoints, UI slots, and namespaced storage. The sidecar registry (`services/ai/app/plugins/registry.py`) is aligned with Tauri persistence (`desktop/src-tauri/src/commands/plugins.rs`).
 
@@ -36,7 +36,7 @@ Personas example:
 
 | Slot | Key files | Usage |
 |---|---|---|
-| Right panel | `RightPanel.vue` | Personas tab, dynamic plugin tabs (`usePluginSlots`) |
+| Right panel | `RightPanel.vue`, `ProjectPanel.vue` | Personas tab, project tab, dynamic plugin tabs (`usePluginSlots`) |
 | Chat composer | `ChatView.vue` | "+" menu: attachments + personas actions |
 | Side chat | `SideChatPanel.vue`, `PersonasSideChat.vue` | Discussion / opinion in side panel (`Ctrl+Shift+L`) |
 | Shared actions | `usePersonasActions.ts` | Switch to a chat session then trigger the action |

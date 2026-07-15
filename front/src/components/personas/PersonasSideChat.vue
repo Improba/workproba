@@ -44,6 +44,10 @@
           {{ t('personas.sideChat.changePersonas') }}
         </button>
 
+        <button type="button" class="personas-side-chat__meeting" @click="onStartMeeting">
+          {{ t('personas.actions.simulateMeeting') }}
+        </button>
+
         <div v-if="selectedPersonas.length" class="personas-side-chat__chips">
           <span
             v-for="persona in selectedPersonas"
@@ -178,6 +182,7 @@ import {
   type DiscussionMessage,
 } from '@composables/usePersonas';
 import { useSideChat } from '@composables/useSideChat';
+import { usePersonasActions } from '@composables/usePersonasActions';
 import type { PersonasOpinionCard as PersonasOpinionCardType } from '#types';
 import type { PersonaInfo } from '@services/aiSidecar';
 
@@ -203,6 +208,7 @@ const {
 const { getPluginDataDir, isPersonasPluginActive, isProjetPluginActive } = usePlugins();
 const { activeDataDir } = useProject();
 const { consumeInitial, peekInitial, launchToken } = useSideChat();
+const { startMeeting } = usePersonasActions();
 
 const mode = ref<'avis' | 'discussion'>('avis');
 const selectedPersonaIds = ref<string[]>([]);
@@ -289,6 +295,11 @@ watch(
 function switchMode(next: 'avis' | 'discussion'): void {
   if (mode.value === next) return;
   mode.value = next;
+}
+
+function onStartMeeting(): void {
+  emit('close');
+  void startMeeting();
 }
 
 function onAnotherOpinion(entry: { question: string; card: PersonasOpinionCardType }): void {
@@ -634,7 +645,8 @@ defineExpose({ close: () => emit('close') });
   }
 }
 
-.personas-side-chat__pick {
+.personas-side-chat__pick,
+.personas-side-chat__meeting {
   align-self: flex-start;
   padding: var(--wp-space-1) var(--wp-space-2);
   border: 1px solid var(--wp-border);
@@ -647,6 +659,11 @@ defineExpose({ close: () => emit('close') });
   &:hover {
     background: var(--wp-surface-2);
   }
+}
+
+.personas-side-chat__meeting {
+  color: var(--wp-gold);
+  border-color: var(--wp-gold-soft);
 }
 
 .personas-side-chat__chips {

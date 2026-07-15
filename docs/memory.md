@@ -448,7 +448,7 @@ Front: `cd front && yarn vitest run test/unit/composables/useMemory.spec.ts test
 | No cross-workspace RAG | Document index is per project workspace |
 | No embedding model | Hybrid ranking disabled; lexical overlap only for injection |
 
-Planned (roadmap): `memory_meta.json` for extracted metadata, **persistent embedding cache**, **UI citations in chat** (T-V2-18).
+Planned (roadmap): `memory_meta.json` for extracted metadata, **persistent embedding cache**, **UI citations in chat** (T-V2-18, personas opinion cards already show memory citations).
 
 ---
 

@@ -11,6 +11,8 @@ from urllib.parse import urlparse
 
 import litellm
 
+from app.embed_batching import iter_embedding_batches
+
 logger = logging.getLogger(__name__)
 
 _CACHE: EmbeddingCache | None = None
@@ -114,25 +116,37 @@ async def embed_texts(
     model: str,
     base_url: str | None = None,
     api_key: str | None = None,
+    batch_size: int | None = None,
+    batch_max_chars: int | None = None,
 ) -> list[list[float]]:
     if not texts:
         return []
-    kwargs: dict[str, Any] = {
-        "model": model,
-        "input": texts,
-    }
-    if base_url:
-        kwargs["api_base"] = base_url
-    if api_key:
-        kwargs["api_key"] = api_key
-    response = await litellm.aembedding(**kwargs)
-    data = response.data
-    if not isinstance(data, list) or len(data) != len(texts):
-        raise RuntimeError(
-            f"embedding provider returned {len(data) if isinstance(data, list) else 0} "
-            f"vectors for {len(texts)} inputs"
-        )
-    return [list(item["embedding"]) for item in data]
+
+    from app.config import get_settings
+
+    limits = get_settings().limits
+    max_items = batch_size if batch_size is not None else limits.embedding_batch_size
+    max_chars = batch_max_chars if batch_max_chars is not None else limits.embedding_batch_max_chars
+
+    vectors: list[list[float]] = []
+    for batch in iter_embedding_batches(texts, max_items=max_items, max_chars=max_chars):
+        kwargs: dict[str, Any] = {
+            "model": model,
+            "input": batch,
+        }
+        if base_url:
+            kwargs["api_base"] = base_url
+        if api_key:
+            kwargs["api_key"] = api_key
+        response = await litellm.aembedding(**kwargs)
+        data = response.data
+        if not isinstance(data, list) or len(data) != len(batch):
+            raise RuntimeError(
+                f"embedding provider returned {len(data) if isinstance(data, list) else 0} "
+                f"vectors for {len(batch)} inputs"
+            )
+        vectors.extend(list(item["embedding"]) for item in data)
+    return vectors
 
 
 async def embed_texts_cached(

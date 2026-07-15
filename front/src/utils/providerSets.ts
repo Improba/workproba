@@ -491,8 +491,26 @@ export function providerSetToSidecar(set: ProviderSet): Record<string, unknown> 
   return payload;
 }
 
+function isSidecarProviderSetShape(raw: Record<string, unknown>): boolean {
+  return (
+    'is_default' in raw ||
+    'is_builtin' in raw ||
+    (typeof raw.chat === 'object' &&
+      raw.chat !== null &&
+      ('api_key_ref' in (raw.chat as object) ||
+        'base_url' in (raw.chat as object) ||
+        (Array.isArray((raw.chat as Record<string, unknown>).models) &&
+          (raw.chat as Record<string, unknown>).models?.[0] != null &&
+          typeof (raw.chat as Record<string, unknown>).models?.[0] === 'object' &&
+          'context_window' in ((raw.chat as Record<string, unknown>).models as object[])[0])))
+  );
+}
+
 /** Normalise un set stocké (Tauri camelCase ou sidecar snake_case). */
 export function normalizeStoredSet(raw: ProviderSet | Record<string, unknown>): ProviderSet {
+  if (isSidecarProviderSetShape(raw as Record<string, unknown>)) {
+    return enrichSetFromBuiltin(sidecarSetToProviderSet(raw as Record<string, unknown>));
+  }
   if ('chat' in raw && raw.chat && typeof raw.chat === 'object' && 'provider' in (raw.chat as object)) {
     const set = raw as ProviderSet;
     return enrichSetFromBuiltin({

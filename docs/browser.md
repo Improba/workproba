@@ -1,7 +1,7 @@
 # Browser plugin (`workproba.browser`)
 
-> **Last updated:** 14 Jul 2026  
-> **Status:** experimental, opt-in (disabled by default), P2 differentiation priority
+> **Last updated:** 15 Jul 2026  
+> **Status:** shipped (experimental, opt-in, disabled by default), P2 differentiation priority
 
 The Browser plugin lets the AI assistant browse the web (http/https), interact with pages, and show the user what it is doing. It is **not** a primary browser or a native Chrome webview: it runs a **Playwright Chromium headless** session with visual feedback via JPEG screenshots and an accessibility tree.
 
@@ -212,14 +212,14 @@ Main coverage: forbidden URLs, locked mode, 8 agent tools, navigate audit, bbox 
 | Playwright concurrency | Live polling may overlap manual actions; silent errors are swallowed |
 | Phase 4 (CDP / user Chrome SSO) | Not implemented; optional enterprise roadmap |
 
-## Roadmap (not shipped)
+## Roadmap (residual)
 
 | Item | Status |
 |---|---|
+| Session navigation history (clearable) | Not shipped (T-V2-20 debt) |
 | Native Tauri live webview | Not chosen for MVP (dual engine) |
 | CDP / user Chrome session (SSO) | Optional Phase 4 enterprise |
 | External MCP browser | Out of scope for non-coder product |
-| Real-time highlight on live page | Replaced by bbox on screenshot + live polling |
 
 ## See also
 

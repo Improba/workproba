@@ -302,6 +302,12 @@ class Settings(BaseSettings):
     index_max_total_chars: int = Field(
         default=1_000_000, ge=1024, validation_alias="INDEX_MAX_TOTAL_CHARS"
     )
+    embedding_batch_size: int = Field(
+        default=32, ge=1, le=256, validation_alias="EMBEDDING_BATCH_SIZE"
+    )
+    embedding_batch_max_chars: int = Field(
+        default=16_000, ge=256, le=500_000, validation_alias="EMBEDDING_BATCH_MAX_CHARS"
+    )
 
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
@@ -370,6 +376,8 @@ class Settings(BaseSettings):
             index_max_files=self.index_max_files,
             index_max_file_bytes=self.index_max_file_bytes,
             index_max_total_chars=self.index_max_total_chars,
+            embedding_batch_size=self.embedding_batch_size,
+            embedding_batch_max_chars=self.embedding_batch_max_chars,
         )
 
 

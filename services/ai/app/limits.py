@@ -30,6 +30,29 @@ DEFAULT_GENERATE_DENY_NAMES: tuple[str, ...] = (".git", ".workproba")
 DEFAULT_GENERATE_DENY_PREFIXES: tuple[str, ...] = (".env",)
 
 
+# Segments de chemin ignorés lors de l'indexation RAG et du scan search_kb.
+WORKSPACE_IGNORED_DIRS: frozenset[str] = frozenset(
+    {
+        ".git",
+        ".workproba",
+        ".venv",
+        "venv",
+        "__pycache__",
+        "node_modules",
+        "vendor",
+        "dist",
+        "build",
+        "target",
+        "coverage",
+        ".pytest_cache",
+        ".mypy_cache",
+        ".ruff_cache",
+        ".next",
+        ".nuxt",
+    }
+)
+
+
 # Extensions de fichiers texte indexables par la passe RAG bulk. Tout fichier
 # non binaire (PDF/DOCX/XLSX/PPTX) et dont l'extension n'est pas dans cet
 # ensemble est ignoré (on évite d'indexer des binaires opaques : zip, images,
@@ -95,6 +118,11 @@ class Limits:
     index_max_file_bytes: int = _kb(512)  # taille max d'un fichier texte indexé
     index_max_total_chars: int = 1_000_000  # budget global caractères indexés
     index_text_exts: tuple[str, ...] = DEFAULT_INDEX_TEXT_EXTS
+
+    # --- embeddings RAG ---
+    # Plafonds par requête API (évite « too many tokens » côté provider).
+    embedding_batch_size: int = 32
+    embedding_batch_max_chars: int = 16_000
 
 
 DEFAULT_LIMITS = Limits()
