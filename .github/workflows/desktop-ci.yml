@@ -58,7 +58,7 @@ jobs:
 
   rust:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     defaults:
       run:
         working-directory: desktop/src-tauri
@@ -72,6 +72,17 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             build-essential
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: services/ai/pyproject.toml
+      - name: Build Python sidecar
+        shell: bash
+        working-directory: .
+        env:
+          CI: 'true'
+        run: bash scripts/build-sidecar.sh
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
