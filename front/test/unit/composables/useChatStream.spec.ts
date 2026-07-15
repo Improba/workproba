@@ -755,6 +755,32 @@ describe('useChatStream — feedbacks', () => {
     unmount();
   });
 
+  it('loadMessages réinitialise le contexte retry', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
+      new TypeError('Failed to fetch'),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('ancien message');
+    expect(api.error.value?.code).toBe('sidecar_unreachable');
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockClear();
+
+    api.loadMessages([
+      {
+        id: 'm1',
+        role: 'user',
+        content: 'nouvelle session',
+        createdAt: new Date().toISOString(),
+      },
+    ]);
+
+    await api.retry();
+    expect(fetchMock).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it('mappe compaction avec summary et summary_failed', () => {
     const mapped = mapPythonSseEvent({
       type: 'compaction',
@@ -1169,5 +1195,103 @@ describe('useChatStream — browser tool results', () => {
     await api.send('clique');
     expect(onBrowserToolCall).not.toHaveBeenCalled();
     wrapper.unmount();
+  });
+
+  it('editAndResend tronque depuis le message user et renvoie le texte édité', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(
+        sseResponse([
+          { event: 'token', data: { content: 'R1' } },
+          { event: 'done', data: { content: '' } },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        sseResponse([
+          { event: 'token', data: { content: 'R2' } },
+          { event: 'done', data: { content: '' } },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        sseResponse([
+          { event: 'token', data: { content: 'R3' } },
+          { event: 'done', data: { content: '' } },
+        ]),
+      );
+
+    const { api, unmount } = mountStream();
+    await api.send('premier');
+    await api.send('second');
+    expect(api.messages.value).toHaveLength(4);
+
+    const firstUserId = api.messages.value[0].id;
+    await api.editAndResend(firstUserId, 'premier modifié');
+
+    expect(api.messages.value).toHaveLength(2);
+    expect(api.messages.value[0].content).toBe('premier modifié');
+    expect(lastAssistant(api.messages.value)?.content).toBe('R3');
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    unmount();
+  });
+
+  it('regenerateFrom supprime la réponse ciblée et relance le message user précédent', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(
+        sseResponse([
+          { event: 'token', data: { content: 'R1' } },
+          { event: 'done', data: { content: '' } },
+        ]),
+      )
+      .mockResolvedValueOnce(
+        sseResponse([
+          { event: 'token', data: { content: 'R2' } },
+          { event: 'done', data: { content: '' } },
+        ]),
+      );
+
+    const { api, unmount } = mountStream();
+    await api.send('question');
+    const assistantId = lastAssistant(api.messages.value)!.id;
+
+    await api.regenerateFrom(assistantId);
+
+    expect(api.messages.value).toHaveLength(2);
+    expect(api.messages.value[0].content).toBe('question');
+    expect(lastAssistant(api.messages.value)?.content).toBe('R2');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it('retry après échec de regénération conserve le message user', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock
+      .mockResolvedValueOnce(
+        sseResponse([
+          { event: 'token', data: { content: 'R1' } },
+          { event: 'done', data: { content: '' } },
+        ]),
+      )
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockResolvedValueOnce(
+        sseResponse([
+          { event: 'token', data: { content: 'R2' } },
+          { event: 'done', data: { content: '' } },
+        ]),
+      );
+
+    const { api, unmount } = mountStream();
+    await api.send('question');
+    const assistantId = lastAssistant(api.messages.value)!.id;
+
+    await api.regenerateFrom(assistantId);
+    expect(api.messages.value).toHaveLength(2);
+    expect(api.error.value?.code).toBe('sidecar_unreachable');
+
+    await api.retry();
+    expect(api.messages.value).toHaveLength(2);
+    expect(api.messages.value[0].content).toBe('question');
+    expect(lastAssistant(api.messages.value)?.content).toBe('R2');
+    unmount();
   });
 });

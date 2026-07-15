@@ -38,6 +38,12 @@ npm run format
 quasar build
 ```
 
+### Chat UI (dev reference)
+
+Composer, message list, SSE streaming, markdown, edit/regenerate: see
+[../docs/architecture.md](../docs/architecture.md) (sections **Chat UX** and
+**Key front files (chat)**).
+
 ### Customize the configuration
 
 See [Configuring quasar.config.js](https://v2.quasar.dev/quasar-cli-vite/quasar-config-js).

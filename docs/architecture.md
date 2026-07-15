@@ -201,3 +201,79 @@ settings.
   progress…" appears in the reasoning zone (`ThinkingCard`) during
   streaming. A "The model is thinking…" placeholder covers the startup delay
   between send and the first event (`thinking_start` or token).
+
+### Message list and streaming performance
+
+- **Virtualized list** (`MessageList.vue` + `vue-virtual-scroller`): long
+  conversations stay responsive. During streaming, `_contentRev` on
+  `ChatMessage` throttles re-measurement (~50 ms token flush in
+  `useChatStream`, ~80 ms markdown throttle in `MessageTextPart`).
+- **Scroll pinning** (`ChatView.vue`): auto-scroll to bottom while the user
+  stays at the bottom; wheel/touch-up detaches until they return or tap the
+  scroll-down FAB. `scrollToBottomStable()` retries until `scrollHeight`
+  stabilizes (virtual scroller layout).
+- **Expansion state** (`useToolCallExpansion.ts`): tool-call and reasoning
+  card expand/collapse survives `DynamicScroller` item recycling via module-level
+  maps + `expansionEpoch` in scroller `size-dependencies`.
+
+### Markdown rendering
+
+Assistant text is rendered by `MessageTextPart.vue` with shared utilities:
+
+| Module | Role |
+|---|---|
+| `utils/markdownRender.ts` | markdown-it, DOMPurify, KaTeX (final only), Shiki highlighting, copy buttons |
+| `utils/markdownStreaming.ts` | Splits content into **complete blocks** (paragraph/fence boundaries) + **tail** during SSE |
+
+During streaming, complete blocks are parsed once and cached; only the tail
+is re-rendered on each throttle tick. KaTeX and Shiki run once the message
+finishes (`streaming: false`). Code-block copy labels are i18n (`chat.codeCopy`,
+etc.).
+
+### Edit and regenerate
+
+Per-message actions in `Message.vue`, wired through `ChatPage` →
+`useChatStream`:
+
+| Action | Composable | Behaviour |
+|---|---|---|
+| **Edit** (user messages) | `editAndResend(id, text)` | Truncates from the edited user message onward, sends the new text |
+| **Regenerate** (assistant messages) | `regenerateFrom(assistantId)` | Removes the assistant and everything after, re-runs the turn reusing the existing user message (`regenerateFromUserId` in turn payload) |
+
+Guards: blocked while `streaming`, while a confirmation or plan is pending
+(`hasActiveHumanGate()`), or while the global composer stream is active
+(`interactionLocked` prop from `MessageList`). Header **Retry** after a failed
+turn uses `lastUserText` / `lastRegenerateUserId`; these are reset on
+`loadMessages()` (session switch).
+
+**Known limitation:** edit/regenerate resend text only; original attachment
+bytes are not re-injected (attachment snapshots remain in persisted history but
+are not replayed on resend).
+
+### Accessibility (chat)
+
+- Message log: `role="log"`, `aria-live="off"` during streaming,
+  `"polite"` otherwise (avoids screen-reader spam on every token).
+- Stream completion: sr-only status region announces when generation ends
+  (`chat.streamCompleteAria`).
+- Message actions, reasoning cards, and confirmation regions use
+  `aria-expanded`, `aria-label`, and `role="alert"` where appropriate.
+- Streaming cursor respects `prefers-reduced-motion`.
+
+### Key front files (chat)
+
+```
+front/src/
+├── components/chat/
+│   ├── ChatView.vue          # composer, scroll pinning, drag-drop
+│   ├── MessageList.vue       # virtual scroller, a11y live region
+│   ├── Message.vue           # interleaved parts, edit/regenerate actions
+│   ├── MessageTextPart.vue   # markdown (incremental + final)
+│   ├── ThinkingCard.vue      # reasoning block
+│   ├── ToolCallCard.vue      # tool call human/tech views
+│   ├── ConfirmationCard.vue  # human approval gate UI
+│   └── PlanCard.vue          # multi-step plan approval
+├── composables/useChatStream.ts   # SSE, send, edit, regenerate, retry
+└── utils/markdownRender.ts        # shared markdown pipeline
+    markdownStreaming.ts           # block split for streaming
+```

@@ -52,4 +52,18 @@ describe('MessageTextPart', () => {
     expect(sanitized).not.toMatch(/href="javascript:/);
     expect(sanitized).toContain('href="https://ok.test"');
   });
+
+  it('rend les blocs stables séparément pendant le streaming', async () => {
+    const wrapper = mount(MessageTextPart, {
+      props: {
+        content: 'Premier paragraphe\n\nDeuxième',
+        streaming: true,
+      },
+    });
+    await flushPromises();
+
+    const blocks = wrapper.findAll('.chat-message__md-block');
+    expect(blocks.length).toBeGreaterThanOrEqual(2);
+    wrapper.unmount();
+  });
 });

@@ -41,6 +41,38 @@
     </header>
 
     <div class="chat-message__body">
+      <template v-if="editing">
+        <label class="visually-hidden" :for="editFieldId">{{ t('chat.editMessageLabel') }}</label>
+        <textarea
+          :id="editFieldId"
+          ref="editFieldRef"
+          v-model="editDraft"
+          class="chat-message__edit-field"
+          rows="3"
+          :maxlength="COMPOSER_MAX_LENGTH"
+          @keydown.enter.ctrl.prevent="saveEdit"
+          @keydown.enter.meta.prevent="saveEdit"
+          @keydown.escape.prevent="cancelEdit"
+        />
+        <div class="chat-message__edit-actions">
+          <button
+            type="button"
+            class="chat-message__action chat-message__action--ghost"
+            @click="cancelEdit"
+          >
+            {{ t('common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="chat-message__action chat-message__action--primary"
+            :disabled="!canSaveEdit"
+            @click="saveEdit"
+          >
+            {{ t('chat.editMessageSave') }}
+          </button>
+        </div>
+      </template>
+      <template v-else>
       <MessageAttachments
         v-if="message.role === 'user' && message.attachments?.length"
         :attachments="message.attachments"
@@ -138,14 +170,41 @@
           </span>
         </div>
       </div>
+      </template>
 
       <footer
-        v-if="showCopyAction"
+        v-if="showUserActions"
         class="chat-message__actions"
       >
         <button
           type="button"
-          class="chat-message__copy"
+          class="chat-message__action"
+          :aria-label="t('chat.editMessageAria')"
+          @click="startEdit"
+        >
+          <Lucide name="pencil" size="xs" color="wp-text-muted" />
+          <span>{{ t('chat.editMessage') }}</span>
+        </button>
+      </footer>
+
+      <footer
+        v-if="showCopyAction || showRegenerateAction"
+        class="chat-message__actions"
+      >
+        <button
+          v-if="showRegenerateAction"
+          type="button"
+          class="chat-message__action"
+          :aria-label="t('chat.regenerateAria')"
+          @click="emit('regenerate', message.id)"
+        >
+          <Lucide name="rotate-ccw" size="xs" color="wp-text-muted" />
+          <span>{{ t('chat.regenerate') }}</span>
+        </button>
+        <button
+          v-if="showCopyAction"
+          type="button"
+          class="chat-message__action"
           :aria-label="t('chat.copyMessageAria')"
           @click="copyAssistantMessage"
         >
@@ -160,7 +219,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import MessageTextPart from '@components/chat/MessageTextPart.vue';
@@ -186,6 +245,10 @@ const props = defineProps<{
   approvingPlan?: boolean;
   attachmentStatuses?: Record<string, import('@composables/useChatStream').AttachmentStatusEntry>;
   settingsLocked?: boolean;
+  /** Un tour est en cours dans la conversation (désactive édition / régénération). */
+  chatStreaming?: boolean;
+  /** Confirmation ou plan en attente : bloque édition / régénération. */
+  interactionLocked?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -197,7 +260,15 @@ const emit = defineEmits<{
   'plan-reject': [];
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
+  edit: [messageId: string, newText: string];
+  regenerate: [messageId: string];
 }>();
+
+const COMPOSER_MAX_LENGTH = 32_000;
+const editing = ref(false);
+const editDraft = ref('');
+const editFieldRef = ref<HTMLTextAreaElement | null>(null);
+const editFieldId = computed(() => `chat-edit-${props.message.id}`);
 
 const copyLabel = ref('');
 const opinionPublishOpen = ref(false);
@@ -314,9 +385,69 @@ const showCopyAction = computed(
   () =>
     props.message.role === 'assistant' &&
     !props.message.streaming &&
+    !props.chatStreaming &&
     !props.message.error &&
     copyableText.value.length > 0,
 );
+
+const showRegenerateAction = computed(
+  () =>
+    props.message.role === 'assistant' &&
+    !props.message.streaming &&
+    !props.chatStreaming &&
+    !props.message.pendingConfirmation &&
+    props.message.pendingPlan?.status !== 'pending' &&
+    !isCompactionMessage.value &&
+    !props.interactionLocked,
+);
+
+const showUserActions = computed(
+  () =>
+    props.message.role === 'user' &&
+    !props.message.streaming &&
+    !props.chatStreaming &&
+    !isCompactionMessage.value &&
+    !editing.value &&
+    !props.interactionLocked,
+);
+
+const canSaveEdit = computed(
+  () =>
+    editDraft.value.trim().length > 0 &&
+    editDraft.value.length <= COMPOSER_MAX_LENGTH &&
+    editDraft.value.trim() !== props.message.content.trim(),
+);
+
+function startEdit(): void {
+  editDraft.value = props.message.content;
+  editing.value = true;
+  void nextTick(() => {
+    const field = editFieldRef.value;
+    if (!field) return;
+    field.focus();
+    field.setSelectionRange(field.value.length, field.value.length);
+  });
+}
+
+function cancelEdit(): void {
+  editing.value = false;
+  editDraft.value = '';
+}
+
+watch(
+  () => props.message.id,
+  () => {
+    editing.value = false;
+    editDraft.value = '';
+  },
+);
+
+function saveEdit(): void {
+  if (!canSaveEdit.value) return;
+  emit('edit', props.message.id, editDraft.value.trim());
+  editing.value = false;
+  editDraft.value = '';
+}
 
 copyLabel.value = t('chat.copyMessage');
 
@@ -529,11 +660,12 @@ function toolCallById(id: string): ChatToolCall | undefined {
 .chat-message__actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--wp-space-2);
   margin-top: var(--wp-space-1);
 }
 
-.chat-message__copy {
+.chat-message__action {
   display: inline-flex;
   align-items: center;
   gap: var(--wp-space-1);
@@ -549,15 +681,73 @@ function toolCallById(id: string): ChatToolCall | undefined {
     border-color var(--wp-dur) var(--wp-ease),
     color var(--wp-dur) var(--wp-ease);
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--wp-surface-3);
     border-color: var(--wp-border);
     color: var(--wp-text);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
   }
 
   &:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px var(--wp-focus-ring);
   }
+
+  &--primary {
+    color: var(--text-invert);
+    background: var(--primary);
+    border-color: transparent;
+
+    &:hover:not(:disabled) {
+      background: var(--primary-hover, var(--primary));
+      color: var(--text-invert);
+      border-color: transparent;
+    }
+  }
+
+  &--ghost {
+    border-color: var(--wp-border);
+  }
+}
+
+.chat-message__edit-field {
+  width: 100%;
+  min-height: 4.5rem;
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-md);
+  background: var(--wp-surface);
+  color: var(--wp-text);
+  font: inherit;
+  line-height: var(--wp-lh-relaxed);
+  resize: vertical;
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--wp-focus-ring);
+  }
+}
+
+.chat-message__edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--wp-space-2);
+  margin-top: var(--wp-space-2);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

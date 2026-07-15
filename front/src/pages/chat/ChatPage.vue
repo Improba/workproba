@@ -86,6 +86,8 @@
         @personas-discuss="openDiscussionView"
         @personas-another="(card) => openOpinionPicker(card.question)"
         @personas-to-discussion="openDiscussionFromOpinion"
+        @edit="(id, text) => editAndResend(id, text)"
+        @regenerate="(id) => regenerateFrom(id)"
       />
     </section>
   </div>
@@ -247,6 +249,8 @@ const {
   confirm,
   approvePlan,
   retry,
+  editAndResend,
+  regenerateFrom,
   abort,
   loadMessages,
 } = useChatStream({

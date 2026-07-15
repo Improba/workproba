@@ -828,6 +828,8 @@ export interface UseChatStreamReturn {
   confirm: (decision: 'approve' | 'deny') => Promise<void>;
   approvePlan: (approved: boolean) => Promise<void>;
   retry: () => Promise<void>;
+  editAndResend: (userMessageId: string, newText: string) => Promise<void>;
+  regenerateFrom: (assistantMessageId: string) => Promise<void>;
   abort: () => void;
   loadMessages: (items: ChatMessage[]) => void;
   reprocessAttachment: (
@@ -902,6 +904,7 @@ export function useChatStream(
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let lastUserText = '';
   let lastPayload: Partial<SendMessagePayload> = {};
+  let lastRegenerateUserId: string | null = null;
   let idlePaused = false;
   // Identifiant de tour fourni par le backend (event turn_start). Utilisé pour
   // isoler la résolution d'une confirmation parmi plusieurs tours concurrents.
@@ -1019,6 +1022,15 @@ export function useChatStream(
     }
   }
 
+  function hasActiveHumanGate(): boolean {
+    if (confirming.value || approvingPlan.value) return true;
+    return messages.value.some(
+      (m) =>
+        m.pendingConfirmation ||
+        m.pendingPlan?.status === 'pending',
+    );
+  }
+
   function loadMessages(items: ChatMessage[]): void {
     flushPendingTokens();
     currentAssistantId = null;
@@ -1027,6 +1039,10 @@ export function useChatStream(
     syncStreamCorrelation();
     fallbackNotifiedTurnId = null;
     error.value = null;
+    streaming.value = false;
+    lastUserText = '';
+    lastPayload = {};
+    lastRegenerateUserId = null;
     if (flushTimer) {
       clearTimeout(flushTimer);
       flushTimer = null;
@@ -1111,29 +1127,45 @@ export function useChatStream(
     }
 
     error.value = null;
-    streaming.value = true;
     lastUserText = trimmed;
-    lastPayload = payload;
 
     const sentAttachments = payload.attachments ?? [];
+    const regenerateUserId = payload.regenerateFromUserId?.trim() || null;
 
-    const userMessage: ChatMessage = {
-      id: createMessageId(),
-      role: 'user',
-      content: trimmed,
-      parentId: payload.parentId ?? null,
-      createdAt: new Date().toISOString(),
+    lastPayload = {
+      attachments: payload.attachments,
+      parentId: payload.parentId,
     };
-    if (sentAttachments.length) {
-      userMessage.attachments = sentAttachments.map((a) => ({
-        id: a.id,
-        fileName: a.fileName,
-        mimeType: a.mimeType,
-        sizeBytes: a.sizeBytes,
-        kind: a.kind,
-        status: a.status,
-        ...(a.error ? { error: a.error } : {}),
-      }));
+
+    let userMessage: ChatMessage;
+    if (regenerateUserId) {
+      const existing = messages.value.find((m) => m.id === regenerateUserId);
+      if (!existing || existing.role !== 'user') {
+        return;
+      }
+      userMessage = existing;
+      lastRegenerateUserId = regenerateUserId;
+    } else {
+      lastRegenerateUserId = null;
+      userMessage = {
+        id: createMessageId(),
+        role: 'user',
+        content: trimmed,
+        parentId: payload.parentId ?? null,
+        createdAt: new Date().toISOString(),
+      };
+      if (sentAttachments.length) {
+        userMessage.attachments = sentAttachments.map((a) => ({
+          id: a.id,
+          fileName: a.fileName,
+          mimeType: a.mimeType,
+          sizeBytes: a.sizeBytes,
+          kind: a.kind,
+          status: a.status,
+          ...(a.error ? { error: a.error } : {}),
+        }));
+      }
+      messages.value.push(userMessage);
     }
 
     const assistantMessage: ChatMessage = {
@@ -1147,7 +1179,9 @@ export function useChatStream(
       createdAt: new Date().toISOString(),
     };
 
-    messages.value.push(userMessage, assistantMessage);
+    messages.value.push(assistantMessage);
+
+    streaming.value = true;
 
     abortController = new AbortController();
     currentAssistantId = assistantMessage.id;
@@ -1322,16 +1356,22 @@ export function useChatStream(
     }
   }
 
+  function findMessageIndex(messageId: string): number {
+    return messages.value.findIndex((m) => m.id === messageId);
+  }
+
   async function retry(): Promise<void> {
     if (!lastUserText || streaming.value) return;
-    // Retire la paire user+assistant du dernier tour échoué pour éviter un
-    // doublon, puis relance le même message.
     const msgs = messages.value;
     for (let i = msgs.length - 1; i >= 0; i--) {
       if (msgs[i].role === 'assistant') {
         msgs.splice(i, 1);
         break;
       }
+    }
+    if (lastRegenerateUserId) {
+      await send(lastUserText, { regenerateFromUserId: lastRegenerateUserId });
+      return;
     }
     for (let i = msgs.length - 1; i >= 0; i--) {
       if (msgs[i].role === 'user') {
@@ -1340,6 +1380,55 @@ export function useChatStream(
       }
     }
     await send(lastUserText, lastPayload);
+  }
+
+  async function editAndResend(
+    userMessageId: string,
+    newText: string,
+  ): Promise<void> {
+    const trimmed = newText.trim();
+    if (!trimmed || streaming.value || hasActiveHumanGate()) return;
+
+    const idx = findMessageIndex(userMessageId);
+    if (idx < 0) return;
+
+    const userMessage = messages.value[idx];
+    if (userMessage.role !== 'user' || userMessage.messageKind === 'compaction') {
+      return;
+    }
+
+    error.value = null;
+    messages.value.splice(idx);
+    await send(trimmed);
+  }
+
+  async function regenerateFrom(assistantMessageId: string): Promise<void> {
+    if (streaming.value || hasActiveHumanGate()) return;
+
+    const idx = findMessageIndex(assistantMessageId);
+    if (idx < 0) return;
+
+    const assistant = messages.value[idx];
+    if (assistant.role !== 'assistant') return;
+    if (assistant.streaming) return;
+    if (assistant.pendingConfirmation) return;
+    if (assistant.pendingPlan?.status === 'pending') return;
+
+    let userIdx = idx - 1;
+    if (assistant.parentId) {
+      const parentIdx = findMessageIndex(assistant.parentId);
+      if (parentIdx >= 0) userIdx = parentIdx;
+    }
+
+    const userMessage = messages.value[userIdx];
+    if (!userMessage || userMessage.role !== 'user') return;
+
+    const userText = userMessage.content.trim();
+    if (!userText) return;
+
+    error.value = null;
+    messages.value.splice(idx);
+    await send(userText, { regenerateFromUserId: userMessage.id });
   }
 
   async function confirm(decision: 'approve' | 'deny'): Promise<void> {
@@ -1484,6 +1573,8 @@ export function useChatStream(
     confirm,
     approvePlan,
     retry,
+    editAndResend,
+    regenerateFrom,
     abort,
     loadMessages,
     reprocessAttachment,

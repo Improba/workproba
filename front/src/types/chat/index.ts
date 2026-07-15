@@ -221,6 +221,8 @@ export interface SendMessagePayload {
   content: string;
   parentId?: string | null;
   attachments?: ChatAttachment[];
+  /** Régénération : réutilise un message user existant sans en créer un nouveau. */
+  regenerateFromUserId?: string;
 }
 
 export type ChatStreamEventType =

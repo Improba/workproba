@@ -4,7 +4,7 @@
       ref="scrollAreaRef"
       class="message-list__scroller"
       role="log"
-      aria-live="polite"
+      :aria-live="ariaLiveMode"
       aria-relevant="additions"
     >
       <DynamicScroller
@@ -39,6 +39,8 @@
               :approving-plan="approvingPlan"
               :attachment-statuses="attachmentStatuses"
               :settings-locked="settingsLocked"
+              :chat-streaming="streaming"
+              :interaction-locked="interactionLocked"
               class="message-list__item"
               @open-file="(path) => emit('open-file', path)"
               @restored="(path) => emit('restored', path)"
@@ -48,6 +50,8 @@
               @plan-reject="emit('plan-reject')"
               @personas-another="(card) => emit('personas-another', card)"
               @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
+              @edit="(id, text) => emit('edit', id, text)"
+              @regenerate="(id) => emit('regenerate', id)"
             />
           </DynamicScrollerItem>
         </template>
@@ -58,11 +62,19 @@
         <p>{{ t('chat.emptyConversation') }}</p>
       </div>
     </q-scroll-area>
+    <p
+      class="message-list__sr-status"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {{ streamStatusMessage }}
+    </p>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import {
   DynamicScroller,
@@ -75,8 +87,9 @@ import { expansionEpoch } from '@composables/useToolCallExpansion';
 import type { ChatMessage } from '#types';
 import type { QScrollArea } from 'quasar';
 
-defineProps<{
+const props = defineProps<{
   messages: ChatMessage[];
+  streaming?: boolean;
   projectPath?: string | null;
   sessionId?: string | null;
   workspaceDataDir?: string | null;
@@ -85,6 +98,17 @@ defineProps<{
   attachmentStatuses?: Record<string, import('@composables/useChatStream').AttachmentStatusEntry>;
   settingsLocked?: boolean;
 }>();
+
+const interactionLocked = computed(
+  () =>
+    !!props.confirming ||
+    !!props.approvingPlan ||
+    props.messages.some(
+      (m) =>
+        m.pendingConfirmation ||
+        m.pendingPlan?.status === 'pending',
+    ),
+);
 
 const emit = defineEmits<{
   'open-file': [path: string];
@@ -95,9 +119,39 @@ const emit = defineEmits<{
   'plan-reject': [];
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
+  edit: [messageId: string, newText: string];
+  regenerate: [messageId: string];
 }>();
 
 const { t } = useI18n();
+
+const ariaLiveMode = computed<'off' | 'polite'>(() =>
+  props.streaming ? 'off' : 'polite',
+);
+
+const streamStatusMessage = ref('');
+let streamStatusTimer: ReturnType<typeof setTimeout> | null = null;
+
+watch(
+  () => props.streaming,
+  (streaming, wasStreaming) => {
+    if (wasStreaming && !streaming) {
+      streamStatusMessage.value = t('chat.streamCompleteAria');
+      if (streamStatusTimer) clearTimeout(streamStatusTimer);
+      streamStatusTimer = setTimeout(() => {
+        streamStatusMessage.value = '';
+        streamStatusTimer = null;
+      }, 1500);
+    }
+  },
+);
+
+onUnmounted(() => {
+  if (streamStatusTimer) {
+    clearTimeout(streamStatusTimer);
+    streamStatusTimer = null;
+  }
+});
 
 const scrollAreaRef = ref<QScrollArea | null>(null);
 
@@ -143,6 +197,7 @@ defineExpose({
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 .message-list__scroller {
@@ -178,5 +233,17 @@ defineExpose({
     font-size: 1rem;
     line-height: 1.55;
   }
+}
+
+.message-list__sr-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 </style>

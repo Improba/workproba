@@ -104,7 +104,7 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 ## Experimental plugins
 
 - **Browser**: see [browser.md](./browser.md)
-- **Cloud plugin** (`workproba.cloud`): local mount sync via **`ProjectSyncPort`** and `project:sync` permission (PR 4). No direct project namespace access. Bidirectional sync deferred to V3.
+- **Cloud plugin** (`workproba.cloud`): local mount sync via **`ProjectSyncPort`** and `project:sync` permission (PR 4). V3: plan de contrôle SaaS via `workproba-cloud/` — see [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md). No direct project namespace access. Bidirectional sync deferred to V3.
 
 ## Local plugins
 
@@ -114,6 +114,7 @@ Tauri can copy and register a local plugin folder. **Runtime loading (Python too
 
 - [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md): capabilities UX plan
 - [contrat-plugin.md](../../workproba-improba/roadmaps/contrat-plugin.md): contract + implementation matrix
+- [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md): control plane V3
 - [memory.md](./memory.md): scoped memory
 - [architecture.md](./architecture.md): UI shell
 - [services/ai/README.md](../services/ai/README.md): endpoint catalog

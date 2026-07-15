@@ -146,7 +146,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, builtin plugins (Regards métier), attachments, document preview, audit, Human Approval Gate, Work Event Bus |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
-| **F** | To do | Optional cloud sync (NestJS) |
+| **F** | To do | Plan de contrôle cloud (`workproba-cloud/`) + sync artefacts publiés |
 
 ### Phase D: validation
 
@@ -159,7 +159,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 ### Product (phase F)
 
-- **Phase F: Optional cloud sync**: reuse archived NestJS stack (`legacy/`) for optional workspace sync.
+- **Phase F: Cloud (plan de contrôle)** : monorepo `workproba-cloud/` (NestJS + Quasar admin, dérivé du template Improba), consommé par le plugin desktop `workproba.cloud` via `CloudControlPlaneClient`. Sync limitée aux **artefacts publiés** ; pas de réactivation de `legacy/api/` (agent-gateway, sessions serveur). Spec : [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ### CI / release (operational since 14/07/2026, commit `1155d2d`)
 

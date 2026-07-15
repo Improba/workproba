@@ -107,9 +107,93 @@ describe('Message accessibilité', () => {
       },
     });
 
-    const copyBtn = wrapper.find('.chat-message__copy');
-    expect(copyBtn.exists()).toBe(true);
-    expect(copyBtn.text()).toContain('Copier');
+    const actions = wrapper.findAll('.chat-message__action');
+    const copyBtn = actions.find((btn) => btn.text().includes('Copier'));
+    expect(copyBtn).toBeTruthy();
+    expect(copyBtn!.text()).toContain('Copier');
+    wrapper.unmount();
+  });
+
+  it('affiche modifier sur un message user terminé', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'u-edit',
+          role: 'user',
+          content: 'Question initiale',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        chatStreaming: false,
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain('Modifier');
+    wrapper.unmount();
+  });
+
+  it('affiche regénérer sur une réponse assistant terminée', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-regen',
+          role: 'assistant',
+          content: 'Réponse',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        chatStreaming: false,
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    expect(wrapper.text()).toContain('Regénérer');
+    wrapper.unmount();
+  });
+
+  it('émet edit après enregistrement du brouillon', async () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'u-save',
+          role: 'user',
+          content: 'Ancien texte',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        chatStreaming: false,
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    await wrapper.find('.chat-message__action').trigger('click');
+    const textarea = wrapper.find('.chat-message__edit-field');
+    await textarea.setValue('Nouveau texte');
+    await wrapper.find('.chat-message__action--primary').trigger('click');
+
+    expect(wrapper.emitted('edit')).toEqual([['u-save', 'Nouveau texte']]);
     wrapper.unmount();
   });
 
@@ -135,7 +219,7 @@ describe('Message accessibilité', () => {
       },
     });
 
-    expect(wrapper.find('.chat-message__copy').exists()).toBe(false);
+    expect(wrapper.find('.chat-message__action').exists()).toBe(false);
     wrapper.unmount();
   });
 

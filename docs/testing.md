@@ -70,7 +70,7 @@ Framework: **Vitest 4** + `@vue/test-utils`, `happy-dom` environment.
 ```bash
 cd front
 
-yarn test:unit                 # vitest run + coverage (334 tests)
+yarn test:unit                 # vitest run + coverage (~387 tests)
 npx vitest run test/unit --no-coverage   # quick without coverage
 yarn test:e2e                  # Playwright (smoke)
 ```
@@ -78,7 +78,11 @@ yarn test:e2e                  # Playwright (smoke)
 ### Notable unit specs
 
 - `ConfirmationCard.spec.ts`: effect-oriented headline, protection labels, approve/deny.
-- `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection, `work_*` correlation (`streamCorrelation`).
+- `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection, `work_*` correlation (`streamCorrelation`), edit/regenerate, retry after failed regenerate, `loadMessages` retry reset.
+- `MessageList.spec.ts`: `aria-live` during streaming, sr-only completion announcement, scroll API.
+- `Message.spec.ts`: role labels, edit/regenerate actions, copy.
+- `MessageTextPart.spec.ts`: markdown sanitization, incremental streaming blocks.
+- `markdownStreaming.spec.ts`: block/tail split (fences, paragraphs).
 - `spaceTerminology.spec.ts`: Space UX i18n (FR/EN).
 - `useUiTheme.spec.ts`, `uiTheme.spec.ts`: theme persistence (Tauri + localStorage boot).
 - `useSidecarHealth.spec.ts`: sidecar health polling (connected / error / streaming).
