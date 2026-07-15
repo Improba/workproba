@@ -18,6 +18,7 @@ from app.llm.provider_sets import (
     resolve_embeddings_from_set,
     resolve_vision_mode,
     set_capabilities,
+    supported_reasoning_efforts_for_set,
     vision_is_supported,
 )
 from app.main import resolve_embedding_config
@@ -100,6 +101,43 @@ def test_resolve_embeddings_none_when_absent() -> None:
         embeddings=None,
     )
     assert resolve_embeddings_from_set(minimal) is None
+
+
+def test_builtin_mistral_chat_models_catalog() -> None:
+    assert MISTRAL_BUILTIN_SET.chat is not None
+    models = MISTRAL_BUILTIN_SET.chat.models
+    assert models is not None
+    assert [m.model for m in models] == [
+        "mistral-small-latest",
+        "mistral-medium-latest",
+        "mistral-large-latest",
+    ]
+    small = next(m for m in models if m.model == "mistral-small-latest")
+    medium = next(m for m in models if m.model == "mistral-medium-latest")
+    large = next(m for m in models if m.model == "mistral-large-latest")
+    assert small.reasoning_efforts == ["none", "high"]
+    assert large.reasoning_efforts == ["none"]
+    assert small.context_window == 256000
+    assert small.hint == "Hybride : chat, code et raisonnement à la demande. Rapide et économique."
+    assert medium.hint == "Modèle frontier pour agents, code long et workflows multi-étapes."
+    assert large.hint == "Flagship multilingue et multimodal. Qualité maximale."
+
+
+def test_supported_reasoning_efforts_for_set() -> None:
+    efforts = supported_reasoning_efforts_for_set(
+        MISTRAL_BUILTIN_SET,
+        "mistral-medium-latest",
+    )
+    assert efforts == ("none", "high")
+    assert supported_reasoning_efforts_for_set(
+        MISTRAL_BUILTIN_SET,
+        "mistral-large-latest",
+    ) == ("none",)
+    assert supported_reasoning_efforts_for_set(OLLAMA_BUILTIN_SET, "llama3.2") is None
+    assert supported_reasoning_efforts_for_set(
+        MISTRAL_BUILTIN_SET,
+        "unknown-model",
+    ) == ("none",)
 
 
 def test_capabilities_and_vision_helpers() -> None:

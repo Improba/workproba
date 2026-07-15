@@ -9,6 +9,7 @@ from app.schemas import (
     ProviderSet,
     ProviderSetCapabilities,
     ProviderSetChat,
+    ProviderSetChatModel,
     ProviderSetEmbeddings,
     ProviderSetOcr,
     ProviderSetVision,
@@ -17,6 +18,30 @@ from app.schemas import (
 
 MISTRAL_DEFAULT_BASE_URL = "https://api.mistral.ai/v1"
 OLLAMA_DEFAULT_BASE_URL = "http://127.0.0.1:11434/v1"
+
+MISTRAL_CHAT_MODELS: tuple[ProviderSetChatModel, ...] = (
+    ProviderSetChatModel(
+        model="mistral-small-latest",
+        label="Mistral Small",
+        hint="Hybride : chat, code et raisonnement à la demande. Rapide et économique.",
+        context_window=256000,
+        reasoning_efforts=["none", "high"],
+    ),
+    ProviderSetChatModel(
+        model="mistral-medium-latest",
+        label="Mistral Medium",
+        hint="Modèle frontier pour agents, code long et workflows multi-étapes.",
+        context_window=256000,
+        reasoning_efforts=["none", "high"],
+    ),
+    ProviderSetChatModel(
+        model="mistral-large-latest",
+        label="Mistral Large",
+        hint="Flagship multilingue et multimodal. Qualité maximale.",
+        context_window=256000,
+        reasoning_efforts=["none"],
+    ),
+)
 
 MISTRAL_BUILTIN_SET = ProviderSet(
     id="mistral-default",
@@ -29,6 +54,7 @@ MISTRAL_BUILTIN_SET = ProviderSet(
         base_url=MISTRAL_DEFAULT_BASE_URL,
         api_key_ref="secrets/mistral",
         reasoning="auto",
+        models=list(MISTRAL_CHAT_MODELS),
     ),
     embeddings=ProviderSetEmbeddings(
         provider="mistral",
@@ -173,6 +199,22 @@ def ocr_is_supported(provider_set: ProviderSet) -> bool:
     from app.provider_set import ocr_available
 
     return ocr_available(provider_set)
+
+
+def supported_reasoning_efforts_for_set(
+    provider_set: ProviderSet | None,
+    model: str,
+) -> tuple[ReasoningEffort, ...] | None:
+    """Efforts déclarés dans le catalogue du set, ou None si absent."""
+    chat = provider_set.chat if provider_set else None
+    if not chat or not chat.models:
+        return None
+    normalized = (model or "").strip().lower()
+    for entry in chat.models:
+        if entry.model.strip().lower() == normalized:
+            return tuple(entry.reasoning_efforts)
+    # Catalogue présent mais modèle absent : pas de raisonnement ajustable.
+    return ("none",)
 
 
 def vision_is_supported(provider_set: ProviderSet) -> bool:

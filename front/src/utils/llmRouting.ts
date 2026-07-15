@@ -12,6 +12,11 @@ import {
   toUtilityLlmConfigFromSet,
 } from '@utils/providerSets';
 import {
+  clampReasoningEffortForSet,
+  defaultReasoningEffortForSet,
+  supportsReasoningForSet,
+} from '@utils/providerSetModels';
+import {
   clampReasoningEffort,
   defaultReasoningEffort,
   supportsReasoning,
@@ -22,6 +27,7 @@ export function mergeLlmConfigsWithSessionReasoning(
   configs: ReturnType<typeof buildActiveLlmConfigs> | null | undefined,
   sessionReasoningEffort?: ReasoningEffort | null,
   sessionModel?: string | null,
+  providerSet?: ReturnType<typeof buildActiveProviderSet>,
 ): { chat: LlmConfigPayload | null; embedding: LlmConfigPayload | null } {
   if (!configs) {
     return { chat: null, embedding: null };
@@ -35,7 +41,10 @@ export function mergeLlmConfigsWithSessionReasoning(
   }
 
   const provider = chat.provider as LlmProviderName;
-  if (!supportsReasoning(provider, chat.model)) {
+  const supports = providerSet
+    ? supportsReasoningForSet(providerSet, chat.model)
+    : supportsReasoning(provider, chat.model);
+  if (!supports) {
     delete chat.reasoning_effort;
     return { ...configs, chat };
   }
@@ -46,11 +55,9 @@ export function mergeLlmConfigsWithSessionReasoning(
     if (effectiveEffort === 'none') {
       delete chat.reasoning_effort;
     } else {
-      const clamped = clampReasoningEffort(
-        provider,
-        chat.model,
-        effectiveEffort,
-      );
+      const clamped = providerSet
+        ? clampReasoningEffortForSet(providerSet, chat.model, effectiveEffort)
+        : clampReasoningEffort(provider, chat.model, effectiveEffort);
       if (clamped === 'none') {
         delete chat.reasoning_effort;
       } else {
@@ -78,6 +85,7 @@ export function buildSessionAwareLlmConfigs(
     buildActiveLlmConfigs(),
     sessionReasoning,
     sessionModel,
+    providerSet,
   );
 }
 

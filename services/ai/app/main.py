@@ -510,7 +510,7 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                             project_client=project_client,
                             sandbox_runner=sandbox_runner,
                             max_iterations=settings.max_agent_iterations,
-                            model_settings=build_model_settings(config),
+                            model_settings=build_model_settings(config, payload.provider_set),
                             project_root=project_root,
                             limits=limits,
                         )

@@ -10,9 +10,11 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from app.llm.config import (
     build_model,
     build_model_settings,
+    clamp_reasoning_effort,
     reasoning_effort_for,
     resolve_llm_config,
 )
+from app.llm.provider_sets import MISTRAL_BUILTIN_SET
 from app.llm.provider import parse_tool_arguments, resolve_litellm_model
 from app.schemas import LLMProviderConfig
 
@@ -107,7 +109,9 @@ def test_build_model_settings_empty_when_unset() -> None:
 
 
 def test_build_model_settings_reasoning_effort_mistral_high() -> None:
-    cfg = LLMProviderConfig(provider="mistral", model="m", reasoning_effort="high")
+    cfg = LLMProviderConfig(
+        provider="mistral", model="mistral-small-latest", reasoning_effort="high"
+    )
     settings = build_model_settings(cfg)
     assert settings["openai_reasoning_effort"] == "high"
 
@@ -125,6 +129,23 @@ def test_build_model_settings_reasoning_effort_mistral_small_clamps_low_to_high(
 def test_build_model_settings_reasoning_effort_mistral_small_clamps_medium_to_high() -> None:
     cfg = LLMProviderConfig(
         provider="mistral", model="mistral-small-latest", reasoning_effort="medium"
+    )
+    settings = build_model_settings(cfg)
+    assert settings["openai_reasoning_effort"] == "high"
+
+
+def test_build_model_settings_reasoning_effort_mistral_medium_clamps_medium_to_high() -> None:
+    # mistral-medium-latest n'accepte que none/high (400 sinon).
+    cfg = LLMProviderConfig(
+        provider="mistral", model="mistral-medium-latest", reasoning_effort="medium"
+    )
+    settings = build_model_settings(cfg)
+    assert settings["openai_reasoning_effort"] == "high"
+
+
+def test_build_model_settings_reasoning_effort_mistral_medium_clamps_low_to_high() -> None:
+    cfg = LLMProviderConfig(
+        provider="mistral", model="mistral-medium-latest", reasoning_effort="low"
     )
     settings = build_model_settings(cfg)
     assert settings["openai_reasoning_effort"] == "high"
@@ -157,6 +178,29 @@ def test_build_model_settings_reasoning_effort_unset_mistral() -> None:
     cfg = LLMProviderConfig(provider="mistral", model="m")
     settings = build_model_settings(cfg)
     assert "openai_reasoning_effort" not in settings
+
+
+def test_build_model_settings_uses_provider_set_model_efforts() -> None:
+    cfg = LLMProviderConfig(
+        provider="mistral",
+        model="mistral-large-latest",
+        reasoning_effort="high",
+    )
+    settings = build_model_settings(cfg, MISTRAL_BUILTIN_SET)
+    assert "openai_reasoning_effort" not in settings
+
+    cfg_small = LLMProviderConfig(
+        provider="mistral",
+        model="mistral-small-latest",
+        reasoning_effort="low",
+    )
+    settings_small = build_model_settings(cfg_small, MISTRAL_BUILTIN_SET)
+    assert settings_small["openai_reasoning_effort"] == "high"
+
+
+def test_clamp_reasoning_effort_mistral_large_without_provider_set() -> None:
+    assert clamp_reasoning_effort("mistral", "mistral-large-latest", "high", None) is None
+    assert clamp_reasoning_effort("mistral", "mistral-small-latest", "medium", None) == "high"
 
 
 def test_reasoning_effort_for() -> None:

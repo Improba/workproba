@@ -1,6 +1,6 @@
 # Workproba architecture
 
-> **Last updated:** 14/07/2026
+> **Last updated:** 15/07/2026
 
 ## Overview
 
@@ -160,27 +160,30 @@ the app: **"AI Models"** screen (settings icon at sidebar footer, route `/settin
 
 ## Model and reasoning per conversation
 
-The "AI Models" screen chooses a **provider/preset** (provider, base URL,
+The "AI Models" screen chooses a **provider preset** (provider set: provider, base URL,
 key, default model). The **specific model** and **reasoning level** are
 chosen **per conversation**, directly in the chat composer, not in
 settings.
 
 - **Composer** (`ChatView` + `ChatModelControl`): a compact control shows
-  the current model and reasoning level. The menu offers the provider's
-  suggested models (`utils/modelCatalog.ts`) and reasoning levels
-  supported by the model (`utils/reasoningSupport.ts`), with verbose help per
-  option for non-technical users.
+  the current model and reasoning level. The menu reads the **active provider
+  set catalogue** (`provider_set.chat.models[]`: labels, context window,
+  `reasoningEfforts`). Legacy providers without a catalogue fall back to
+  `utils/modelCatalog.ts` and `utils/reasoningSupport.ts`.
 - **Per-session persistence**: model and reasoning effort are
   saved **with** the conversation on the Tauri side (`ConversationSession.model` and
   `reasoningEffort`). When loading a session, the saved model is
-  restored if still applicable to the active provider; otherwise it falls back to the provider
-  default model (`isModelApplicable` logic + watch on active provider).
-- **Turn transit**: `buildActiveProviderSet` applies session
-  overrides to the active set; `useLlmSessionContext` propagates these overrides to
-  personas and attachments while the conversation is active.
-  `mergeLlmConfigsWithSessionReasoning` (`utils/llmRouting.ts`) is only used for
-  legacy fallback without a set.
-- **UI labels**: `None` · `Low` · `Medium` · `High`.
+  restored if still applicable to the active provider set; otherwise it falls back to the set
+  default model (`isModelApplicableForSet` + watch on active provider).
+  On session switch, overrides are cleared immediately before async load.
+- **Turn transit**: `buildActiveProviderSet` → `applySessionOverridesToSet`
+  (reconciles reasoning after model change) → `providerSetToSidecar` in
+  `/agent/turn`. The sidecar reclamps via `build_model_settings(config,
+  provider_set)`. See [provider-sets-reasoning.md](./provider-sets-reasoning.md).
+- **Mistral**: small/medium models expose **None** and **High** only in the UI;
+  large has no adjustable reasoning. Legacy values (`medium`, `low`) are
+  clamped to `high` before API call.
+- **UI labels**: `None` · `Low` · `Medium` · `High` (subset shown per model).
 
 ## Chat UX (composer & reasoning)
 

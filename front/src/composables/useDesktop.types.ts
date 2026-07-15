@@ -63,6 +63,14 @@ export type ProviderSetOcrMode = 'auto' | 'none';
 export type ProviderSetVisionMode = 'chat' | 'none';
 export type ProviderSetCapabilitiesReasoning = 'low' | 'medium' | 'high';
 
+export interface ProviderSetChatModel {
+  model: string;
+  label: string;
+  hint?: string;
+  contextWindow?: number;
+  reasoningEfforts?: ReasoningEffort[];
+}
+
 export interface ProviderSetChat {
   provider: LlmProviderName;
   model: string;
@@ -70,6 +78,7 @@ export interface ProviderSetChat {
   apiKey?: string | null;
   baseUrl?: string | null;
   reasoning?: ProviderSetChatReasoning;
+  models?: ProviderSetChatModel[];
 }
 
 export interface ProviderSetEmbeddings {

@@ -201,6 +201,7 @@
             :model-value="reasoningEffort ?? 'none'"
             :provider="reasoningProvider"
             :model="reasoningModel"
+            :provider-set="activeSet"
             @update:model-value="
               (value) => emit('update:reasoningEffort', value)
             "
@@ -244,6 +245,7 @@ import ChatModelControl from '@components/chat/ChatModelControl.vue';
 import ChatComposerAttachments from '@components/chat/ChatComposerAttachments.vue';
 import MessageList from '@components/chat/MessageList.vue';
 import StartPrompts from '@components/chat/StartPrompts.vue';
+import { useAppSettings } from '@composables/useAppSettings';
 import type { LlmProviderName } from '@composables/useDesktop.types';
 import {
   ATTACHMENT_ACCEPT,
@@ -252,6 +254,7 @@ import {
 } from '@composables/useChatAttachments';
 import type { ChatAttachment, ChatMessage, ReasoningEffort } from '#types';
 import type { QInput } from 'quasar';
+import { hasSetModelChoice, supportsReasoningForSet } from '@utils/providerSetModels';
 import { supportsReasoning } from '@utils/reasoningSupport';
 import { hasModelChoice } from '@utils/modelCatalog';
 
@@ -306,10 +309,15 @@ const {
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const dragCounter = ref(0);
 
+const { activeSet } = useAppSettings();
+
 const showModelControl = computed(() => {
   const provider = props.reasoningProvider;
   const model = props.reasoningModel;
   if (!provider || !model) return false;
+  if (activeSet.value) {
+    return hasSetModelChoice(activeSet.value) || supportsReasoningForSet(activeSet.value, model);
+  }
   return hasModelChoice(provider) || supportsReasoning(provider, model);
 });
 

@@ -85,7 +85,7 @@ def _build_agent(
         build_model(llm_config),
         system_prompt=system_prompt,
         output_type=str,
-        model_settings=build_model_settings(llm_config),
+        model_settings=build_model_settings(llm_config, provider_set),
     )
 
 

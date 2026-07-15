@@ -1,4 +1,11 @@
-import type { LlmProviderName } from '@composables/useDesktop.types';
+import type { LlmProviderName, ProviderSet } from '@composables/useDesktop.types';
+import {
+  contextWindowForSet,
+  findSetModel,
+  hasSetModelChoice,
+  isModelApplicableForSet,
+  modelsForSet,
+} from '@utils/providerSetModels';
 
 export const DEFAULT_CONTEXT_WINDOW = 16384;
 
@@ -24,9 +31,9 @@ export interface ModelOption {
  */
 const PROVIDER_MODELS: Partial<Record<LlmProviderName, ModelOption[]>> = {
   mistral: [
-    { model: 'mistral-small-latest', label: 'Mistral Small', hint: 'Rapide et économe', contextWindow: 32000 },
-    { model: 'mistral-medium-latest', label: 'Mistral Medium', hint: 'Bon compromis', contextWindow: 128000 },
-    { model: 'mistral-large-latest', label: 'Mistral Large', hint: 'Le plus puissant', contextWindow: 128000 },
+    { model: 'mistral-small-latest', label: 'Mistral Small', hint: 'Hybride : chat, code et raisonnement à la demande. Rapide et économique.', contextWindow: 256000 },
+    { model: 'mistral-medium-latest', label: 'Mistral Medium', hint: 'Modèle frontier pour agents, code long et workflows multi-étapes.', contextWindow: 256000 },
+    { model: 'mistral-large-latest', label: 'Mistral Large', hint: 'Flagship multilingue et multimodal. Qualité maximale.', contextWindow: 256000 },
   ],
   openai: [
     { model: 'gpt-4o-mini', label: 'GPT-4o mini', hint: 'Rapide et économique', contextWindow: 128000 },
@@ -41,12 +48,20 @@ const PROVIDER_MODELS: Partial<Record<LlmProviderName, ModelOption[]>> = {
 };
 
 /** Modèles suggérés pour un provider (liste vide si non applicable). */
-export function modelsForProvider(provider: LlmProviderName): ModelOption[] {
+export function modelsForProvider(
+  provider: LlmProviderName,
+  set?: ProviderSet | null,
+): ModelOption[] {
+  if (set) return modelsForSet(set);
   return PROVIDER_MODELS[provider] ?? [];
 }
 
 /** Indique si le provider propose un choix de modèles depuis le compositeur. */
-export function hasModelChoice(provider: LlmProviderName): boolean {
+export function hasModelChoice(
+  provider: LlmProviderName,
+  set?: ProviderSet | null,
+): boolean {
+  if (set) return hasSetModelChoice(set);
   return modelsForProvider(provider).length > 0;
 }
 
@@ -59,7 +74,12 @@ export function hasModelChoice(provider: LlmProviderName): boolean {
  * Sert à invalider un `model` persisté par session quand l'utilisateur a
  * changé de provider entre-temps (ex. session Mistral rouverte sous OpenAI).
  */
-export function isModelApplicable(provider: LlmProviderName, model: string | null | undefined): boolean {
+export function isModelApplicable(
+  provider: LlmProviderName,
+  model: string | null | undefined,
+  set?: ProviderSet | null,
+): boolean {
+  if (set) return isModelApplicableForSet(set, model);
   const list = PROVIDER_MODELS[provider];
   const value = (model ?? '').trim().toLowerCase();
   if (!value) return false;
@@ -71,7 +91,12 @@ export function isModelApplicable(provider: LlmProviderName, model: string | nul
  * Fenêtre de contexte en tokens pour un couple (provider, modèle).
  * Retourne la valeur cataloguée ou {@link DEFAULT_CONTEXT_WINDOW}.
  */
-export function contextWindowFor(provider: LlmProviderName, model: string | null | undefined): number {
+export function contextWindowFor(
+  provider: LlmProviderName,
+  model: string | null | undefined,
+  set?: ProviderSet | null,
+): number {
+  if (set) return contextWindowForSet(set, model);
   const list = PROVIDER_MODELS[provider];
   const value = (model ?? '').trim().toLowerCase();
   if (!list || !value) return DEFAULT_CONTEXT_WINDOW;
@@ -84,9 +109,16 @@ export function contextWindowFor(provider: LlmProviderName, model: string | null
  * correspondance (insensible à la casse), sinon on retraite l'identifiant
  * (ex. "mistral-small-latest" -> "Mistral Small").
  */
-export function friendlyModelLabel(provider: LlmProviderName, model: string): string {
+export function friendlyModelLabel(
+  provider: LlmProviderName,
+  model: string,
+  set?: ProviderSet | null,
+): string {
   const raw = (model ?? '').trim();
   if (!raw) return 'Modèle';
+
+  const setMatch = set ? findSetModel(set, raw) : null;
+  if (setMatch) return setMatch.label;
 
   const list = PROVIDER_MODELS[provider];
   if (list) {

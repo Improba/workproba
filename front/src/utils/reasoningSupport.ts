@@ -5,7 +5,6 @@ const MISTRAL_REASONING_MODELS = [
   'mistral-small-latest',
   'mistral-medium-3-5',
   'mistral-medium-latest',
-  'mistral-large-latest',
 ];
 
 const OPENAI_REASONING_RE = /gpt-5|o1|o3|o4|o-series/i;
@@ -24,7 +23,6 @@ function mistralSupportsReasoning(model: string): boolean {
   const normalized = model.toLowerCase();
   if (MISTRAL_REASONING_MODELS.some((m) => normalized.includes(m))) return true;
   if (normalized.includes('medium') && normalized.includes('-latest')) return true;
-  if (normalized.includes('large') && normalized.includes('-latest')) return true;
   if (normalized.includes('small') && normalized.includes('-latest')) return true;
   return false;
 }
@@ -52,8 +50,8 @@ export function supportsReasoning(provider: LlmProviderName, model: string): boo
 /**
  * Efforts de raisonnement réellement acceptés par le couple provider/modèle.
  *
- * L'API Mistral n'accepte que `none` et `high` pour `mistral-small-latest`
- * (renvoie une 400 `reasoning_effort='low' is not supported` sinon). On filtre
+ * L'API Mistral n'accepte que `none` et `high` pour les modèles à raisonnement
+ * ajustable (`mistral-small-latest`, `mistral-medium-3-5`, alias `mistral-medium-latest`).
  * donc les options proposées par modèle pour ne présenter que ce qui marche.
  */
 export function supportedReasoningEfforts(
@@ -63,11 +61,8 @@ export function supportedReasoningEfforts(
   if (!supportsReasoning(provider, model)) return ['none'];
 
   switch (provider) {
-    case 'mistral': {
-      const normalized = model.trim().toLowerCase();
-      if (normalized.includes('small')) return ['none', 'high'];
-      return ALL_EFFORTS;
-    }
+    case 'mistral':
+      return ['none', 'high'];
     case 'openai':
     case 'openai_compat':
     case 'anthropic':
@@ -81,8 +76,7 @@ export function supportedReasoningEfforts(
 
 /**
  * Effort par défaut : `low` quand le modèle le supporte (légère réflexion),
- * sinon `none` (certains modèles comme `mistral-small-latest` n'acceptent que
- * `none`/`high`, on évite donc de forcer `high` sur chaque message).
+ * sinon `none` (modèles Mistral à raisonnement : API binaire none/high).
  */
 export function defaultReasoningEffort(
   provider: LlmProviderName,
@@ -99,5 +93,7 @@ export function clampReasoningEffort(
   effort: ReasoningEffort,
 ): ReasoningEffort {
   const efforts = supportedReasoningEfforts(provider, model);
-  return efforts.includes(effort) ? effort : defaultReasoningEffort(provider, model);
+  if (efforts.includes(effort)) return effort;
+  if (effort !== 'none' && efforts.includes('high')) return 'high';
+  return defaultReasoningEffort(provider, model);
 }

@@ -136,9 +136,14 @@ async def compact_history_if_needed(
     )
 
     try:
+        compaction_config = (
+            chat_config.model_copy(update={"reasoning_effort": None})
+            if chat_config is not None
+            else None
+        )
         req = UtilitySummarizeRequest(
             messages=old_for_summary,
-            llm_provider_config=chat_config,
+            llm_provider_config=compaction_config,
             utility_llm_config=None,
             focus=t(locale, "utility.compaction_focus"),
             prior_summary=prior_summary,

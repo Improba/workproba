@@ -12,7 +12,12 @@ import type { DensityMode, LlmProviderName, SettingsMode, ToolCallViewMode } fro
 import type { ReasoningEffort } from '#types';
 import { getAiSidecarUrl, getDesktopSecret } from '@services/aiSidecar';
 import { isLocalLlmProvider } from '@utils/isLocalLlmProvider';
-import { supportsReasoning, defaultReasoningEffort } from '@utils/reasoningSupport';
+import { clampReasoningEffort, supportsReasoning, defaultReasoningEffort } from '@utils/reasoningSupport';
+import {
+  clampReasoningEffortForSet,
+  defaultReasoningEffortForSet,
+  supportsReasoningForSet,
+} from '@utils/providerSetModels';
 import { normalizeLocale, resolveInitialLocale, setLang } from '@boot/i18n';
 import { t } from '@utils/i18nT';
 import type { UiThemeId } from '@utils/uiTheme';
@@ -162,14 +167,14 @@ export interface ActiveChatRouting {
 
 function reasoningFromSetChat(
   reasoning: import('@composables/useDesktop.types').ProviderSetChatReasoning | undefined,
-  provider: LlmProviderName,
+  set: ProviderSet,
   model: string,
 ): ReasoningEffort {
   if (!reasoning || reasoning === 'auto') {
-    return defaultReasoningEffort(provider, model);
+    return defaultReasoningEffortForSet(set, model);
   }
   if (reasoning === 'none') return 'none';
-  return reasoning;
+  return clampReasoningEffortForSet(set, model, reasoning);
 }
 
 /** Provider/modèle chat effectifs (set actif ou legacy). */
@@ -181,7 +186,7 @@ const activeChatRouting = computed<ActiveChatRouting | null>(() => {
       provider: chat.provider,
       model: chat.model,
       label: set.name,
-      defaultReasoning: reasoningFromSetChat(chat.reasoning, chat.provider, chat.model),
+      defaultReasoning: reasoningFromSetChat(chat.reasoning, set, chat.model),
     };
   }
   const legacy = activeChatProvider.value;
@@ -211,7 +216,14 @@ export function toChatLlmConfig(entry: LlmProviderEntry | null): LlmConfigPayloa
     entry.reasoningEffort !== 'none' &&
     supportsReasoning(entry.provider, entry.model)
   ) {
-    payload.reasoning_effort = entry.reasoningEffort;
+    const clamped = clampReasoningEffort(
+      entry.provider,
+      entry.model,
+      entry.reasoningEffort,
+    );
+    if (clamped !== 'none') {
+      payload.reasoning_effort = clamped;
+    }
   }
   return payload;
 }

@@ -106,12 +106,14 @@ One session = one JSON file, read/written via Tauri commands
 | `summary` | Optional auto-generated cross-session digest (used by promotion and `recall_project_sessions`) |
 | `createdAt` / `updatedAt` | Timestamps |
 
-`reasoningEffort` and `model` are **persisted per session**: restored on open if still applicable to the active provider, otherwise fallback to the provider default model. Persistence is **debounced** and atomic
+`reasoningEffort` and `model` are **persisted per session**: restored on open if still applicable to the active provider set, otherwise fallback to the set default model. On session switch, overrides are cleared before load completes. Values incompatible with the model catalogue (e.g. `medium` on Mistral medium) are clamped at send time. See [provider-sets-reasoning.md](./provider-sets-reasoning.md).
+
+Persistence is **debounced** and atomic
 (`persistSession` saves `messages` + `reasoningEffort` + `model` in a single
 write) to avoid races during streaming. `model` is optional
 (`#[serde(default, skip_serializing_if)]`) to remain readable by older versions.
 
-See also [architecture.md § Model and reasoning per conversation](./architecture.md#model-and-reasoning-per-conversation).
+See also [architecture.md § Model and reasoning per conversation](./architecture.md#model-and-reasoning-per-conversation) and [provider-sets-reasoning.md](./provider-sets-reasoning.md).
 
 ## Initial release migration
 

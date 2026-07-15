@@ -102,10 +102,18 @@
 <script setup lang="ts">
 import { computed, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import type { LlmProviderName } from '@composables/useDesktop.types';
+import type { LlmProviderName, ProviderSet } from '@composables/useDesktop.types';
 import type { ReasoningEffort } from '#types';
+import { REASONING_EFFORT_OPTIONS } from '@utils/reasoningSupport';
 import {
-  REASONING_EFFORT_OPTIONS,
+  clampReasoningEffortForSet,
+  defaultReasoningEffortForSet,
+  hasSetModelChoice,
+  modelsForSet,
+  supportsReasoningForSet,
+  supportedReasoningEffortsForSet,
+} from '@utils/providerSetModels';
+import {
   clampReasoningEffort,
   defaultReasoningEffort,
   supportsReasoning,
@@ -125,6 +133,7 @@ const props = defineProps<{
   modelValue: ReasoningEffort;
   provider: LlmProviderName | null | undefined;
   model: string | null | undefined;
+  providerSet?: ProviderSet | null;
 }>();
 
 const emit = defineEmits<{
@@ -137,23 +146,31 @@ const model = computed(() => (props.model ?? '').trim());
 
 const availableEffortOptions = computed(() => {
   if (!provider.value || !model.value) return [];
-  const supported = supportedReasoningEfforts(provider.value, model.value);
+  const supported = props.providerSet
+    ? supportedReasoningEffortsForSet(props.providerSet, model.value)
+    : supportedReasoningEfforts(provider.value, model.value);
   return REASONING_EFFORT_OPTIONS.filter((opt) => supported.includes(opt.value));
 });
 
 const reasoningVisible = computed(() => {
   if (!provider.value || !model.value) return false;
-  return supportsReasoning(provider.value, model.value) && availableEffortOptions.value.length > 1;
+  const supports = props.providerSet
+    ? supportsReasoningForSet(props.providerSet, model.value)
+    : supportsReasoning(provider.value, model.value);
+  return supports && availableEffortOptions.value.length > 1;
 });
 
 const canShow = computed(() => {
   if (!provider.value) return false;
+  if (props.providerSet) {
+    return hasSetModelChoice(props.providerSet) || reasoningVisible.value;
+  }
   return hasModelChoice(provider.value) || reasoningVisible.value;
 });
 
 const modelLabel = computed(() => {
   if (!provider.value) return model.value || 'Modèle';
-  return friendlyModelLabel(provider.value, model.value);
+  return friendlyModelLabel(provider.value, model.value, props.providerSet);
 });
 
 const currentEffortLabel = computed(() => {
@@ -168,10 +185,10 @@ const triggerTitle = computed(() =>
 );
 
 const EFFORT_HINTS: Record<ReasoningEffort, string> = {
-  none: 'Réponse directe, sans réflexion',
+  none: 'Réponse rapide, sans trace de réflexion visible',
   low: 'Réflexion rapide',
   medium: 'Réflexion équilibrée',
-  high: 'Réflexion approfondie',
+  high: 'Réflexion approfondie visible',
 };
 
 function hintFor(effort: ReasoningEffort): string {
@@ -196,7 +213,9 @@ const barLevel = computed(() => effortToLevel(props.modelValue));
 /** Options de modèles présentées : catalogue + modèle courant s'il n'y figure pas. */
 const modelOptions = computed<ModelOption[]>(() => {
   if (!provider.value) return [];
-  const list = modelsForProvider(provider.value);
+  const list = props.providerSet
+    ? modelsForSet(props.providerSet)
+    : modelsForProvider(provider.value);
   if (!model.value) return list;
   const currentLower = model.value.toLowerCase();
   const inList = list.some((m) => m.model.toLowerCase() === currentLower);
@@ -204,7 +223,7 @@ const modelOptions = computed<ModelOption[]>(() => {
   return [
     {
       model: model.value,
-      label: friendlyModelLabel(provider.value, model.value),
+      label: friendlyModelLabel(provider.value, model.value, props.providerSet),
       hint: 'Modèle actuel',
     },
     ...list,
@@ -217,9 +236,9 @@ function isModelActive(modelId: string): boolean {
 
 function onModelChange(modelId: string): void {
   if (!provider.value || isModelActive(modelId)) return;
-  // On adapte le niveau de raisonnement au nouveau modèle (valeur par défaut
-  // supportée) avant de changer, pour ne pas laisser d'effort invalide.
-  const nextEffort = defaultReasoningEffort(provider.value, modelId);
+  const nextEffort = props.providerSet
+    ? defaultReasoningEffortForSet(props.providerSet, modelId)
+    : defaultReasoningEffort(provider.value, modelId);
   emit('update:modelValue', nextEffort);
   emit('update:model', modelId);
 }
@@ -232,10 +251,12 @@ function onEffortChange(effort: ReasoningEffort): void {
 // devenu invalide…), on ramène la valeur à un effort supporté pour éviter
 // l'erreur 400 du provider.
 watch(
-  () => [props.provider, props.model] as const,
+  () => [props.provider, props.model, props.providerSet] as const,
   () => {
     if (!provider.value || !model.value) return;
-    const clamped = clampReasoningEffort(provider.value, model.value, props.modelValue);
+    const clamped = props.providerSet
+      ? clampReasoningEffortForSet(props.providerSet, model.value, props.modelValue)
+      : clampReasoningEffort(provider.value, model.value, props.modelValue);
     if (clamped !== props.modelValue) {
       emit('update:modelValue', clamped);
     }

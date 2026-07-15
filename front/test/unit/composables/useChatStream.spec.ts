@@ -929,7 +929,7 @@ describe('useChatStream — feedbacks', () => {
 });
 
 describe('mergeLlmConfigsWithSessionReasoning', () => {
-  it('clampe un override `low` vers none pour mistral-small-latest', () => {
+  it('clampe un override `low` vers high pour mistral-small-latest', () => {
     const merged = mergeLlmConfigsWithSessionReasoning(
       {
         chat: {
@@ -941,10 +941,10 @@ describe('mergeLlmConfigsWithSessionReasoning', () => {
       },
       'low',
     );
-    expect(merged.chat?.reasoning_effort).toBeUndefined();
+    expect(merged.chat?.reasoning_effort).toBe('high');
   });
 
-  it('clampe un override `medium` vers none pour mistral-small-latest', () => {
+  it('clampe un override `medium` vers high pour mistral-small-latest', () => {
     const merged = mergeLlmConfigsWithSessionReasoning(
       {
         chat: { provider: 'mistral', model: 'mistral-small-latest' },
@@ -952,7 +952,7 @@ describe('mergeLlmConfigsWithSessionReasoning', () => {
       },
       'medium',
     );
-    expect(merged.chat?.reasoning_effort).toBeUndefined();
+    expect(merged.chat?.reasoning_effort).toBe('high');
   });
 
   it('supprime reasoning_effort quand l override clampé vaut none', () => {
@@ -966,15 +966,33 @@ describe('mergeLlmConfigsWithSessionReasoning', () => {
     expect(merged.chat?.reasoning_effort).toBeUndefined();
   });
 
-  it('garde low pour un modèle qui le supporte', () => {
-    const merged = mergeLlmConfigsWithSessionReasoning(
+  it('clampe low/medium vers high pour mistral-medium (API binaire)', () => {
+    const mergedLow = mergeLlmConfigsWithSessionReasoning(
       {
         chat: { provider: 'mistral', model: 'mistral-medium-latest' },
         embedding: null,
       },
       'low',
     );
-    expect(merged.chat?.reasoning_effort).toBe('low');
+    expect(mergedLow.chat?.reasoning_effort).toBe('high');
+
+    const mergedMedium = mergeLlmConfigsWithSessionReasoning(
+      {
+        chat: { provider: 'mistral', model: 'mistral-medium-latest' },
+        embedding: null,
+      },
+      'medium',
+    );
+    expect(mergedMedium.chat?.reasoning_effort).toBe('high');
+
+    const mergedHigh = mergeLlmConfigsWithSessionReasoning(
+      {
+        chat: { provider: 'mistral', model: 'mistral-medium-latest' },
+        embedding: null,
+      },
+      'high',
+    );
+    expect(mergedHigh.chat?.reasoning_effort).toBe('high');
   });
 
   it('ignore l override si le modèle ne supporte pas le raisonnement', () => {

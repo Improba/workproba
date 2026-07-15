@@ -26,6 +26,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 ## Technical architecture
 
 - **[architecture.md](./architecture.md)**: Overview, stack, UI shell, chat, LLM models, human approval gate, work events
+- **[provider-sets-reasoning.md](./provider-sets-reasoning.md)**: Provider set catalog, reasoning effort clamping (Mistral none/high), front/back alignment
 - **[stack.md](./stack.md)**: Component versions, ports, environment variables, dev commands
 - **[workspace-storage.md](./workspace-storage.md)**: Per-space storage and global user data (Space UX, `{app_data}/spaces/`, migration from legacy `workspaces/`)
 - **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, hybrid ranking, embedding cache, promotion, cross-session recall
@@ -47,7 +48,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 - **Install Workproba**: [installateurs.md](./installateurs.md)
 - **Start dev**: `make dev` or `yarn dev` (see [root README](../README.md))
 - **Understand the product**: [intention.md](./intention.md)
-- **Architecture**: [architecture.md](./architecture.md) · [desktop.md](./desktop.md)
+- **Architecture**: [architecture.md](./architecture.md) · [desktop.md](./desktop.md) · [provider-sets-reasoning.md](./provider-sets-reasoning.md)
 - **Memory & plugins**: [memory.md](./memory.md) (scoped memory, RAG, promotion, cross-session recall) · [plugins.md](./plugins.md) · [browser.md](./browser.md) · [web-search.md](./web-search.md)
 - **Stack & variables**: [stack.md](./stack.md)
 - **AI sidecar**: [services/ai/README.md](../services/ai/README.md)

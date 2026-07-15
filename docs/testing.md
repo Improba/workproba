@@ -82,6 +82,7 @@ yarn test:e2e                  # Playwright (smoke)
 - `spaceTerminology.spec.ts`: Space UX i18n (FR/EN).
 - `useUiTheme.spec.ts`, `uiTheme.spec.ts`: theme persistence (Tauri + localStorage boot).
 - `useSidecarHealth.spec.ts`: sidecar health polling (connected / error / streaming).
+- `providerSetModels.spec.ts`, `providerSetsEnrich.spec.ts`, `llmRouting.spec.ts`: provider set catalogue, reasoning clamp, session overrides (see [provider-sets-reasoning.md](./provider-sets-reasoning.md)).
 
 ### Test selection by risk
 

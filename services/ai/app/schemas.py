@@ -63,6 +63,14 @@ class LLMProviderConfig(BaseModel):
     extra_headers: dict[str, str] = Field(default_factory=dict)
 
 
+class ProviderSetChatModel(BaseModel):
+    model: str
+    label: str
+    hint: str | None = None
+    context_window: int | None = None
+    reasoning_efforts: list[ReasoningEffort] = Field(default_factory=lambda: ["none"])
+
+
 class ProviderSetChat(BaseModel):
     provider: ProviderName
     model: str
@@ -70,6 +78,7 @@ class ProviderSetChat(BaseModel):
     api_key: SecretStr | None = None
     base_url: str | None = None
     reasoning: ProviderSetChatReasoning = "auto"
+    models: list[ProviderSetChatModel] | None = None
 
 
 class ProviderSetEmbeddings(BaseModel):

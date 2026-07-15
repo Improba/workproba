@@ -91,8 +91,9 @@ Workproba metadata lives in the **application folder**, not in the client folder
 2. Tauri registers the space (stable `workspace_id` + path + display title); the front keeps the path and `workspace_id`. The user can rename the display title in the sidebar (`update_workspace_title`).
 3. The user sends a message in chat.
 4. Quasar calls `POST http://127.0.0.1:8765/agent/turn` (direct SSE). The payload
-   includes the conversation **model + reasoning level** override
-   (persisted in session), clamped against model capabilities.
+   includes the active **provider set** with conversation **model + reasoning**
+   overrides (persisted in session), clamped against the set model catalogue.
+   See [provider-sets-reasoning.md](./provider-sets-reasoning.md).
 5. Python runs the agent loop: LLM, file tools, local search, subprocess sandbox.
 6. Before sensitive actions (file write, publish, network, code execution), the sidecar
    emits `confirmation_request` (effect-oriented headline + protections). The user approves

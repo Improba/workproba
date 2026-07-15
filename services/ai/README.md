@@ -181,6 +181,8 @@ WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 
 Coverage: agent, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE. See [docs/testing.md](../../docs/testing.md).
 
+**Provider sets & reasoning:** catalogue-driven model/reasoning routing, Mistral `none`/`high` clamp. Details: [docs/provider-sets-reasoning.md](../../docs/provider-sets-reasoning.md). Focused tests: `tests/test_provider_sets.py`, `tests/test_llm_config.py`.
+
 ## Current limits
 
 - Agent: [Pydantic AI](https://ai.pydantic.dev/) (native models). Routing via `OpenAIChatModel` + `AnthropicModel`.

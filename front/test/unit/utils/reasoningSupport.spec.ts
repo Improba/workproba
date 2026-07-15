@@ -8,11 +8,14 @@ import {
 
 describe('reasoningSupport', () => {
   describe('supportsReasoning', () => {
-    it('accepte les modèles Mistral récents', () => {
+    it('accepte les modèles Mistral récents à raisonnement ajustable', () => {
       expect(supportsReasoning('mistral', 'mistral-small-latest')).toBe(true);
       expect(supportsReasoning('mistral', 'mistral-medium-latest')).toBe(true);
-      expect(supportsReasoning('mistral', 'mistral-large-latest')).toBe(true);
       expect(supportsReasoning('mistral', 'mistral-medium-3-5')).toBe(true);
+    });
+
+    it('refuse mistral-large (pas de reasoning_effort ajustable)', () => {
+      expect(supportsReasoning('mistral', 'mistral-large-latest')).toBe(false);
     });
 
     it('refuse mistral sans motif raisonnement', () => {
@@ -37,26 +40,19 @@ describe('reasoningSupport', () => {
   });
 
   describe('supportedReasoningEfforts', () => {
-    it('limite mistral-small à none/high (API Mistral)', () => {
+    it('limite les modèles Mistral à raisonnement à none/high (API Mistral)', () => {
       expect(supportedReasoningEfforts('mistral', 'mistral-small-latest')).toEqual([
+        'none',
+        'high',
+      ]);
+      expect(supportedReasoningEfforts('mistral', 'mistral-medium-latest')).toEqual([
         'none',
         'high',
       ]);
     });
 
-    it('garde la plage complète pour les autres modèles Mistral', () => {
-      expect(supportedReasoningEfforts('mistral', 'mistral-medium-latest')).toEqual([
-        'none',
-        'low',
-        'medium',
-        'high',
-      ]);
-      expect(supportedReasoningEfforts('mistral', 'mistral-large-latest')).toEqual([
-        'none',
-        'low',
-        'medium',
-        'high',
-      ]);
+    it('retourne uniquement none pour mistral-large', () => {
+      expect(supportedReasoningEfforts('mistral', 'mistral-large-latest')).toEqual(['none']);
     });
 
     it('garde la plage complète pour OpenAI/Anthropic de raisonnement', () => {
@@ -81,8 +77,8 @@ describe('reasoningSupport', () => {
   });
 
   describe('defaultReasoningEffort', () => {
-    it('retourne low pour un modèle supportant low', () => {
-      expect(defaultReasoningEffort('mistral', 'mistral-medium-latest')).toBe('low');
+    it('retourne none pour mistral-medium (low non supporté)', () => {
+      expect(defaultReasoningEffort('mistral', 'mistral-medium-latest')).toBe('none');
     });
 
     it('retourne none pour mistral-small (low non supporté)', () => {
@@ -100,13 +96,14 @@ describe('reasoningSupport', () => {
       expect(clampReasoningEffort('mistral', 'mistral-small-latest', 'none')).toBe('none');
     });
 
-    it('ramène low à none pour mistral-small', () => {
-      expect(clampReasoningEffort('mistral', 'mistral-small-latest', 'low')).toBe('none');
-      expect(clampReasoningEffort('mistral', 'mistral-small-latest', 'medium')).toBe('none');
+    it('ramène low/medium à high pour mistral-small (aligné backend)', () => {
+      expect(clampReasoningEffort('mistral', 'mistral-small-latest', 'low')).toBe('high');
+      expect(clampReasoningEffort('mistral', 'mistral-small-latest', 'medium')).toBe('high');
     });
 
-    it('garde low pour un modèle qui le supporte', () => {
-      expect(clampReasoningEffort('mistral', 'mistral-medium-latest', 'low')).toBe('low');
+    it('ramène medium à high pour mistral-medium', () => {
+      expect(clampReasoningEffort('mistral', 'mistral-medium-latest', 'medium')).toBe('high');
+      expect(clampReasoningEffort('mistral', 'mistral-medium-latest', 'low')).toBe('high');
     });
   });
 });

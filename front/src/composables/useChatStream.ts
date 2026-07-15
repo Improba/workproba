@@ -47,6 +47,7 @@ import type { LlmProviderName } from '@composables/useDesktop.types';
 import { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
 import { isBrowserAgentTool, type BrowserAgentToolName } from '@utils/browserTools';
 import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
+import { contextWindowForSet } from '@utils/providerSetModels';
 import { contextWindowFor } from '@utils/modelCatalog';
 import { t } from '@utils/i18nT';
 
@@ -1170,18 +1171,17 @@ export function useChatStream(
         buildActiveLlmConfigs(),
         options.reasoningEffort?.value ?? null,
         options.sessionModel?.value ?? null,
-      );
-      const providerSet = buildActiveProviderSet(
-        options.sessionModel?.value ?? null,
-        options.reasoningEffort?.value ?? null,
+        providerSet,
       );
       const chatConfig = llmConfigs.chat;
-      const contextWindow = chatConfig
-        ? contextWindowFor(
-            chatConfig.provider as LlmProviderName,
-            chatConfig.model,
-          )
-        : null;
+      const contextWindow = providerSet
+        ? contextWindowForSet(providerSet, chatConfig?.model)
+        : chatConfig
+          ? contextWindowFor(
+              chatConfig.provider as LlmProviderName,
+              chatConfig.model,
+            )
+          : null;
       const pluginDataDir = await resolveAgentPluginDataDir(
         activePluginIds.value,
         getPluginDataDir,

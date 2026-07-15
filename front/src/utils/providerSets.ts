@@ -3,14 +3,43 @@ import type {
   LlmProviderName,
   ProviderSet,
   ProviderSetCapabilities,
+  ProviderSetChatModel,
   ProviderSetChatReasoning,
 } from '@composables/useDesktop.types';
 import type { LlmConfigPayload } from '@composables/useAppSettings';
 import type { ReasoningEffort } from '#types';
-import { supportsReasoning } from '@utils/reasoningSupport';
+import {
+  clampReasoningEffortForSet,
+  defaultReasoningEffortForSet,
+  supportsReasoningForSet,
+} from '@utils/providerSetModels';
 
 const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
 const OLLAMA_BASE_URL = 'http://127.0.0.1:11434/v1';
+
+const MISTRAL_CHAT_MODELS: ProviderSetChatModel[] = [
+  {
+    model: 'mistral-small-latest',
+    label: 'Mistral Small',
+    hint: 'Hybride : chat, code et raisonnement à la demande. Rapide et économique.',
+    contextWindow: 256000,
+    reasoningEfforts: ['none', 'high'],
+  },
+  {
+    model: 'mistral-medium-latest',
+    label: 'Mistral Medium',
+    hint: 'Modèle frontier pour agents, code long et workflows multi-étapes.',
+    contextWindow: 256000,
+    reasoningEfforts: ['none', 'high'],
+  },
+  {
+    model: 'mistral-large-latest',
+    label: 'Mistral Large',
+    hint: 'Flagship multilingue et multimodal. Qualité maximale.',
+    contextWindow: 256000,
+    reasoningEfforts: ['none'],
+  },
+];
 
 export const MISTRAL_BUILTIN_SET: ProviderSet = {
   id: 'mistral-default',
@@ -23,6 +52,7 @@ export const MISTRAL_BUILTIN_SET: ProviderSet = {
     baseUrl: MISTRAL_BASE_URL,
     apiKeyRef: 'secrets/mistral',
     reasoning: 'auto',
+    models: MISTRAL_CHAT_MODELS,
   },
   embeddings: {
     provider: 'mistral',
@@ -75,9 +105,37 @@ export function getBuiltinSets(): ProviderSet[] {
 
 export function resolveSets(stored: ProviderSet[] | null | undefined): ProviderSet[] {
   if (stored?.length) {
-    return stored.map(cloneProviderSet);
+    return stored.map((set) => enrichSetFromBuiltin(cloneProviderSet(set)));
   }
   return getBuiltinSets();
+}
+
+/** Complète un set stocké avec le catalogue modèles du builtin homologue (migration douce). */
+export function enrichSetFromBuiltin(set: ProviderSet): ProviderSet {
+  const template = BUILTIN_PROVIDER_SETS.find((b) => b.id === set.id);
+  if (!template?.chat.models?.length) return set;
+
+  if (!set.chat.models?.length) {
+    return {
+      ...set,
+      chat: { ...set.chat, models: template.chat.models },
+    };
+  }
+
+  const templateByModel = new Map(template.chat.models.map((m) => [m.model, m]));
+  const mergedModels = set.chat.models.map((stored) => {
+    const fresh = templateByModel.get(stored.model);
+    return fresh ? { ...stored, ...fresh } : stored;
+  });
+  for (const fresh of template.chat.models) {
+    if (!mergedModels.some((m) => m.model === fresh.model)) {
+      mergedModels.push(fresh);
+    }
+  }
+  return {
+    ...set,
+    chat: { ...set.chat, models: mergedModels },
+  };
 }
 
 export function resolveActiveSet(
@@ -110,8 +168,11 @@ export function toChatLlmConfigFromSet(set: ProviderSet | null): LlmConfigPayloa
     extra_headers: {},
   };
   const effort = chatReasoningToEffort(chat.reasoning);
-  if (effort && effort !== 'none' && supportsReasoning(chat.provider, chat.model)) {
-    payload.reasoning_effort = effort;
+  if (effort && effort !== 'none' && supportsReasoningForSet(set, chat.model)) {
+    const clamped = clampReasoningEffortForSet(set, chat.model, effort);
+    if (clamped !== 'none') {
+      payload.reasoning_effort = clamped;
+    }
   }
   return payload;
 }
@@ -185,13 +246,53 @@ export function applySessionOverridesToSet(
   if (modelTrimmed) {
     next.chat = { ...next.chat, model: modelTrimmed };
   }
-  if (sessionReasoning && supportsReasoning(next.chat.provider, next.chat.model)) {
-    next.chat = {
-      ...next.chat,
-      reasoning: sessionReasoning === 'none' ? 'none' : sessionReasoning,
-    };
+  const effectiveModel = next.chat.model;
+
+  if (sessionReasoning != null) {
+    if (supportsReasoningForSet(next, effectiveModel)) {
+      const clamped = clampReasoningEffortForSet(
+        next,
+        effectiveModel,
+        sessionReasoning,
+      );
+      next.chat = {
+        ...next.chat,
+        reasoning: clamped,
+      };
+    } else {
+      next.chat = { ...next.chat, reasoning: 'none' };
+    }
+  } else if (!supportsReasoningForSet(next, effectiveModel)) {
+    next.chat = { ...next.chat, reasoning: 'none' };
+  } else if (
+    next.chat.reasoning &&
+    next.chat.reasoning !== 'auto' &&
+    next.chat.reasoning !== 'none'
+  ) {
+    const clamped = clampReasoningEffortForSet(
+      next,
+      effectiveModel,
+      next.chat.reasoning,
+    );
+    next.chat = { ...next.chat, reasoning: clamped };
   }
   return next;
+}
+
+/** Effort effectif pour l'UI après overrides session (modèle + raisonnement). */
+export function effectiveReasoningEffortFromSet(
+  set: ProviderSet,
+  sessionModel?: string | null,
+  sessionReasoning?: ReasoningEffort | null,
+): ReasoningEffort {
+  const routed = applySessionOverridesToSet(set, sessionModel, sessionReasoning);
+  const model = routed.chat.model;
+  const reasoning = routed.chat.reasoning;
+  if (!reasoning || reasoning === 'auto') {
+    return defaultReasoningEffortForSet(routed, model);
+  }
+  if (reasoning === 'none') return 'none';
+  return clampReasoningEffortForSet(routed, model, reasoning);
 }
 
 export function inferBuiltinSetIdFromProvider(entry: LlmProviderEntry | null): string {
@@ -339,6 +440,18 @@ export function providerSetToSidecar(set: ProviderSet): Record<string, unknown> 
   if (set.chat.apiKeyRef) chat.api_key_ref = set.chat.apiKeyRef;
   if (set.chat.apiKey) chat.api_key = set.chat.apiKey;
   if (set.chat.baseUrl) chat.base_url = set.chat.baseUrl;
+  if (set.chat.models?.length) {
+    chat.models = set.chat.models.map((m) => {
+      const entry: Record<string, unknown> = {
+        model: m.model,
+        label: m.label,
+      };
+      if (m.hint) entry.hint = m.hint;
+      if (m.contextWindow != null) entry.context_window = m.contextWindow;
+      if (m.reasoningEfforts?.length) entry.reasoning_efforts = m.reasoningEfforts;
+      return entry;
+    });
+  }
 
   const payload: Record<string, unknown> = {
     id: set.id,
@@ -382,13 +495,13 @@ export function providerSetToSidecar(set: ProviderSet): Record<string, unknown> 
 export function normalizeStoredSet(raw: ProviderSet | Record<string, unknown>): ProviderSet {
   if ('chat' in raw && raw.chat && typeof raw.chat === 'object' && 'provider' in (raw.chat as object)) {
     const set = raw as ProviderSet;
-    return {
+    return enrichSetFromBuiltin({
       ...cloneProviderSet(set),
       vision: set.vision ?? { mode: 'none' },
       capabilities: set.capabilities ?? { reasoning: 'medium', vision: false, tools: true },
-    };
+    });
   }
-  return sidecarSetToProviderSet(raw as Record<string, unknown>);
+  return enrichSetFromBuiltin(sidecarSetToProviderSet(raw as Record<string, unknown>));
 }
 
 export function sidecarSetToProviderSet(raw: Record<string, unknown>): ProviderSet {
@@ -397,6 +510,29 @@ export function sidecarSetToProviderSet(raw: Record<string, unknown>): ProviderS
   const visionRaw = (raw.vision ?? {}) as Record<string, unknown>;
   const embedRaw = raw.embeddings as Record<string, unknown> | null | undefined;
   const ocrRaw = raw.ocr as Record<string, unknown> | null | undefined;
+
+  const modelsRaw = chatRaw.models;
+  const models: ProviderSetChatModel[] | undefined = Array.isArray(modelsRaw)
+    ? modelsRaw.map((item) => {
+        const m = item as Record<string, unknown>;
+        const effortsRaw = m.reasoning_efforts ?? m.reasoningEfforts;
+        const reasoningEfforts = Array.isArray(effortsRaw)
+          ? effortsRaw.map(String).filter((e): e is ReasoningEffort =>
+              ['none', 'low', 'medium', 'high'].includes(e),
+            )
+          : undefined;
+        return {
+          model: String(m.model ?? ''),
+          label: String(m.label ?? m.model ?? ''),
+          hint: m.hint ? String(m.hint) : undefined,
+          contextWindow:
+            m.context_window != null || m.contextWindow != null
+              ? Number(m.context_window ?? m.contextWindow)
+              : undefined,
+          reasoningEfforts,
+        };
+      })
+    : undefined;
 
   return {
     id: String(raw.id ?? ''),
@@ -410,6 +546,7 @@ export function sidecarSetToProviderSet(raw: Record<string, unknown>): ProviderS
       apiKey: chatRaw.api_key ?? chatRaw.apiKey ? String(chatRaw.api_key ?? chatRaw.apiKey) : null,
       baseUrl: chatRaw.base_url ?? chatRaw.baseUrl ? String(chatRaw.base_url ?? chatRaw.baseUrl) : null,
       reasoning: (chatRaw.reasoning as ProviderSetChatReasoning | undefined) ?? 'auto',
+      models,
     },
     embeddings: embedRaw
       ? {

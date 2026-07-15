@@ -122,13 +122,14 @@ import {
   sanitizeChatMessagesForPersistence,
 } from '@services/aiSidecar';
 import { getSession, saveSession } from '@services/workspaceSession';
-import { contextWindowFor } from '@utils/modelCatalog';
+import { contextWindowFor, isModelApplicable } from '@utils/modelCatalog';
 import { estimateMessagesTokens } from '@utils/tokenEstimate';
 import {
-  defaultReasoningEffort,
-  supportsReasoning,
-} from '@utils/reasoningSupport';
-import { isModelApplicable } from '@utils/modelCatalog';
+  isModelApplicableForSet,
+  supportsReasoningForSet,
+} from '@utils/providerSetModels';
+import { effectiveReasoningEffortFromSet } from '@utils/providerSets';
+import { defaultReasoningEffort, supportsReasoning } from '@utils/reasoningSupport';
 import type { ChatMessage, PersonasOpinionCard, ReasoningEffort } from '#types';
 import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import { usePersonasNavigation } from '@composables/usePersonasNavigation';
@@ -157,7 +158,7 @@ const chatViewRef = ref<InstanceType<typeof ChatView> | null>(null);
 const sessionLoadGuard = createSessionLoadGuard();
 
 const { activePath, activeDataDir, workspaceTitle, documents } = useProject();
-const { settingsMode, settingsLocked, activeChatRouting } = useAppSettings();
+const { settingsMode, settingsLocked, activeChatRouting, activeSet } = useAppSettings();
 const { setStreaming, setSidecarState } = useChatActivity();
 const { isPersonasPluginActive, isProjetPluginActive, getPluginDataDir } = usePlugins();
 const { consumeAction, pendingAction } = usePersonasNavigation();
@@ -195,10 +196,17 @@ const displayReasoningEffort = computed<ReasoningEffort>({
     if (sessionReasoningOverride.value != null) {
       return sessionReasoningOverride.value;
     }
+    const model = displayReasoningModel.value;
     const routing = activeChatRouting.value;
-    if (!routing) return 'none';
-    const model = displayReasoningModel.value ?? routing.model;
-    return routing.defaultReasoning ?? defaultReasoningEffort(routing.provider, model);
+    if (!routing || !model) return 'none';
+    if (activeSet.value) {
+      return effectiveReasoningEffortFromSet(
+        activeSet.value,
+        sessionModelOverride.value,
+        null,
+      );
+    }
+    return defaultReasoningEffort(routing.provider, model);
   },
   set(effort: ReasoningEffort) {
     void onReasoningEffortChange(effort);
@@ -280,7 +288,9 @@ const metaParts = computed<ChatMetaPart[]>(() => {
     const model = displayReasoningModel.value ?? routing.model;
     parts.push({ text: routing.label || model });
     if (
-      supportsReasoning(routing.provider, model) &&
+      (activeSet.value
+        ? supportsReasoningForSet(activeSet.value, model)
+        : supportsReasoning(routing.provider, model)) &&
       displayReasoningEffort.value !== 'none'
     ) {
       const effort = displayReasoningEffort.value;
@@ -289,7 +299,7 @@ const metaParts = computed<ChatMetaPart[]>(() => {
         text: t('chat.page.reasoningLevel', { level: levelLabel.toLowerCase() }),
       });
     }
-    const contextWindow = contextWindowFor(routing.provider, model);
+    const contextWindow = contextWindowFor(routing.provider, model, activeSet.value);
     const usedTokens =
       lastUsage.value.inputTokens ?? estimateMessagesTokens(messages.value);
     const pct = Math.round((usedTokens / contextWindow) * 100);
@@ -351,6 +361,9 @@ watch(
     closeSideChat();
     clearExpansionState();
 
+    sessionReasoningOverride.value = null;
+    sessionModelOverride.value = null;
+
     autoTitleStarted.value = false;
     autoSummaryRunning.value = false;
     lastSummaryTurn.value = 0;
@@ -376,7 +389,9 @@ watch(
     sessionModelOverride.value =
       chatProvider &&
       session.model &&
-      isModelApplicable(chatProvider, session.model)
+      (activeSet.value
+        ? isModelApplicableForSet(activeSet.value, session.model)
+        : isModelApplicable(chatProvider, session.model))
         ? session.model
         : null;
     if (sessionLoadGuard.isStale(loadGen)) return;
@@ -552,8 +567,13 @@ watch(
   (providerName) => {
     if (!providerName) return;
     const override = sessionModelOverride.value;
-    if (override && !isModelApplicable(providerName, override)) {
+    if (override && !(
+      activeSet.value
+        ? isModelApplicableForSet(activeSet.value, override)
+        : isModelApplicable(providerName, override)
+    )) {
       sessionModelOverride.value = null;
+      sessionReasoningOverride.value = null;
       void persistSession(messages.value);
     }
   },

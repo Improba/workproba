@@ -9,7 +9,7 @@ from pydantic_ai.settings import ModelSettings
 
 from app.config import ProviderName
 from app.llm.mistral import MistralChatModel
-from app.llm.provider_sets import resolve_chat_from_set
+from app.llm.provider_sets import resolve_chat_from_set, supported_reasoning_efforts_for_set
 from app.schemas import LLMProviderConfig, ProviderSet, ReasoningEffort
 
 # Base URL par défaut selon le provider (quand non fourni par la config).
@@ -91,16 +91,34 @@ def reasoning_effort_for(config: LLMProviderConfig) -> ReasoningEffort | None:
     return effort
 
 
+def _mistral_supports_reasoning(model: str) -> bool:
+    """True si le modèle Mistral accepte ``reasoning_effort`` (none/high)."""
+    normalized = (model or "").strip().lower()
+    if any(
+        token in normalized
+        for token in (
+            "mistral-small-latest",
+            "mistral-medium-3-5",
+            "mistral-medium-latest",
+        )
+    ):
+        return True
+    if "medium" in normalized and "-latest" in normalized:
+        return True
+    if "small" in normalized and "-latest" in normalized:
+        return True
+    return False
+
+
 # Efforts réellement acceptés par l'API du provider pour un modèle donné.
-# L'API Mistral n'accepte que `none`/`high` pour `mistral-small-latest`
-# (renvoie une 400 `reasoning_effort='low' is not supported` sinon). On filtre
+# L'API Mistral n'accepte que `none`/`high` pour les modèles à raisonnement ajustable
+# (`mistral-small-latest`, `mistral-medium-3-5`, alias `mistral-medium-latest`).
 # ici en sécurité même si le front a déjà clampe, pour ne jamais planter l'appel.
 def _supported_efforts(provider: ProviderName, model: str) -> tuple[ReasoningEffort, ...]:
-    normalized = (model or "").strip().lower()
     if provider == "mistral":
-        if "small" in normalized:
+        if _mistral_supports_reasoning(model):
             return ("none", "high")
-        return ("none", "low", "medium", "high")
+        return ("none",)
     if provider == "anthropic":
         return ("none", "low", "medium", "high")
     # openai / openai_compat / ollama / vllm
@@ -108,23 +126,30 @@ def _supported_efforts(provider: ProviderName, model: str) -> tuple[ReasoningEff
 
 
 def clamp_reasoning_effort(
-    provider: ProviderName, model: str, effort: ReasoningEffort | None
+    provider: ProviderName,
+    model: str,
+    effort: ReasoningEffort | None,
+    provider_set: ProviderSet | None = None,
 ) -> ReasoningEffort | None:
     """Ramène un effort à une valeur supportée par le couple provider/modèle.
 
     Retourne None pour `none` ou absence. Si l'effort n'est pas supporté, on
-    tombe sur `high` (le seul effort non-nul garanti pour mistral-small) plutôt
-    que d'envoyer une valeur refusée par l'API.
+    tombe sur `high` (effort non-nul garanti pour les modèles Mistral binaires)
+    plutôt que d'envoyer une valeur refusée par l'API.
     """
     if effort is None or effort == "none":
         return None
-    supported = _supported_efforts(provider, model)
+    set_efforts = supported_reasoning_efforts_for_set(provider_set, model)
+    supported = set_efforts if set_efforts is not None else _supported_efforts(provider, model)
     if effort in supported:
         return effort
     return "high" if "high" in supported else None
 
 
-def build_model_settings(config: LLMProviderConfig) -> ModelSettings:
+def build_model_settings(
+    config: LLMProviderConfig,
+    provider_set: ProviderSet | None = None,
+) -> ModelSettings:
     settings: ModelSettings = {}
     if config.temperature is not None:
         settings["temperature"] = config.temperature
@@ -134,7 +159,7 @@ def build_model_settings(config: LLMProviderConfig) -> ModelSettings:
         settings["extra_headers"] = dict(config.extra_headers)
 
     provider = config.provider
-    effort = clamp_reasoning_effort(provider, config.model, config.reasoning_effort)
+    effort = clamp_reasoning_effort(provider, config.model, config.reasoning_effort, provider_set)
     if effort is not None:
         if provider in _OPENAI_COMPAT_PROVIDERS:
             settings["openai_reasoning_effort"] = effort
