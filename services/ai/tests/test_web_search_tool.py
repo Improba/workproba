@@ -93,6 +93,10 @@ async def test_web_search_tool_returns_results(plugin_dir: Path) -> None:
     assert result["count"] == 2
     assert result["backend"] == "mock"
     assert result["results"][0]["url"].startswith("https://")
+    first = result["results"][0]
+    assert isinstance(first.get("title"), str) and first["title"]
+    assert isinstance(first.get("snippet"), str)
+    assert isinstance(result.get("citations"), list)
     assert deps.web_search_calls == 1
 
 

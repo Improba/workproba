@@ -792,24 +792,33 @@ export async function fetchPreviewChange(opts: {
   workspaceDataDir: string;
   projectPath: string;
   filePath: string;
-  proposedContent: string;
+  proposedContent?: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
 }): Promise<PreviewChangeResult | null> {
   if (!isSafeRelativePath(opts.filePath)) {
     return null;
   }
   try {
+    const body: Record<string, unknown> = {
+      workspace_data_dir: opts.workspaceDataDir,
+      project_path: opts.projectPath,
+      file_path: opts.filePath,
+      proposed_content: opts.proposedContent ?? '',
+    };
+    if (opts.toolName) {
+      body.tool_name = opts.toolName;
+    }
+    if (opts.toolArgs) {
+      body.tool_args = opts.toolArgs;
+    }
     const response = await fetch(`${getAiSidecarUrl()}/documents/preview-change`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'X-Internal-Secret': getDesktopSecret(),
       },
-      body: JSON.stringify({
-        workspace_data_dir: opts.workspaceDataDir,
-        project_path: opts.projectPath,
-        file_path: opts.filePath,
-        proposed_content: opts.proposedContent,
-      }),
+      body: JSON.stringify(body),
     });
     if (!response.ok) return null;
     return (await response.json()) as PreviewChangeResult;

@@ -73,7 +73,9 @@ const props = defineProps<{
   workspaceDataDir?: string | null;
   projectPath?: string | null;
   filePath: string;
-  proposedContent: string;
+  proposedContent?: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
 }>();
 
 const emit = defineEmits<{
@@ -124,7 +126,9 @@ async function load(): Promise<void> {
       workspaceDataDir: props.workspaceDataDir,
       projectPath: props.projectPath,
       filePath: props.filePath,
-      proposedContent: props.proposedContent,
+      proposedContent: props.proposedContent ?? '',
+      toolName: props.toolName,
+      toolArgs: props.toolArgs,
     });
     if (!data) {
       loadError.value = true;
@@ -139,7 +143,16 @@ async function load(): Promise<void> {
 }
 
 watch(
-  () => [props.open, props.filePath, props.proposedContent, props.workspaceDataDir, props.projectPath] as const,
+  () =>
+    [
+      props.open,
+      props.filePath,
+      props.proposedContent,
+      props.toolName,
+      props.toolArgs,
+      props.workspaceDataDir,
+      props.projectPath,
+    ] as const,
   ([isOpen]) => {
     if (isOpen) void load();
   },

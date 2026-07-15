@@ -1,12 +1,6 @@
 <template>
   <div class="cloud-panel">
-    <div v-if="!isCloudPluginActive" class="cloud-panel__inactive">
-      <Lucide name="cloud" size="24" color="text-faint" />
-      <p>{{ t('cloud.inactive') }}</p>
-    </div>
-
-    <template v-else>
-      <div class="cloud-panel__badge">
+    <div class="cloud-panel__badge">
         {{ t('cloud.experimental') }}
       </div>
 
@@ -94,7 +88,6 @@
           </li>
         </ul>
       </section>
-    </template>
   </div>
 </template>
 
@@ -102,7 +95,6 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
-import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useCloud } from '@composables/useCloud';
 import { PROJET_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import { pickProjectFolder } from '@composables/useDesktop';
@@ -112,7 +104,7 @@ import {
 } from '@services/aiSidecar';
 
 const { t } = useI18n();
-const { isCloudPluginActive, isProjetPluginActive, getPluginDataDir } = usePlugins();
+const { isProjetPluginActive, getPluginDataDir } = usePlugins();
 const {
   status,
   loading,
@@ -207,22 +199,12 @@ async function onSync(projectId: string): Promise<void> {
   }
 }
 
-watch(isCloudPluginActive, (active) => {
-  if (active) {
-    void bootstrap();
-  }
-});
-
 watch(isProjetPluginActive, () => {
-  if (isCloudPluginActive.value) {
-    void refreshProjects();
-  }
+  void refreshProjects();
 });
 
 onMounted(() => {
-  if (isCloudPluginActive.value) {
-    void bootstrap();
-  }
+  void bootstrap();
 });
 
 defineExpose({
@@ -243,7 +225,6 @@ defineExpose({
   overflow-y: auto;
 }
 
-.cloud-panel__inactive,
 .cloud-panel__empty,
 .cloud-panel__loading {
   padding: 24px 8px;

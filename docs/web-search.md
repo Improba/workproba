@@ -201,7 +201,7 @@ An initial implementation shipped as opt-in plugin `workproba.web_search`. Produ
 |---|---|
 | T-V2-WS-3 | Tavily fallback for non-Mistral sets (e.g. Ollama) |
 | T-V2-WS-4 | `capabilities.web_search` on provider sets + UI badges |
-| T-V2-WS-5 | Audit log + inline citation chips in assistant messages (audit via effect gate partial) |
+| T-V2-WS-5 | Audit log + inline citation chips in assistant messages (**delivered**: audit + inline source pills from `web_search` tool results) |
 
 Full spec and implementation plan: [workproba-improba/roadmaps/web-search.md](../../workproba-improba/roadmaps/web-search.md).
 

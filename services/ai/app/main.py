@@ -812,6 +812,8 @@ async def documents_preview_change(
             project_root=project_root,
             file_path=payload.file_path,
             proposed_content=payload.proposed_content,
+            tool_name=payload.tool_name,
+            tool_args=payload.tool_args,
             locale=payload.locale,
         )
     except ValueError as exc:

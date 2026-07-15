@@ -729,11 +729,14 @@ export function applyStreamEvent(
       break;
     }
     case 'plan_proposed': {
+      const isReplan = Boolean(assistant.planSeenInTurn);
+      assistant.planSeenInTurn = true;
       const plan: ChatProposedPlan = {
         planId: event.data.planId,
         steps: event.data.steps,
         rationale: event.data.rationale,
         status: 'pending',
+        isReplan,
       };
       assistant.pendingPlan = plan;
       onConfirmationRequest?.();

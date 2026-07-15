@@ -178,7 +178,7 @@ export default {
     hubButton: 'Capacités',
     hubButtonAria: 'Ouvrir le hub Capacités',
     drawerTitle: 'Capacités',
-    drawerLead: 'Découvrez et activez les modules pour enrichir votre espace de travail.',
+    drawerLead: 'Découvrez et activez les capacités pour enrichir votre espace de travail.',
     regards: {
       title: 'Regards métier',
       description: 'Consultez des profils métier pour des avis, discussions et regards croisés.',
@@ -301,6 +301,7 @@ export default {
     confirmationSummary: 'Je vais {verb} {file}',
     plan: {
       proposed: 'Plan proposé',
+      updated: 'Plan mis à jour',
       approve: 'Approuver',
       refuse: 'Refuser',
       step: 'Étape',
@@ -740,7 +741,7 @@ export default {
   },
   cloud: {
     tabLabel: 'Cloud',
-    inactive: 'Activez le plugin Cloud dans les réglages pour synchroniser vos projets.',
+    inactive: 'Activez la synchronisation depuis le hub Capacités.',
     experimental: 'Version expérimentale (sync dossier local)',
     mountPathTitle: 'Dossier de synchronisation',
     mountPathHint: 'Choisissez un dossier local partagé entre vos postes.',
@@ -941,7 +942,7 @@ export default {
   },
   browser: {
     tabLabel: 'Navigateur',
-    inactive: 'Activez le plugin Navigateur dans les réglages pour parcourir le web.',
+    inactive: 'Activez la navigation web depuis le hub Capacités.',
     urlPlaceholder: 'https://…',
     go: 'Aller',
     back: 'Retour',
@@ -1011,5 +1012,10 @@ export default {
     citationAria: 'Citation mémoire : {snippet}',
     citationTooltip: 'Source : {source} — {snippet}',
     highlightFailed: 'Souvenir introuvable dans le panneau.',
+  },
+  webSearch: {
+    sourcesLabel: 'Sources web',
+    citationAria: 'Ouvrir la source : {title}',
+    citationTooltip: '{title} — {snippet}',
   },
 };

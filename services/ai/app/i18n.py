@@ -299,8 +299,11 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "modifications destructives, ou si l'utilisateur demande un plan), "
                 "appelle d'abord l'outil propose_plan avec les étapes prévues "
                 "(outil, résumé, fichier cible) et une justification. N'exécute pas "
-                "les écritures tant que le plan n'est pas approuvé. Pour les tâches "
-                "simples (une lecture, une reformulation), agis directement."
+                "les écritures tant que le plan n'est pas approuvé. Si, après "
+                "approbation, la réalité diverge (fichier manquant, erreur, nouveau "
+                "besoin), appelle propose_plan à nouveau avec des étapes ajustées "
+                "avant de poursuivre les écritures. Pour les tâches simples (une "
+                "lecture, une reformulation), agis directement."
             ),
             "approval_gate_prompt": (
                 "Les outils d'écriture (documents, fichiers, publication) exigent "
@@ -750,8 +753,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "For complex tasks (multiple files, multiple steps, destructive "
                 "changes, or when the user asks for a plan), first call propose_plan "
                 "with the planned steps (tool, summary, target file) and a rationale. "
-                "Do not perform writes until the plan is approved. For simple tasks "
-                "(a read, a rewrite), act directly."
+                "Do not perform writes until the plan is approved. If, after approval, "
+                "reality diverges (missing file, error, new requirement), call "
+                "propose_plan again with adjusted steps before continuing writes. "
+                "For simple tasks (a read, a rewrite), act directly."
             ),
             "approval_gate_prompt": (
                 "Write tools (documents, files, publishing) require explicit user "

@@ -609,7 +609,9 @@ class PreviewChangeRequest(BaseModel):
     workspace_data_dir: str
     project_path: str
     file_path: str
-    proposed_content: str
+    proposed_content: str = ""
+    tool_name: str | None = None
+    tool_args: dict[str, Any] | None = None
     locale: Locale = "fr"
 
     @field_validator("locale", mode="before")

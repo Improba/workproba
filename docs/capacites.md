@@ -1,0 +1,36 @@
+# Capacités activables
+
+> **Last updated:** 15/07/2026  
+> **Audience:** end users (mode guidé)
+
+## What are capabilities?
+
+**Capabilities** are optional features you can turn on to extend Workproba. They are listed in the **Capabilities** hub (button in the title bar).
+
+You do not need to know about technical plugins or extensions to use them in guided mode.
+
+| Capability | What it adds | Where it lives after activation |
+|---|---|---|
+| **Business perspectives** (Regards métier) | Expert-style opinions, discussions, cross-perspectives | Side panel and central area |
+| **Projects and deliverables** | Published documents shared with collaborators | Right panel, Project tab |
+| **Web navigation** | Browse pages from Workproba with guided agent help | Right panel, Browser tab |
+| **Synchronization** | Sync published project files via a shared folder | Under Projects (coming soon in guided mode) |
+
+## How to activate
+
+1. Click **Capabilities** in the title bar.
+2. Pick a capability card.
+3. Use **Enable and open** to activate it and jump to its home surface.
+
+To turn a capability off, open the hub again and use **Disable** on an active card.
+
+## What is not a capability?
+
+- **Web search** when the Imp looks up facts on the public web: automatic when your engine and network policy allow it. Sources appear as links under assistant messages.
+- **Memory**, **conversations**, and **file tools**: always available in your **space** (local folder).
+
+## Advanced mode
+
+In **Settings → Extensions**, administrators can see technical plugin details, permissions, and local plugin installation (developer builds only).
+
+See also: [plugins.md](./plugins.md) (honest technical status), [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md) (product spec).

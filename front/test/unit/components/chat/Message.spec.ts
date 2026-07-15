@@ -290,4 +290,51 @@ describe('Message accessibilité', () => {
     expect(wrapper.find('.memory-citations-stub').exists()).toBe(true);
     wrapper.unmount();
   });
+
+  it('affiche les sources web sur un message assistant', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-web',
+          role: 'assistant',
+          content: 'Réponse avec sources.',
+          toolCalls: [
+            {
+              id: 'tc-web',
+              name: 'web_search',
+              status: 'success',
+              args: { query: 'test' },
+              result: {
+                results: [
+                  {
+                    title: 'Example',
+                    url: 'https://example.com/',
+                    snippet: 'Snippet.',
+                  },
+                ],
+              },
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+          MemoryCitationsBar: true,
+          WebSearchCitationsBar: {
+            props: ['citations'],
+            template: '<ul class="web-search-citations-stub" />',
+          },
+        },
+      },
+    });
+
+    expect(wrapper.find('.web-search-citations-stub').exists()).toBe(true);
+    wrapper.unmount();
+  });
 });

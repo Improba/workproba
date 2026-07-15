@@ -1,12 +1,6 @@
 <template>
   <div class="browser-panel">
-    <div v-if="!isBrowserPluginActive" class="browser-panel__inactive">
-      <Lucide name="globe" size="24" color="text-faint" />
-      <p>{{ t('browser.inactive') }}</p>
-    </div>
-
-    <template v-else>
-      <div class="browser-panel__toolbar">
+    <div class="browser-panel__toolbar">
         <div class="browser-panel__nav-row">
           <div class="browser-panel__nav">
             <button
@@ -179,7 +173,6 @@
           </ul>
         </details>
       </div>
-    </template>
   </div>
 </template>
 
@@ -198,7 +191,6 @@ const ELAPSED_TICK_MS = 1000;
 const { t } = useI18n();
 const { rightPanelTab } = useShellSurfaces();
 const {
-  isBrowserPluginActive,
   currentUrl,
   title,
   screenshot,
@@ -376,7 +368,6 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
-.browser-panel__inactive,
 .browser-panel__empty {
   display: flex;
   flex-direction: column;
@@ -387,10 +378,6 @@ onUnmounted(() => {
   color: var(--wp-text-faint);
   font-size: var(--wp-fs-sm);
   text-align: center;
-}
-
-.browser-panel__inactive {
-  flex: 1;
 }
 
 .browser-panel__toolbar {

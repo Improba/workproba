@@ -178,7 +178,7 @@ export default {
     hubButton: 'Capabilities',
     hubButtonAria: 'Open Capabilities hub',
     drawerTitle: 'Capabilities',
-    drawerLead: 'Discover and enable modules to enrich your workspace.',
+    drawerLead: 'Discover and enable capabilities to enrich your space.',
     regards: {
       title: 'Business perspectives',
       description: 'Consult expert profiles for opinions, discussions, and cross-perspectives.',
@@ -302,6 +302,7 @@ export default {
     confirmationSummary: 'I will {verb} {file}',
     plan: {
       proposed: 'Proposed plan',
+      updated: 'Updated plan',
       approve: 'Approve',
       refuse: 'Decline',
       step: 'Step',
@@ -741,7 +742,7 @@ export default {
   },
   cloud: {
     tabLabel: 'Cloud',
-    inactive: 'Enable the Cloud plugin in settings to sync your projects.',
+    inactive: 'Enable synchronization from the Capabilities hub.',
     experimental: 'Experimental (local folder sync)',
     mountPathTitle: 'Sync folder',
     mountPathHint: 'Choose a local folder shared across your devices.',
@@ -942,7 +943,7 @@ export default {
   },
   browser: {
     tabLabel: 'Browser',
-    inactive: 'Enable the Browser plugin in settings to browse the web.',
+    inactive: 'Enable web navigation from the Capabilities hub.',
     urlPlaceholder: 'https://…',
     go: 'Go',
     back: 'Back',
@@ -1012,5 +1013,10 @@ export default {
     citationAria: 'Memory citation: {snippet}',
     citationTooltip: 'Source: {source} — {snippet}',
     highlightFailed: 'Memory not found in panel.',
+  },
+  webSearch: {
+    sourcesLabel: 'Web sources',
+    citationAria: 'Open source: {title}',
+    citationTooltip: '{title} — {snippet}',
   },
 };

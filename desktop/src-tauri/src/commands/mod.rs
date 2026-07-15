@@ -17,7 +17,7 @@ pub use project::{
     create_conversation, delete_conversation, ensure_workproba_dir, find_conversation_by_id,
     get_active_project_path, get_conversation, get_workproba_dir, get_workspace_data_dir,
     get_workspace_info, list_conversations, list_dir_entries, list_documents, list_workspaces,
-    open_path, pick_project_folder, restore_last_project_path, reveal_in_os, save_conversation,
+    open_path, open_external_url, pick_project_folder, restore_last_project_path, reveal_in_os, save_conversation,
     set_active_project_path, update_workspace_title, ProjectState,
 };
 pub use settings_store::{

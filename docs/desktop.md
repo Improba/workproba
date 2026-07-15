@@ -1,7 +1,8 @@
-# Workproba Desktop
+# Workproba Desktop (application locale)
 
-> **Status:** Product decision: desktop pivot
-> **Last updated:** 15/07/2026
+> **Status:** Product decision: desktop pivot  
+> **Last updated:** 15/07/2026  
+> **Terminology:** user-facing **space** (FR: **espace**) = one local folder you work in
 
 ## Decision
 
@@ -66,7 +67,7 @@ Chat **does not go through Rust**: the Quasar webview calls the Python sidecar d
 
 ### Per-space storage
 
-Workproba metadata lives in the **application folder**, not in the client folder. See [workspace-storage.md](./workspace-storage.md).
+Workproba metadata lives in the **application folder**, not in the client folder. See [space storage](./workspace-storage.md) (espace).
 
 ```
 {app_data}/spaces/{workspace_id}/.workproba/

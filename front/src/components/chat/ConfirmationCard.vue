@@ -90,7 +90,9 @@
       :workspace-data-dir="workspaceDataDir"
       :project-path="projectPath"
       :file-path="confirmation.proposedPath"
-      :proposed-content="proposedContent!"
+      :proposed-content="proposedContent"
+      :tool-name="confirmation.toolName"
+      :tool-args="toolArgs"
       @confirm="emit('approve')"
     />
   </div>
@@ -102,7 +104,7 @@ import { useI18n } from 'vue-i18n';
 import type { ChatConfirmation } from '#types';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import PreviewChangeDialog from '@components/chat/PreviewChangeDialog.vue';
-import { extractProposedContent, isFileWriteTool } from '@utils/fileWriteTools';
+import { canPreviewFileWrite, extractProposedContent } from '@utils/fileWriteTools';
 
 const props = defineProps<{
   confirmation: ChatConfirmation;
@@ -123,15 +125,14 @@ const emit = defineEmits<{
 
 const previewOpen = ref(false);
 
-const proposedContent = computed(() => extractProposedContent(props.toolArgs));
+const proposedContent = computed(() => extractProposedContent(props.toolArgs) ?? '');
 
 const canPreview = computed(
   () =>
-    isFileWriteTool(props.confirmation.toolName) &&
     Boolean(props.workspaceDataDir) &&
     Boolean(props.projectPath) &&
     Boolean(props.confirmation.proposedPath) &&
-    proposedContent.value !== null,
+    canPreviewFileWrite(props.confirmation.toolName, props.toolArgs),
 );
 
 const hasEffectHeadline = computed(() =>

@@ -137,6 +137,41 @@ async def test_propose_plan_deny_marks_error(tmp_path: Path) -> None:
     assert final[0].status == "cancelled"
 
 
+@pytest.mark.asyncio
+async def test_second_propose_plan_in_same_turn() -> None:
+    gate = PlanGate(session_id="sess-replan", turn_id="turn-replan")
+
+    async def first_plan() -> dict[str, Any]:
+        return await gate.request_plan(
+            steps=[{"tool": "read_document", "summary": "Lire", "target": "a.txt"}],
+            rationale="Premier plan",
+            locale="fr",
+        )
+
+    first_task = asyncio.create_task(first_plan())
+    await asyncio.sleep(0.02)
+    first_id = next(iter(gate._pending))
+    gate.resolve(first_id, approved=True)
+    first_result = await first_task
+    assert first_result.get("approved") is True
+
+    async def second_plan() -> dict[str, Any]:
+        return await gate.request_plan(
+            steps=[{"tool": "write_docx", "summary": "Écrire", "target": "b.docx"}],
+            rationale="Plan ajusté",
+            locale="fr",
+        )
+
+    second_task = asyncio.create_task(second_plan())
+    await asyncio.sleep(0.02)
+    second_id = next(iter(gate._pending))
+    assert second_id != first_id
+    gate.resolve(second_id, approved=True)
+    second_result = await second_task
+    assert second_result.get("approved") is True
+    assert second_result.get("steps")[0]["tool"] == "write_docx"
+
+
 def test_plan_approve_http_endpoint() -> None:
     from fastapi.testclient import TestClient
 

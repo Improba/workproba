@@ -77,7 +77,7 @@ def test_preview_change_new_file(tmp_path: Path) -> None:
     assert resp.json()["is_new"] is True
 
 
-def test_preview_change_binary_docx(tmp_path: Path) -> None:
+def test_preview_change_binary_docx_without_tool_args(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()
     ws_data = tmp_path / "ws_data"
@@ -102,6 +102,79 @@ def test_preview_change_binary_docx(tmp_path: Path) -> None:
     assert data["is_binary"] is True
     assert data["diff_html"] == ""
     assert data["message"]
+
+
+def test_preview_change_docx_with_tool_args(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+    doc = Document()
+    doc.add_paragraph("Ancien paragraphe")
+    doc.save(project / "rapport.docx")
+
+    with TestClient(mainmod.app) as client:
+        resp = client.post(
+            "/documents/preview-change",
+            json={
+                "workspace_data_dir": str(ws_data),
+                "project_path": str(project),
+                "file_path": "rapport.docx",
+                "tool_name": "write_docx",
+                "tool_args": {
+                    "title": "Rapport",
+                    "paragraphs": ["Nouveau paragraphe"],
+                },
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["is_binary"] is False
+    assert data["is_new"] is False
+    assert "wp-diff-add" in data["diff_html"]
+    assert "Nouveau paragraphe" in data["diff_html"]
+    assert "Ancien paragraphe" in data["diff_html"]
+
+
+def test_preview_change_xlsx_with_tool_args(tmp_path: Path) -> None:
+    from openpyxl import Workbook
+
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Données"
+    sheet.append(["Ancien", "Valeur"])
+    workbook.save(project / "data.xlsx")
+    workbook.close()
+
+    with TestClient(mainmod.app) as client:
+        resp = client.post(
+            "/documents/preview-change",
+            json={
+                "workspace_data_dir": str(ws_data),
+                "project_path": str(project),
+                "file_path": "data.xlsx",
+                "tool_name": "write_xlsx",
+                "tool_args": {
+                    "sheets": [
+                        {
+                            "name": "Données",
+                            "rows": [["Nouveau", "Valeur"]],
+                        }
+                    ],
+                },
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["is_binary"] is False
+    assert "wp-diff-add" in data["diff_html"]
+    assert "Nouveau" in data["diff_html"]
 
 
 def test_preview_change_rejects_traversal(tmp_path: Path) -> None:

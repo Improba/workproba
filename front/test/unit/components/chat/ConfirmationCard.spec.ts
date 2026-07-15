@@ -85,7 +85,7 @@ describe('ConfirmationCard', () => {
         }),
         workspaceDataDir: '/data',
         projectPath: '/project',
-        toolArgs: { content: 'Hello' },
+        toolArgs: { path: 'note.docx', paragraphs: ['Hello'] },
       },
       global: {
         stubs: {
