@@ -98,7 +98,7 @@ Webfonts are embedded offline (Tauri) via `@fontsource` in `workproba.scss`: Var
 
 | Token | Role |
 |-------|------|
-| `--wp-focus-ring` | `:focus-visible` ring; per theme: `var(--accent-high)` (light cyan, dark gold) |
+| `--wp-focus-ring` | `:focus-visible` ring; per theme: `var(--accent-high)` (gold in both themes) |
 | `--wp-focus-offset` | Outline offset (2px) |
 
 Applied globally on `.wp-shell` for titlebar, sidebar, explorer, composer, and buttons via the `wp-focus-visible` mixin.
@@ -115,25 +115,43 @@ The `--wp-space-1` through `--wp-space-6` tokens define the spacing scale. Their
 
 ### Surfaces, borders, and accents
 
-Light mode uses a **warm neutral** palette (cream surfaces, warm borders). Dark mode uses warm charcoal + gold accent.
+Light and dark modes share the same **warm accent family** (gold). Light mode uses a **warm neutral** palette (cream surfaces, visible warm borders). Dark mode uses warm charcoal with the same gold accent logic.
 
 | Token | Role |
 |-------|------|
-| `--wp-bg` | Global application background |
+| `--wp-bg` | Global application background (light: `neutral-low` for clearer separation from cards) |
 | `--wp-surface`, `--wp-surface-2`, `--wp-surface-3` | Cards, panels, elevated areas |
-| `--wp-border`, `--wp-border-strong` | Separators and outlines |
+| `--wp-border`, `--wp-border-strong` | Separators and outlines (light: `neutral-medium` for readable edges) |
 | `--wp-text`, `--wp-text-muted`, `--wp-text-faint` | Text hierarchy |
 | `--text-muted`, `--text-faint` | Aliases for Lucide `color` prop |
-| `--wp-primary`, `--wp-primary-soft` | Branding: teal (light) / gold (dark), via `var(--primary)` |
-| `--wp-accent`, `--wp-accent-strong`, `--wp-accent-soft` | Actions, focus, active tabs: cyan (light) / gold (dark) |
-| `--wp-canard`, `--wp-cyan`, `--wp-gold`, `--wp-violet` | Improba brand accents (theme-adjusted where noted in SCSS) |
-| `--wp-gold-soft`, `--wp-violet-soft` | Soft backgrounds for badges and Regards métier sidebar tab |
+| `--wp-primary`, `--wp-primary-soft` | Structure: canard (light) / soft blue (dark), via `var(--primary)` |
+| `--wp-accent`, `--wp-accent-strong`, `--wp-accent-soft` | **Single interactive accent**: gold in both themes (`#d4a017` light / `#e0a93a` dark) |
+| `--wp-canard`, `--wp-cyan`, `--wp-gold`, `--wp-violet` | Stable brand accents (see color roles below) |
+| `--wp-gold-soft`, `--wp-violet-soft` | Soft backgrounds for Regards métier and memory badges |
+| `--wp-warning`, `--wp-warning-soft` | Semantic warning aliases (mapped to Anubis `warning`) |
 | `--wp-selection`, `--wp-selection-soft` | Text selection in chat |
 | `--wp-user-bubble-bg`, `--wp-user-bubble-text`, `--wp-user-bubble-border` | User message bubbles in chat |
-| `--wp-success`, `--wp-danger`, `--wp-danger-soft` | Semantic states |
+| `--wp-success`, `--wp-success-soft`, `--wp-danger`, `--wp-danger-soft` | Semantic states |
 | `--wp-r-sm` … `--wp-r-pill` | Border radii |
 | `--wp-shadow-1`, `--wp-shadow-2` | Light shadows (theme-specific values) |
 | `--wp-ease`, `--wp-dur` | Transitions (180ms) |
+
+### Color roles (semantic discipline)
+
+One accent for all interactive UI. Secondary colors carry **business meaning** only.
+
+| Token | Light value (stable or mapped) | Role | Usage |
+|-------|-------------------------------|------|--------|
+| `--wp-accent` | `#d4a017` (via Anubis `accent`) | **Action** | Send, primary CTA, focus ring, active tabs, sidebar hovers, composer chip Regards |
+| `--wp-primary` | `#203d52` (canard) | **Structure** | Workspace selection, user bubble text, titles, selection states |
+| `--wp-cyan` | `#2bb5c2` (stable in `:root`) | **Info / secondary** | Links techniques, badges info, `--q-info`; former main accent in light mode |
+| `--wp-gold` | `#e0a93a` (via Anubis `warning`) | **Regards / Personas** | Personas avatars, meeting views, opinion cards; slightly brighter than accent |
+| `--wp-violet` | theme-adjusted | **Memory / RAG** | Avatars mémoire, citations, raisonnement marqué |
+| `--wp-success` / `--wp-danger` / `--wp-warning` | Anubis semantic | **Feedback** | Confirmations, errors, alerts |
+
+**Rule**: shell components use `--wp-accent` for any hover, focus, or CTA. Reserve `--wp-gold` for the Regards / Personas feature family. Do not mix `--wp-gold` on generic chrome hovers (sidebar icons, titlebar toggles).
+
+**Why light = gold now**: light mode previously used cyan accent + gold hovers + canard structure on warm cream backgrounds, which felt disjoint compared to dark mode (already gold-accented). Unifying on gold aligns both themes; cyan is demoted to informational use.
 
 ### Animation utilities
 
@@ -224,20 +242,30 @@ Variants are intelligently inverted: for example, `neutral-lowest` is white in l
 Values defined in `front/anubis.config.json`:
 
 ```text
-// Light: teal + cyan
-primary:       #203d52 / n/a
-accent:        #2bb5c2 / n/a
-neutral-lowest: #ffffff / n/a
-text:          #1c2a36 / n/a
+// Light: warm cream + gold accent + canard structure
+primary:        #203d52
+accent:         #d4a017
+accent-high:    #bb8e02
+text:           #1e2a32
+text-link:      #bb8e02
+neutral-low:    #f3f0ea   ← --wp-bg (shell)
+neutral-lowest: #fffcf8   ← --wp-surface (cards)
+neutral-medium: #cfc8bc   ← --wp-border (shell)
+warning:        #e0a93a   ← --wp-gold (Regards / Personas)
 
-// Dark: warm charcoal + gold
-primary:       n/a / #e0a93a
-accent:        n/a / #e0a93a
-neutral-lowest: n/a / #161514
-neutral-lower:  n/a / #1f1e1c
-text:          n/a / #eceae6
-text-link:     n/a / #ffcc49
-success:       n/a / #4ade80
+// Dark: warm charcoal + gold accent
+primary:        #6b9eb5
+accent:         #e0a93a
+accent-high:    #ffcc49
+neutral-lowest: #161514
+neutral-lower:  #1f1e1c
+text:           #eceae6
+text-link:      #ffcc49
+success:        #4ade80
+
+// Stable across themes (:root in workproba.scss)
+wp-canard:      #203d52
+wp-cyan:        #2bb5c2   ← info / secondary (not main accent)
 ```
 
 Full list and modification procedure: [anubis-ui.md](./anubis-ui.md).
@@ -289,8 +317,8 @@ Use the Mastok wrapper with Anubis or `--wp-*` color names:
 
 ```vue
 <Lucide name="folder" size="16" color="wp-text-muted" />
-<Lucide name="message-square-plus" size="sm" color="wp-canard" />
-<Lucide name="users" size="15" color="wp-gold" />
+<Lucide name="message-square-plus" size="sm" color="wp-accent" />
+<Lucide name="users" size="15" color="wp-gold" />  <!-- Regards / Personas only -->
 ```
 
 Supported aliases: `text-muted`, `text-faint`, `text` → mapped to `--wp-*` in `Lucide.vue`.

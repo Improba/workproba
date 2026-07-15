@@ -38,29 +38,48 @@ css: ['app.scss', '_anubis.scss', 'workproba.scss'],
 
 ## Workproba palettes
 
+Both themes use a **gold accent** for interactive UI. Light mode uses a slightly deeper gold (`#d4a017`) for contrast on cream surfaces. Cyan (`--wp-cyan`, `#2bb5c2`) is reserved for info and secondary highlights, not primary actions.
+
 ### Light mode, "Paper"
 
 | Role | Token | Value |
 |------|-------|--------|
-| Branding / selections | `primary` | `#203d52` (teal blue) |
-| Action / focus / send | `accent` | `#2bb5c2` (cyan) |
-| Application background | `neutral-lower` | `#faf8f5` |
-| Card surface | `neutral-lowest` | `#fffcf8` |
+| Structure / selections | `primary` | `#203d52` (canard) |
+| Action / focus / send | `accent` | `#d4a017` (gold, deeper than dark for WCAG on light bg) |
+| Accent hover / focus ring | `accent-high` | `#bb8e02` |
+| Application background (`--wp-bg`) | `neutral-low` | `#f3f0ea` |
+| Card surface (`--wp-surface`) | `neutral-lowest` | `#fffcf8` |
+| Shell borders (`--wp-border`) | `neutral-medium` | `#cfc8bc` |
 | Main text | `text` | `#1e2a32` |
+| Links | `text-link` | `#bb8e02` |
+| Regards / Personas feature | `warning` → `--wp-gold` | `#e0a93a` |
+| Info / secondary highlight | `:root --wp-cyan` | `#2bb5c2` |
 | Success / danger / warning | `success` / `danger` / `warning` | `#2e9e74` / `#d64545` / `#e0a93a` |
 
 ### Dark mode, "Warm Charcoal"
 
 | Role | Token | Value |
 |------|-------|--------|
-| Main accent (gold) | `primary`, `accent` | `#e0a93a` / `#ffcc49` (high) |
+| Structure | `primary` | `#6b9eb5` (soft blue) |
+| Main accent (gold) | `accent` | `#e0a93a` |
+| Accent hover / links | `accent-high`, `text-link` | `#ffcc49` |
 | Background | `neutral-lowest` | `#161514` |
 | Surfaces | `neutral-lower` → `neutral-low` | `#1f1e1c` → `#2a2825` |
 | Text | `text` | `#eceae6` |
-| Links | `text-link` | `#ffcc49` |
 | Success | `success` | `#4ade80` |
 
-Cyan (`--wp-cyan`) remains available as a stable brand accent (`:root`) but is no longer the main accent in dark mode.
+### Semantic color roles
+
+| Need | Token to use |
+|------|----------------|
+| Button, send, focus, active tab, generic hover | `--wp-accent` |
+| Workspace selection, user bubble, structural emphasis | `--wp-primary` / `--wp-canard` |
+| Regards, Personas, human-in-the-loop UI | `--wp-gold` / `--wp-gold-soft` |
+| Memory, RAG, citations | `--wp-violet` / `--wp-violet-soft` |
+| Info badge, technical link, `--q-info` | `--wp-cyan` |
+| Error / success / alert | `--wp-danger` / `--wp-success` / `--wp-warning` |
+
+Do not use `--wp-gold` for generic shell hovers; use `--wp-accent` so light and dark share the same interactive grammar.
 
 ## Changing a color
 
@@ -88,9 +107,23 @@ node -e "require('anubis-ui/dist/tools/main').init()"
 
 ### 3. Workproba shell tokens (`--wp-*`)
 
-For chrome-specific needs (surface-3, fine borders, persona violet, dark shadows), edit `front/src/css/workproba.scss`.
+For chrome-specific needs (surface steps, shell borders, persona violet, semantic aliases, dark shadows), edit `front/src/css/workproba.scss`.
 
-Example: the shell maps surfaces to Anubis in dark mode:
+Example: light mode shell surfaces (stronger separation between bg and cards):
+
+```scss
+body.body--light {
+  --wp-bg: var(--neutral-low);
+  --wp-surface: var(--neutral-lowest);
+  --wp-surface-2: var(--neutral-lower);
+  --wp-border: var(--neutral-medium);
+  --wp-accent: var(--accent);
+  --wp-warning: var(--warning);
+  --wp-warning-soft: var(--warning-lowest);
+}
+```
+
+Example: dark mode shell mapping:
 
 ```scss
 body.body--dark {
