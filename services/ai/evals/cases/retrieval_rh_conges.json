@@ -1,0 +1,25 @@
+{
+  "id": "retrieval_rh_conges",
+  "type": "retrieval",
+  "documents": [
+    {
+      "id": "note_rh_conges_payes.md",
+      "title": "Note RH — Congés payés 2026",
+      "text": "Règles de congés payés pour les salariés de LogiPack SAS. Acquisition : 2,5 jours ouvrables par mois. Report possible jusqu'à 5 jours sur l'année suivante avec accord du manager. Demande obligatoire via l'intranet au moins 15 jours avant le départ. Période estivale (juillet-août) : maximum 10 jours consécutifs sauf dérogation RH."
+    },
+    {
+      "id": "planning_equipe_juin.md",
+      "title": "Planning équipe logistique — Juin",
+      "text": "Planning tournées camions secteur Nord. Lundi : équipe A (Marc, Julie). Mardi : équipe B. Mercredi : maintenance véhicule CT-12. Jeudi-vendredi : livraisons express client Dupré."
+    },
+    {
+      "id": "menu_cantine_semaine12.md",
+      "title": "Menu cantine — Semaine 12",
+      "text": "Lundi : lasagnes bolognaise. Mardi : poisson pané, purée. Mercredi : salade César. Jeudi : couscous végétarien. Vendredi : burger maison."
+    }
+  ],
+  "query": "Quelles sont les règles de congés payés et comment faire une demande ?",
+  "relevant_ids": ["note_rh_conges_payes.md"],
+  "k": 2,
+  "pass_threshold": 1.0
+}

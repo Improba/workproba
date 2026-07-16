@@ -1,0 +1,25 @@
+{
+  "id": "retrieval_chantier_epi",
+  "type": "retrieval",
+  "documents": [
+    {
+      "id": "consigne_securite_epi_nord.md",
+      "title": "Consigne sécurité — EPI chantier Nord",
+      "text": "EPI obligatoires sur le chantier Nord (site LogiPack extension entrepôt). Casque de chantier certifié EN 397. Chaussures de sécurité S3. Gilet haute visibilité classe 2. Lunettes de protection. Gants anti-coupure pour manutention. Port des EPI contrôlé à l'entrée du site."
+    },
+    {
+      "id": "planning_camion_mardi.md",
+      "title": "Planning camion — Mardi",
+      "text": "Tournée camion mardi : départ 6h30 dépôt LogiPack. Livraison palette client Martin à 8h. Retour dépôt 11h30. Révision freins prévue l'après-midi."
+    },
+    {
+      "id": "facture_materiaux_beton.md",
+      "title": "Facture matériaux — BétonPro",
+      "text": "Facture BétonPro chantier Nord. 12 m3 béton C25/30 : 1 680 EUR HT. Livraison pompe mardi 14h. Référence commande MAT-7742."
+    }
+  ],
+  "query": "Quels équipements de protection individuelle sont obligatoires sur le chantier Nord ?",
+  "relevant_ids": ["consigne_securite_epi_nord.md"],
+  "k": 2,
+  "pass_threshold": 1.0
+}

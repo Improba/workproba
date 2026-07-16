@@ -1,0 +1,8 @@
+{
+  "id": "answer_rh_refus_conge_poli",
+  "type": "answer_judge",
+  "question": "Rédige un mail court et poli pour refuser une demande de congé du 20 au 27 août 2026, en expliquant que l'équipe est en sous-effectif cette semaine-là, et en proposant une alternative du 3 au 10 septembre.",
+  "candidate_answer": "Bonjour,\n\nMerci pour votre demande de congés du 20 au 27 août 2026. Malheureusement, nous ne pouvons pas la valider : plusieurs collègues sont déjà absents cette semaine et l'équipe serait en sous-effectif.\n\nSeriez-vous disponible pour les dates du 3 au 10 septembre 2026 ? Nous pourrons y répondre favorablement.\n\nCordialement,\nSylvie Martin\nService RH — LogiPack SAS",
+  "criteria": "Mail en français, ton poli et professionnel. Doit mentionner : refus de la période demandée (20-27 août 2026), motif (sous-effectif / absences), et alternative proposée (3-10 septembre 2026). Score 5 si court, poli et complet ; 3 si refus + motif + alternative présents même si style moins soigné.",
+  "pass_min_score": 3
+}

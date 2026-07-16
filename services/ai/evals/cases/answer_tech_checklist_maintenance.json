@@ -1,0 +1,8 @@
+{
+  "id": "answer_tech_checklist_maintenance",
+  "type": "answer_judge",
+  "question": "À partir de cette note de maintenance, produis une checklist de 4 étapes numérotées : « Vérification mensuelle compresseur C-12 : contrôler niveau d'huile, purger le condensat du séparateur, serrer les raccords accessibles, noter la pression de service sur la fiche atelier. »",
+  "candidate_answer": "1. Contrôler le niveau d'huile du compresseur C-12.\n2. Purger le condensat du séparateur.\n3. Serrer les raccords accessibles.\n4. Noter la pression de service sur la fiche atelier.",
+  "criteria": "La réponse doit comporter exactement 4 étapes numérotées (1 à 4), dans un ordre logique, reprenant : contrôle huile, purge condensat, serrage raccords, notation pression sur fiche atelier. Score 5 si 4 étapes complètes et fidèles ; 3 si 4 étapes présentes avec le sens général correct.",
+  "pass_min_score": 3
+}

@@ -1,0 +1,25 @@
+{
+  "id": "retrieval_rh_entretien_annuel",
+  "type": "retrieval",
+  "documents": [
+    {
+      "id": "guide_entretien_annuel.md",
+      "title": "Guide RH — Trame entretien annuel",
+      "text": "Trame entretien annuel LogiPack SAS. 1) Bilan des objectifs de l'année écoulée. 2) Compétences développées et axes de progrès. 3) Souhaits d'évolution et formation. 4) Fixation des objectifs pour l'année N+1. Durée recommandée : 45 minutes. Le salarié reçoit le formulaire 48h avant."
+    },
+    {
+      "id": "grille_salaires_2026.md",
+      "title": "Grille salariale interne 2026",
+      "text": "Grille indiciaire LogiPack : Technicien niveau 1 : 24 500-27 000 EUR brut. Technicien niveau 2 : 27 500-31 000 EUR. Assistant administratif : 23 000-26 500 EUR. Majoration ancienneté : +2% par tranche de 3 ans."
+    },
+    {
+      "id": "procedure_offboarding.md",
+      "title": "Procédure départ salarié",
+      "text": "Checklist offboarding : restitution badge, clés, téléphone pro. Dernier jour de travail : solde de tout compte. Entretien de sortie optionnel avec RH dans les 15 jours."
+    }
+  ],
+  "query": "Quelle est la trame pour conduire un entretien annuel avec un salarié ?",
+  "relevant_ids": ["guide_entretien_annuel.md"],
+  "k": 2,
+  "pass_threshold": 1.0
+}

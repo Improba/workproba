@@ -1,0 +1,25 @@
+{
+  "id": "retrieval_devis_fournisseur",
+  "type": "retrieval",
+  "documents": [
+    {
+      "id": "devis_imprimerie_dupont.md",
+      "title": "Devis Imprimerie Dupont — DEV-2026-0342",
+      "text": "Devis Imprimerie Dupont pour LogiPack SAS. Objet : impression 500 flyers A5 couleur recto-verso. Montant HT : 1 240 EUR. TVA 20% : 248 EUR. Montant TTC : 1 488 EUR. Validité : 30 jours. Délai de livraison : 5 jours ouvrés après bon de commande."
+    },
+    {
+      "id": "cgv_fournisseurs_generiques.md",
+      "title": "CGV générales — Achats",
+      "text": "Conditions générales d'achat LogiPack. Paiement à 45 jours fin de mois. Clause de réserve de propriété jusqu'au paiement intégral. Litiges : tribunal de commerce de Lyon."
+    },
+    {
+      "id": "bon_commande_bureau_plus.md",
+      "title": "Bon de commande Bureau Plus — BC-8891",
+      "text": "Bon de commande fournisseur Bureau Plus. Fournitures de bureau : ramettes A4, stylos, classeurs. Montant HT : 356 EUR. Livraison prévue le 12 mars 2026."
+    }
+  ],
+  "query": "Quel est le montant du devis de l'Imprimerie Dupont pour les flyers ?",
+  "relevant_ids": ["devis_imprimerie_dupont.md"],
+  "k": 2,
+  "pass_threshold": 1.0
+}

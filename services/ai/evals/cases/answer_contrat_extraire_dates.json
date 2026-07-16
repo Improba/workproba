@@ -1,0 +1,8 @@
+{
+  "id": "answer_contrat_extraire_dates",
+  "type": "answer_judge",
+  "question": "Extrais les trois dates importantes de cet extrait de contrat : « Le présent contrat de prestation entre LogiPack SAS et Imprimerie Dupont prend effet le 1er mars 2026 pour une durée de 12 mois. La première livraison est prévue le 15 mars 2026. Le renouvellement tacite s'applique à partir du 1er mars 2027 sauf dénonciation 30 jours avant. »",
+  "candidate_answer": "Les trois dates importantes sont : 1er mars 2026 (début du contrat), 15 mars 2026 (première livraison), 1er mars 2027 (date de renouvellement tacite).",
+  "criteria": "La réponse doit lister clairement les trois dates : 1er mars 2026, 15 mars 2026 et 1er mars 2027, chacune avec son rôle (début, livraison, renouvellement). Score 5 si les 3 dates sont exactes et identifiées ; 3 si les 3 dates sont présentes même sans libellé détaillé.",
+  "pass_min_score": 3
+}

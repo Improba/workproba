@@ -1,0 +1,20 @@
+{
+  "id": "retrieval_support_client",
+  "type": "retrieval",
+  "documents": [
+    {
+      "id": "rapport.md",
+      "title": "rapport",
+      "text": "Le CA Q2 atteint 12345 EUR, hausse de 12%. Notes: prioriser le support client."
+    },
+    {
+      "id": "notes.md",
+      "title": "notes",
+      "text": "Le support client est la priorite Q3."
+    }
+  ],
+  "query": "support client",
+  "relevant_ids": ["notes.md"],
+  "k": 2,
+  "pass_threshold": 1.0
+}

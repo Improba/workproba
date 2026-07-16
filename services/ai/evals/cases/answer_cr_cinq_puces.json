@@ -1,0 +1,8 @@
+{
+  "id": "answer_cr_cinq_puces",
+  "type": "answer_judge",
+  "question": "Résume ce compte-rendu de réunion en exactement 5 puces : « Réunion projet extension entrepôt du 10 juin 2026. Présents : Sylvie Martin (RH), Marc Dubois (maintenance), Claire Petit (chef de projet). Décision : démarrage travaux reporté au 1er juillet. Budget validé à 180 000 EUR. Marc doit commander les EPI avant le 20 juin. Sylvie informera les équipes du nouveau planning. Prochaine réunion le 24 juin. »",
+  "candidate_answer": "- Réunion du 10 juin 2026 sur l'extension de l'entrepôt (Sylvie, Marc, Claire).\n- Démarrage des travaux reporté au 1er juillet 2026.\n- Budget validé : 180 000 EUR.\n- Marc commande les EPI avant le 20 juin.\n- Prochaine réunion prévue le 24 juin ; Sylvie informe les équipes du nouveau planning.",
+  "criteria": "La réponse doit contenir exactement 5 puces (tirets ou numéros). Chaque puce doit reprendre un fait clé : date/contexte réunion, report travaux au 1er juillet, budget 180 000 EUR, commande EPI avant le 20 juin, prochaine réunion le 24 juin ou info équipes. Score 5 si 5 puces et faits corrects ; 3 si 5 puces avec au moins 4 faits justes.",
+  "pass_min_score": 3
+}

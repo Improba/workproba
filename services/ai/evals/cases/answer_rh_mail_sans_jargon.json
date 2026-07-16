@@ -1,0 +1,8 @@
+{
+  "id": "answer_rh_mail_sans_jargon",
+  "type": "answer_judge",
+  "question": "Reformule ce mail RH en français clair, sans jargon : « Conformément à la circulaire DRH-2026-04, le dispositif de télétravail aménagé sera déployé en mode hybride sur une base de 2 jours/semaine, sous réserve de validation managériale et dans le respect des SLA de présence opérationnelle. »",
+  "candidate_answer": "À partir de la note RH du 4 avril 2026, le télétravail sera possible 2 jours par semaine. Votre manager doit donner son accord. Vous devez rester joignable et présent sur site les autres jours pour assurer le bon fonctionnement de l'équipe.",
+  "criteria": "La réponse doit être en français simple, sans acronymes ni jargon RH (pas de SLA, DRH, dispositif déployé). Elle doit mentionner : 2 jours de télétravail par semaine, accord du manager, et l'obligation d'être présent/joignable les autres jours. Score 5 si clair et complet ; 3 si l'essentiel est là malgré un style moins fluide.",
+  "pass_min_score": 3
+}

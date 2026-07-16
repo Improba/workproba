@@ -1,0 +1,25 @@
+{
+  "id": "retrieval_intervention_panne",
+  "type": "retrieval",
+  "documents": [
+    {
+      "id": "fiche_panne_presse_hydraulique.md",
+      "title": "Fiche intervention — Panne presse hydraulique PH-200",
+      "text": "Procédure panne presse hydraulique PH-200. 1) Couper l'alimentation électrique au disjoncteur D4. 2) Verrouiller le circuit avec cadenas personnel. 3) Vérifier pression résiduelle manomètre M2 (doit être à 0). 4) Diagnostiquer fuite ou capteur : consulter schéma hydraulique tiroir 3. 5) Appeler maintenance niveau 2 si fuite sur vérin principal."
+    },
+    {
+      "id": "catalogue_pieces_presse.md",
+      "title": "Catalogue pièces détachées — Presse PH-200",
+      "text": "Références pièces presse PH-200 : joint torique vérin JTV-44, filtre hydraulique FH-12, capteur pression CP-09, flexible haute pression FH-200-B."
+    },
+    {
+      "id": "planning_maintenance_annuel.md",
+      "title": "Planning maintenance annuelle 2026",
+      "text": "Maintenance préventive 2026 : janvier compresseurs, mars convoyeurs, juin presses (PH-200 et PH-150), septembre pont roulant, novembre groupes froids."
+    }
+  ],
+  "query": "Quelle est la procédure à suivre en cas de panne sur la presse hydraulique PH-200 ?",
+  "relevant_ids": ["fiche_panne_presse_hydraulique.md"],
+  "k": 2,
+  "pass_threshold": 1.0
+}

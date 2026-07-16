@@ -1,0 +1,8 @@
+{
+  "id": "answer_factual_short",
+  "type": "answer_judge",
+  "question": "What is 2 + 2?",
+  "candidate_answer": "4",
+  "criteria": "Answer must state the correct sum (4). Partial credit if reasoning is shown but the final answer is correct.",
+  "pass_min_score": 3
+}
