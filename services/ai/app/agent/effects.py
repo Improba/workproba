@@ -237,6 +237,30 @@ def classify_effect(
             ),
         )
 
+    if tool_name == "sync_from_cloud":
+        project_id = str(args.get("project_id") or "")
+        return EffectProposal(
+            effect="modify",
+            tool_name=tool_name,
+            targets=[project_id] if project_id else [],
+            action="modify",
+            protections=EffectProtection(
+                network_used=True,
+            ),
+        )
+
+    if tool_name == "sync_managed_regards":
+        org_id = str(args.get("org_id") or "")
+        return EffectProposal(
+            effect="modify",
+            tool_name=tool_name,
+            targets=[org_id] if org_id else [],
+            action="modify",
+            protections=EffectProtection(
+                network_used=True,
+            ),
+        )
+
     if tool_name == "web_search":
         query = str(args.get("query") or "")
         short_query = query[:80] if query else ""

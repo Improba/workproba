@@ -14,6 +14,7 @@ from app.agent.confirmation import raise_unless_approved
 from app.agent.tools import ToolDeps
 from app.i18n import t
 from app.plugins.workproba_projet import storage
+from app.plugins.workproba_projet.publish_route import publish_artefact_routed
 
 
 def _plugin_data_dir(ctx: RunContext[ToolDeps]) -> Path:
@@ -145,7 +146,7 @@ def register_projet_tools(agent: Agent[ToolDeps, str]) -> None:
 
         workspace_root = _workspace_root(ctx) if has_source else None
         try:
-            artefact = storage.publish_artifact(
+            artefact = await publish_artefact_routed(
                 plugin_data_dir=plugin_data_dir,
                 workspace_root=workspace_root,
                 source_path=source_path,

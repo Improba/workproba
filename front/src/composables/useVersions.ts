@@ -11,6 +11,12 @@ export interface RestoreUndoState {
   previousVersionId: string;
 }
 
+export interface PendingRestoreState {
+  filePath: string;
+  versionId: string;
+  entry: FileVersionEntry;
+}
+
 export interface PurgeVersionsResult {
   ok: boolean;
   versionsRemoved: number;
@@ -23,7 +29,10 @@ export interface UseVersionsReturn {
   purging: Ref<boolean>;
   error: Ref<string | null>;
   lastRestore: Ref<RestoreUndoState | null>;
+  pendingRestore: Ref<PendingRestoreState | null>;
   listVersions: (filePath: string) => Promise<void>;
+  openRestoreConfirm: (filePath: string, versionId: string) => void;
+  closeRestoreConfirm: () => void;
   restoreVersion: (filePath: string, versionId: string) => Promise<boolean>;
   purgeVersions: (filePath: string, opts?: { keepLast?: number; olderThanDays?: number }) => Promise<PurgeVersionsResult>;
   undoRestore: () => Promise<boolean>;
@@ -40,6 +49,7 @@ export function useVersions(
   const purging = ref(false);
   const error = ref<string | null>(null);
   const lastRestore = ref<RestoreUndoState | null>(null);
+  const pendingRestore = ref<PendingRestoreState | null>(null);
 
   async function listVersionsForFile(filePath: string): Promise<void> {
     const dataDir = workspaceDataDir.value;
@@ -61,6 +71,16 @@ export function useVersions(
     } finally {
       loading.value = false;
     }
+  }
+
+  function openRestoreConfirm(filePath: string, versionId: string): void {
+    const entry = versions.value.find((item) => item.version_id === versionId);
+    if (!entry || !filePath.trim()) return;
+    pendingRestore.value = { filePath, versionId, entry };
+  }
+
+  function closeRestoreConfirm(): void {
+    pendingRestore.value = null;
   }
 
   async function restoreVersionForFile(
@@ -150,7 +170,10 @@ export function useVersions(
     purging,
     error,
     lastRestore,
+    pendingRestore,
     listVersions: listVersionsForFile,
+    openRestoreConfirm,
+    closeRestoreConfirm,
     restoreVersion: restoreVersionForFile,
     purgeVersions: purgeVersionsForFile,
     undoRestore,

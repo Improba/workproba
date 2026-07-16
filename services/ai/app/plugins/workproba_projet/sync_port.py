@@ -119,7 +119,54 @@ class ProjectSyncPort:
 
     def apply_remote_change(self, change: dict[str, Any]) -> dict[str, Any]:
         self._audit("apply_remote_change", {"change_keys": sorted(change.keys())})
-        raise NotImplementedError("bidirectional sync is not available in V2")
+        project_id = change.get("project_id")
+        artefact_id = change.get("artefact_id")
+        content = change.get("content")
+        version = change.get("version")
+        if not isinstance(project_id, str) or not project_id.strip():
+            raise ValueError("invalid_remote_change")
+        if not isinstance(artefact_id, str) or not artefact_id.strip():
+            raise ValueError("invalid_remote_change")
+        if content is None:
+            raise ValueError("invalid_remote_change")
+        if isinstance(content, str):
+            payload = content.encode("utf-8")
+        elif isinstance(content, bytes):
+            payload = content
+        else:
+            raise ValueError("invalid_remote_change")
+        version_value = str(version) if version is not None else None
+        return self.write_artefact(
+            project_id.strip(),
+            artefact_id.strip(),
+            payload,
+            version=version_value,
+        )
+
+    def write_artefact(
+        self,
+        project_id: str,
+        artefact_id: str,
+        content: bytes,
+        version: str | None = None,
+    ) -> dict[str, Any]:
+        safe_name = Path(artefact_id).name
+        self._audit(
+            "write_artefact",
+            {
+                "project_id": project_id,
+                "artefact_id": safe_name,
+                "version": version,
+                "size_bytes": len(content),
+            },
+        )
+        return storage.write_published_artefact(
+            self._projet_data_dir,
+            project_id,
+            safe_name,
+            content,
+            version=version,
+        )
 
 
 def open_project_sync_port(

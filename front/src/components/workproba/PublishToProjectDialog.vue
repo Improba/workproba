@@ -2,7 +2,7 @@
   <q-dialog :model-value="open" @update:model-value="onOpenChange">
     <div class="publish-dialog">
       <header class="publish-dialog__head">
-        <h2 class="publish-dialog__title">{{ t('plugin.workproba.projet.publishTitle') }}</h2>
+        <h2 class="publish-dialog__title">{{ t(projetKey('publishTitle')) }}</h2>
         <button
           type="button"
           class="publish-dialog__close"
@@ -21,13 +21,17 @@
         <span>{{ fileName }}</span>
       </p>
 
+      <div v-if="loadError" class="publish-dialog__error" role="alert">
+        {{ loadError }}
+      </div>
+
       <div v-if="!projects.length && !loading" class="publish-dialog__onboarding">
-        <p>{{ t('plugin.workproba.projet.publishNoProject') }}</p>
+        <p>{{ t(projetKey('publishNoProject')) }}</p>
         <input
           v-model="newProjectName"
           type="text"
           class="publish-dialog__input"
-          :placeholder="t('plugin.workproba.projet.createPlaceholder')"
+          :placeholder="t(projetKey('createPlaceholder'))"
         />
         <button
           type="button"
@@ -35,13 +39,13 @@
           :disabled="creating || !newProjectName.trim()"
           @click="onCreateThenPublish"
         >
-          {{ t('plugin.workproba.projet.createAndPublish') }}
+          {{ t(projetKey('createAndPublish')) }}
         </button>
       </div>
 
       <template v-else>
         <label class="publish-dialog__label" for="publish-project">
-          {{ t('plugin.workproba.projet.selectProject') }}
+          {{ t(projetKey('selectProject')) }}
         </label>
         <select
           id="publish-project"
@@ -60,8 +64,12 @@
           v-model="documentName"
           type="text"
           class="publish-dialog__input"
-          :placeholder="t('plugin.workproba.projet.publishNamePlaceholder')"
+          :placeholder="t(projetKey('publishNamePlaceholder'))"
         />
+
+        <p v-if="!isEnrolled" class="publish-dialog__scope-hint">
+          {{ t('plugin.workproba.projet.publishHintLocal') }}
+        </p>
 
         <footer class="publish-dialog__foot">
           <button type="button" class="publish-dialog__btn publish-dialog__btn--ghost" @click="close">
@@ -86,6 +94,7 @@ import { computed, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+import { useCloud } from '@composables/useCloud';
 import { PROJET_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import {
   createProjetProject,
@@ -109,10 +118,18 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const { getPluginDataDir } = usePlugins();
+const { isEnrolled, canSync, init: initCloud, sync: syncToCloud } = useCloud();
+
+function projetKey(base: string): string {
+  return isEnrolled.value
+    ? `plugin.workproba.projet.${base}Shared`
+    : `plugin.workproba.projet.${base}`;
+}
 
 const loading = ref(false);
 const publishing = ref(false);
 const creating = ref(false);
+const loadError = ref<string | null>(null);
 const pluginDataDir = ref<string | null>(null);
 const projects = ref<ProjetProject[]>([]);
 const selectedProjectId = ref<string | null>(null);
@@ -146,13 +163,20 @@ function onOpenChange(v: boolean): void {
 
 async function loadProjects(): Promise<void> {
   loading.value = true;
+  loadError.value = null;
   try {
     pluginDataDir.value = await getPluginDataDir(PROJET_PLUGIN_ID);
     if (!pluginDataDir.value) {
       projects.value = [];
       return;
     }
-    projects.value = await listProjetProjects(pluginDataDir.value);
+    const result = await listProjetProjects(pluginDataDir.value);
+    if (!result.ok) {
+      projects.value = [];
+      loadError.value = result.error;
+      return;
+    }
+    projects.value = result.data;
     if (projects.value.length) {
       selectedProjectId.value = projects.value[0].id;
     }
@@ -161,38 +185,86 @@ async function loadProjects(): Promise<void> {
   }
 }
 
+async function offerPostPublishSync(projectId: string, publishedName: string): Promise<void> {
+  await initCloud();
+  const successMessage = contentMode.value
+    ? t('personas.publishToProjectSuccess', { name: publishedName })
+    : t(projetKey('publishSuccess'), { name: publishedName });
+
+  if (isEnrolled.value || !canSync.value) {
+    Notify.create({
+      message: successMessage,
+      color: 'positive',
+      timeout: 3000,
+    });
+    return;
+  }
+
+  Notify.create({
+    message: successMessage,
+    color: 'positive',
+    timeout: 6000,
+    actions: [
+      {
+        label: t('plugin.workproba.projet.syncNowAfterPublish'),
+        color: 'white',
+        handler: () => {
+          void (async () => {
+            const syncResult = await syncToCloud(projectId);
+            if (!syncResult.ok) {
+              Notify.create({ message: syncResult.error, color: 'negative' });
+              return;
+            }
+            const synced = syncResult.data.synced.length;
+            const blobs = syncResult.data.blobs_uploaded?.length ?? 0;
+            if (synced > 0 || blobs > 0) {
+              Notify.create({
+                message:
+                  blobs > 0
+                    ? t('cloud.syncCloudSuccess', { count: synced, blobs })
+                    : t('cloud.syncSuccess', { count: synced }),
+                color: 'positive',
+                timeout: 2500,
+              });
+            } else {
+              Notify.create({ message: t('cloud.syncEmpty'), color: 'info', timeout: 2500 });
+            }
+          })();
+        },
+      },
+    ],
+  });
+}
+
 async function onPublish(): Promise<void> {
-  if (!canPublish.value || !pluginDataDir.value || !props.workspaceDataDir) {
+  if (!canPublish.value || !props.workspaceDataDir || !pluginDataDir.value) {
     return;
   }
   publishing.value = true;
   try {
     const result = await publishToProjet({
-      pluginDataDir: pluginDataDir.value,
       sourcePath: props.sourcePath ?? undefined,
       content: props.content ?? undefined,
       workspaceDataDir: props.workspaceDataDir,
       projectId: selectedProjectId.value!,
       name: documentName.value.trim(),
+      pluginDataDir: pluginDataDir.value,
     });
-    if (!result) {
+    if (!result.ok) {
       Notify.create({
-        message: contentMode.value
-          ? t('personas.publishToProjectFailed')
-          : t('plugin.workproba.projet.publishFailed'),
+        message:
+          result.error ||
+          (contentMode.value
+            ? t('personas.publishToProjectFailed')
+            : t('plugin.workproba.projet.publishFailed')),
         color: 'negative',
       });
       return;
     }
-    Notify.create({
-      message: contentMode.value
-        ? t('personas.publishToProjectSuccess', { name: result.name })
-        : t('plugin.workproba.projet.publishSuccess', { name: result.name }),
-      color: 'positive',
-      timeout: 3000,
-    });
+    const projectId = selectedProjectId.value!;
     emit('published');
     close();
+    await offerPostPublishSync(projectId, result.data.name);
   } finally {
     publishing.value = false;
   }
@@ -204,11 +276,15 @@ async function onCreateThenPublish(): Promise<void> {
   if (!contentMode.value && !props.sourcePath) return;
   creating.value = true;
   try {
-    const project = await createProjetProject(pluginDataDir.value, name);
-    if (!project) {
-      Notify.create({ message: t('plugin.workproba.projet.createFailed'), color: 'negative' });
+    const result = await createProjetProject(pluginDataDir.value, name);
+    if (!result.ok) {
+      Notify.create({
+        message: result.error || t('plugin.workproba.projet.createFailed'),
+        color: 'negative',
+      });
       return;
     }
+    const project = result.data;
     projects.value = [project];
     selectedProjectId.value = project.id;
     documentName.value = fileName.value;
@@ -224,6 +300,7 @@ watch(
   (isOpen) => {
     if (isOpen) {
       documentName.value = props.defaultName ?? fileName.value;
+      void initCloud();
       void loadProjects();
     }
   },
@@ -295,6 +372,15 @@ watch(
   color: var(--wp-text-muted);
 }
 
+.publish-dialog__error {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: var(--wp-r-sm);
+  background: color-mix(in srgb, var(--wp-danger) 10%, transparent);
+  color: var(--wp-danger);
+  font-size: var(--wp-fs-sm);
+}
+
 .publish-dialog__label {
   display: block;
   margin-bottom: 6px;
@@ -326,6 +412,16 @@ watch(
     font-size: var(--wp-fs-sm);
     color: var(--wp-text-muted);
   }
+}
+
+.publish-dialog__scope-hint {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-surface-2);
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-muted);
+  line-height: var(--wp-lh-relaxed);
 }
 
 .publish-dialog__foot {

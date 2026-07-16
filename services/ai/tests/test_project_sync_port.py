@@ -90,12 +90,22 @@ def test_read_blob_rejects_invalid_blob_id(tmp_path: Path) -> None:
         port.read_blob("missing-slash")
 
 
-def test_apply_remote_change_not_available_in_v2(tmp_path: Path) -> None:
-    plugins_root, _, _ = _layout(tmp_path)
+def test_apply_remote_change_writes_artefact(tmp_path: Path) -> None:
+    plugins_root, projet_dir, project_id = _layout(tmp_path)
     port = open_project_sync_port(
         caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
         caller_permissions=frozenset({PROJECT_SYNC_PERMISSION}),
         plugins_root=plugins_root,
     )
-    with pytest.raises(NotImplementedError):
-        port.apply_remote_change({"project_id": "x"})
+    result = port.apply_remote_change(
+        {
+            "project_id": project_id,
+            "artefact_id": "remote.docx",
+            "content": b"remote-content",
+            "version": "2.0.0",
+        }
+    )
+    assert result["name"] == "remote.docx"
+    assert result["version"] == "2.0.0"
+    written = projet_dir / "artefacts" / project_id / "remote.docx"
+    assert written.read_bytes() == b"remote-content"

@@ -1,6 +1,6 @@
 # Capacités activables
 
-> **Last updated:** 15/07/2026  
+> **Last updated:** 16/07/2026  
 > **Audience:** end users (mode guidé)
 
 ## What are capabilities?
@@ -12,9 +12,20 @@ You do not need to know about technical plugins or extensions to use them in gui
 | Capability | What it adds | Where it lives after activation |
 |---|---|---|
 | **Business perspectives** (Regards métier) | Expert-style opinions, discussions, cross-perspectives | Side panel and central area |
-| **Projects and deliverables** | Published documents shared with collaborators | Right panel, Project tab |
+| **Projects and deliverables** | Publish documents from your space into a local project library | Right panel, Project tab |
 | **Web navigation** | Browse pages from Workproba with guided agent help | Right panel, Browser tab |
-| **Synchronization** | Sync published project files via a shared folder | Under Projects (coming soon in guided mode) |
+| **Synchronization** | Advanced: technical NAS/mount sync (deprecated product path) | Under Projects (advanced mode only) |
+
+## Projects and sources of truth
+
+| Concept | Source of truth | What it is not |
+|---|---|---|
+| **Solo project / library** | **Local machine** (`app_data/plugins/workproba.projet/`) | A shared project ; cloud is not the SoT |
+| **Shared project** | **Cloud** (control plane + S3) ; list/publish/open/republish via enrolled device | NAS mount, mirror push/pull, or local folder as SoT |
+| **Local copy (shared)** | Disposable cache on the workstation (opened on demand) | A second source of truth |
+| **Mount sync** | Technical NAS bridge (`ProjectSyncPort`) ; advanced only, **blocked when enrolled** | A shared project ; deprecated as a guided product path |
+
+Solo projects stay **local-first**. Shared projects require cloud enrollment (V3+). Once enrolled, mirror push/pull is refused ; use publish and republish instead. Bidirectional sync with conflict resolution is **out of scope** as a product flow.
 
 ## How to activate
 

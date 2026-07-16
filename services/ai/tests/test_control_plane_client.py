@@ -136,16 +136,25 @@ async def test_pull_and_install_regards(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_enroll_device_persists_tokens(tmp_path: Path) -> None:
+async def test_join_with_token_persists_tokens(tmp_path: Path) -> None:
     cloud_dir, _, _ = _layout(tmp_path)
 
     def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/devices/enroll":
+        if request.url.path == "/devices/join":
             body = json.loads(request.content.decode())
-            assert body == {"orgId": "org-99", "deviceName": "desk-paris"}
+            assert body["token"] == "join-abc"
+            assert body["deviceName"] == "desk-lyon"
+            assert "authorization" not in request.headers
             return httpx.Response(
-                200,
-                json={"deviceId": "dev_abc123", "accessToken": "wp_dev_token_xyz"},
+                201,
+                json={
+                    "deviceId": "dev_join1",
+                    "accessToken": "wp_dev_join_token",
+                    "profile": "field",
+                    "orgId": "org-field",
+                    "organizationName": "Acme Field Ops",
+                    "baseUrl": "https://cloud.example.test",
+                },
             )
         return httpx.Response(404)
 
@@ -159,19 +168,109 @@ async def test_enroll_device_persists_tokens(tmp_path: Path) -> None:
             plugin_data_dir=cloud_dir,
             http_client=http_client,
         )
-        result = await client.enroll_device(org_id="org-99", device_name="desk-paris")
+        result = await client.join_with_token(token="join-abc", device_name="desk-lyon")
 
-    assert result["deviceId"] == "dev_abc123"
+    assert result["deviceId"] == "dev_join1"
     tokens = client.load_tokens()
-    assert tokens["access_token"] == "wp_dev_token_xyz"
-    assert tokens["device_id"] == "dev_abc123"
-    assert tokens["org_id"] == "org-99"
+    assert tokens["access_token"] == "wp_dev_join_token"
+    assert tokens["device_id"] == "dev_join1"
+    assert tokens["org_id"] == "org-field"
+    assert tokens["profile"] == "field"
+    assert tokens["org_label"] == "Acme Field Ops"
+    config_path = cloud_dir / "config.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    assert config["base_url"] == "https://cloud.example.test"
+
+
+@pytest.mark.asyncio
+async def test_join_with_token_org_label_falls_back_to_profile(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/join":
+            return httpx.Response(
+                201,
+                json={
+                    "deviceId": "dev_join2",
+                    "accessToken": "wp_dev_join_token2",
+                    "profile": "enterprise",
+                    "orgId": "org-ent",
+                },
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        await client.join_with_token(token="join-def")
+
+    tokens = client.load_tokens()
+    assert tokens["org_label"] == "enterprise"
+
+
+def test_cloud_join_http(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+
+    async def fake_join(self, *, token: str, device_name: str | None = None):
+        assert token == "opaque-token"
+        self.save_tokens(
+            {
+                "access_token": "wp_dev_http",
+                "device_id": "dev_http",
+                "org_id": "org-http",
+                "profile": "standard",
+                "token_type": "bearer",
+            }
+        )
+        return {
+            "deviceId": "dev_http",
+            "accessToken": "wp_dev_http",
+            "orgId": "org-http",
+            "profile": "standard",
+        }
+
+    with patch.object(CloudControlPlaneClient, "join_with_token", fake_join):
+        with TestClient(mainmod.app) as test_client:
+            enroll_resp = test_client.post(
+                "/plugins/cloud/enroll",
+                json={
+                    "plugin_data_dir": str(cloud_dir),
+                    "base_url": "https://cloud.example.test",
+                    "join_token": "opaque-token",
+                },
+                headers=INTERNAL_HEADERS,
+            )
+            assert enroll_resp.status_code == 200
+            body = enroll_resp.json()
+            assert body["authenticated"] is True
+            assert body["method"] == "join_token"
+            assert body["org_id"] == "org-http"
+
+
+@pytest.mark.asyncio
+async def test_enroll_device_raises_join_token_required(tmp_path: Path) -> None:
+    """enroll_device est déprécié : org_id seul exige un code d'invitation."""
+    cloud_dir, _, _ = _layout(tmp_path)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.example.test",
+        plugin_data_dir=cloud_dir,
+    )
+    with pytest.raises(ValueError, match="join_token_required"):
+        await client.enroll_device(org_id="org-99", device_name="desk-paris")
 
 
 @pytest.mark.asyncio
 async def test_sync_artefact_endpoints_with_mock_transport(tmp_path: Path) -> None:
     cloud_dir, _, _ = _layout(tmp_path)
     artefact_meta = {
+        "id": 42,
         "projectId": "proj-alpha",
         "artifactId": "art-q1",
         "version": "1.0.0",
@@ -186,7 +285,7 @@ async def test_sync_artefact_endpoints_with_mock_transport(tmp_path: Path) -> No
             return httpx.Response(200, json={"items": [artefact_meta]})
         if request.url.path == "/sync/artefacts" and request.method == "POST":
             body = json.loads(request.content.decode())
-            assert body == artefact_meta
+            assert body == {k: v for k, v in artefact_meta.items() if k != "id"}
             return httpx.Response(200, json=artefact_meta)
         return httpx.Response(404)
 
@@ -211,8 +310,71 @@ async def test_sync_artefact_endpoints_with_mock_transport(tmp_path: Path) -> No
         )
         listed = await client.list_sync_artefacts(project_id="proj-alpha")
 
+    assert pushed["id"] == 42
     assert pushed["artifactId"] == "art-q1"
     assert listed["items"][0]["filename"] == "q1.pdf"
+
+
+@pytest.mark.asyncio
+async def test_upload_url_confirm_and_put_presigned_blob(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    artefact_db_id = 99
+    put_calls: list[httpx.Request] = []
+
+    def cp_handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == f"/sync/artefacts/{artefact_db_id}/upload-url":
+            assert request.method == "POST"
+            assert request.url.params.get("contentType") == "application/pdf"
+            return httpx.Response(
+                200,
+                json={
+                    "url": "https://blob.example.test/upload/key",
+                    "storageKey": "sync/proj/art/v1/file.pdf",
+                    "expiresAt": "2026-07-15T21:40:00.000Z",
+                },
+            )
+        if request.url.path == f"/sync/artefacts/{artefact_db_id}/confirm":
+            assert request.method == "POST"
+            return httpx.Response(200, json={"id": artefact_db_id, "artifactId": "art-q1"})
+        return httpx.Response(404)
+
+    def blob_handler(request: httpx.Request) -> httpx.Response:
+        put_calls.append(request)
+        assert request.method == "PUT"
+        assert request.url == httpx.URL("https://blob.example.test/upload/key")
+        assert request.headers.get("content-type") == "application/pdf"
+        assert request.headers.get("content-length") == "11"
+        assert request.content == b"hello world"
+        assert "authorization" not in request.headers
+        return httpx.Response(200)
+
+    cp_transport = httpx.MockTransport(cp_handler)
+    blob_transport = httpx.MockTransport(blob_handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=cp_transport,
+    ) as cp_http_client, httpx.AsyncClient(transport=blob_transport) as blob_http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=cp_http_client,
+        )
+        await client.authenticate(bearer_token="sync-token")
+        upload = await client.request_upload_url(
+            artefact_db_id=artefact_db_id,
+            content_type="application/pdf",
+        )
+        await client.put_presigned_blob(
+            url=str(upload["url"]),
+            content=b"hello world",
+            content_type="application/pdf",
+            _put_client=blob_http_client,
+        )
+        confirmed = await client.confirm_upload(artefact_db_id=artefact_db_id)
+
+    assert upload["storageKey"] == "sync/proj/art/v1/file.pdf"
+    assert len(put_calls) == 1
+    assert confirmed["id"] == artefact_db_id
 
 
 def test_cloud_enroll_http(tmp_path: Path) -> None:
@@ -230,6 +392,23 @@ def test_cloud_enroll_http(tmp_path: Path) -> None:
         )
         assert enroll_resp.status_code == 200
         assert enroll_resp.json()["authenticated"] is True
+
+
+def test_cloud_enroll_org_id_only_returns_join_token_required(tmp_path: Path) -> None:
+    """org_id seul sans join_token ni bearer renvoie 400 join_token_required."""
+    cloud_dir, _, _ = _layout(tmp_path)
+    with TestClient(mainmod.app) as test_client:
+        enroll_resp = test_client.post(
+            "/plugins/cloud/enroll",
+            json={
+                "plugin_data_dir": str(cloud_dir),
+                "base_url": "https://cloud.example.test",
+                "org_id": "org-only",
+            },
+            headers=INTERNAL_HEADERS,
+        )
+        assert enroll_resp.status_code == 400
+        assert enroll_resp.json()["detail"] == "join_token_required"
 
 
 def test_cloud_sync_regards_http(tmp_path: Path) -> None:

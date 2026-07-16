@@ -59,11 +59,68 @@
       @undo="onUndo"
       @dismiss="clearRestoreBanner"
     />
+
+    <q-dialog
+      :model-value="!!pendingRestore"
+      persistent
+      @update:model-value="onRestoreDialogToggle"
+    >
+      <div
+        v-if="pendingRestore"
+        class="versions-restore-dialog"
+        role="dialog"
+        :aria-label="t('shell.versions.restoreDialogTitle')"
+      >
+        <header class="versions-restore-dialog__head">
+          <h2 class="versions-restore-dialog__title">{{ t('shell.versions.restoreDialogTitle') }}</h2>
+        </header>
+
+        <p class="versions-restore-dialog__file">{{ restoreFileName }}</p>
+
+        <div class="versions-restore-dialog__snippet">
+          <p class="versions-restore-dialog__snippet-label">
+            {{ pendingRestore.entry.label || formatDate(pendingRestore.entry.created_at) }}
+          </p>
+          <p class="versions-restore-dialog__snippet-meta">
+            {{ formatDate(pendingRestore.entry.created_at) }}
+            <span v-if="pendingRestore.entry.size">
+              {{ t('shell.versions.sizeSep') }}{{ formatSize(pendingRestore.entry.size) }}
+            </span>
+          </p>
+        </div>
+
+        <p class="versions-restore-dialog__warning">
+          {{ t('shell.versions.restoreDialogWarning') }}
+        </p>
+        <p class="versions-restore-dialog__hint">
+          {{ t('shell.versions.restoreDialogHint') }}
+        </p>
+
+        <footer class="versions-restore-dialog__foot">
+          <button
+            type="button"
+            class="versions-restore-dialog__btn versions-restore-dialog__btn--ghost"
+            :disabled="restoring"
+            @click="closeRestoreConfirm"
+          >
+            {{ t('common.cancel') }}
+          </button>
+          <button
+            type="button"
+            class="versions-restore-dialog__btn"
+            :disabled="restoring"
+            @click="onConfirmRestore"
+          >
+            {{ restoring ? t('common.inProgress') : t('shell.versions.restoreDialogConfirm') }}
+          </button>
+        </footer>
+      </div>
+    </q-dialog>
   </section>
 </template>
 
 <script setup lang="ts">
-import { toRef, watch } from 'vue';
+import { computed, toRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import RestoreBanner from '@components/chat/RestoreBanner.vue';
@@ -88,12 +145,21 @@ const {
   restoring,
   purging,
   lastRestore,
+  pendingRestore,
   listVersions,
+  openRestoreConfirm,
+  closeRestoreConfirm,
   restoreVersion,
   purgeVersions,
   undoRestore,
   clearRestoreBanner,
 } = useVersions(workspaceRef, projectRef);
+
+const restoreFileName = computed(() => {
+  const path = pendingRestore.value?.filePath ?? props.relativePath ?? '';
+  const parts = path.split(/[/\\]/);
+  return parts[parts.length - 1] || path;
+});
 
 function formatDate(iso: string): string {
   if (!iso) return '';
@@ -110,20 +176,29 @@ function formatSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} Mo`;
 }
 
-async function onRestore(versionId: string): Promise<void> {
+function onRestore(versionId: string): void {
   const path = props.relativePath;
   if (!path) return;
-  const confirmed = window.confirm(t('shell.versions.confirmRestaurer'));
-  if (!confirmed) return;
+  openRestoreConfirm(path, versionId);
+}
 
-  const ok = await restoreVersion(path, versionId);
+function onRestoreDialogToggle(open: boolean): void {
+  if (!open) closeRestoreConfirm();
+}
+
+async function onConfirmRestore(): Promise<void> {
+  const pending = pendingRestore.value;
+  if (!pending) return;
+
+  const ok = await restoreVersion(pending.filePath, pending.versionId);
+  closeRestoreConfirm();
   if (ok) {
     Notify.create({
       message: t('shell.versions.restauré'),
       color: 'positive',
       timeout: 2500,
     });
-    emit('restored', path);
+    emit('restored', pending.filePath);
   } else {
     Notify.create({
       message: t('shell.versions.restoreFailed'),
@@ -294,6 +369,99 @@ defineExpose({ refresh: () => props.relativePath && listVersions(props.relativeP
   font-size: var(--wp-fs-xs);
   font-weight: 600;
   cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.versions-restore-dialog {
+  width: min(32rem, 92vw);
+  display: flex;
+  flex-direction: column;
+  padding: 1rem 1.1rem;
+  border-radius: var(--wp-r-lg);
+  background: var(--wp-surface);
+  border: 1px solid var(--wp-border);
+  box-shadow: var(--wp-shadow-2);
+}
+
+.versions-restore-dialog__head {
+  margin-bottom: 0.5rem;
+}
+
+.versions-restore-dialog__title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--wp-text);
+}
+
+.versions-restore-dialog__file {
+  margin: 0 0 0.75rem;
+  font-size: var(--wp-fs-sm);
+  font-family: var(--wp-font-mono, ui-monospace, monospace);
+  color: var(--wp-text-muted);
+}
+
+.versions-restore-dialog__snippet {
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-surface-2);
+}
+
+.versions-restore-dialog__snippet-label {
+  margin: 0;
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  color: var(--wp-text);
+}
+
+.versions-restore-dialog__snippet-meta {
+  margin: 0.2rem 0 0;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-muted);
+}
+
+.versions-restore-dialog__warning {
+  margin: 0 0 0.35rem;
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  color: var(--wp-danger);
+}
+
+.versions-restore-dialog__hint {
+  margin: 0;
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-text-muted);
+}
+
+.versions-restore-dialog__foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--wp-border);
+}
+
+.versions-restore-dialog__btn {
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--wp-r-md);
+  border: 1px solid var(--wp-accent);
+  background: var(--wp-accent);
+  color: var(--wp-canard);
+  font-weight: 600;
+  cursor: pointer;
+
+  &--ghost {
+    border-color: var(--wp-border-strong);
+    background: var(--wp-surface);
+    color: var(--wp-text);
+  }
 
   &:disabled {
     opacity: 0.6;

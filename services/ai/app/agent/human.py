@@ -223,6 +223,35 @@ def build_human_summary(
             )
         return t(locale, "human.sync_to_cloud.will", project_id=project_id)
 
+    if tool_name == "sync_from_cloud":
+        project_id = str(arguments.get("project_id") or "")
+        if is_result:
+            if is_error:
+                return t(locale, "human.sync_from_cloud.cannot", project_id=project_id)
+            count = int(result.get("count") or len(result.get("pulled") or []))
+            return t(
+                locale,
+                "human.sync_from_cloud.done",
+                project_id=project_id,
+                count=count,
+            )
+        return t(locale, "human.sync_from_cloud.will", project_id=project_id)
+
+    if tool_name == "enroll_to_cloud":
+        if is_result:
+            if is_error:
+                return t(locale, "human.enroll_to_cloud.cannot")
+            return t(locale, "human.enroll_to_cloud.done")
+        return t(locale, "human.enroll_to_cloud.will")
+
+    if tool_name == "sync_managed_regards":
+        if is_result:
+            if is_error:
+                return t(locale, "human.sync_managed_regards.cannot")
+            count = int(result.get("count") or 0)
+            return t(locale, "human.sync_managed_regards.done", count=count)
+        return t(locale, "human.sync_managed_regards.will")
+
     if tool_name == "list_projects":
         if is_result:
             if is_error:

@@ -644,7 +644,46 @@ export interface ProjetPublishedDocument {
   name: string;
   project_id: string;
   created_at: string;
-  version?: number;
+  version?: string;
+  cloud_confirmed?: boolean;
+  cloud_pending?: boolean;
+  has_local_cache?: boolean;
+}
+
+export interface ProjetArtefactSyncStatus {
+  id: string;
+  name: string;
+  version?: string | number;
+  published: boolean;
+  mount_synced: boolean;
+  cloud_confirmed: boolean;
+  cloud_pending: boolean;
+}
+
+export type SidecarResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: string; status?: number };
+
+async function readSidecarError(response: Response): Promise<string> {
+  try {
+    const body = (await response.json()) as { detail?: unknown; message?: unknown };
+    if (typeof body.detail === 'string' && body.detail.trim()) {
+      return body.detail;
+    }
+    if (typeof body.message === 'string' && body.message.trim()) {
+      return body.message;
+    }
+    return JSON.stringify(body);
+  } catch {
+    return response.statusText || `HTTP ${response.status}`;
+  }
+}
+
+async function parseSidecarJson<T>(response: Response): Promise<SidecarResult<T>> {
+  if (!response.ok) {
+    return { ok: false, error: await readSidecarError(response), status: response.status };
+  }
+  return { ok: true, data: (await response.json()) as T };
 }
 
 function normalizePublishedDocument(
@@ -658,31 +697,179 @@ function normalizePublishedDocument(
     name,
     project_id: String(raw.project_id ?? projectId),
     created_at: createdAt,
-    version: typeof raw.version === 'number' ? raw.version : undefined,
+    version:
+      typeof raw.version === 'string'
+        ? raw.version
+        : typeof raw.version === 'number'
+          ? String(raw.version)
+          : undefined,
+    cloud_confirmed:
+      typeof raw.cloud_confirmed === 'boolean' ? raw.cloud_confirmed : undefined,
+    cloud_pending: typeof raw.cloud_pending === 'boolean' ? raw.cloud_pending : undefined,
+    has_local_cache:
+      typeof raw.has_local_cache === 'boolean' ? raw.has_local_cache : undefined,
   };
+}
+
+export async function listCloudArtefacts(
+  pluginDataDir: string,
+  projectId: string,
+): Promise<SidecarResult<ProjetPublishedDocument[]>> {
+  const params = new URLSearchParams({
+    plugin_data_dir: pluginDataDir,
+    project_id: projectId,
+  });
+  try {
+    const response = await fetch(
+      `${getAiSidecarUrl()}/plugins/cloud/artefacts?${params.toString()}`,
+      { headers: { 'X-Internal-Secret': getDesktopSecret() } },
+    );
+    const parsed = await parseSidecarJson<{ artefacts?: Record<string, unknown>[] }>(response);
+    if (!parsed.ok) return parsed;
+    return {
+      ok: true,
+      data: (parsed.data.artefacts ?? []).map((item) =>
+        normalizePublishedDocument(item, projectId),
+      ),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_artefacts_failed',
+    };
+  }
+}
+
+export interface CloudOpenArtefactResult {
+  local_path: string;
+  artefact_id: string;
+  version: string;
+  filename: string;
+}
+
+export async function openCloudArtefact(opts: {
+  pluginDataDir: string;
+  projectId: string;
+  artefactId: string;
+}): Promise<SidecarResult<CloudOpenArtefactResult>> {
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/artefacts/open`, {
+      method: 'POST',
+      headers: sidecarHeaders(),
+      body: JSON.stringify({
+        plugin_data_dir: opts.pluginDataDir,
+        project_id: opts.projectId,
+        artefact_id: opts.artefactId,
+      }),
+    });
+    return parseSidecarJson<CloudOpenArtefactResult>(response);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_open_failed',
+    };
+  }
+}
+
+export async function republishCloudArtefact(opts: {
+  pluginDataDir: string;
+  projectId: string;
+  artefactId: string;
+  cachePath?: string;
+}): Promise<SidecarResult<ProjetPublishedDocument>> {
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/artefacts/republish`, {
+      method: 'POST',
+      headers: sidecarHeaders(),
+      body: JSON.stringify({
+        plugin_data_dir: opts.pluginDataDir,
+        project_id: opts.projectId,
+        artefact_id: opts.artefactId,
+        cache_path: opts.cachePath ?? undefined,
+      }),
+    });
+    const parsed = await parseSidecarJson<{ artefact?: Record<string, unknown> }>(response);
+    if (!parsed.ok) return parsed;
+    if (!parsed.data.artefact) {
+      return { ok: false, error: 'missing_artefact_in_response' };
+    }
+    return {
+      ok: true,
+      data: normalizePublishedDocument(parsed.data.artefact, opts.projectId),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_republish_failed',
+    };
+  }
+}
+
+export async function publishToCloud(opts: {
+  pluginDataDir: string;
+  workspaceDataDir: string;
+  projectId: string;
+  name: string;
+  sourcePath?: string;
+  content?: string;
+}): Promise<SidecarResult<ProjetPublishedDocument>> {
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/artefacts/publish`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Internal-Secret': getDesktopSecret(),
+      },
+      body: JSON.stringify({
+        plugin_data_dir: opts.pluginDataDir,
+        source_path: opts.sourcePath ?? undefined,
+        content: opts.content ?? undefined,
+        workspace_data_dir: opts.workspaceDataDir,
+        project_id: opts.projectId,
+        name: opts.name,
+      }),
+    });
+    const parsed = await parseSidecarJson<{ artefact?: Record<string, unknown> }>(response);
+    if (!parsed.ok) return parsed;
+    if (!parsed.data.artefact) {
+      return { ok: false, error: 'missing_artefact_in_response' };
+    }
+    return {
+      ok: true,
+      data: normalizePublishedDocument(parsed.data.artefact, opts.projectId),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_publish_failed',
+    };
+  }
 }
 
 export async function listProjetProjects(
   pluginDataDir: string,
-): Promise<ProjetProject[]> {
+): Promise<SidecarResult<ProjetProject[]>> {
   const params = new URLSearchParams({ plugin_data_dir: pluginDataDir });
   try {
     const response = await fetch(
       `${getAiSidecarUrl()}/plugins/projet/projects?${params.toString()}`,
       { headers: { 'X-Internal-Secret': getDesktopSecret() } },
     );
-    if (!response.ok) return [];
-    const data = (await response.json()) as { projects?: ProjetProject[] };
-    return data.projects ?? [];
-  } catch {
-    return [];
+    const parsed = await parseSidecarJson<{ projects?: ProjetProject[] }>(response);
+    if (!parsed.ok) return parsed;
+    return { ok: true, data: parsed.data.projects ?? [] };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'projet_projects_failed',
+    };
   }
 }
 
 export async function createProjetProject(
   pluginDataDir: string,
   name: string,
-): Promise<ProjetProject | null> {
+): Promise<SidecarResult<ProjetProject>> {
   try {
     const response = await fetch(`${getAiSidecarUrl()}/plugins/projet/projects`, {
       method: 'POST',
@@ -692,11 +879,17 @@ export async function createProjetProject(
       },
       body: JSON.stringify({ plugin_data_dir: pluginDataDir, name }),
     });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { project?: ProjetProject };
-    return data.project ?? null;
-  } catch {
-    return null;
+    const parsed = await parseSidecarJson<{ project?: ProjetProject }>(response);
+    if (!parsed.ok) return parsed;
+    if (!parsed.data.project) {
+      return { ok: false, error: 'missing_project_in_response' };
+    }
+    return { ok: true, data: parsed.data.project };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'projet_create_failed',
+    };
   }
 }
 
@@ -707,7 +900,7 @@ export async function publishToProjet(opts: {
   name: string;
   sourcePath?: string;
   content?: string;
-}): Promise<ProjetPublishedDocument | null> {
+}): Promise<SidecarResult<ProjetPublishedDocument>> {
   try {
     const response = await fetch(`${getAiSidecarUrl()}/plugins/projet/publish`, {
       method: 'POST',
@@ -724,19 +917,27 @@ export async function publishToProjet(opts: {
         name: opts.name,
       }),
     });
-    if (!response.ok) return null;
-    const data = (await response.json()) as { artefact?: Record<string, unknown> };
-    if (!data.artefact) return null;
-    return normalizePublishedDocument(data.artefact, opts.projectId);
-  } catch {
-    return null;
+    const parsed = await parseSidecarJson<{ artefact?: Record<string, unknown> }>(response);
+    if (!parsed.ok) return parsed;
+    if (!parsed.data.artefact) {
+      return { ok: false, error: 'missing_artefact_in_response' };
+    }
+    return {
+      ok: true,
+      data: normalizePublishedDocument(parsed.data.artefact, opts.projectId),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'projet_publish_failed',
+    };
   }
 }
 
 export async function listProjetPublishedDocuments(
   pluginDataDir: string,
   projectId: string,
-): Promise<ProjetPublishedDocument[]> {
+): Promise<SidecarResult<ProjetPublishedDocument[]>> {
   const params = new URLSearchParams({
     plugin_data_dir: pluginDataDir,
     project_id: projectId,
@@ -746,11 +947,47 @@ export async function listProjetPublishedDocuments(
       `${getAiSidecarUrl()}/plugins/projet/artefacts?${params.toString()}`,
       { headers: { 'X-Internal-Secret': getDesktopSecret() } },
     );
-    if (!response.ok) return [];
-    const data = (await response.json()) as { artefacts?: Record<string, unknown>[] };
-    return (data.artefacts ?? []).map((item) => normalizePublishedDocument(item, projectId));
-  } catch {
-    return [];
+    const parsed = await parseSidecarJson<{ artefacts?: Record<string, unknown>[] }>(response);
+    if (!parsed.ok) return parsed;
+    return {
+      ok: true,
+      data: (parsed.data.artefacts ?? []).map((item) =>
+        normalizePublishedDocument(item, projectId),
+      ),
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'projet_artefacts_failed',
+    };
+  }
+}
+
+export async function listProjetArtefactSyncStatus(opts: {
+  pluginDataDir: string;
+  projectId: string;
+  cloudPluginDataDir?: string;
+}): Promise<SidecarResult<ProjetArtefactSyncStatus[]>> {
+  const params = new URLSearchParams({
+    plugin_data_dir: opts.pluginDataDir,
+    project_id: opts.projectId,
+  });
+  if (opts.cloudPluginDataDir) {
+    params.set('cloud_plugin_data_dir', opts.cloudPluginDataDir);
+  }
+  try {
+    const response = await fetch(
+      `${getAiSidecarUrl()}/plugins/projet/artefacts/sync-status?${params.toString()}`,
+      { headers: { 'X-Internal-Secret': getDesktopSecret() } },
+    );
+    const parsed = await parseSidecarJson<{ items?: ProjetArtefactSyncStatus[] }>(response);
+    if (!parsed.ok) return parsed;
+    return { ok: true, data: parsed.data.items ?? [] };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'projet_sync_status_failed',
+    };
   }
 }
 
@@ -1871,29 +2108,45 @@ export interface CloudStatus {
   mount_path: string | null;
   last_sync: string | null;
   synced_count: number;
+  base_url: string | null;
+  enrolled: boolean;
+  has_token: boolean;
+  org_id?: string | null;
+  org_label?: string | null;
 }
 
 export async function fetchCloudStatus(
   pluginDataDir: string,
-): Promise<CloudStatus | null> {
+): Promise<SidecarResult<CloudStatus>> {
   const params = new URLSearchParams({ plugin_data_dir: pluginDataDir });
   try {
     const response = await fetch(
       `${getAiSidecarUrl()}/plugins/cloud/status?${params.toString()}`,
       { headers: { 'X-Internal-Secret': getDesktopSecret() } },
     );
-    if (!response.ok) return null;
-    return (await response.json()) as CloudStatus;
-  } catch {
-    return null;
+    return parseSidecarJson<CloudStatus>(response);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_status_failed',
+    };
   }
+}
+
+export interface CloudSyncResult {
+  synced: string[];
+  metadata_pushed?: string[];
+  blobs_uploaded?: string[];
+  skipped?: string[];
+  mount_path?: string;
+  last_sync?: string;
 }
 
 export async function syncCloud(opts: {
   pluginDataDir: string;
   projectId: string;
-  mountPath: string;
-}): Promise<{ synced: string[] }> {
+  mountPath?: string;
+}): Promise<SidecarResult<CloudSyncResult>> {
   try {
     const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/sync`, {
       method: 'POST',
@@ -1901,23 +2154,171 @@ export async function syncCloud(opts: {
       body: JSON.stringify({
         plugin_data_dir: opts.pluginDataDir,
         project_id: opts.projectId,
-        mount_path: opts.mountPath,
+        mount_path: opts.mountPath ?? undefined,
       }),
     });
-    if (!response.ok) {
-      return { synced: [] };
+    const parsed = await parseSidecarJson<CloudSyncResult>(response);
+    if (!parsed.ok) return parsed;
+    return {
+      ok: true,
+      data: {
+        synced: parsed.data.synced ?? [],
+        metadata_pushed: parsed.data.metadata_pushed,
+        blobs_uploaded: parsed.data.blobs_uploaded,
+        skipped: parsed.data.skipped,
+        mount_path: parsed.data.mount_path,
+        last_sync: parsed.data.last_sync,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_sync_failed',
+    };
+  }
+}
+
+export interface CloudPullResult {
+  pulled: string[];
+  skipped?: string[];
+  errors?: string[];
+}
+
+export async function pullCloud(opts: {
+  pluginDataDir: string;
+  projectId: string;
+}): Promise<SidecarResult<CloudPullResult>> {
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/pull`, {
+      method: 'POST',
+      headers: sidecarHeaders(),
+      body: JSON.stringify({
+        plugin_data_dir: opts.pluginDataDir,
+        project_id: opts.projectId,
+      }),
+    });
+    const parsed = await parseSidecarJson<CloudPullResult>(response);
+    if (!parsed.ok) return parsed;
+    return {
+      ok: true,
+      data: {
+        pulled: parsed.data.pulled ?? [],
+        skipped: parsed.data.skipped,
+        errors: parsed.data.errors,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_pull_failed',
+    };
+  }
+}
+
+export interface CloudSyncRegardsResult {
+  installed: Array<Record<string, unknown>>;
+  activated?: Record<string, unknown> | null;
+  count: number;
+}
+
+export async function syncManagedRegards(opts: {
+  pluginDataDir: string;
+  orgId?: string;
+}): Promise<SidecarResult<CloudSyncRegardsResult>> {
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/sync-regards`, {
+      method: 'POST',
+      headers: sidecarHeaders(),
+      body: JSON.stringify({
+        plugin_data_dir: opts.pluginDataDir,
+        org_id: opts.orgId ?? undefined,
+      }),
+    });
+    const parsed = await parseSidecarJson<CloudSyncRegardsResult>(response);
+    if (!parsed.ok) return parsed;
+    return {
+      ok: true,
+      data: {
+        installed: parsed.data.installed ?? [],
+        activated: parsed.data.activated,
+        count: parsed.data.count ?? 0,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_sync_regards_failed',
+    };
+  }
+}
+
+export async function enrollCloud(opts: {
+  pluginDataDir: string;
+  baseUrl: string;
+  bearerToken?: string;
+  joinToken?: string;
+  deviceName?: string;
+}): Promise<SidecarResult<{ authenticated: boolean; org_id?: string | null }>> {
+  try {
+    const body: Record<string, unknown> = {
+      plugin_data_dir: opts.pluginDataDir,
+      base_url: opts.baseUrl,
+    };
+    if (opts.bearerToken?.trim()) {
+      body.bearer_token = opts.bearerToken.trim();
     }
-    const data = (await response.json()) as { synced?: string[] };
-    return { synced: data.synced ?? [] };
-  } catch {
-    return { synced: [] };
+    if (opts.joinToken?.trim()) {
+      body.join_token = opts.joinToken.trim();
+    }
+    if (opts.deviceName?.trim()) {
+      body.device_name = opts.deviceName.trim();
+    }
+    const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/enroll`, {
+      method: 'POST',
+      headers: sidecarHeaders(),
+      body: JSON.stringify(body),
+    });
+    const parsed = await parseSidecarJson<{ authenticated?: boolean; org_id?: string | null }>(response);
+    if (!parsed.ok) return parsed;
+    return {
+      ok: true,
+      data: {
+        authenticated: parsed.data.authenticated ?? false,
+        org_id: parsed.data.org_id ?? null,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_enroll_failed',
+    };
+  }
+}
+
+export async function disconnectCloud(
+  pluginDataDir: string,
+): Promise<SidecarResult<boolean>> {
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/disconnect`, {
+      method: 'POST',
+      headers: sidecarHeaders(),
+      body: JSON.stringify({ plugin_data_dir: pluginDataDir }),
+    });
+    const parsed = await parseSidecarJson<{ ok?: boolean }>(response);
+    if (!parsed.ok) return parsed;
+    return { ok: true, data: parsed.data.ok !== false };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_disconnect_failed',
+    };
   }
 }
 
 export async function configCloud(
   pluginDataDir: string,
   mountPath: string,
-): Promise<boolean> {
+): Promise<SidecarResult<boolean>> {
   try {
     const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/config`, {
       method: 'POST',
@@ -1927,11 +2328,14 @@ export async function configCloud(
         mount_path: mountPath,
       }),
     });
-    if (!response.ok) return false;
-    const data = (await response.json()) as { ok?: boolean };
-    return data.ok !== false;
-  } catch {
-    return false;
+    const parsed = await parseSidecarJson<{ ok?: boolean }>(response);
+    if (!parsed.ok) return parsed;
+    return { ok: true, data: parsed.data.ok !== false };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_config_failed',
+    };
   }
 }
 

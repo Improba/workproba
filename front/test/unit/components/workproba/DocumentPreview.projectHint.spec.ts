@@ -52,7 +52,7 @@ describe('DocumentPreview suggestion projet', () => {
 
     const hint = wrapper.find('.doc-preview__project-hint');
     expect(hint.exists()).toBe(true);
-    expect(hint.text()).toContain('Organiser ce document dans un projet');
+    expect(hint.text()).toContain('Organiser ce document dans une bibliothèque');
 
     await wrapper.find('.doc-preview__project-hint-link').trigger('click');
     expect(openCapabilities).toHaveBeenCalledWith('projects');

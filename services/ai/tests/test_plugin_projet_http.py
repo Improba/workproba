@@ -122,6 +122,50 @@ def test_projet_publish_path_traversal(
         assert resp.status_code == 403
 
 
+def test_projet_artefacts_sync_status(
+    plugin_dir: Path,
+    workspace: Path,
+) -> None:
+    with TestClient(mainmod.app) as client:
+        project = client.post(
+            "/plugins/projet/projects",
+            json={"plugin_data_dir": str(plugin_dir), "name": "P1"},
+            headers={"X-Internal-Secret": "desktop-dev-secret"},
+        ).json()["project"]
+
+        publish_resp = client.post(
+            "/plugins/projet/publish",
+            json={
+                "plugin_data_dir": str(plugin_dir),
+                "workspace_data_dir": str(workspace),
+                "source_path": "note.txt",
+                "project_id": project["id"],
+                "name": "note.txt",
+            },
+            headers={"X-Internal-Secret": "desktop-dev-secret"},
+        )
+        assert publish_resp.status_code == 200
+        artefact_id = publish_resp.json()["artefact"]["id"]
+
+        sync_resp = client.get(
+            "/plugins/projet/artefacts/sync-status",
+            params={
+                "plugin_data_dir": str(plugin_dir),
+                "project_id": project["id"],
+            },
+            headers={"X-Internal-Secret": "desktop-dev-secret"},
+        )
+        assert sync_resp.status_code == 200
+        items = sync_resp.json()["items"]
+        assert len(items) == 1
+        item = items[0]
+        assert item["id"] == artefact_id
+        assert item["published"] is True
+        assert item["mount_synced"] is False
+        assert item["cloud_confirmed"] is False
+        assert item["cloud_pending"] is False
+
+
 def test_projet_endpoints_require_secret(plugin_dir: Path) -> None:
     with TestClient(mainmod.app) as client:
         resp = client.get(

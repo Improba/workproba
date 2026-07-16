@@ -37,6 +37,33 @@ Framework: **pytest** + `pytest-asyncio`. Offline tests are deterministic (no LL
 - `tests/test_work_events.py`: Work Event Bus (`work_started`, `work_contribution`, `work_completed`, `work_failed`)
 - `tests/test_memory_flow.py`: cross-session memory promotion and recall flows
 - `tests/test_live_mistral.py`: **live** (network + Mistral key), skipped by default
+- `tests/test_eval_metrics.py`, `tests/test_eval_schema.py`: product eval harness (offline)
+- `tests/test_eval_live.py`: **live** product evals (retrieval + judge), skipped unless `WP_EVAL=1`
+
+### Product eval harness
+
+Golden cases and runners live in `services/ai/evals/` (not under default pytest `testpaths`). Offline tests validate JSON schema and metrics. Live tests (`WP_EVAL=1`) use **remote Mistral** (same idea as the product set):
+
+- **Retrieval**: embed + search via `RagStore`, score `recall@k`.
+- **Answer judge (LLM-as-judge)**: send question + fixed `candidate_answer` + rubric to `mistral-small-latest`; Mistral returns a score 1–5 and a short rationale. The case passes if the score is at least `pass_min_score`. This does not run the agent; it grades a golden string to prove the judge path (later: grade real agent answers).
+
+API key: `MISTRAL_API_KEY` or `LLM_DEFAULT_API_KEY` (often from the monorepo root `.env`).
+
+```bash
+cd services/ai
+
+# Offline eval unit tests (CI)
+.venv/bin/pytest tests/test_eval_metrics.py tests/test_eval_schema.py -q
+
+# Live evals (network + key; distinct from WP_LIVE_LLM)
+set -a && source ../../.env && set +a   # if the key is at the monorepo root
+WP_EVAL=1 .venv/bin/pytest tests/test_eval_live.py -q
+
+# CLI summary
+python -m evals
+```
+
+See [services/ai/evals/README.md](../services/ai/evals/README.md) for case formats, judge behaviour, and env vars.
 
 ### Commands
 

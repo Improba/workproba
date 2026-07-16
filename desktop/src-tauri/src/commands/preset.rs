@@ -11,6 +11,7 @@ use super::settings_store::AppSettings;
 
 const PRESETS_DIR: &str = "presets";
 const ENTERPRISE_PRESET_FILE: &str = "enterprise.json";
+const TERRAIN_PRESET_JSON: &str = include_str!("../../presets/preset.terrain.json");
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -203,6 +204,36 @@ pub fn load_enterprise_preset_at(app_data: &Path) -> Option<EnterprisePreset> {
     parse_enterprise_preset(&raw).ok()
 }
 
+pub fn load_terrain_preset_builtin() -> Option<EnterprisePreset> {
+    parse_enterprise_preset(TERRAIN_PRESET_JSON).ok()
+}
+
+pub fn apply_terrain_preset(settings: &mut AppSettings) {
+    let Some(preset) = load_terrain_preset_builtin() else {
+        return;
+    };
+    apply_preset_to_settings(settings, &preset);
+}
+
+pub fn apply_enterprise_preset(app_data: &Path, settings: &mut AppSettings) {
+    apply_terrain_preset(settings);
+    let Some(preset) = load_enterprise_preset_at(app_data) else {
+        return;
+    };
+    apply_preset_to_settings(settings, &preset);
+    super::plugins::apply_preset_cloud_policy(app_data, settings, &preset);
+    let preset_path = enterprise_preset_path(app_data);
+    let _ = log_audit_event(
+        app_data,
+        "preset.applied",
+        "system",
+        serde_json::json!({
+            "preset_path": preset_path.to_string_lossy(),
+            "terrain": true,
+        }),
+    );
+}
+
 pub fn apply_preset_to_settings(settings: &mut AppSettings, preset: &EnterprisePreset) {
     if preset.settings_locked {
         settings.settings_locked = Some(true);
@@ -249,23 +280,6 @@ pub fn apply_preset_to_settings(settings: &mut AppSettings, preset: &EnterpriseP
     if let Some(ids) = &preset.allowed_provider_set_ids {
         settings.allowed_provider_set_ids = Some(ids.clone());
     }
-}
-
-pub fn apply_enterprise_preset(app_data: &Path, settings: &mut AppSettings) {
-    let Some(preset) = load_enterprise_preset_at(app_data) else {
-        return;
-    };
-    apply_preset_to_settings(settings, &preset);
-    super::plugins::apply_preset_cloud_policy(app_data, settings, &preset);
-    let preset_path = enterprise_preset_path(app_data);
-    let _ = log_audit_event(
-        app_data,
-        "preset.applied",
-        "system",
-        serde_json::json!({
-            "preset_path": preset_path.to_string_lossy(),
-        }),
-    );
 }
 
 fn app_data_root(app: &AppHandle) -> Result<PathBuf, String> {
@@ -601,6 +615,25 @@ mod preset_tests {
             doc.provider_set.as_ref().and_then(|ps| ps.id.as_deref()),
             Some("mistral-default")
         );
+    }
+
+    #[test]
+    fn parses_terrain_preset_builtin() {
+        let preset = super::load_terrain_preset_builtin().expect("terrain preset");
+        assert!(preset.settings_locked);
+        assert_eq!(preset.permissions_network, Some(false));
+        assert_eq!(preset.permissions_project_sync, Some(true));
+        let allowed = preset.plugins_allowed.as_deref().unwrap_or(&[]);
+        assert!(allowed.iter().any(|id| id == "workproba.cloud"));
+    }
+
+    #[test]
+    fn apply_terrain_preset_without_enterprise_file() {
+        let mut settings = AppSettings::default();
+        apply_terrain_preset(&mut settings);
+        assert_eq!(settings.settings_locked, Some(true));
+        assert_eq!(settings.permissions_network, Some(false));
+        assert_eq!(settings.permissions_project_sync, Some(true));
     }
 
     #[test]

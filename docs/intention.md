@@ -31,6 +31,18 @@ Imp calls **fixed, controlled tools** to transform documents. Workproba V2 **doe
 - IDE / code editor.
 - Arbitrary user code.
 - Mandatory cloud sync.
+- **Mount NAS as a shared project**: folder sync is technical only ; shared projects use cloud as SoT (V3+).
+- **Mirror push/pull as collaboration**: deprecated product path ; bidirectional sync and conflicts are out of scope.
+
+## Vocabulary (projects)
+
+| Term | Source of truth |
+|---|---|
+| **Solo project / library** | Local machine |
+| **Shared project** | Cloud (control plane + S3) ; local = disposable cache |
+| **Mount sync** | Technical NAS ; not a shared project ; advanced/cache only |
+
+See [glossaire.md](../../workproba-improba/roadmaps/glossaire.md) for the French product glossary.
 
 ## Stack
 

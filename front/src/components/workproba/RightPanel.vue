@@ -82,6 +82,7 @@
         v-show="activeTab === tab.key"
         :ref="(el: unknown) => setPluginRef(tab.pluginId, el)"
         class="wp-right-panel__plugin-pane"
+        @artefacts-changed="onPublished"
       />
 
       <PublishToProjectDialog

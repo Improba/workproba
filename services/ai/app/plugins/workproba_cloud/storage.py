@@ -48,9 +48,57 @@ def get_control_plane_base_url(plugin_data_dir: Path) -> str | None:
     return None
 
 
+def get_access_token(plugin_data_dir: Path) -> str | None:
+    tokens = load_config(plugin_data_dir).get("tokens")
+    if not isinstance(tokens, dict):
+        return None
+    raw = tokens.get("access_token")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
+
+
+def is_enrolled(plugin_data_dir: Path) -> bool:
+    return (
+        get_control_plane_base_url(plugin_data_dir) is not None
+        and get_access_token(plugin_data_dir) is not None
+    )
+
+
+def get_org_id(plugin_data_dir: Path) -> str | None:
+    tokens = load_config(plugin_data_dir).get("tokens")
+    if not isinstance(tokens, dict):
+        return None
+    raw = tokens.get("org_id")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
+
+
+def get_org_label(plugin_data_dir: Path) -> str | None:
+    tokens = load_config(plugin_data_dir).get("tokens")
+    if not isinstance(tokens, dict):
+        return None
+    for key in ("org_label", "org_name", "profile", "org_id"):
+        raw = tokens.get(key)
+        if isinstance(raw, str) and raw.strip():
+            return raw.strip()
+    return None
+
+
+def clear_enrollment(plugin_data_dir: Path) -> None:
+    """Supprime jetons et identifiants cloud (déconnexion locale)."""
+    config = load_config(plugin_data_dir)
+    config.pop("tokens", None)
+    plugin_data_dir.mkdir(parents=True, exist_ok=True)
+    with _config_path(plugin_data_dir).open("w", encoding="utf-8") as handle:
+        json.dump(config, handle, ensure_ascii=False, indent=2)
+
+
 def status(plugin_data_dir: Path) -> dict[str, Any]:
     mount_path = get_mount_path(plugin_data_dir)
     config = load_config(plugin_data_dir)
+    base_url = get_control_plane_base_url(plugin_data_dir)
     synced_count = 0
     if mount_path:
         mount = Path(mount_path).expanduser()
@@ -61,6 +109,11 @@ def status(plugin_data_dir: Path) -> dict[str, Any]:
         "mount_path": mount_path,
         "last_sync": config.get("last_sync"),
         "synced_count": synced_count,
+        "base_url": base_url,
+        "enrolled": is_enrolled(plugin_data_dir),
+        "has_token": get_access_token(plugin_data_dir) is not None,
+        "org_id": get_org_id(plugin_data_dir),
+        "org_label": get_org_label(plugin_data_dir),
     }
 
 

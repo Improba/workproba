@@ -394,6 +394,15 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "sync_empty": "Aucun document publié à synchroniser.",
             "project_not_found": "Projet introuvable : {project_id}.",
             "configured": "Dossier cloud configuré.",
+            "artefact_not_found": "Document cloud introuvable.",
+            "artefact_not_confirmed": "Le document cloud n'est pas encore disponible au téléchargement.",
+            "download_failed": "Téléchargement du document cloud impossible.",
+            "cache_not_found": "Aucune copie locale en cache pour ce document.",
+            "republish_failed": "Republication vers le cloud impossible.",
+            "republish_hint": "Les modifications locales doivent être republiées vers le cloud.",
+            "use_cloud_sot_not_mirror_sync": (
+                "La synchronisation miroir est désactivée : le cloud est la source de vérité."
+            ),
         },
         "preset": {
             "active": "Preset enterprise actif",
@@ -845,6 +854,15 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "sync_empty": "No published documents to sync.",
             "project_not_found": "Project not found: {project_id}.",
             "configured": "Cloud folder configured.",
+            "artefact_not_found": "Cloud document not found.",
+            "artefact_not_confirmed": "The cloud document is not available for download yet.",
+            "download_failed": "Could not download the cloud document.",
+            "cache_not_found": "No local cached copy for this document.",
+            "republish_failed": "Could not republish to the cloud.",
+            "republish_hint": "Local changes must be republished to the cloud.",
+            "use_cloud_sot_not_mirror_sync": (
+                "Mirror sync is disabled: the cloud is the source of truth."
+            ),
         },
         "preset": {
             "active": "Enterprise preset active",

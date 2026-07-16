@@ -7,17 +7,17 @@
     <div v-else-if="!projects.length" class="project-panel__onboarding">
       <Lucide name="folder-kanban" size="28" color="text-faint" />
       <h3 class="project-panel__onboarding-title">
-        {{ t('plugin.workproba.projet.onboardingTitle') }}
+        {{ t(projetKey('onboardingTitle')) }}
       </h3>
       <p class="project-panel__onboarding-text">
-        {{ t('plugin.workproba.projet.onboardingText') }}
+        {{ t(projetKey('onboardingText')) }}
       </p>
       <div class="project-panel__create">
         <input
           v-model="newProjectName"
           type="text"
           class="project-panel__input"
-          :placeholder="t('plugin.workproba.projet.createPlaceholder')"
+          :placeholder="t(projetKey('createPlaceholder'))"
           @keydown.enter="onCreateProject"
         />
         <button
@@ -26,7 +26,7 @@
           :disabled="creating || !newProjectName.trim()"
           @click="onCreateProject"
         >
-          {{ t('plugin.workproba.projet.createProject') }}
+          {{ t(projetKey('createProject')) }}
         </button>
       </div>
     </div>
@@ -34,7 +34,7 @@
     <template v-else>
       <div class="project-panel__toolbar">
         <label class="project-panel__label" for="project-select">
-          {{ t('plugin.workproba.projet.selectProject') }}
+          {{ t(projetKey('selectProject')) }}
         </label>
         <select
           id="project-select"
@@ -50,7 +50,7 @@
           class="project-panel__btn project-panel__btn--ghost"
           @click="showCreate = !showCreate"
         >
-          {{ t('plugin.workproba.projet.newProject') }}
+          {{ t(projetKey('newProject')) }}
         </button>
       </div>
 
@@ -59,7 +59,7 @@
           v-model="newProjectName"
           type="text"
           class="project-panel__input"
-          :placeholder="t('plugin.workproba.projet.createPlaceholder')"
+          :placeholder="t(projetKey('createPlaceholder'))"
           @keydown.enter="onCreateProject"
         />
         <button
@@ -68,25 +68,90 @@
           :disabled="creating || !newProjectName.trim()"
           @click="onCreateProject"
         >
-          {{ t('plugin.workproba.projet.createProject') }}
+          {{ t(projetKey('createProject')) }}
         </button>
       </div>
 
       <section class="project-panel__docs">
         <h4 class="project-panel__docs-title">
-          {{ t('plugin.workproba.projet.publishedDocuments') }}
+          {{ t(isEnrolled ? 'plugin.workproba.projet.publishedDocumentsShared' : 'plugin.workproba.projet.publishedDocuments') }}
         </h4>
+        <p class="project-panel__scope-hint">
+          {{ t(isEnrolled ? 'plugin.workproba.projet.scopeHintShared' : 'plugin.workproba.projet.scopeHintLocal') }}
+        </p>
         <div v-if="docsLoading" class="project-panel__empty project-panel__empty--small">
           {{ t('common.loading') }}
         </div>
+        <p v-else-if="loadError" class="project-panel__empty-text project-panel__empty-text--error" role="alert">
+          {{ loadError }}
+        </p>
         <p v-else-if="!publishedDocs.length" class="project-panel__empty-text">
-          {{ t('plugin.workproba.projet.noPublishedDocuments') }}
+          {{ t(projetKey('noPublishedDocuments')) }}
         </p>
         <ul v-else class="project-panel__doc-list" role="list">
-          <li v-for="doc in publishedDocs" :key="doc.id" class="project-panel__doc">
+          <li
+            v-for="doc in publishedDocs"
+            :key="doc.id"
+            class="project-panel__doc"
+            :class="{
+              'project-panel__doc--clickable': isEnrolled,
+              'project-panel__doc--opening': openingDocId === doc.id,
+            }"
+            @click="isEnrolled ? onOpenCloudDoc(doc) : undefined"
+          >
             <Lucide name="file-check" size="14" color="text-muted" />
             <span class="project-panel__doc-name">{{ doc.name }}</span>
+            <span v-if="doc.version" class="project-panel__doc-version">v{{ doc.version }}</span>
+            <div v-if="isEnrolled" class="project-panel__badges">
+              <span
+                v-if="doc.cloud_confirmed === true"
+                class="project-panel__badge project-panel__badge--cloud"
+              >
+                {{ t('plugin.workproba.projet.syncStatusCloud') }}
+              </span>
+              <span
+                v-else-if="doc.cloud_pending"
+                class="project-panel__badge project-panel__badge--pending"
+              >
+                {{ t('plugin.workproba.projet.syncStatusCloudPending') }}
+              </span>
+            </div>
+            <div v-else-if="syncByDocId[doc.id]" class="project-panel__badges">
+              <span
+                v-if="syncByDocId[doc.id]?.published"
+                class="project-panel__badge project-panel__badge--published"
+              >
+                {{ t('plugin.workproba.projet.syncStatusPublished') }}
+              </span>
+              <span
+                v-if="syncByDocId[doc.id]?.mount_synced"
+                class="project-panel__badge project-panel__badge--mount"
+              >
+                {{ t('plugin.workproba.projet.syncStatusMount') }}
+              </span>
+              <span
+                v-if="syncByDocId[doc.id]?.cloud_confirmed"
+                class="project-panel__badge project-panel__badge--cloud"
+              >
+                {{ t('plugin.workproba.projet.syncStatusCloud') }}
+              </span>
+              <span
+                v-else-if="syncByDocId[doc.id]?.cloud_pending"
+                class="project-panel__badge project-panel__badge--pending"
+              >
+                {{ t('plugin.workproba.projet.syncStatusCloudPending') }}
+              </span>
+            </div>
             <span class="project-panel__doc-date">{{ formatDate(doc.created_at) }}</span>
+            <button
+              v-if="isEnrolled && doc.has_local_cache"
+              type="button"
+              class="project-panel__btn project-panel__btn--ghost project-panel__republish"
+              :disabled="republishingDocId === doc.id"
+              @click.stop="onRepublishCloudDoc(doc)"
+            >
+              {{ t('cloud.republishToCloud') }}
+            </button>
           </li>
         </ul>
       </section>
@@ -95,31 +160,54 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import { PROJET_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import { CLOUD_PLUGIN_ID, PROJET_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import { openPath } from '@composables/useDesktop';
+import { useCloud } from '@composables/useCloud';
 import {
   createProjetProject,
+  listCloudArtefacts,
+  listProjetArtefactSyncStatus,
   listProjetProjects,
   listProjetPublishedDocuments,
+  openCloudArtefact,
+  republishCloudArtefact,
+  type ProjetArtefactSyncStatus,
   type ProjetProject,
   type ProjetPublishedDocument,
 } from '@services/aiSidecar';
 
 const { t, locale } = useI18n();
 const { getPluginDataDir } = usePlugins();
+const { status, isEnrolled, init: initCloud, refreshStatus } = useCloud();
+
+function projetKey(base: string): string {
+  return isEnrolled.value
+    ? `plugin.workproba.projet.${base}Shared`
+    : `plugin.workproba.projet.${base}`;
+}
 
 const loading = ref(true);
 const docsLoading = ref(false);
 const creating = ref(false);
 const showCreate = ref(false);
 const newProjectName = ref('');
+const loadError = ref<string | null>(null);
 const pluginDataDir = ref<string | null>(null);
+const cloudPluginDataDir = ref<string | null>(null);
 const projects = ref<ProjetProject[]>([]);
 const selectedProjectId = ref<string | null>(null);
 const publishedDocs = ref<ProjetPublishedDocument[]>([]);
+const syncStatuses = ref<ProjetArtefactSyncStatus[]>([]);
+const openingDocId = ref<string | null>(null);
+const republishingDocId = ref<string | null>(null);
+
+const syncByDocId = computed(() =>
+  Object.fromEntries(syncStatuses.value.map((item) => [item.id, item])),
+);
 
 function formatDate(iso: string): string {
   try {
@@ -135,13 +223,21 @@ function formatDate(iso: string): string {
 
 async function loadProjects(): Promise<void> {
   loading.value = true;
+  loadError.value = null;
   try {
     pluginDataDir.value = await getPluginDataDir(PROJET_PLUGIN_ID);
+    cloudPluginDataDir.value = await getPluginDataDir(CLOUD_PLUGIN_ID);
     if (!pluginDataDir.value) {
       projects.value = [];
       return;
     }
-    projects.value = await listProjetProjects(pluginDataDir.value);
+    const result = await listProjetProjects(pluginDataDir.value);
+    if (!result.ok) {
+      projects.value = [];
+      loadError.value = result.error;
+      return;
+    }
+    projects.value = result.data;
     if (projects.value.length && !selectedProjectId.value) {
       selectedProjectId.value = projects.value[0].id;
     }
@@ -151,18 +247,136 @@ async function loadProjects(): Promise<void> {
 }
 
 async function loadPublishedDocs(): Promise<void> {
-  if (!pluginDataDir.value || !selectedProjectId.value) {
+  if (!selectedProjectId.value) {
     publishedDocs.value = [];
+    syncStatuses.value = [];
     return;
   }
   docsLoading.value = true;
+  loadError.value = null;
   try {
-    publishedDocs.value = await listProjetPublishedDocuments(
-      pluginDataDir.value,
-      selectedProjectId.value,
-    );
+    await refreshStatus();
+    if (status.value?.enrolled) {
+      if (!cloudPluginDataDir.value) {
+        publishedDocs.value = [];
+        syncStatuses.value = [];
+        return;
+      }
+      const docsResult = await listCloudArtefacts(
+        cloudPluginDataDir.value,
+        selectedProjectId.value,
+      );
+      if (!docsResult.ok) {
+        publishedDocs.value = [];
+        loadError.value = docsResult.error;
+        syncStatuses.value = [];
+        return;
+      }
+      publishedDocs.value = docsResult.data;
+      syncStatuses.value = [];
+      return;
+    }
+
+    if (!pluginDataDir.value) {
+      publishedDocs.value = [];
+      syncStatuses.value = [];
+      return;
+    }
+    const [docsResult, syncResult] = await Promise.all([
+      listProjetPublishedDocuments(pluginDataDir.value, selectedProjectId.value),
+      listProjetArtefactSyncStatus({
+        pluginDataDir: pluginDataDir.value,
+        projectId: selectedProjectId.value,
+        cloudPluginDataDir: cloudPluginDataDir.value ?? undefined,
+      }),
+    ]);
+    if (!docsResult.ok) {
+      publishedDocs.value = [];
+      loadError.value = docsResult.error;
+      syncStatuses.value = syncResult.ok ? syncResult.data : [];
+      return;
+    }
+    publishedDocs.value = docsResult.data;
+    syncStatuses.value = syncResult.ok ? syncResult.data : [];
+    if (!syncResult.ok && !loadError.value) {
+      loadError.value = syncResult.error;
+    }
   } finally {
     docsLoading.value = false;
+  }
+}
+
+async function onOpenCloudDoc(doc: ProjetPublishedDocument): Promise<void> {
+  if (!isEnrolled.value || !cloudPluginDataDir.value || !selectedProjectId.value) return;
+  if (openingDocId.value) return;
+  openingDocId.value = doc.id;
+  try {
+    const result = await openCloudArtefact({
+      pluginDataDir: cloudPluginDataDir.value,
+      projectId: selectedProjectId.value,
+      artefactId: doc.id,
+    });
+    if (!result.ok) {
+      Notify.create({
+        message: result.error || t('cloud.openFailed'),
+        color: 'negative',
+      });
+      return;
+    }
+    try {
+      await openPath(result.data.local_path);
+    } catch {
+      Notify.create({
+        message: t('cloud.cachedAt', { path: result.data.local_path }),
+        color: 'info',
+        timeout: 5000,
+      });
+    }
+    Notify.create({
+      message: t('cloud.republishHint'),
+      color: 'info',
+      timeout: 6000,
+    });
+    publishedDocs.value = publishedDocs.value.map((item) =>
+      item.id === doc.id ? { ...item, has_local_cache: true } : item,
+    );
+  } finally {
+    openingDocId.value = null;
+  }
+}
+
+async function onRepublishCloudDoc(doc: ProjetPublishedDocument): Promise<void> {
+  if (!isEnrolled.value || !cloudPluginDataDir.value || !selectedProjectId.value) return;
+  if (republishingDocId.value) return;
+  republishingDocId.value = doc.id;
+  try {
+    const result = await republishCloudArtefact({
+      pluginDataDir: cloudPluginDataDir.value,
+      projectId: selectedProjectId.value,
+      artefactId: doc.id,
+    });
+    if (!result.ok) {
+      Notify.create({
+        message: result.error || t('cloud.republishFailed'),
+        color: 'negative',
+      });
+      return;
+    }
+    publishedDocs.value = publishedDocs.value.map((item) =>
+      item.id === doc.id
+        ? { ...result.data, has_local_cache: true }
+        : item,
+    );
+    Notify.create({
+      message: t('cloud.republishSuccess', {
+        name: doc.name,
+        version: result.data.version ?? '',
+      }),
+      color: 'positive',
+      timeout: 3000,
+    });
+  } finally {
+    republishingDocId.value = null;
   }
 }
 
@@ -171,17 +385,21 @@ async function onCreateProject(): Promise<void> {
   if (!name || !pluginDataDir.value) return;
   creating.value = true;
   try {
-    const project = await createProjetProject(pluginDataDir.value, name);
-    if (!project) {
-      Notify.create({ message: t('plugin.workproba.projet.createFailed'), color: 'negative' });
+    const result = await createProjetProject(pluginDataDir.value, name);
+    if (!result.ok) {
+      Notify.create({
+        message: result.error || t('plugin.workproba.projet.createFailed'),
+        color: 'negative',
+      });
       return;
     }
+    const project = result.data;
     projects.value = [...projects.value, project];
     selectedProjectId.value = project.id;
     newProjectName.value = '';
     showCreate.value = false;
     Notify.create({
-      message: t('plugin.workproba.projet.createSuccess', { name: project.name }),
+      message: t(projetKey('createSuccess'), { name: project.name }),
       color: 'positive',
       timeout: 2000,
     });
@@ -195,12 +413,14 @@ watch(selectedProjectId, () => {
 });
 
 onMounted(async () => {
+  await initCloud();
   await loadProjects();
   await loadPublishedDocs();
 });
 
 defineExpose({
   refresh: async () => {
+    await refreshStatus();
     await loadProjects();
     await loadPublishedDocs();
   },
@@ -324,7 +544,7 @@ defineExpose({
 }
 
 .project-panel__docs-title {
-  margin: 0 0 var(--wp-space-2);
+  margin: 0 0 var(--wp-space-1);
   font-size: var(--wp-fs-xs);
   font-weight: 600;
   color: var(--wp-text-muted);
@@ -332,10 +552,56 @@ defineExpose({
   letter-spacing: 0.04em;
 }
 
+.project-panel__scope-hint {
+  margin: 0 0 var(--wp-space-2);
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
+  line-height: var(--wp-lh-relaxed);
+}
+
 .project-panel__empty-text {
   margin: 0;
   font-size: var(--wp-fs-sm);
   color: var(--wp-text-faint);
+
+  &--error {
+    color: var(--wp-danger);
+  }
+}
+
+.project-panel__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  flex: none;
+}
+
+.project-panel__badge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--wp-r-pill);
+  white-space: nowrap;
+
+  &--published {
+    background: var(--wp-surface-3);
+    color: var(--wp-text-muted);
+  }
+
+  &--mount {
+    background: var(--wp-accent-soft, var(--wp-surface-3));
+    color: var(--wp-accent);
+  }
+
+  &--cloud {
+    background: color-mix(in srgb, var(--wp-positive, #2e7d32) 15%, transparent);
+    color: var(--wp-positive, #2e7d32);
+  }
+
+  &--pending {
+    background: var(--wp-gold-soft, var(--wp-surface-3));
+    color: var(--wp-gold, var(--wp-text-muted));
+  }
 }
 
 .project-panel__doc-list {
@@ -357,6 +623,19 @@ defineExpose({
   font-size: var(--wp-fs-sm);
 }
 
+.project-panel__doc--clickable {
+  cursor: pointer;
+
+  &:hover {
+    background: var(--wp-surface-3);
+  }
+}
+
+.project-panel__doc--opening {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
 .project-panel__doc-name {
   flex: 1;
   min-width: 0;
@@ -366,9 +645,21 @@ defineExpose({
   color: var(--wp-text);
 }
 
+.project-panel__doc-version {
+  flex: none;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-muted);
+}
+
 .project-panel__doc-date {
   flex: none;
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-faint);
+}
+
+.project-panel__republish {
+  flex: none;
+  font-size: 10px;
+  padding: 2px 8px;
 }
 </style>

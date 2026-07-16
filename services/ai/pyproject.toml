@@ -27,7 +27,7 @@ dependencies = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["app*"]
+include = ["app*", "evals*"]
 
 [project.optional-dependencies]
 dev = [

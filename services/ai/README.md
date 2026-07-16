@@ -177,9 +177,15 @@ See `.env.example`.
 
 # Live tests against Mistral (network + key required)
 WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
+
+# Product eval harness (gated separately from WP_LIVE_LLM)
+# Retrieval: recall@k via mistral-embed. Answer judge: remote mistral-small-latest
+# grades a fixed golden answer 1-5 against a rubric (LLM-as-judge; not AgentLoop).
+# Key: MISTRAL_API_KEY or LLM_DEFAULT_API_KEY (e.g. monorepo root .env).
+WP_EVAL=1 .venv/bin/pytest tests/test_eval_live.py -q
 ```
 
-Coverage: agent, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE. See [docs/testing.md](../../docs/testing.md).
+Coverage: agent, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE. See [docs/testing.md](../../docs/testing.md). Eval cases and judge details: [evals/README.md](evals/README.md).
 
 **Provider sets & reasoning:** catalogue-driven model/reasoning routing, Mistral `none`/`high` clamp. Details: [docs/provider-sets-reasoning.md](../../docs/provider-sets-reasoning.md). Focused tests: `tests/test_provider_sets.py`, `tests/test_llm_config.py`.
 

@@ -1038,6 +1038,10 @@ class ProjetArtefactsResponse(BaseModel):
     artefacts: list[dict[str, Any]]
 
 
+class ProjetArtefactSyncStatusResponse(BaseModel):
+    items: list[dict[str, Any]]
+
+
 def _resolve_plugin_data_dir(raw: str) -> Path:
     return Path(raw).expanduser().resolve()
 
@@ -1104,9 +1108,14 @@ async def projet_publish_artifact(
     require_internal_secret(request, settings)
     locale = normalize_locale(payload.locale)
 
-    from app.plugins.workproba_projet import storage as projet_storage
+    from app.plugins.workproba_projet.publish_route import (
+        cloud_dir_for,
+        cloud_publish_enabled,
+        publish_artefact_routed,
+    )
 
     plugin_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    cloud_mode = cloud_publish_enabled(cloud_dir_for(plugin_dir))
     has_source = bool(payload.source_path and payload.source_path.strip())
     has_content = payload.content is not None
     if has_source and has_content:
@@ -1121,7 +1130,7 @@ async def projet_publish_artifact(
         )
     workspace_root = _resolve_workspace_root(payload) if has_source else None
     try:
-        artefact = projet_storage.publish_artifact(
+        artefact = await publish_artefact_routed(
             plugin_data_dir=plugin_dir,
             workspace_root=workspace_root,
             source_path=payload.source_path,
@@ -1146,6 +1155,10 @@ async def projet_publish_artifact(
         else:
             status = 403
         raise HTTPException(status_code=status, detail=detail) from exc
+    except Exception as exc:  # noqa: BLE001
+        if cloud_mode:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        raise
     return ProjetPublishResponse(artefact=artefact)
 
 
@@ -1176,6 +1189,47 @@ async def projet_list_artefacts(
             ) from exc
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     return ProjetArtefactsResponse(artefacts=artefacts)
+
+
+@app.get("/plugins/projet/artefacts/sync-status", response_model=ProjetArtefactSyncStatusResponse)
+async def projet_artefacts_sync_status(
+    request: Request,
+    plugin_data_dir: str,
+    project_id: str,
+    cloud_plugin_data_dir: str | None = None,
+    locale: str = "fr",
+) -> ProjetArtefactSyncStatusResponse:
+    """Statut mount/cloud par document publié."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(locale)
+
+    from app.plugins.workproba_cloud.sync_access import open_sync_port_for_cloud
+    from app.plugins.workproba_cloud.sync_service import list_artefact_sync_status
+
+    plugins_root = _resolve_plugin_data_dir(plugin_data_dir).parent
+    cloud_dir = (
+        _resolve_plugin_data_dir(cloud_plugin_data_dir)
+        if cloud_plugin_data_dir
+        else plugins_root / "workproba.cloud"
+    )
+    try:
+        sync_port = open_sync_port_for_cloud(plugins_root)
+        items = await list_artefact_sync_status(
+            cloud_dir=cloud_dir,
+            sync_port=sync_port,
+            project_id=project_id,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        if str(exc) == "project_not_found":
+            raise HTTPException(
+                status_code=404,
+                detail=t(locale, "errors.project_not_found", project_id=project_id),
+            ) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return ProjetArtefactSyncStatusResponse(items=items)
 
 
 class PersonasSetsResponse(BaseModel):
@@ -2271,6 +2325,11 @@ class CloudStatusResponse(BaseModel):
     mount_path: str | None = None
     last_sync: str | None = None
     synced_count: int = 0
+    base_url: str | None = None
+    enrolled: bool = False
+    has_token: bool = False
+    org_id: str | None = None
+    org_label: str | None = None
 
 
 class CloudConfigRequest(BaseModel):
@@ -2290,6 +2349,21 @@ class CloudSyncResponse(BaseModel):
     synced: list[str]
     mount_path: str | None = None
     last_sync: str | None = None
+    metadata_pushed: list[str] | None = None
+    blobs_uploaded: list[str] | None = None
+    skipped: list[str] | None = None
+
+
+class CloudPullRequest(BaseModel):
+    plugin_data_dir: str
+    project_id: str
+    locale: str = "fr"
+
+
+class CloudPullResponse(BaseModel):
+    pulled: list[str]
+    skipped: list[str] | None = None
+    errors: list[str] | None = None
 
 
 class CloudEnrollRequest(BaseModel):
@@ -2297,7 +2371,9 @@ class CloudEnrollRequest(BaseModel):
     base_url: str
     bearer_token: str | None = None
     device_code: str | None = None
+    join_token: str | None = None
     org_id: str | None = None
+    device_name: str | None = None
     locale: str = "fr"
 
 
@@ -2306,6 +2382,11 @@ class CloudEnrollResponse(BaseModel):
     method: str | None = None
     pending: bool = False
     org_id: str | None = None
+
+
+class CloudDisconnectRequest(BaseModel):
+    plugin_data_dir: str
+    locale: str = "fr"
 
 
 class CloudSyncRegardsRequest(BaseModel):
@@ -2318,6 +2399,59 @@ class CloudSyncRegardsResponse(BaseModel):
     installed: list[dict[str, Any]]
     activated: dict[str, Any] | None = None
     count: int = 0
+
+
+class CloudArtefactsResponse(BaseModel):
+    artefacts: list[dict[str, Any]]
+
+
+class CloudPublishArtefactRequest(BaseModel):
+    plugin_data_dir: str
+    project_id: str
+    name: str
+    source_path: str | None = None
+    content: str | None = None
+    workspace_data_dir: str | None = None
+    project_path: str | None = None
+    locale: str = "fr"
+
+
+class CloudPublishArtefactResponse(BaseModel):
+    artefact: dict[str, Any]
+
+
+class CloudOpenArtefactRequest(BaseModel):
+    plugin_data_dir: str
+    project_id: str
+    artefact_id: str
+    locale: str = "fr"
+
+
+class CloudOpenArtefactResponse(BaseModel):
+    local_path: str
+    artefact_id: str
+    version: str
+    filename: str
+
+
+class CloudRepublishArtefactRequest(BaseModel):
+    plugin_data_dir: str
+    project_id: str
+    artefact_id: str
+    cache_path: str | None = None
+    locale: str = "fr"
+
+
+class CloudRepublishArtefactResponse(BaseModel):
+    artefact: dict[str, Any]
+
+
+def _resolve_cloud_publish_workspace(payload: CloudPublishArtefactRequest) -> Path:
+    if payload.workspace_data_dir is None:
+        raise HTTPException(status_code=400, detail="workspace_data_dir required")
+    if payload.project_path:
+        return Path(payload.project_path).expanduser().resolve()
+    return Path(payload.workspace_data_dir).expanduser().resolve()
 
 
 def _resolve_app_data_from_workspace(raw: str) -> Path:
@@ -2472,17 +2606,57 @@ async def cloud_sync_endpoint(
     locale = normalize_locale(payload.locale)
 
     from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
     from app.plugins.workproba_cloud.sync_access import open_sync_port_for_cloud
+    from app.plugins.workproba_cloud.sync_service import (
+        is_cloud_enrolled,
+        is_mount_configured,
+        push_project_artefacts_to_cloud,
+    )
 
     cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    if is_cloud_enrolled(cloud_dir):
+        raise HTTPException(
+            status_code=400,
+            detail=t(locale, "cloud.use_cloud_sot_not_mirror_sync"),
+        )
+    has_mount = is_mount_configured(cloud_dir) or bool(
+        payload.mount_path and payload.mount_path.strip()
+    )
+    if not has_mount and not is_cloud_enrolled(cloud_dir):
+        raise HTTPException(status_code=400, detail=t(locale, "cloud.not_configured"))
+
     try:
         sync_port = open_sync_port_for_cloud(cloud_dir.parent)
-        result = cloud_storage.sync_project(
-            plugin_data_dir=cloud_dir,
-            sync_port=sync_port,
-            project_id=payload.project_id,
-            mount_path=payload.mount_path,
-        )
+        result: dict[str, Any] = {"synced": [], "mount_path": None, "last_sync": None}
+
+        if is_mount_configured(cloud_dir) or (
+            payload.mount_path and payload.mount_path.strip()
+        ):
+            result = cloud_storage.sync_project(
+                plugin_data_dir=cloud_dir,
+                sync_port=sync_port,
+                project_id=payload.project_id,
+                mount_path=payload.mount_path,
+            )
+        else:
+            artefacts = sync_port.list_artefacts(payload.project_id)
+            result["synced"] = [
+                str(artefact.get("id"))
+                for artefact in artefacts
+                if artefact.get("id")
+            ]
+
+        base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+        if is_cloud_enrolled(cloud_dir) and base_url:
+            client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+            push_result = await push_project_artefacts_to_cloud(
+                cloud_dir=cloud_dir,
+                sync_port=sync_port,
+                project_id=payload.project_id,
+                client=client,
+            )
+            result.update(push_result)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
@@ -2501,7 +2675,278 @@ async def cloud_sync_endpoint(
         synced=list(result.get("synced") or []),
         mount_path=result.get("mount_path"),
         last_sync=result.get("last_sync"),
+        metadata_pushed=result.get("metadata_pushed"),
+        blobs_uploaded=result.get("blobs_uploaded"),
+        skipped=result.get("skipped"),
     )
+
+
+@app.post("/plugins/cloud/pull", response_model=CloudPullResponse)
+async def cloud_pull_endpoint(
+    request: Request,
+    payload: CloudPullRequest,
+) -> CloudPullResponse:
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    locale = normalize_locale(payload.locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.sync_access import open_sync_port_for_cloud
+    from app.plugins.workproba_cloud.sync_service import (
+        is_cloud_enrolled,
+        pull_project_artefacts_from_cloud,
+    )
+
+    cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    if is_cloud_enrolled(cloud_dir):
+        raise HTTPException(
+            status_code=400,
+            detail=t(locale, "cloud.use_cloud_sot_not_mirror_sync"),
+        )
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not base_url:
+        raise HTTPException(status_code=400, detail=t(locale, "cloud.not_configured"))
+
+    try:
+        sync_port = open_sync_port_for_cloud(cloud_dir.parent)
+        client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+        result = await pull_project_artefacts_from_cloud(
+            cloud_dir=cloud_dir,
+            sync_port=sync_port,
+            project_id=payload.project_id,
+            client=client,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        code = str(exc)
+        if code == "project_not_found":
+            detail = t(locale, "errors.project_not_found", project_id=payload.project_id)
+            status = 404
+        else:
+            detail = code
+            status = 400
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+    return CloudPullResponse(
+        pulled=list(result.get("pulled") or []),
+        skipped=result.get("skipped"),
+        errors=result.get("errors"),
+    )
+
+
+@app.get("/plugins/cloud/artefacts", response_model=CloudArtefactsResponse)
+async def cloud_list_artefacts_endpoint(
+    request: Request,
+    plugin_data_dir: str,
+    project_id: str,
+    locale: str = "fr",
+) -> CloudArtefactsResponse:
+    """Liste les artefacts cloud d'un projet (source de vérité enrollé)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    locale = normalize_locale(locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.sync_service import (
+        is_cloud_enrolled,
+        list_cloud_artefacts_for_project,
+    )
+
+    cloud_dir = _resolve_plugin_data_dir(plugin_data_dir)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not is_cloud_enrolled(cloud_dir) or not base_url:
+        raise HTTPException(status_code=400, detail=t(locale, "cloud.not_configured"))
+
+    client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+    artefacts = await list_cloud_artefacts_for_project(
+        client=client,
+        project_id=project_id,
+        cloud_dir=cloud_dir,
+    )
+    return CloudArtefactsResponse(artefacts=artefacts)
+
+
+@app.post("/plugins/cloud/artefacts/open", response_model=CloudOpenArtefactResponse)
+async def cloud_open_artefact_endpoint(
+    request: Request,
+    payload: CloudOpenArtefactRequest,
+) -> CloudOpenArtefactResponse:
+    """Télécharge un artefact cloud dans le cache jetable et retourne le chemin local."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    locale = normalize_locale(payload.locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.cache_service import open_cloud_artefact_to_cache
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.sync_service import is_cloud_enrolled
+
+    cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not is_cloud_enrolled(cloud_dir) or not base_url:
+        raise HTTPException(status_code=400, detail=t(locale, "cloud.not_configured"))
+
+    client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+    try:
+        result = await open_cloud_artefact_to_cache(
+            cloud_dir=cloud_dir,
+            project_id=payload.project_id,
+            artefact_id=payload.artefact_id,
+            client=client,
+        )
+    except ValueError as exc:
+        detail_key = {
+            "artefact_not_found": "cloud.artefact_not_found",
+            "artefact_not_confirmed": "cloud.artefact_not_confirmed",
+            "missing_download_url": "cloud.download_failed",
+            "checksum_mismatch": "cloud.download_failed",
+            "size_mismatch": "cloud.download_failed",
+            "invalid_remote_list": "cloud.download_failed",
+        }.get(str(exc), "cloud.download_failed")
+        raise HTTPException(status_code=400, detail=t(locale, detail_key)) from exc
+
+    return CloudOpenArtefactResponse(
+        local_path=str(result["local_path"]),
+        artefact_id=str(result["artefact_id"]),
+        version=str(result["version"]),
+        filename=str(result["filename"]),
+    )
+
+
+@app.post("/plugins/cloud/artefacts/publish", response_model=CloudPublishArtefactResponse)
+async def cloud_publish_artefact_endpoint(
+    request: Request,
+    payload: CloudPublishArtefactRequest,
+) -> CloudPublishArtefactResponse:
+    """Publie un artefact directement dans le cloud (projet enrollé)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    locale = normalize_locale(payload.locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.registry import PLUGIN_WORKPROBA_PROJET
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.sync_service import (
+        is_cloud_enrolled,
+        publish_shared_artefact_to_cloud,
+    )
+    from app.plugins.workproba_projet import storage as projet_storage
+
+    cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not is_cloud_enrolled(cloud_dir) or not base_url:
+        raise HTTPException(status_code=400, detail=t(locale, "cloud.not_configured"))
+
+    projet_dir = cloud_dir.parent / PLUGIN_WORKPROBA_PROJET
+    if projet_storage.find_project(projet_dir, payload.project_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=t(locale, "errors.project_not_found", project_id=payload.project_id),
+        )
+
+    has_source = bool(payload.source_path and payload.source_path.strip())
+    has_content = payload.content is not None
+    if has_source and has_content:
+        raise HTTPException(
+            status_code=400,
+            detail=t(locale, "errors.ambiguous_publish_source"),
+        )
+    if not has_source and not has_content:
+        raise HTTPException(
+            status_code=400,
+            detail=t(locale, "errors.missing_publish_source"),
+        )
+
+    try:
+        if has_content:
+            encoded = payload.content.encode("utf-8")
+            if len(encoded) > projet_storage.MAX_PUBLISH_CONTENT_BYTES:
+                raise ValueError("content_too_large")
+            filename = projet_storage._sanitize_artefact_name(payload.name, markdown=True)
+            content = encoded
+        else:
+            filename = projet_storage._sanitize_artefact_name(payload.name)
+            workspace_root = _resolve_cloud_publish_workspace(payload)
+            source = projet_storage.resolve_source_in_workspace(
+                workspace_root,
+                payload.source_path or "",
+            )
+            content = source.read_bytes()
+            if len(content) > projet_storage.MAX_PUBLISH_CONTENT_BYTES:
+                raise ValueError("content_too_large")
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail=t(locale, "errors.source_not_found", path=payload.source_path or ""),
+        ) from exc
+    except ValueError as exc:
+        code = str(exc)
+        detail = t(locale, f"errors.{code}")
+        if detail == f"errors.{code}":
+            detail = code
+        if code == "content_too_large":
+            status = 413
+        else:
+            status = 400
+        raise HTTPException(status_code=status, detail=detail) from exc
+
+    try:
+        client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+        artefact = await publish_shared_artefact_to_cloud(
+            cloud_dir=cloud_dir,
+            client=client,
+            project_id=payload.project_id,
+            filename=filename,
+            content=content,
+        )
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return CloudPublishArtefactResponse(artefact=artefact)
+
+
+@app.post("/plugins/cloud/artefacts/republish", response_model=CloudRepublishArtefactResponse)
+async def cloud_republish_artefact_endpoint(
+    request: Request,
+    payload: CloudRepublishArtefactRequest,
+) -> CloudRepublishArtefactResponse:
+    """Republie un artefact modifié depuis le cache local vers le cloud."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    locale = normalize_locale(payload.locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.cache_service import republish_cloud_artefact_from_cache
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.sync_service import is_cloud_enrolled
+
+    cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not is_cloud_enrolled(cloud_dir) or not base_url:
+        raise HTTPException(status_code=400, detail=t(locale, "cloud.not_configured"))
+
+    client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+    try:
+        artefact = await republish_cloud_artefact_from_cache(
+            cloud_dir=cloud_dir,
+            project_id=payload.project_id,
+            artefact_id=payload.artefact_id,
+            client=client,
+            cache_path=payload.cache_path,
+        )
+    except ValueError as exc:
+        detail_key = {
+            "cache_not_found": "cloud.cache_not_found",
+            "cache_path_outside_cache": "cloud.cache_not_found",
+        }.get(str(exc), "cloud.republish_failed")
+        raise HTTPException(status_code=400, detail=t(locale, detail_key)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return CloudRepublishArtefactResponse(artefact=artefact)
 
 
 @app.post("/plugins/cloud/enroll", response_model=CloudEnrollResponse)
@@ -2517,6 +2962,8 @@ async def cloud_enroll_endpoint(
     from app.plugins.workproba_cloud import storage as cloud_storage
     from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
 
+    import socket
+
     cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
     cloud_storage.save_config(cloud_dir, {"base_url": payload.base_url.rstrip("/")})
     client = CloudControlPlaneClient(
@@ -2524,11 +2971,39 @@ async def cloud_enroll_endpoint(
         plugin_data_dir=cloud_dir,
     )
     try:
-        result = await client.authenticate(
-            bearer_token=payload.bearer_token,
-            device_code=payload.device_code,
-            org_id=payload.org_id,
-        )
+        if payload.join_token:
+            resolved_name = (
+                (payload.device_name or "").strip()
+                or socket.gethostname()
+                or "workproba-desktop"
+            )
+            join_payload = await client.join_with_token(
+                token=payload.join_token,
+                device_name=resolved_name,
+            )
+            tokens = client.load_tokens()
+            result = {
+                **join_payload,
+                "authenticated": bool(tokens.get("access_token")),
+                "method": "join_token",
+                "org_id": tokens.get("org_id"),
+            }
+        elif payload.bearer_token:
+            result = await client.authenticate(
+                bearer_token=payload.bearer_token,
+                device_code=None,
+                org_id=payload.org_id,
+            )
+        elif payload.device_code:
+            result = await client.authenticate(
+                bearer_token=None,
+                device_code=payload.device_code,
+                org_id=payload.org_id,
+            )
+        elif payload.org_id:
+            raise ValueError("join_token_required")
+        else:
+            raise ValueError("cloud_auth_required")
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     _ = locale
@@ -2538,6 +3013,23 @@ async def cloud_enroll_endpoint(
         pending=bool(result.get("pending")),
         org_id=str(result.get("org_id")) if result.get("org_id") else None,
     )
+
+
+@app.post("/plugins/cloud/disconnect", response_model=OkResponse)
+async def cloud_disconnect_endpoint(
+    request: Request,
+    payload: CloudDisconnectRequest,
+) -> OkResponse:
+    """Déconnecte le poste du cloud (suppression locale des jetons)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(payload.locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+
+    cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    cloud_storage.clear_enrollment(cloud_dir)
+    return OkResponse(ok=True)
 
 
 @app.post("/plugins/cloud/sync-regards", response_model=CloudSyncRegardsResponse)

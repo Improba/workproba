@@ -410,13 +410,44 @@ pub fn list_dir_entries(
     Ok(entries)
 }
 
+fn ensure_path_in_allowed_roots(app: &AppHandle, path: &Path) -> Result<PathBuf, String> {
+    let canonical = path.canonicalize().map_err(|error| error.to_string())?;
+
+    if let Ok(app_data) = app.path().app_data_dir() {
+        if let Ok(app_data_canonical) = app_data.canonicalize() {
+            if canonical.starts_with(&app_data_canonical) {
+                return Ok(canonical);
+            }
+        }
+    }
+
+    let workspaces = workspace_store::list_workspaces(app)?;
+    for workspace in workspaces {
+        let folder = PathBuf::from(&workspace.folder_path);
+        if let Ok(folder_canonical) = folder.canonicalize() {
+            if canonical.starts_with(&folder_canonical) {
+                return Ok(canonical);
+            }
+        }
+        let data_dir = PathBuf::from(&workspace.data_dir);
+        if let Ok(data_dir_canonical) = data_dir.canonicalize() {
+            if canonical.starts_with(&data_dir_canonical) {
+                return Ok(canonical);
+            }
+        }
+    }
+
+    Err("Accès refusé : chemin hors des espaces autorisés".to_string())
+}
+
 /// Révèle un chemin dans le gestionnaire de fichiers de l'OS.
 #[tauri::command]
-pub fn reveal_in_os(path: String) -> Result<(), String> {
+pub fn reveal_in_os(app: AppHandle, path: String) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     if !path_buf.exists() {
         return Err(format!("Le chemin n'existe pas : {path}"));
     }
+    ensure_path_in_allowed_roots(&app, &path_buf)?;
 
     #[cfg(target_os = "linux")]
     {
@@ -509,13 +540,14 @@ fn open_path_in_os(path: &Path) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn open_path(path: String) -> Result<(), String> {
+pub fn open_path(app: AppHandle, path: String) -> Result<(), String> {
     let path_buf = PathBuf::from(&path);
     if !path_buf.exists() {
         return Err(format!("Le chemin n'existe pas : {path}"));
     }
 
-    open_path_in_os(&path_buf)
+    let validated = ensure_path_in_allowed_roots(&app, &path_buf)?;
+    open_path_in_os(&validated)
 }
 
 #[tauri::command]

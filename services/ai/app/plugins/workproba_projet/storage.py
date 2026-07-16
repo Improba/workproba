@@ -13,6 +13,7 @@ from app.audit import log_event, resolve_app_data_dir
 
 
 PROJECTS_FILE = "projects.json"
+ARTEFACT_VERSIONS_FILE = ".artefact_versions.json"
 MAX_PUBLISH_CONTENT_BYTES = 5 * 1024 * 1024
 
 
@@ -70,18 +71,84 @@ def artefacts_dir(plugin_data_dir: Path, project_id: str) -> Path:
     return plugin_data_dir / "artefacts" / project_id
 
 
+def _artefact_versions_path(plugin_data_dir: Path, project_id: str) -> Path:
+    return artefacts_dir(plugin_data_dir, project_id) / ARTEFACT_VERSIONS_FILE
+
+
+def load_artefact_versions(plugin_data_dir: Path, project_id: str) -> dict[str, str]:
+    path = _artefact_versions_path(plugin_data_dir, project_id)
+    if not path.is_file():
+        return {}
+    with path.open("r", encoding="utf-8") as handle:
+        raw = json.load(handle)
+    if not isinstance(raw, dict):
+        return {}
+    return {str(key): str(value) for key, value in raw.items()}
+
+
+def save_artefact_versions(
+    plugin_data_dir: Path,
+    project_id: str,
+    versions: dict[str, str],
+) -> None:
+    path = _artefact_versions_path(plugin_data_dir, project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        json.dump(versions, handle, ensure_ascii=False, indent=2)
+
+
+def get_artefact_version(
+    plugin_data_dir: Path,
+    project_id: str,
+    artefact_name: str,
+) -> str | None:
+    return load_artefact_versions(plugin_data_dir, project_id).get(artefact_name)
+
+
+def _bump_patch_version(version: str) -> str:
+    parts = version.split(".")
+    while len(parts) < 3:
+        parts.append("0")
+    try:
+        parts[2] = str(int(parts[2]) + 1)
+    except ValueError:
+        parts[2] = "1"
+    return ".".join(parts[:3])
+
+
+def bump_artefact_version(
+    plugin_data_dir: Path,
+    project_id: str,
+    artefact_name: str,
+    *,
+    republish: bool = False,
+) -> str:
+    versions = load_artefact_versions(plugin_data_dir, project_id)
+    if republish and artefact_name in versions:
+        new_version = _bump_patch_version(versions[artefact_name])
+    else:
+        new_version = versions.get(artefact_name, "1.0.0")
+    versions[artefact_name] = new_version
+    save_artefact_versions(plugin_data_dir, project_id, versions)
+    return new_version
+
+
 def list_artefacts(plugin_data_dir: Path, project_id: str) -> list[dict[str, Any]]:
     if find_project(plugin_data_dir, project_id) is None:
         raise ValueError("project_not_found")
     directory = artefacts_dir(plugin_data_dir, project_id)
     if not directory.is_dir():
         return []
+    versions = load_artefact_versions(plugin_data_dir, project_id)
     artefacts: list[dict[str, Any]] = []
     for path in sorted(directory.iterdir()):
         if not path.is_file():
             continue
+        if path.name == ARTEFACT_VERSIONS_FILE or path.name.startswith("."):
+            continue
         stat = path.stat()
         published_at = datetime.fromtimestamp(stat.st_mtime, UTC).isoformat()
+        version = versions.get(path.name, "1.0.0")
         artefacts.append(
             {
                 "id": path.name,
@@ -91,6 +158,7 @@ def list_artefacts(plugin_data_dir: Path, project_id: str) -> list[dict[str, Any
                 "size_bytes": stat.st_size,
                 "published_at": published_at,
                 "created_at": published_at,
+                "version": version,
             }
         )
     return artefacts
@@ -171,6 +239,7 @@ def publish_artifact(
             raise ValueError("content_too_large")
         artefact_name = _sanitize_artefact_name(name, markdown=True)
         dest = _resolve_artefact_dest(dest_dir, artefact_name)
+        republish = dest.is_file()
         dest.write_text(content, encoding="utf-8")
         audit_details["name"] = artefact_name
         audit_details["source"] = "content"
@@ -181,10 +250,17 @@ def publish_artifact(
         artefact_name = _sanitize_artefact_name(name)
         source = resolve_source_in_workspace(workspace_root, source_path or "")
         dest = _resolve_artefact_dest(dest_dir, artefact_name)
+        republish = dest.is_file()
         shutil.copy2(source, dest)
         audit_details["name"] = artefact_name
         result_source_path = normalize_relative_path(source_path or "")
 
+    version = bump_artefact_version(
+        plugin_data_dir,
+        project_id,
+        artefact_name,
+        republish=republish,
+    )
     stat = dest.stat()
     from app.agent.work_events import audit_details_with_work_id
 
@@ -203,7 +279,58 @@ def publish_artifact(
         "size_bytes": stat.st_size,
         "published_at": published_at,
         "created_at": published_at,
+        "version": version,
     }
     if result_source_path is not None:
         result["source_path"] = result_source_path
     return result
+
+
+def write_published_artefact(
+    plugin_data_dir: Path,
+    project_id: str,
+    name: str,
+    content: bytes,
+    *,
+    version: str | None = None,
+) -> dict[str, Any]:
+    """Écrit un artefact publié (pull cloud ou changement distant)."""
+    project = find_project(plugin_data_dir, project_id)
+    if project is None:
+        raise ValueError("project_not_found")
+
+    artefact_name = _sanitize_artefact_name(name)
+    if len(content) > MAX_PUBLISH_CONTENT_BYTES:
+        raise ValueError("content_too_large")
+
+    dest_dir = artefacts_dir(plugin_data_dir, project_id)
+    dest = _resolve_artefact_dest(dest_dir, artefact_name)
+    republish = dest.is_file()
+    dest.write_bytes(content)
+
+    if version:
+        versions = load_artefact_versions(plugin_data_dir, project_id)
+        versions[artefact_name] = version
+        save_artefact_versions(plugin_data_dir, project_id, versions)
+        resolved_version = version
+    else:
+        resolved_version = bump_artefact_version(
+            plugin_data_dir,
+            project_id,
+            artefact_name,
+            republish=republish,
+        )
+
+    published_at = _now_iso()
+    stat = dest.stat()
+    return {
+        "id": artefact_name,
+        "name": artefact_name,
+        "path": dest.as_posix(),
+        "project_id": project_id,
+        "project_name": project.get("name", project_id),
+        "size_bytes": stat.st_size,
+        "published_at": published_at,
+        "created_at": published_at,
+        "version": resolved_version,
+    }

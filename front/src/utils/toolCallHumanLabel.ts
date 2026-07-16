@@ -7,9 +7,30 @@ export function fallbackHumanLabel(
 ): string {
   switch (name) {
     case 'read_documents':
+    case 'read_document':
       return t('toolCalls.readDocuments');
     case 'generate_document':
       return t('toolCalls.generateDocument');
+    case 'write_docx':
+      return t('toolCalls.writeDocx');
+    case 'write_xlsx':
+      return t('toolCalls.writeXlsx');
+    case 'write_pdf':
+      return t('toolCalls.writePdf');
+    case 'publish_artifact':
+      return t('toolCalls.publishArtifact');
+    case 'create_project':
+      return t('toolCalls.createProject');
+    case 'list_projects':
+      return t('toolCalls.listProjects');
+    case 'sync_to_cloud':
+      return t('toolCalls.syncToCloud');
+    case 'sync_from_cloud':
+      return t('toolCalls.syncFromCloud');
+    case 'enroll_to_cloud':
+      return t('toolCalls.enrollToCloud');
+    case 'sync_managed_regards':
+      return t('toolCalls.syncManagedRegards');
     case 'search_kb':
       return t('toolCalls.searchKb');
     case 'web_search':

@@ -1,6 +1,6 @@
 # Workproba plugins
 
-> **Last updated:** 15/07/2026 (V2.2 PR 1–3)
+> **Last updated:** 16/07/2026 (V2.2 PR 1–4)
 
 Workproba extends the agent core with a **plugin system** (technical layer): agent tools, HTTP endpoints, UI slots, and namespaced storage. User-facing discovery uses **activatable capabilities** (hub « Capacités », V2.2) — see [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
@@ -114,12 +114,14 @@ Active managed catalogs appear in `GET /plugins/personas/sets` with `provenance:
 
 Internal project management and artifact publishing. Disabled by default; discoverable via Capabilities hub. Contextual hint in document preview opens the hub (focus Projects). Publishing requires Human Approval Gate (`effect: publish`).
 
+**Product model (sources of truth):** **solo project** = local SoT (`{app_data}/plugins/workproba.projet/`, list/publish/open local). **Shared project** = cloud SoT (control plane list/publish/open/republish + S3 blobs) ; local storage is a **disposable cache** only (pull/open on demand). **Mount sync** (`ProjectSyncPort`) = technical NAS bridge, not a shared project ; mirror push/pull is a **deprecated product path** and **blocked when enrolled** (agent tools + HTTP `/plugins/cloud/sync`, `/pull`). Bidirectional sync and conflicts are **out of scope**.
+
 Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins/projet/artefacts`.
 
 ## Experimental plugins
 
 - **Browser**: see [browser.md](./browser.md)
-- **Cloud plugin** (`workproba.cloud`): local mount sync via **`ProjectSyncPort`** and `project:sync` permission (PR 4). V3 scaffold: **`CloudControlPlaneClient`** (`enroll_to_cloud`, `sync_managed_regards` tools; `/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`) pulls signed regards via **`ManagedRegardsPort`**. **`RemoteCapabilityGateway`** (`capability:remote`, `services/ai/app/plugins/ports/remote_capability_gateway.py`) : appels plugins distants avec délégation d'identité, minimisation des données (pas de conversations/fichiers locaux par défaut), timeouts et journal d'audit. Plan de contrôle SaaS: `workproba-cloud/` — see [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md). No direct project or personas namespace access.
+- **Cloud plugin** (`workproba.cloud`): client of the **control plane** ; **shared project SoT** = cloud (list/publish/open/republish via API + S3, local = disposable cache). **`CloudControlPlaneClient`** (`enroll_to_cloud`, `sync_managed_regards`; `/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`). **`ManagedRegardsPort`** for enterprise regards. **`ProjectSyncPort`** mount sync = technical NAS only, deprecated product path, **rejected when enrolled**. **`RemoteCapabilityGateway`** scaffold. Plan de contrôle: `workproba-cloud/` — see [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md). No direct project or personas namespace access.
 
 ## Local plugins
 

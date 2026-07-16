@@ -20,7 +20,7 @@ export function isDesktopApp(): boolean {
 
 /** Application bureau uniquement (plus de mode web). */
 export function isDesktopMode(): boolean {
-  return true;
+  return process.env.DESKTOP_MODE === 'true';
 }
 
 async function tauriInvoke<T>(command: string, args?: Record<string, unknown>): Promise<T> {

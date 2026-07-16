@@ -1,0 +1,26 @@
+{
+  "preset_id": "workproba-terrain",
+  "mode": "locked",
+  "plugins": {
+    "allowed": [
+      "workproba.projet",
+      "workproba.personas",
+      "workproba.cloud"
+    ],
+    "local_plugins": false
+  },
+  "permissions": {
+    "network": false,
+    "code_execute": false,
+    "project_sync": true,
+    "network_improba_cloud": true
+  },
+  "ui": {
+    "locale": "fr",
+    "locale_locked": false
+  },
+  "audit": {
+    "enabled": true,
+    "retention_days": 30
+  }
+}

@@ -154,3 +154,85 @@ def test_human_summary_error_variants(locale: str) -> None:
         assert summary == "Je n'ai pas pu lire manquant.pdf"
     else:
         assert summary == "I could not read manquant.pdf"
+
+
+@pytest.mark.parametrize("locale", ["fr", "en"])
+def test_human_summary_sync_from_cloud(locale: str) -> None:
+    start = build_human_summary(
+        "sync_from_cloud",
+        {"project_id": "alpha"},
+        locale=locale,
+    )
+    done = build_human_summary(
+        "sync_from_cloud",
+        {"project_id": "alpha"},
+        result={"pulled": [{"id": "a"}, {"id": "b"}], "count": 2},
+        locale=locale,
+    )
+    error = build_human_summary(
+        "sync_from_cloud",
+        {"project_id": "alpha"},
+        result={},
+        is_error=True,
+        locale=locale,
+    )
+    if locale == "fr":
+        assert start == "Je vais récupérer les documents du projet alpha depuis le cloud"
+        assert done == "J'ai récupéré 2 document(s) du projet alpha depuis le cloud"
+        assert error == "Je n'ai pas pu récupérer les documents du projet alpha depuis le cloud"
+    else:
+        assert start == "I will pull documents for project alpha from the cloud"
+        assert done == "I pulled 2 document(s) for project alpha from the cloud"
+        assert error == "I could not pull documents for project alpha from the cloud"
+
+
+@pytest.mark.parametrize("locale", ["fr", "en"])
+def test_human_summary_enroll_to_cloud(locale: str) -> None:
+    start = build_human_summary("enroll_to_cloud", {"base_url": "https://cloud.example"}, locale=locale)
+    done = build_human_summary(
+        "enroll_to_cloud",
+        {"base_url": "https://cloud.example"},
+        result={"authenticated": True},
+        locale=locale,
+    )
+    error = build_human_summary(
+        "enroll_to_cloud",
+        {"base_url": "https://cloud.example"},
+        result={},
+        is_error=True,
+        locale=locale,
+    )
+    if locale == "fr":
+        assert start == "Je vais connecter ce poste au cloud"
+        assert done == "Ce poste est connecté au cloud"
+        assert error == "Je n'ai pas pu connecter ce poste au cloud"
+    else:
+        assert start == "I will connect this computer to the cloud"
+        assert done == "This computer is connected to the cloud"
+        assert error == "I could not connect this computer to the cloud"
+
+
+@pytest.mark.parametrize("locale", ["fr", "en"])
+def test_human_summary_sync_managed_regards(locale: str) -> None:
+    start = build_human_summary("sync_managed_regards", {}, locale=locale)
+    done = build_human_summary(
+        "sync_managed_regards",
+        {},
+        result={"count": 3},
+        locale=locale,
+    )
+    error = build_human_summary(
+        "sync_managed_regards",
+        {},
+        result={},
+        is_error=True,
+        locale=locale,
+    )
+    if locale == "fr":
+        assert start == "Je vais synchroniser les regards de l'organisation"
+        assert done == "J'ai synchronisé 3 regard(s) de l'organisation"
+        assert error == "Je n'ai pas pu synchroniser les regards de l'organisation"
+    else:
+        assert start == "I will sync organization regards"
+        assert done == "I synced 3 organization regard(s)"
+        assert error == "I could not sync organization regards"

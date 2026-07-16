@@ -149,13 +149,20 @@ class CloudControlPlaneClient:
             if owns_client:
                 await client.aclose()
 
-    async def _post_json(self, path: str, *, json_body: JsonDict) -> JsonDict:
+    async def _post_json(
+        self,
+        path: str,
+        *,
+        json_body: JsonDict | None = None,
+        params: JsonDict | None = None,
+    ) -> JsonDict:
         client = await self._client()
         owns_client = self._http_client is None
         try:
             response = await client.post(
                 path,
                 json=json_body,
+                params=params,
                 headers=self._auth_headers(),
             )
             response.raise_for_status()
@@ -167,20 +174,48 @@ class CloudControlPlaneClient:
             if owns_client:
                 await client.aclose()
 
-    async def enroll_device(
+    async def _post_public_json(
+        self,
+        path: str,
+        *,
+        json_body: JsonDict | None = None,
+    ) -> JsonDict:
+        """POST sans jeton (endpoints publics, ex. /devices/join)."""
+        client = await self._client()
+        owns_client = self._http_client is None
+        try:
+            response = await client.post(path, json=json_body)
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("invalid_control_plane_response")
+            return payload
+        finally:
+            if owns_client:
+                await client.aclose()
+
+    async def join_with_token(
         self,
         *,
-        org_id: str,
-        device_name: str,
+        token: str,
+        device_name: str | None = None,
     ) -> JsonDict:
-        """Enrôle le poste desktop et persiste deviceId + accessToken."""
-        payload = await self._post_json(
-            "/devices/enroll",
-            json_body={"orgId": org_id, "deviceName": device_name},
-        )
+        """Échange un jeton join contre deviceId + accessToken (POST /devices/join)."""
+        body: JsonDict = {"token": token.strip()}
+        if device_name and device_name.strip():
+            body["deviceName"] = device_name.strip()
+        payload = await self._post_public_json("/devices/join", json_body=body)
+
+        response_base_url = payload.get("baseUrl")
+        if isinstance(response_base_url, str) and response_base_url.strip():
+            self._base_url = response_base_url.strip().rstrip("/")
+
         tokens: JsonDict = {}
         device_id = payload.get("deviceId")
         access_token = payload.get("accessToken")
+        org_id = payload.get("orgId")
+        profile = payload.get("profile")
+        organization_name = payload.get("organizationName")
         if isinstance(device_id, str) and device_id.strip():
             tokens["device_id"] = device_id.strip()
         if isinstance(access_token, str) and access_token.strip():
@@ -188,9 +223,32 @@ class CloudControlPlaneClient:
             tokens["token_type"] = "bearer"
         if isinstance(org_id, str) and org_id.strip():
             tokens["org_id"] = org_id.strip()
+        if isinstance(profile, str) and profile.strip():
+            tokens["profile"] = profile.strip()
+        org_label = next(
+            (
+                value.strip()
+                for value in (organization_name, profile, org_id)
+                if isinstance(value, str) and value.strip()
+            ),
+            None,
+        )
+        if org_label:
+            tokens["org_label"] = org_label
         if tokens:
             self.save_tokens(tokens)
+
         return payload
+
+    async def enroll_device(
+        self,
+        *,
+        org_id: str,
+        device_name: str,
+    ) -> JsonDict:
+        """Déprécié : POST /devices/enroll supprimé en H0.1 — utiliser join_with_token."""
+        _ = org_id, device_name
+        raise ValueError("join_token_required")
 
     async def list_sync_artefacts(self, *, project_id: str | None = None) -> JsonDict:
         params: JsonDict = {}
@@ -219,6 +277,56 @@ class CloudControlPlaneClient:
                 "size": size,
             },
         )
+
+    async def request_upload_url(
+        self,
+        *,
+        artefact_db_id: int,
+        content_type: str | None = None,
+    ) -> JsonDict:
+        params: JsonDict | None = None
+        if content_type:
+            params = {"contentType": content_type}
+        return await self._post_json(
+            f"/sync/artefacts/{artefact_db_id}/upload-url",
+            params=params,
+        )
+
+    async def confirm_upload(self, *, artefact_db_id: int) -> JsonDict:
+        return await self._post_json(f"/sync/artefacts/{artefact_db_id}/confirm")
+
+    async def request_download_url(self, *, artefact_db_id: int) -> JsonDict:
+        return await self._post_json(f"/sync/artefacts/{artefact_db_id}/download-url")
+
+    async def verify_blob(self, *, artefact_db_id: int) -> JsonDict:
+        return await self._post_json(f"/sync/artefacts/{artefact_db_id}/verify-blob")
+
+    async def get_presigned_blob(self, url: str) -> bytes:
+        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.content
+
+    async def put_presigned_blob(
+        self,
+        *,
+        url: str,
+        content: bytes,
+        content_type: str | None = None,
+        _put_client: httpx.AsyncClient | None = None,
+    ) -> None:
+        headers: dict[str, str] = {"Content-Length": str(len(content))}
+        if content_type:
+            headers["Content-Type"] = content_type
+
+        if _put_client is not None:
+            response = await _put_client.put(url, content=content, headers=headers)
+            response.raise_for_status()
+            return
+
+        async with httpx.AsyncClient(timeout=DEFAULT_TIMEOUT) as client:
+            response = await client.put(url, content=content, headers=headers)
+            response.raise_for_status()
 
     async def fetch_regards_catalog(self, *, org_id: str | None = None) -> JsonDict:
         params: JsonDict = {}
