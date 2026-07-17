@@ -3,7 +3,7 @@ import { t } from './i18nT';
 /** Libellé lisible par défaut quand le sidecar n'envoie pas de humanSummary. */
 export function fallbackHumanLabel(
   name: string,
-  _args?: Record<string, unknown>,
+  args?: Record<string, unknown>,
 ): string {
   switch (name) {
     case 'read_documents':
@@ -31,6 +31,13 @@ export function fallbackHumanLabel(
       return t('toolCalls.enrollToCloud');
     case 'sync_managed_regards':
       return t('toolCalls.syncManagedRegards');
+    case 'invoke_managed_connector': {
+      const connectorId = args?.connector_id;
+      if (typeof connectorId === 'string' && connectorId.trim()) {
+        return t('toolCalls.invokeManagedConnectorNamed', { name: connectorId.trim() });
+      }
+      return t('toolCalls.invokeManagedConnector');
+    }
     case 'search_kb':
       return t('toolCalls.searchKb');
     case 'web_search':

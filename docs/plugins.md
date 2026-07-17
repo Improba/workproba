@@ -1,6 +1,6 @@
 # Workproba plugins
 
-> **Last updated:** 16/07/2026 (V2.2 PR 1–4)
+> **Last updated:** 17/07/2026 (V2.2 PR 1–4)
 
 Workproba extends the agent core with a **plugin system** (technical layer): agent tools, HTTP endpoints, UI slots, and namespaced storage. User-facing discovery uses **activatable capabilities** (hub « Capacités », V2.2) — see [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
@@ -21,7 +21,7 @@ Only **`right_panel`** and **`side_chat`** slots are generalized via `usePluginS
 | `workproba.personas` | yes | Regards métier | Side chat; central view for crossed perspectives |
 | `workproba.projet` | no | Projets et livrables | Right panel, Project tab |
 | `workproba.browser` | no | Navigation web | Right panel, Browser tab |
-| `workproba.cloud` | no | Synchronisation (under Projects) | Nested under Project — not a top-level tab |
+| `workproba.cloud` | no | Improba Cloud (under Projects) | CloudPanel : join, connecteurs, regards, projets |
 
 Effective activation depends on Tauri settings (`active_plugins`). Enterprise presets can restrict the list (`plugins_allowed`).
 
@@ -118,10 +118,22 @@ Internal project management and artifact publishing. Disabled by default; discov
 
 Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins/projet/artefacts`.
 
+## Improba Cloud (Mode A)
+
+Standard path for managed connectors (MVP livré 17/07/2026). Plugin `workproba.cloud` :
+
+- **`CloudControlPlaneClient`** : join device, catalogs, regards (`/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`)
+- **`RemoteCapabilityGateway`** + tool **`invoke_managed_connector`** : relay to `echo` and `ihora.shaped` (stub) via `POST /connectors/{id}/invoke` ; sidecar `GET /plugins/cloud/connectors` ; Human Approval Gate (`external_send`)
+- **`ManagedRegardsPort`** for enterprise regards
+- **`ProjectSyncPort`** mount sync = technical NAS only, deprecated product path, **rejected when enrolled**
+- Shared project SoT = cloud (list/publish/open/republish via API + S3, local = disposable cache)
+- Direct poste→external connectors (mode C) = power-user, not promoted
+
+See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md). No direct project or personas namespace access.
+
 ## Experimental plugins
 
-- **Browser**: see [browser.md](./browser.md)
-- **Cloud plugin** (`workproba.cloud`): client of the **control plane** ; **shared project SoT** = cloud (list/publish/open/republish via API + S3, local = disposable cache). **`CloudControlPlaneClient`** (`enroll_to_cloud`, `sync_managed_regards`; `/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`). **`ManagedRegardsPort`** for enterprise regards. **`ProjectSyncPort`** mount sync = technical NAS only, deprecated product path, **rejected when enrolled**. **`RemoteCapabilityGateway`** scaffold. Plan de contrôle: `workproba-cloud/` — see [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md). No direct project or personas namespace access.
+- **Browser**: see [browser.md](./browser.md) (opt-in, Playwright backend)
 
 ## Local plugins
 
@@ -131,7 +143,7 @@ Tauri can copy and register a local plugin folder. **Runtime loading (Python too
 
 - [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md): capabilities UX plan
 - [contrat-plugin.md](../../workproba-improba/roadmaps/contrat-plugin.md): contract + implementation matrix
-- [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md): control plane V3
+- [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md): Improba Cloud (auth, connector presets, relay)
 - [memory.md](./memory.md): scoped memory
 - [architecture.md](./architecture.md): UI shell
 - [services/ai/README.md](../services/ai/README.md): endpoint catalog

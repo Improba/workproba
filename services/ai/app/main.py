@@ -2401,6 +2401,18 @@ class CloudSyncRegardsResponse(BaseModel):
     count: int = 0
 
 
+class CloudConnectorItem(BaseModel):
+    id: str
+    name: str
+    runtime: str = "managed"
+    description: str = ""
+
+
+class CloudConnectorsResponse(BaseModel):
+    connectors: list[CloudConnectorItem]
+    enrolled: bool = False
+
+
 class CloudArtefactsResponse(BaseModel):
     artefacts: list[dict[str, Any]]
 
@@ -3065,3 +3077,62 @@ async def cloud_sync_regards_endpoint(
         activated=result.get("activated"),
         count=int(result.get("count") or 0),
     )
+
+
+@app.get("/plugins/cloud/connectors", response_model=CloudConnectorsResponse)
+async def cloud_list_connectors_endpoint(
+    request: Request,
+    plugin_data_dir: str,
+    locale: str = "fr",
+) -> CloudConnectorsResponse:
+    """Liste les connecteurs managés autorisés pour le poste enrollé (Mode A)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    loc = normalize_locale(locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.sync_service import is_cloud_enrolled
+
+    cloud_dir = _resolve_plugin_data_dir(plugin_data_dir)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not base_url or not is_cloud_enrolled(cloud_dir):
+        return CloudConnectorsResponse(connectors=[], enrolled=False)
+
+    client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+    tokens = client.load_tokens()
+    device_id = tokens.get("device_id")
+    if not isinstance(device_id, str) or not device_id.strip():
+        raise HTTPException(
+            status_code=403,
+            detail=t(loc, "cloud.connectors_require_device"),
+        )
+
+    try:
+        payload = await client.list_connectors()
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=t(loc, "cloud.connectors_auth_failed"),
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        detail = t(loc, "cloud.connectors_load_failed")
+        if detail == "cloud.connectors_load_failed":
+            detail = f"connectors_unavailable:{exc}"
+        raise HTTPException(status_code=502, detail=detail) from exc
+
+    raw = payload.get("connectors") if isinstance(payload, dict) else None
+    items: list[CloudConnectorItem] = []
+    if isinstance(raw, list):
+        for entry in raw:
+            if not isinstance(entry, dict) or not entry.get("id"):
+                continue
+            items.append(
+                CloudConnectorItem(
+                    id=str(entry.get("id")),
+                    name=str(entry.get("name") or entry.get("id")),
+                    runtime=str(entry.get("runtime") or "managed"),
+                    description=str(entry.get("description") or ""),
+                )
+            )
+    return CloudConnectorsResponse(connectors=items, enrolled=True)

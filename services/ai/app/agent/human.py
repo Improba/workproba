@@ -252,6 +252,14 @@ def build_human_summary(
             return t(locale, "human.sync_managed_regards.done", count=count)
         return t(locale, "human.sync_managed_regards.will")
 
+    if tool_name == "invoke_managed_connector":
+        connector_id = str(arguments.get("connector_id") or result.get("connector_id") or "")
+        if is_result:
+            if is_error:
+                return t(locale, "human.invoke_managed_connector.cannot", connector_id=connector_id)
+            return t(locale, "human.invoke_managed_connector.done", connector_id=connector_id)
+        return t(locale, "human.invoke_managed_connector.will", connector_id=connector_id)
+
     if tool_name == "list_projects":
         if is_result:
             if is_error:

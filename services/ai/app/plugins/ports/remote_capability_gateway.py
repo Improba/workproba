@@ -69,7 +69,19 @@ def minimize_remote_payload(payload: JsonDict) -> JsonDict:
             if nested:
                 minimized[key] = nested
             continue
-        if isinstance(value, list) and key in {"conversation", "conversations"}:
+        if isinstance(value, list):
+            cleaned_list: list[Any] = []
+            for item in value:
+                if isinstance(item, dict):
+                    nested_item = minimize_remote_payload(item)
+                    if nested_item:
+                        cleaned_list.append(nested_item)
+                elif not (
+                    key in {"conversation", "conversations"} and isinstance(item, str)
+                ):
+                    cleaned_list.append(item)
+            if cleaned_list:
+                minimized[key] = cleaned_list
             continue
         minimized[key] = value
     return minimized
@@ -165,7 +177,7 @@ class LocalRemoteCapabilityGateway:
 
 
 class HttpRemoteCapabilityGateway(LocalRemoteCapabilityGateway):
-    """Stub HTTP : POST vers `{base_url}/capabilities/{id}/invoke` avec délégation minimale."""
+    """HTTP : POST vers `{base_url}/connectors/{id}/invoke` avec délégation minimale."""
 
     def __init__(
         self,
@@ -209,11 +221,25 @@ class HttpRemoteCapabilityGateway(LocalRemoteCapabilityGateway):
             )
         try:
             response = await client.post(
-                f"/capabilities/{capability_id}/invoke",
+                f"/connectors/{capability_id}/invoke",
                 json=body,
                 headers=self._auth_headers(identity_delegation),
             )
-            response.raise_for_status()
+            if response.is_error:
+                detail = ""
+                try:
+                    err_body = response.json()
+                    if isinstance(err_body, dict):
+                        detail = str(
+                            err_body.get("message")
+                            or err_body.get("error")
+                            or err_body
+                        )
+                except Exception:  # noqa: BLE001
+                    detail = response.text[:200]
+                raise RemoteCapabilityRejected(
+                    f"remote_http_{response.status_code}:{detail or response.reason_phrase}"
+                )
             data = response.json()
             if not isinstance(data, dict):
                 raise RemoteCapabilityRejected("invalid_remote_response")

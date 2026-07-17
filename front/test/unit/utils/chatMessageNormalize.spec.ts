@@ -92,7 +92,56 @@ describe('chatMessageNormalize', () => {
     expect(normalized?.messageKind).toBe('compaction');
   });
 
-  it('normalise pendingConfirmation en snake_case (persistance legacy)', () => {
+  it('conserve subject et summary optionnels sur une part thinking', () => {
+    const normalized = normalizeChatMessage({
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      parts: [
+        {
+          type: 'thinking',
+          id: 'p-think',
+          thinkingId: 'think-0',
+          content: 'Raisonnement complet',
+          done: true,
+          subject: 'Synthèse courte',
+          summary: 'Point A · Point B',
+        },
+      ],
+    });
+
+    expect(normalized?.parts?.[0]).toMatchObject({
+      type: 'thinking',
+      subject: 'Synthèse courte',
+      summary: 'Point A · Point B',
+    });
+  });
+
+  it('tolère une part thinking sans subject ni summary', () => {
+    const normalized = normalizeChatMessage({
+      id: 'a2',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      parts: [
+        {
+          type: 'thinking',
+          id: 'p-think',
+          thinkingId: 'think-0',
+          content: 'Legacy',
+          done: true,
+        },
+      ],
+    });
+
+    const part = normalized?.parts?.[0];
+    expect(part).toMatchObject({ type: 'thinking', content: 'Legacy', done: true });
+    expect(part && 'subject' in part ? part.subject : undefined).toBeUndefined();
+    expect(part && 'summary' in part ? part.summary : undefined).toBeUndefined();
+  });
+
+  it('ignore pendingConfirmation au reload (gate backend morte)', () => {
     const normalized = normalizeChatMessage({
       id: 'a1',
       role: 'assistant',
@@ -104,7 +153,7 @@ describe('chatMessageNormalize', () => {
         tool_name: 'write_docx',
         action: 'modify',
         proposed_path: 'note.docx',
-        human_summary: 'Modifier note.docx',
+        human_summary: 'modifier note.docx',
         turn_id: 'turn_1',
         effect: 'modify',
         targets: ['note.docx'],
@@ -113,18 +162,6 @@ describe('chatMessageNormalize', () => {
       },
     });
 
-    expect(normalized?.pendingConfirmation).toEqual({
-      confirmationId: 'cf_1',
-      toolCallId: 'tc_1',
-      toolName: 'write_docx',
-      action: 'modify',
-      proposedPath: 'note.docx',
-      humanSummary: 'Modifier note.docx',
-      turnId: 'turn_1',
-      effect: 'modify',
-      targets: ['note.docx'],
-      headline: 'Je vais Modifier : note.docx',
-      protectionLabels: ['Aperçu disponible avant validation'],
-    });
+    expect(normalized?.pendingConfirmation).toBeUndefined();
   });
 });

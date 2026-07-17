@@ -1,6 +1,8 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { nextTick, reactive } from 'vue';
+import { describe, expect, it, vi } from 'vitest';
 import Message from '@components/chat/Message.vue';
+import * as expansion from '@composables/useToolCallExpansion';
 
 describe('Message accessibilité', () => {
   it('affiche un libellé de rôle visible pour le message user', () => {
@@ -335,6 +337,193 @@ describe('Message accessibilité', () => {
     });
 
     expect(wrapper.find('.web-search-citations-stub').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('replie le raisonnement quand un tool_call suit immédiatement', async () => {
+    const collapseSpy = vi.spyOn(expansion, 'collapseThinking');
+
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-thinking-tool',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          parts: [
+            {
+              type: 'thinking',
+              id: 'think-part',
+              thinkingId: 'think-0',
+              content: 'Analyse en cours',
+              done: false,
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    collapseSpy.mockClear();
+    await wrapper.setProps({
+      message: {
+        id: 'a-thinking-tool',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        toolCalls: [
+          { id: 'tc-1', name: 'list_files', status: 'running' },
+        ],
+        parts: [
+          {
+            type: 'thinking',
+            id: 'think-part',
+            thinkingId: 'think-0',
+            content: 'Analyse en cours',
+            done: false,
+          },
+          {
+            type: 'tool_call',
+            id: 'tc-part',
+            toolCallId: 'tc-1',
+          },
+        ],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    expect(collapseSpy).toHaveBeenCalledWith('think-part');
+    collapseSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('replie le raisonnement quand un tool_call est ajouté in-place sur parts', async () => {
+    const collapseSpy = vi.spyOn(expansion, 'collapseThinking');
+    const message = reactive({
+      id: 'a-inplace',
+      role: 'assistant' as const,
+      content: '',
+      streaming: true,
+      parts: [
+        {
+          type: 'thinking' as const,
+          id: 'think-part',
+          thinkingId: 'think-0',
+          content: 'Analyse en cours',
+          done: false,
+        },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const wrapper = mount(Message, {
+      props: { message },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    collapseSpy.mockClear();
+    message.parts.push({
+      type: 'tool_call',
+      id: 'tc-part',
+      toolCallId: 'tc-1',
+    });
+    await nextTick();
+
+    expect(collapseSpy).toHaveBeenCalledWith('think-part');
+    collapseSpy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('ne replie pas le raisonnement si un texte sépare thinking et tool_call', async () => {
+    const collapseSpy = vi.spyOn(expansion, 'collapseThinking');
+
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-thinking-text-tool',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          parts: [
+            {
+              type: 'thinking',
+              id: 'think-part',
+              thinkingId: 'think-0',
+              content: 'Analyse en cours',
+              done: false,
+            },
+            {
+              type: 'text',
+              id: 'text-part',
+              content: 'Voici mon analyse.',
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    collapseSpy.mockClear();
+    await wrapper.setProps({
+      message: {
+        id: 'a-thinking-text-tool',
+        role: 'assistant',
+        content: 'Voici mon analyse.',
+        streaming: true,
+        toolCalls: [
+          { id: 'tc-1', name: 'list_files', status: 'running' },
+        ],
+        parts: [
+          {
+            type: 'thinking',
+            id: 'think-part',
+            thinkingId: 'think-0',
+            content: 'Analyse en cours',
+            done: false,
+          },
+          {
+            type: 'text',
+            id: 'text-part',
+            content: 'Voici mon analyse.',
+          },
+          {
+            type: 'tool_call',
+            id: 'tc-part',
+            toolCallId: 'tc-1',
+          },
+        ],
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+    });
+
+    expect(collapseSpy).not.toHaveBeenCalled();
+    collapseSpy.mockRestore();
     wrapper.unmount();
   });
 });

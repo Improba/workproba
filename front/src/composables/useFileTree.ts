@@ -69,6 +69,8 @@ export function useFileTree(projectPath: () => string | null) {
 
   const pendingFsChanges: FsChangePayload[] = [];
   let unlistenFs: UnlistenFn | null = null;
+  let loadGeneration = 0;
+  let fsListenerGeneration = 0;
 
   function visibleNodes(): FileNode[] {
     const term = filter.value.trim().toLowerCase();
@@ -188,6 +190,9 @@ export function useFileTree(projectPath: () => string | null) {
     const depth = parentNode ? parentNode.depth + 1 : 0;
     const entry = await resolveEntry(root, parentPath, payload.path, payload);
     if (!entry) return;
+    // Abandonner si l'espace a changé ou si le nœud a déjà été créé pendant l'await.
+    if (projectPath() !== root || nodes.has(payload.path)) return;
+    if (!isParentVisible(parentPath)) return;
 
     const node = makeNode(entry, depth);
     nodes.set(payload.path, node);
@@ -222,7 +227,9 @@ export function useFileTree(projectPath: () => string | null) {
 
   const flushFsChanges = useDebounceFn(async () => {
     const batch = pendingFsChanges.splice(0);
+    const rootAtFlush = projectPath();
     for (const payload of batch) {
+      if (projectPath() !== rootAtFlush) return;
       await reconcileFsChange(payload);
     }
   }, 150);
@@ -233,6 +240,7 @@ export function useFileTree(projectPath: () => string | null) {
   }
 
   async function bindFsListener(path: string | null): Promise<void> {
+    const generation = ++fsListenerGeneration;
     if (unlistenFs) {
       await unlistenFs();
       unlistenFs = null;
@@ -241,9 +249,14 @@ export function useFileTree(projectPath: () => string | null) {
 
     if (!path) return;
 
-    unlistenFs = await listen<FsChangePayload>('fs-change', (event) => {
+    const listener = await listen<FsChangePayload>('fs-change', (event) => {
       queueFsChange(event.payload);
     });
+    if (generation !== fsListenerGeneration) {
+      await listener();
+      return;
+    }
+    unlistenFs = listener;
   }
 
   watch(projectPath, (path) => {
@@ -259,6 +272,7 @@ export function useFileTree(projectPath: () => string | null) {
   async function loadDir(relativePath: string): Promise<void> {
     const root = projectPath();
     if (!root) return;
+    const capturedRoot = root;
     const parent = relativePath === '' ? null : nodes.get(relativePath);
     if (parent) {
       if (parent.loading || parent.loaded) return;
@@ -266,10 +280,18 @@ export function useFileTree(projectPath: () => string | null) {
     } else {
       indexing.value = true;
     }
+    const generation = ++loadGeneration;
     error.value = null;
 
+    const isStale = () =>
+      generation !== loadGeneration || projectPath() !== capturedRoot;
+
     try {
-      const entries = await listDirEntries(root, relativePath);
+      const entries = await listDirEntries(capturedRoot, relativePath);
+      if (isStale()) {
+        if (parent) parent.loading = false;
+        return;
+      }
       const depth = parent ? parent.depth + 1 : 0;
       const childPaths: string[] = [];
       for (const entry of entries) {
@@ -286,6 +308,8 @@ export function useFileTree(projectPath: () => string | null) {
         rootLoaded.value = true;
       }
     } catch (err) {
+      if (parent) parent.loading = false;
+      if (isStale()) return;
       let detail: string;
       if (err instanceof Error) {
         detail = err.message && err.message.trim()
@@ -302,9 +326,10 @@ export function useFileTree(projectPath: () => string | null) {
       }
       error.value = detail && detail.trim() ? detail : 'Indexation impossible';
       console.error('[useFileTree] listDirEntries failed', { root, relativePath, err });
-      if (parent) parent.loading = false;
     } finally {
-      indexing.value = false;
+      if (!isStale()) {
+        indexing.value = false;
+      }
     }
   }
 
@@ -331,6 +356,7 @@ export function useFileTree(projectPath: () => string | null) {
   }
 
   function reset(): void {
+    loadGeneration += 1;
     nodes.clear();
     rootPaths.value = [];
     filter.value = '';

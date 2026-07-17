@@ -215,12 +215,20 @@ pub fn apply_terrain_preset(settings: &mut AppSettings) {
     apply_preset_to_settings(settings, &preset);
 }
 
-pub fn apply_enterprise_preset(app_data: &Path, settings: &mut AppSettings) {
+pub fn apply_preset_flags_to_settings(app_data: &Path, settings: &mut AppSettings) {
     apply_terrain_preset(settings);
     let Some(preset) = load_enterprise_preset_at(app_data) else {
         return;
     };
     apply_preset_to_settings(settings, &preset);
+}
+
+/// Effets de bord preset (cloud policy + audit). À appeler une fois au démarrage,
+/// pas à chaque `load_settings`.
+pub fn run_enterprise_preset_side_effects_at(app_data: &Path, settings: &AppSettings) {
+    let Some(preset) = load_enterprise_preset_at(app_data) else {
+        return;
+    };
     super::plugins::apply_preset_cloud_policy(app_data, settings, &preset);
     let preset_path = enterprise_preset_path(app_data);
     let _ = log_audit_event(
@@ -232,6 +240,21 @@ pub fn apply_enterprise_preset(app_data: &Path, settings: &mut AppSettings) {
             "terrain": true,
         }),
     );
+}
+
+pub fn run_enterprise_preset_side_effects(app: &AppHandle) -> Result<(), String> {
+    let app_data = app_data_root(app)?;
+    let settings = super::settings_store::load_settings(app)?;
+    run_enterprise_preset_side_effects_at(&app_data, &settings);
+    Ok(())
+}
+
+/// Conservé pour les chemins qui appliquent preset + effets de bord en une fois
+/// (hors `load_settings`).
+#[allow(dead_code)]
+pub fn apply_enterprise_preset(app_data: &Path, settings: &mut AppSettings) {
+    apply_preset_flags_to_settings(app_data, settings);
+    run_enterprise_preset_side_effects_at(app_data, settings);
 }
 
 pub fn apply_preset_to_settings(settings: &mut AppSettings, preset: &EnterprisePreset) {
@@ -649,6 +672,60 @@ mod preset_tests {
         let preset = load_enterprise_preset_at(&app_data).expect("load");
         assert!(preset.settings_locked);
         assert_eq!(preset.permissions_network, Some(false));
+    }
+
+    #[test]
+    fn apply_preset_flags_does_not_write_audit_or_cloud_config() {
+        let app_data = temp_app_data();
+        let presets = presets_dir(&app_data);
+        fs::create_dir_all(&presets).expect("mkdir presets");
+        fs::write(
+            enterprise_preset_path(&app_data),
+            r#"{
+                "mode":"locked",
+                "permissions":{"network_improba_cloud":true,"project_sync":true},
+                "cloud":{"endpoint":"https://cloud.example.test","org_id":"org-eti"},
+                "plugins":{"allowed":["workproba.cloud"]}
+            }"#,
+        )
+        .expect("write preset");
+
+        let mut settings = AppSettings::default();
+        apply_preset_flags_to_settings(&app_data, &mut settings);
+        apply_preset_flags_to_settings(&app_data, &mut settings);
+
+        assert_eq!(settings.settings_locked, Some(true));
+        assert!(!super::super::audit::audit_file_path(&app_data).is_file());
+        let cloud_config = app_data
+            .join("plugins")
+            .join("workproba.cloud")
+            .join("config.json");
+        assert!(!cloud_config.is_file());
+    }
+
+    #[test]
+    fn run_side_effects_writes_audit_once_per_call() {
+        let app_data = temp_app_data();
+        let presets = presets_dir(&app_data);
+        fs::create_dir_all(&presets).expect("mkdir presets");
+        fs::write(
+            enterprise_preset_path(&app_data),
+            r#"{"mode":"locked","permissions":{"network_improba_cloud":true,"project_sync":true}}"#,
+        )
+        .expect("write preset");
+
+        let mut settings = AppSettings::default();
+        apply_preset_flags_to_settings(&app_data, &mut settings);
+        run_enterprise_preset_side_effects_at(&app_data, &settings);
+
+        let audit_path = super::super::audit::audit_file_path(&app_data);
+        let first = fs::read_to_string(&audit_path).expect("audit");
+        assert_eq!(first.matches("preset.applied").count(), 1);
+
+        apply_preset_flags_to_settings(&app_data, &mut settings);
+        apply_preset_flags_to_settings(&app_data, &mut settings);
+        let after_flags_only = fs::read_to_string(&audit_path).expect("audit unchanged");
+        assert_eq!(after_flags_only.matches("preset.applied").count(), 1);
     }
 
     #[test]

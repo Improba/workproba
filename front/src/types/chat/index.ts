@@ -127,6 +127,10 @@ export interface ChatThinkingPart {
   thinkingId: string;
   content: string;
   done: boolean;
+  /** Sujet courant ou récap (dérivé côté stream, figé à thinking_end). */
+  subject?: string;
+  /** Résumé prose (dérivé à thinking_end). */
+  summary?: string;
 }
 
 export type ReasoningEffort = 'none' | 'low' | 'medium' | 'high';
@@ -162,6 +166,12 @@ export type ChatAttachmentSnapshot = Omit<
   ChatAttachment,
   'contentBase64' | 'previewUrl'
 >;
+
+/** Pièce jointe en mémoire de session : métadonnées + bytes optionnels. */
+export type ChatMessageAttachment = ChatAttachmentSnapshot & {
+  contentBase64?: string;
+  previewUrl?: string;
+};
 
 /** Liste ordonnée des segments d'un message, pour respecter le flux réel :
  * texte -> outil -> texte -> ... */
@@ -206,7 +216,7 @@ export interface ChatMessage {
   /** Texte de raisonnement persisté (rejoué au backend lors des tours suivants). */
   thinking?: string | null;
   /** Pièces jointes au message (côté user). Snapshots métadonnées après envoi. */
-  attachments?: ChatAttachmentSnapshot[];
+  attachments?: ChatMessageAttachment[];
   streaming?: boolean;
   /** Carte d'avis personas (mode 1, distincte du message assistant). */
   personasOpinion?: PersonasOpinionCard | null;

@@ -95,6 +95,28 @@ fn now_iso() -> String {
     Utc::now().to_rfc3339()
 }
 
+/// Rejette les identifiants utilisés comme segment de chemin (`/`, `\`, `..`, vide).
+fn validate_safe_path_segment_id(id: &str, label: &str) -> Result<(), String> {
+    if id.trim().is_empty() {
+        return Err(format!("{label} manquant"));
+    }
+    if id.contains('/') || id.contains('\\') {
+        return Err(format!("{label} invalide : séparateurs interdits"));
+    }
+    if id.contains("..") {
+        return Err(format!("{label} invalide : séquence .. interdite"));
+    }
+    Ok(())
+}
+
+fn validate_workspace_id(workspace_id: &str) -> Result<(), String> {
+    validate_safe_path_segment_id(workspace_id, "Identifiant d'espace")
+}
+
+fn validate_session_id(session_id: &str) -> Result<(), String> {
+    validate_safe_path_segment_id(session_id, "Identifiant de session")
+}
+
 fn app_data_root(app: &AppHandle) -> Result<PathBuf, String> {
     app.path().app_data_dir().map_err(|error| error.to_string())
 }
@@ -120,6 +142,7 @@ fn ensure_spaces_migrated(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn space_root(app: &AppHandle, space_id: &str) -> Result<PathBuf, String> {
+    validate_workspace_id(space_id)?;
     let app_data = ensure_spaces_migrated(app)?;
     let spaces_path = app_data.join(SPACES_DIR).join(space_id);
     if spaces_path.is_dir() {
@@ -224,7 +247,7 @@ fn v1_migration_already_done(space_root: &Path) -> Result<bool, String> {
             return Ok(true);
         }
     }
-    Ok(canonical_dest_exists(space_root))
+    Ok(false)
 }
 
 fn merge_copy_tree(src: &Path, dst: &Path) -> Result<bool, String> {
@@ -278,9 +301,7 @@ fn upsert_space_manifest(
     manifest.folder_path = entry.folder_path.clone();
     manifest.title = entry.title.clone();
     manifest.last_opened_at = entry.last_opened_at.clone();
-    if mark_migrated_from_v1
-        || (manifest.migrated_from_v1.is_none() && canonical_dest_exists(space_root))
-    {
+    if mark_migrated_from_v1 {
         manifest.migrated_from_v1 = Some(true);
         manifest.migration_confirmed = Some(false);
     }
@@ -303,6 +324,8 @@ fn migrate_v1_to_v2_paths(
         return upsert_space_manifest(&space_root, entry, false);
     }
 
+    // Toujours tenter les copies idempotentes avant de poser le flag, y compris
+    // quand la destination existe déjà (migration partielle ou installs sans flag).
     let nested_workproba = space_root.join(WORKPROBA_DIR_NAME);
     let client_workproba = client_folder_path.join(WORKPROBA_DIR_NAME);
     let canonical_versions = space_root.join(VERSIONS_DIR);
@@ -326,7 +349,8 @@ fn migrate_v1_to_v2_paths(
         }
     }
 
-    upsert_space_manifest(&space_root, entry, did_migrate)
+    let mark_done = did_migrate || canonical_dest_exists(&space_root);
+    upsert_space_manifest(&space_root, entry, mark_done)
 }
 
 pub fn migrate_v1_to_v2(
@@ -415,9 +439,15 @@ pub fn open_or_create_workspace(
         entry.last_opened_at = now.clone();
         let entry_snapshot = entry.clone();
         let data_dir = ensure_workspace_layout(app, &entry_snapshot.id)?;
-        migrate_v1_to_v2(app, &entry_snapshot.id, folder_path)?;
-        write_manifest(&data_dir, &entry_snapshot)?;
         save_registry(app, &registry)?;
+        let app_data = ensure_spaces_migrated(app)?;
+        migrate_v1_to_v2_paths(
+            &app_data,
+            &entry_snapshot.id,
+            folder_path,
+            &entry_snapshot,
+        )?;
+        write_manifest(&data_dir, &entry_snapshot)?;
         return entry_to_info(app, &entry_snapshot);
     }
 
@@ -431,10 +461,11 @@ pub fn open_or_create_workspace(
     };
 
     let data_dir = ensure_workspace_layout(app, &entry.id)?;
-    migrate_v1_to_v2(app, &entry.id, folder_path)?;
-    write_manifest(&data_dir, &entry)?;
     registry.workspaces.push(entry.clone());
     save_registry(app, &registry)?;
+    let app_data = ensure_spaces_migrated(app)?;
+    migrate_v1_to_v2_paths(&app_data, &entry.id, folder_path, &entry)?;
+    write_manifest(&data_dir, &entry)?;
     entry_to_info(app, &entry)
 }
 
@@ -454,6 +485,7 @@ pub fn update_workspace_title(
     workspace_id: &str,
     title: &str,
 ) -> Result<WorkspaceInfo, String> {
+    validate_workspace_id(workspace_id)?;
     let trimmed = normalize_workspace_title(title)?;
 
     let mut registry = load_registry(app)?;
@@ -483,23 +515,27 @@ pub fn get_workspace_data_dir_for_folder(
         .workspaces
         .iter()
         .find(|entry| entry.folder_path_normalized == normalized);
-    Ok(entry.map(|entry| {
-        workspace_data_dir(app, &entry.id)
-            .map(|path| path.to_string_lossy().to_string())
-            .unwrap_or_default()
-    }))
+    match entry {
+        Some(entry) => {
+            let path = workspace_data_dir(app, &entry.id)?;
+            Ok(Some(path.to_string_lossy().to_string()))
+        }
+        None => Ok(None),
+    }
 }
 
-fn conversation_path(data_dir: &Path, session_id: &str) -> PathBuf {
-    data_dir
+fn conversation_path(data_dir: &Path, session_id: &str) -> Result<PathBuf, String> {
+    validate_session_id(session_id)?;
+    Ok(data_dir
         .join(CONVERSATIONS_DIR)
-        .join(format!("{session_id}.json"))
+        .join(format!("{session_id}.json")))
 }
 
 pub fn list_conversations(
     app: &AppHandle,
     workspace_id: &str,
 ) -> Result<Vec<ConversationSession>, String> {
+    validate_workspace_id(workspace_id)?;
     let data_dir = workspace_data_dir(app, workspace_id)?;
     let conversations_dir = data_dir.join(CONVERSATIONS_DIR);
     if !conversations_dir.is_dir() {
@@ -528,8 +564,9 @@ pub fn get_conversation(
     workspace_id: &str,
     session_id: &str,
 ) -> Result<Option<ConversationSession>, String> {
+    validate_workspace_id(workspace_id)?;
     let data_dir = workspace_data_dir(app, workspace_id)?;
-    let path = conversation_path(&data_dir, session_id);
+    let path = conversation_path(&data_dir, session_id)?;
     if !path.is_file() {
         return Ok(None);
     }
@@ -543,6 +580,7 @@ pub fn find_conversation_by_id(
     app: &AppHandle,
     session_id: &str,
 ) -> Result<Option<ConversationSession>, String> {
+    validate_session_id(session_id)?;
     let registry = load_registry(app)?;
     for entry in &registry.workspaces {
         if let Some(session) = get_conversation(app, &entry.id, session_id)? {
@@ -553,8 +591,10 @@ pub fn find_conversation_by_id(
 }
 
 pub fn save_conversation(app: &AppHandle, session: ConversationSession) -> Result<(), String> {
+    validate_workspace_id(&session.workspace_id)?;
+    validate_session_id(&session.id)?;
     let data_dir = ensure_workspace_layout(app, &session.workspace_id)?;
-    let path = conversation_path(&data_dir, &session.id);
+    let path = conversation_path(&data_dir, &session.id)?;
     let json = serde_json::to_string_pretty(&session).map_err(|error| error.to_string())?;
     atomic_write(&path, &json)
 }
@@ -564,8 +604,9 @@ pub fn delete_conversation(
     workspace_id: &str,
     session_id: &str,
 ) -> Result<(), String> {
+    validate_workspace_id(workspace_id)?;
     let data_dir = workspace_data_dir(app, workspace_id)?;
-    let path = conversation_path(&data_dir, session_id);
+    let path = conversation_path(&data_dir, session_id)?;
     if path.is_file() {
         fs::remove_file(path).map_err(|error| error.to_string())?;
     }
@@ -578,6 +619,7 @@ pub fn create_conversation(
     folder_path: &str,
     title: Option<String>,
 ) -> Result<ConversationSession, String> {
+    validate_workspace_id(workspace_id)?;
     let now = now_iso();
     let session = ConversationSession {
         id: format!(
@@ -781,6 +823,81 @@ mod workspace_store_tests {
     }
 
     #[test]
+    fn migrate_v1_to_v2_completes_partial_migration() {
+        let app_data = unique_temp_dir("v1_partial");
+        let client = unique_temp_dir("v1_partial_project");
+        let space_id = "ws_test_partial";
+        let space_root = app_data.join(SPACES_DIR).join(space_id);
+        // Destination partielle : versions déjà là, memory encore absente
+        fs::create_dir_all(space_root.join(VERSIONS_DIR).join("sess_a")).expect("versions");
+        fs::write(
+            space_root.join(VERSIONS_DIR).join("sess_a").join("a.txt"),
+            "already",
+        )
+        .expect("version file");
+
+        let client_wp = client.join(WORKPROBA_DIR_NAME);
+        fs::create_dir_all(client_wp.join(VERSIONS_DIR).join("sess_b")).expect("client versions");
+        fs::write(
+            client_wp.join(VERSIONS_DIR).join("sess_b").join("b.txt"),
+            "pending",
+        )
+        .expect("client version");
+        fs::write(client_wp.join(MEMORY_DB_FILE), "db-v1").expect("client memory");
+
+        let entry = registry_entry(space_id, &client);
+        migrate_v1_to_v2_paths(&app_data, space_id, &client, &entry).expect("migrate");
+
+        assert!(space_root
+            .join(VERSIONS_DIR)
+            .join("sess_b")
+            .join("b.txt")
+            .is_file());
+        assert_eq!(
+            fs::read_to_string(space_root.join(MEMORY_DB_FILE)).expect("memory"),
+            "db-v1"
+        );
+        let manifest: SpaceManifest = serde_json::from_str(
+            &fs::read_to_string(space_root.join(SPACE_MANIFEST_FILE)).unwrap(),
+        )
+        .expect("space.json");
+        assert_eq!(manifest.migrated_from_v1, Some(true));
+
+        let _ = fs::remove_dir_all(app_data);
+        let _ = fs::remove_dir_all(client);
+    }
+
+    #[test]
+    fn migrate_v1_to_v2_repairs_flag_when_dest_exists_without_flag() {
+        let app_data = unique_temp_dir("v1_repair_flag");
+        let client = unique_temp_dir("v1_repair_flag_project");
+        let space_id = "ws_test_repair";
+        let space_root = app_data.join(SPACES_DIR).join(space_id);
+        fs::create_dir_all(space_root.join(VERSIONS_DIR)).expect("versions");
+        fs::write(space_root.join(MEMORY_DB_FILE), "existing").expect("memory");
+
+        let client_wp = client.join(WORKPROBA_DIR_NAME);
+        fs::create_dir_all(&client_wp).expect("client wp");
+        fs::write(client_wp.join(MEMORY_DB_FILE), "new-db").expect("client memory");
+
+        let entry = registry_entry(space_id, &client);
+        migrate_v1_to_v2_paths(&app_data, space_id, &client, &entry).expect("migrate");
+
+        assert_eq!(
+            fs::read_to_string(space_root.join(MEMORY_DB_FILE)).expect("read"),
+            "existing"
+        );
+        let manifest: SpaceManifest = serde_json::from_str(
+            &fs::read_to_string(space_root.join(SPACE_MANIFEST_FILE)).unwrap(),
+        )
+        .expect("space.json");
+        assert_eq!(manifest.migrated_from_v1, Some(true));
+
+        let _ = fs::remove_dir_all(app_data);
+        let _ = fs::remove_dir_all(client);
+    }
+
+    #[test]
     fn migrate_v1_to_v2_skips_when_destination_exists() {
         let app_data = unique_temp_dir("v1_skip_dest");
         let client = unique_temp_dir("v1_skip_dest_project");
@@ -800,6 +917,69 @@ mod workspace_store_tests {
             fs::read_to_string(space_root.join(MEMORY_DB_FILE)).expect("read"),
             "existing"
         );
+        let manifest: SpaceManifest = serde_json::from_str(
+            &fs::read_to_string(space_root.join(SPACE_MANIFEST_FILE)).unwrap(),
+        )
+        .expect("space.json");
+        assert_eq!(manifest.migrated_from_v1, Some(true));
+
+        let _ = fs::remove_dir_all(app_data);
+        let _ = fs::remove_dir_all(client);
+    }
+
+    #[test]
+    fn migrate_v1_to_v2_repairs_flag_is_idempotent() {
+        let app_data = unique_temp_dir("v1_repair_idem");
+        let client = unique_temp_dir("v1_repair_idem_project");
+        let space_id = "ws_test_repair_idem";
+        let space_root = app_data.join(SPACES_DIR).join(space_id);
+        fs::create_dir_all(space_root.join(VERSIONS_DIR)).expect("versions");
+        fs::write(space_root.join(MEMORY_DB_FILE), "existing").expect("memory");
+
+        let entry = registry_entry(space_id, &client);
+        migrate_v1_to_v2_paths(&app_data, space_id, &client, &entry).expect("migrate1");
+        migrate_v1_to_v2_paths(&app_data, space_id, &client, &entry).expect("migrate2");
+
+        assert_eq!(
+            fs::read_to_string(space_root.join(MEMORY_DB_FILE)).expect("read"),
+            "existing"
+        );
+
+        let _ = fs::remove_dir_all(app_data);
+        let _ = fs::remove_dir_all(client);
+    }
+
+    #[test]
+    fn validate_workspace_and_session_ids_reject_traversal() {
+        assert!(validate_workspace_id("ws_abc123").is_ok());
+        assert!(validate_workspace_id("../etc").is_err());
+        assert!(validate_workspace_id("ws/evil").is_err());
+        assert!(validate_workspace_id("").is_err());
+
+        assert!(validate_session_id("sess_123_abc").is_ok());
+        assert!(validate_session_id("..").is_err());
+        assert!(validate_session_id("sess/evil").is_err());
+    }
+
+    #[test]
+    fn new_space_migrate_succeeds_after_registry_saved() {
+        let app_data = unique_temp_dir("registry_before_migrate");
+        let client = unique_temp_dir("registry_before_migrate_client");
+        let space_id = "ws_test_new_registry";
+        let entry = registry_entry(space_id, &client);
+
+        let registry = Registry {
+            version: REGISTRY_VERSION,
+            workspaces: vec![entry.clone()],
+        };
+        fs::create_dir_all(&app_data).expect("mkdir app_data");
+        let json = serde_json::to_string_pretty(&registry).expect("serialize registry");
+        fs::write(app_data.join(REGISTRY_FILE), json).expect("write registry");
+
+        migrate_v1_to_v2_paths(&app_data, space_id, &client, &entry).expect("migrate");
+
+        let space_root = app_data.join(SPACES_DIR).join(space_id);
+        assert!(space_root.join(SPACE_MANIFEST_FILE).is_file());
 
         let _ = fs::remove_dir_all(app_data);
         let _ = fs::remove_dir_all(client);

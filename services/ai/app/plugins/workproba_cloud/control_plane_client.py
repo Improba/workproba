@@ -135,12 +135,37 @@ class CloudControlPlaneClient:
 
         raise ValueError("cloud_auth_required")
 
+    @staticmethod
+    def _auth_error_detail(response: httpx.Response) -> str:
+        try:
+            payload = response.json()
+            if isinstance(payload, dict):
+                for key in ("message", "detail", "error"):
+                    value = payload.get(key)
+                    if isinstance(value, str) and value.strip():
+                        return value.strip()
+        except (json.JSONDecodeError, ValueError):
+            pass
+        return "invalid_device_token"
+
+    @staticmethod
+    def _reraise_http_error(exc: httpx.HTTPStatusError) -> None:
+        status = exc.response.status_code
+        if status in (401, 403):
+            raise PermissionError(
+                CloudControlPlaneClient._auth_error_detail(exc.response),
+            ) from exc
+        raise ValueError(f"control_plane_http_{status}") from exc
+
     async def _get_json(self, path: str, *, params: JsonDict | None = None) -> JsonDict:
         client = await self._client()
         owns_client = self._http_client is None
         try:
             response = await client.get(path, params=params, headers=self._auth_headers())
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                self._reraise_http_error(exc)
             payload = response.json()
             if not isinstance(payload, dict):
                 raise ValueError("invalid_control_plane_response")
@@ -165,7 +190,10 @@ class CloudControlPlaneClient:
                 params=params,
                 headers=self._auth_headers(),
             )
-            response.raise_for_status()
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                self._reraise_http_error(exc)
             payload = response.json()
             if not isinstance(payload, dict):
                 raise ValueError("invalid_control_plane_response")
@@ -345,6 +373,43 @@ class CloudControlPlaneClient:
         if org_id:
             params["org"] = org_id
         return await self._get_json("/policies", params=params or None)
+
+    async def list_connectors(self, *, org_id: str | None = None) -> JsonDict:
+        """GET /connectors — connecteurs managés autorisés pour le device."""
+        _ = org_id  # org is implied by DeviceBearer on the server
+        return await self._get_json("/connectors")
+
+    async def fetch_allowed_connector_ids(self) -> frozenset[str]:
+        """GET /connectors → ids ; liste vide = org sans connecteurs (pas un fallback)."""
+        payload = await self._get_json("/connectors")
+        raw_connectors = payload.get("connectors")
+        if not isinstance(raw_connectors, list):
+            return frozenset()
+        return frozenset(
+            str(item.get("id"))
+            for item in raw_connectors
+            if isinstance(item, dict) and item.get("id")
+        )
+
+    async def invoke_connector(
+        self,
+        connector_id: str,
+        *,
+        payload: JsonDict | None = None,
+        subject_id: str,
+        org_id: str | None = None,
+        scopes: list[str] | None = None,
+    ) -> JsonDict:
+        """POST /connectors/{id}/invoke — relai transport Mode A."""
+        body: JsonDict = {
+            "payload": payload or {},
+            "identity": {
+                "subject_id": subject_id,
+                "org_id": org_id,
+                "scopes": scopes or [],
+            },
+        }
+        return await self._post_json(f"/connectors/{connector_id}/invoke", json_body=body)
 
     async def fetch_active_preset(self, *, device_id: str | None = None) -> JsonDict:
         params: JsonDict = {}

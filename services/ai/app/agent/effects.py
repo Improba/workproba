@@ -261,6 +261,19 @@ def classify_effect(
             ),
         )
 
+    if tool_name == "invoke_managed_connector":
+        connector_id = str(args.get("connector_id") or "")
+        return EffectProposal(
+            effect="external_send",
+            tool_name=tool_name,
+            targets=[connector_id] if connector_id else [],
+            action="create",
+            protections=EffectProtection(
+                network_used=True,
+                external_send=True,
+            ),
+        )
+
     if tool_name == "web_search":
         query = str(args.get("query") or "")
         short_query = query[:80] if query else ""

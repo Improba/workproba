@@ -8,9 +8,15 @@ from typing import Any
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
 
+from app.agent.confirmation import raise_unless_approved
+from app.agent.effects import classify_effect, effect_headline, protection_labels
 from app.agent.human import build_human_summary
 from app.agent.tools import ToolDeps
 from app.i18n import t
+from app.plugins.ports.remote_capability_gateway import (
+    IdentityDelegation,
+    open_remote_capability_gateway,
+)
 from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD, resolve_plugin_data_dir
 from app.plugins.workproba_cloud import storage as cloud_storage
 from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
@@ -253,6 +259,126 @@ def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
         human_summary = build_human_summary(
             "sync_managed_regards",
             {"count": result.get("count", 0)},
+            locale=locale,
+        )
+        return {**result, "human_summary": human_summary}
+
+    @agent.tool
+    async def invoke_managed_connector(
+        ctx: RunContext[ToolDeps],
+        connector_id: str,
+        payload_json: str = "{}",
+    ) -> dict[str, Any]:
+        """Invoke a managed Improba Cloud connector (Mode A transport relay).
+
+        Args:
+            connector_id: Managed connector id (e.g. echo, ihora.shaped).
+            payload_json: JSON object string passed as connector payload.
+        """
+        import json
+
+        locale = ctx.deps.context.locale
+        deps = ctx.deps
+        cloud_dir = _cloud_data_dir(ctx)
+        base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+        if not base_url:
+            raise ModelRetry(t(locale, "cloud.not_configured"))
+
+        if not deps.context.permissions_network:
+            raise ModelRetry(t(locale, "errors.network_locked"))
+
+        try:
+            payload = json.loads(payload_json) if payload_json.strip() else {}
+            if not isinstance(payload, dict):
+                raise ValueError("payload_must_be_object")
+        except json.JSONDecodeError as exc:
+            raise ModelRetry(f"invalid_payload_json: {exc}") from exc
+        except ValueError as exc:
+            raise ModelRetry(str(exc)) from exc
+
+        gate = deps.confirmation_gate
+        if gate is not None:
+            human_summary = build_human_summary(
+                "invoke_managed_connector",
+                {"connector_id": connector_id},
+                locale=locale,
+            )
+            proposal = classify_effect(
+                "invoke_managed_connector",
+                {"connector_id": connector_id},
+                permissions_network=deps.context.permissions_network,
+            )
+            if proposal is None:
+                raise ModelRetry("Effet non classifiable pour invoke_managed_connector")
+            proposal = proposal.model_copy(update={"human_summary": human_summary})
+            proposal = proposal.model_copy(
+                update={
+                    "headline": effect_headline(proposal, locale),
+                    "protection_labels": protection_labels(proposal, locale),
+                }
+            )
+            outcome = await gate.request_effect(
+                tool_call_id=ctx.tool_call_id or "",
+                proposal=proposal,
+                audit_app_data_dir=deps.context.workspace_data_dir,
+                audit_enabled=deps.context.audit_enabled,
+            )
+            raise_unless_approved(outcome, locale)
+
+        client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+        tokens = client.load_tokens()
+        access_token = tokens.get("access_token")
+        if not isinstance(access_token, str) or not access_token.strip():
+            raise ModelRetry(t(locale, "cloud.not_authenticated"))
+
+        org_id = tokens.get("org_id")
+        org_id_str = org_id.strip() if isinstance(org_id, str) else None
+        device_id = tokens.get("device_id")
+        if not isinstance(device_id, str) or not device_id.strip():
+            raise ModelRetry(t(locale, "cloud.connectors_require_device"))
+        subject = device_id.strip()
+
+        try:
+            try:
+                allowed = await client.fetch_allowed_connector_ids()
+            except PermissionError as exc:
+                raise ModelRetry(t(locale, "cloud.connectors_auth_failed")) from exc
+            except Exception as exc:  # noqa: BLE001
+                raise ModelRetry(t(locale, "cloud.connectors_load_failed")) from exc
+
+            if connector_id not in allowed:
+                raise ModelRetry(f"connector_not_allowed:{connector_id}")
+
+            plugins_root = cloud_dir.parent
+            gateway = open_remote_capability_gateway(
+                caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
+                caller_permissions=frozenset(
+                    [
+                        "capability:remote",
+                        "network:improba-cloud",
+                    ]
+                ),
+                plugins_root=plugins_root,
+                base_url=base_url,
+                allowed_capability_ids=allowed,
+            )
+            identity = IdentityDelegation(
+                subject_id=subject,
+                org_id=org_id_str,
+                scopes=frozenset({"connectors:invoke"}),
+                access_token=access_token.strip(),
+            )
+            result = await gateway.invoke_remote(connector_id, payload, identity)
+        except ModelRetry:
+            raise
+        except PermissionError as exc:
+            raise ModelRetry(str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise ModelRetry(f"{type(exc).__name__}: {exc}") from exc
+
+        human_summary = build_human_summary(
+            "invoke_managed_connector",
+            {"connector_id": connector_id, "ok": bool(result.get("ok", True))},
             locale=locale,
         )
         return {**result, "human_summary": human_summary}

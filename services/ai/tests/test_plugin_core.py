@@ -34,6 +34,8 @@ def test_builtin_plugins_manifest() -> None:
     assert "storage:cross:workproba.projet" not in cloud.permissions
     assert "sync_from_cloud" in cloud.tools
     assert "sync_managed_regards" in cloud.tools
+    assert "invoke_managed_connector" in cloud.tools
+    assert "capability:remote" in cloud.permissions
 
 
 def test_is_plugin_active_retrocompat() -> None:

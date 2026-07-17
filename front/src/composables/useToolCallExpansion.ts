@@ -97,6 +97,13 @@ export function useThinkingExpansion(thinkingId: () => string) {
   return { expanded, toggle };
 }
 
+/** Replie un bloc raisonnement (ex. quand un tool_call suit). */
+export function collapseThinking(thinkingPartId: string): void {
+  if (thinkingExpandedOverrides.get(thinkingPartId) !== true) return;
+  thinkingExpandedOverrides.set(thinkingPartId, false);
+  bumpEpoch();
+}
+
 /** Vide les maps d'expansion au changement de session pour éviter une fuite mémoire. */
 export function clearExpansionState(): void {
   techViewOverrides.clear();

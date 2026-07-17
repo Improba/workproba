@@ -1,8 +1,12 @@
 # Workproba
 
-> **Status:** Local-first desktop pivot
-> **Date:** 14/07/2026
+> **Status:** Desktop application (see scope amendment below)  
+> **Date:** 14/07/2026  
 > **Decision maker:** Syl
+
+## Scope amendment (17/07/2026)
+
+Product scope updated: Workproba = **desktop app** + **managed Improba Cloud** (auth, secrets, connector presets, transport relay). Agent loop stays on desktop. See [positionnement-cloud-regards.md](../../workproba-improba/roadmaps/positionnement-cloud-regards.md) and [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ## Intent
 
@@ -12,7 +16,7 @@ Imp calls **fixed, controlled tools** to transform documents. Workproba V2 **doe
 
 ## Product decision
 
-**Tauri 2 desktop application**, local-first. See [desktop.md](./desktop.md).
+**Tauri 2 desktop application** working on local folders, connected to Improba Cloud for managed connectors (standard path). See [desktop.md](./desktop.md) and [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ## Product goals
 
@@ -39,7 +43,7 @@ Imp calls **fixed, controlled tools** to transform documents. Workproba V2 **doe
 | Term | Source of truth |
 |---|---|
 | **Solo project / library** | Local machine |
-| **Shared project** | Cloud (control plane + S3) ; local = disposable cache |
+| **Shared project** | Cloud (auth, presets, connector relay + S3) ; local = disposable cache |
 | **Mount sync** | Technical NAS ; not a shared project ; advanced/cache only |
 
 See [glossaire.md](../../workproba-improba/roadmaps/glossaire.md) for the French product glossary.
@@ -50,7 +54,7 @@ See [glossaire.md](../../workproba-improba/roadmaps/glossaire.md) for the French
 - **UI**: Quasar 2 + Vue 3 + Anubis: `front/`
 - **AI**: Python 3.12 + FastAPI sidecar: `services/ai/`
 - **Data**: SQLite + `.workproba/` per space in `{app_data}/spaces/` + `{app_data}/user/` for global memory
-- **Cloud (optional, archived)**: see `legacy/`
+- **Cloud legacy (archived)**: `legacy/`. **Improba Cloud** (chemin standard V3+): `workproba-cloud/` (auth, secrets, connector presets, transport relay).
 
 ## Phasing
 
@@ -60,7 +64,7 @@ See [glossaire.md](../../workproba-improba/roadmaps/glossaire.md) for the French
 4. Local RAG, extraction, versions
 5. Scoped memory, plugins (personas), attachments, document preview
 6. Multi-OS packaging
-7. Optional cloud sync
+7. Improba Cloud (auth, connector presets, managed relay)
 
 ## See also
 

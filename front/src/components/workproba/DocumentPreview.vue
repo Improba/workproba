@@ -160,6 +160,7 @@ const preview = ref<DocumentPreviewResult | null>(null);
 const imageSrc = ref<string | null>(null);
 const previousVersionId = ref<string | null>(null);
 const restoring = ref(false);
+let previewRequestId = 0;
 
 const sanitizedHtml = computed(() => {
   const html = preview.value?.html?.trim();
@@ -180,9 +181,11 @@ async function resolveImageSrc(relativePath: string): Promise<string | null> {
 }
 
 async function loadVersions(): Promise<void> {
+  const requestId = previewRequestId;
   const path = props.relativePath;
   const dataDir = props.workspaceDataDir;
   if (!path || !dataDir) {
+    if (requestId !== previewRequestId) return;
     previousVersionId.value = null;
     return;
   }
@@ -191,8 +194,10 @@ async function loadVersions(): Promise<void> {
       workspaceDataDir: dataDir,
       filePath: path,
     });
+    if (requestId !== previewRequestId) return;
     previousVersionId.value = versions.length > 1 ? versions[1].version_id : null;
   } catch {
+    if (requestId !== previewRequestId) return;
     previousVersionId.value = null;
   }
 }
@@ -225,8 +230,10 @@ async function restorePreviousVersion(): Promise<void> {
 }
 
 async function loadPreview(): Promise<void> {
+  const requestId = ++previewRequestId;
   const path = props.relativePath;
   if (!path || !props.projectPath || !isSafeRelativePath(path)) {
+    if (requestId !== previewRequestId) return;
     preview.value = null;
     imageSrc.value = null;
     error.value = null;
@@ -245,15 +252,20 @@ async function loadPreview(): Promise<void> {
       projectPath: props.projectPath,
       workspaceDataDir: props.workspaceDataDir,
     });
+    if (requestId !== previewRequestId) return;
     preview.value = result;
     if (result.type === 'image') {
       imageSrc.value = await resolveImageSrc(path);
+      if (requestId !== previewRequestId) return;
     }
   } catch (err) {
+    if (requestId !== previewRequestId) return;
     error.value =
       err instanceof Error ? err.message : t('shell.previewUnsupported');
   } finally {
-    loading.value = false;
+    if (requestId === previewRequestId) {
+      loading.value = false;
+    }
   }
 }
 

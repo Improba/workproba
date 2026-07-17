@@ -243,10 +243,15 @@ import MemoryCitationsBar from '@components/chat/MemoryCitationsBar.vue';
 import WebSearchCitationsBar from '@components/chat/WebSearchCitationsBar.vue';
 import { extractWebSearchCitations } from '@utils/webSearchCitations';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
+import { collapseThinking } from '@composables/useToolCallExpansion';
 import { usePlugins } from '@composables/usePlugins';
 import { formatOpinionMarkdown } from '@composables/usePersonas';
 import { isCompactionMessageLike } from '@utils/compactionMessage';
 import { getAssistantCopyText } from '@utils/messageCopy';
+import {
+  deriveThinkingSubjectDone,
+  deriveThinkingSummary,
+} from '@utils/thinkingPresentation';
 import type { ChatMessage, ChatMessagePart, ChatThinkingPart, ChatToolCall } from '#types';
 
 const props = defineProps<{
@@ -334,19 +339,26 @@ const compactionBody = computed(() => {
  * Segments ordonnés à rendre. Si le message dispose de `parts` (messages
  * streamed ou normalisés au chargement), on les utilise tels quels : c'est ce
  * qui permet d'intercaler les appels d'outil dans le flux du texte. Sinon
- * (vieilles sessions), on reconstruit un rendu legacy : texte puis outils.
+ * (legacy sessions / vieilles sessions), on reconstruit un rendu legacy : texte puis outils.
  */
 const renderParts = computed<ChatMessagePart[]>(() => {
   if (props.message.parts?.length) return props.message.parts;
   const fallback: ChatMessagePart[] = [];
   if (props.message.thinking) {
-    fallback.push({
+    const thinkingPart: ChatThinkingPart = {
       type: 'thinking',
       id: `${props.message.id}__thinking`,
       thinkingId: 'think-0',
       content: props.message.thinking,
       done: true,
-    });
+    };
+    if (thinkingPart.content.trim()) {
+      const subject = deriveThinkingSubjectDone(thinkingPart.content);
+      if (subject) thinkingPart.subject = subject;
+      const summary = deriveThinkingSummary(thinkingPart.content);
+      if (summary) thinkingPart.summary = summary;
+    }
+    fallback.push(thinkingPart);
   }
   if (props.message.content || props.message.streaming) {
     fallback.push({ type: 'text', id: `${props.message.id}__text`, content: props.message.content });
@@ -455,6 +467,46 @@ watch(
     editing.value = false;
     editDraft.value = '';
   },
+);
+
+const seenToolCallPartIds = new Set<string>();
+
+function seedSeenToolCallPartIds(parts: ChatMessagePart[] | undefined): void {
+  seenToolCallPartIds.clear();
+  for (const part of parts ?? []) {
+    if (part.type === 'tool_call') {
+      seenToolCallPartIds.add(part.id);
+    }
+  }
+}
+
+watch(
+  () => props.message.id,
+  () => {
+    seedSeenToolCallPartIds(props.message.parts);
+  },
+  { immediate: true },
+);
+
+/** Replie le raisonnement quand un tool_call nouveau suit immédiatement un thinking. */
+watch(
+  () => props.message.parts,
+  (parts) => {
+    if (!parts?.length) return;
+
+    for (let i = 0; i < parts.length; i += 1) {
+      const part = parts[i];
+      if (part.type !== 'tool_call') continue;
+      if (seenToolCallPartIds.has(part.id)) continue;
+
+      seenToolCallPartIds.add(part.id);
+      const preceding = parts[i - 1];
+      if (preceding?.type === 'thinking') {
+        collapseThinking(preceding.id);
+      }
+    }
+  },
+  { deep: true },
 );
 
 function saveEdit(): void {

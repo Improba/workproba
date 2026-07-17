@@ -1,11 +1,11 @@
 import type {
   ChatAttachmentSnapshot,
-  ChatConfirmation,
   ChatError,
   ChatMessage,
   ChatMessagePart,
   ChatMessageRole,
   ChatToolCall,
+  MemoryCitation,
   ToolCallStatus,
 } from '#types';
 import { normalizeChatErrorCode } from '#types';
@@ -76,54 +76,20 @@ function normalizePart(
   }
   if (raw.type === 'thinking') {
     const thinkingId = asString(raw.thinkingId).trim() || `think-${index}`;
-    return {
+    const part: ChatMessagePart & { type: 'thinking' } = {
       type: 'thinking',
       id,
       thinkingId,
       content: asString(raw.content),
       done: Boolean(raw.done),
     };
+    const subject = asString(raw.subject).trim();
+    const summary = asString(raw.summary).trim();
+    if (subject) part.subject = subject;
+    if (summary) part.summary = summary;
+    return part;
   }
   return null;
-}
-
-function normalizeConfirmation(raw: unknown): ChatConfirmation | null {
-  if (!isRecord(raw)) return null;
-  const confirmationId = asString(
-    raw.confirmationId ?? raw.confirmation_id,
-  ).trim();
-  const toolCallId = asString(raw.toolCallId ?? raw.tool_call_id).trim();
-  const toolName = asString(raw.toolName ?? raw.tool_name).trim();
-  const proposedPath = asString(raw.proposedPath ?? raw.proposed_path).trim();
-  if (!confirmationId || !toolCallId || !toolName) return null;
-
-  const protectionRaw = raw.protectionLabels ?? raw.protection_labels;
-  const protectionLabels = Array.isArray(protectionRaw)
-    ? protectionRaw.map((item) => asString(item)).filter(Boolean)
-    : [];
-  const targetsRaw = raw.targets;
-  const targets = Array.isArray(targetsRaw)
-    ? targetsRaw.map((item) => asString(item)).filter(Boolean)
-    : [];
-
-  return {
-    confirmationId,
-    toolCallId,
-    toolName,
-    action: raw.action === 'modify' ? 'modify' : 'create',
-    proposedPath,
-    humanSummary: asString(raw.humanSummary ?? raw.human_summary),
-    turnId:
-      raw.turnId != null
-        ? asString(raw.turnId)
-        : raw.turn_id != null
-          ? asString(raw.turn_id)
-          : null,
-    effect: raw.effect != null ? asString(raw.effect) : null,
-    targets,
-    headline: asString(raw.headline),
-    protectionLabels,
-  };
 }
 
 function normalizeError(raw: unknown): ChatError | null {
@@ -158,6 +124,21 @@ function normalizeAttachment(raw: unknown): ChatAttachmentSnapshot | null {
   };
   if (typeof raw.error === 'string') snapshot.error = raw.error;
   return snapshot;
+}
+
+function normalizeMemoryCitation(raw: unknown): MemoryCitation | null {
+  if (!isRecord(raw)) return null;
+  const id = asString(raw.id).trim();
+  const snippet = asString(raw.snippet).trim();
+  if (!id || !snippet) return null;
+  const citation: MemoryCitation = { id, snippet };
+  const source = asString(raw.source).trim();
+  if (source) citation.source = source;
+  const scopeRaw = asString(raw.scope).trim();
+  if (scopeRaw === 'user' || scopeRaw === 'project') {
+    citation.scope = scopeRaw;
+  }
+  return citation;
 }
 
 /** Valide et normalise un message chargé depuis le stockage local ou Tauri. */
@@ -207,8 +188,12 @@ export function normalizeChatMessage(raw: unknown): ChatMessage | null {
     if (attachments.length) message.attachments = attachments;
   }
 
-  const pendingConfirmation = normalizeConfirmation(raw.pendingConfirmation);
-  if (pendingConfirmation) message.pendingConfirmation = pendingConfirmation;
+  if (Array.isArray(raw.memoryCitations)) {
+    const citations = raw.memoryCitations
+      .map((item) => normalizeMemoryCitation(item))
+      .filter((item): item is MemoryCitation => item != null);
+    if (citations.length) message.memoryCitations = citations;
+  }
 
   const error = normalizeError(raw.error);
   if (error) message.error = error;

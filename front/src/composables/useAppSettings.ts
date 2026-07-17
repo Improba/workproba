@@ -8,7 +8,7 @@ import {
   type LlmProviderEntry,
   type ProviderSet,
 } from '@composables/useDesktop';
-import type { DensityMode, LlmProviderName, SettingsMode, ToolCallViewMode } from '@composables/useDesktop.types';
+import type { DensityMode, LlmProviderName, SettingsMode, ThinkingDetailViewMode, ToolCallViewMode } from '@composables/useDesktop.types';
 import type { ReasoningEffort } from '#types';
 import { getAiSidecarUrl, getDesktopSecret } from '@services/aiSidecar';
 import { isLocalLlmProvider } from '@utils/isLocalLlmProvider';
@@ -64,6 +64,7 @@ const settings = ref<AppSettings>({ version: 1, providers: [], density: 'comfort
 const loaded = ref(false);
 /** Invalide un load() en cours si save() ou un load() plus récent a modifié les réglages. */
 let loadGeneration = 0;
+let thinkingDetailViewSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
 function readOnboardingDone(): boolean {
   if (typeof localStorage === 'undefined') return false;
@@ -120,6 +121,10 @@ const toolCallView = computed<ToolCallViewMode>(
   () => settings.value.toolCallView ?? 'human',
 );
 
+const thinkingDetailView = computed<ThinkingDetailViewMode>(
+  () => settings.value.thinkingDetailView ?? 'summary',
+);
+
 const confirmBeforeWrite = computed<boolean>(
   () => settings.value.confirmBeforeWrite !== false,
 );
@@ -146,6 +151,14 @@ const settingsLocked = computed<boolean>(
 
 const permissionsNetwork = computed<boolean>(
   () => settings.value.permissionsNetwork !== false,
+);
+
+const codeExecute = computed<boolean>(
+  () => settings.value.codeExecute !== false,
+);
+
+const auditEnabled = computed<boolean | null>(
+  () => settings.value.auditEnabled ?? null,
 );
 
 const permissionsProjectSync = computed<boolean>(
@@ -349,12 +362,15 @@ export interface UseAppSettingsReturn {
   activeChatProvider: typeof activeChatProvider;
   activeEmbeddingProvider: typeof activeEmbeddingProvider;
   toolCallView: typeof toolCallView;
+  thinkingDetailView: typeof thinkingDetailView;
   confirmBeforeWrite: typeof confirmBeforeWrite;
   confirmBeforeWriteEffective: typeof confirmBeforeWriteEffective;
   onboardingDone: typeof onboardingDone;
   settingsMode: typeof settingsMode;
   settingsLocked: typeof settingsLocked;
   permissionsNetwork: typeof permissionsNetwork;
+  codeExecute: typeof codeExecute;
+  auditEnabled: typeof auditEnabled;
   permissionsProjectSync: typeof permissionsProjectSync;
   permissionsNetworkImprobaCloud: typeof permissionsNetworkImprobaCloud;
   density: typeof density;
@@ -369,6 +385,7 @@ export interface UseAppSettingsReturn {
   updateSet: (set: ProviderSet) => Promise<AppSettings>;
   deleteSet: (id: string) => Promise<AppSettings>;
   setToolCallView: (view: ToolCallViewMode) => Promise<AppSettings>;
+  setThinkingDetailView: (view: ThinkingDetailViewMode) => Promise<AppSettings>;
   setConfirmBeforeWrite: (enabled: boolean) => Promise<AppSettings>;
   setOnboardingDone: (done: boolean) => Promise<void>;
   setSettingsMode: (mode: SettingsMode) => Promise<AppSettings>;
@@ -415,11 +432,15 @@ export function useAppSettings(): UseAppSettingsReturn {
     }
     try {
       const persisted = await saveAppSettings(prepared);
-      settings.value = persisted;
-      if (persisted.uiTheme && isUiThemeId(persisted.uiTheme)) {
-        writeCachedUiTheme(persisted.uiTheme);
+      const merged = ensureSetsLoaded({
+        ...persisted,
+        onboardingDone: readOnboardingDone(),
+      });
+      settings.value = merged;
+      if (merged.uiTheme && isUiThemeId(merged.uiTheme)) {
+        writeCachedUiTheme(merged.uiTheme);
       }
-      return persisted;
+      return merged;
     } catch (error) {
       settings.value = previous;
       if (previous.uiTheme && isUiThemeId(previous.uiTheme)) {
@@ -472,6 +493,27 @@ export function useAppSettings(): UseAppSettingsReturn {
     return save({ ...settings.value, toolCallView: view });
   }
 
+  async function setThinkingDetailView(
+    view: ThinkingDetailViewMode,
+  ): Promise<AppSettings> {
+    if (settings.value.thinkingDetailView === view) {
+      return settings.value;
+    }
+    // Invalide tout load() en vol : sinon il écrase l'update optimiste
+    // pendant la fenêtre de debounce avant save().
+    loadGeneration += 1;
+    settings.value = { ...settings.value, thinkingDetailView: view };
+    if (thinkingDetailViewSaveTimer) {
+      clearTimeout(thinkingDetailViewSaveTimer);
+    }
+    return new Promise((resolve) => {
+      thinkingDetailViewSaveTimer = setTimeout(() => {
+        thinkingDetailViewSaveTimer = null;
+        void save({ ...settings.value }).then(resolve);
+      }, 400);
+    });
+  }
+
   async function setConfirmBeforeWrite(enabled: boolean): Promise<AppSettings> {
     if (settingsLocked.value || settingsMode.value !== 'advanced') {
       return settings.value;
@@ -514,12 +556,15 @@ export function useAppSettings(): UseAppSettingsReturn {
     activeChatProvider,
     activeEmbeddingProvider,
     toolCallView,
+    thinkingDetailView,
     confirmBeforeWrite,
     confirmBeforeWriteEffective,
     onboardingDone,
     settingsMode,
     settingsLocked,
     permissionsNetwork,
+    codeExecute,
+    auditEnabled,
     permissionsProjectSync,
     permissionsNetworkImprobaCloud,
     density,
@@ -534,6 +579,7 @@ export function useAppSettings(): UseAppSettingsReturn {
     updateSet,
     deleteSet,
     setToolCallView,
+    setThinkingDetailView,
     setConfirmBeforeWrite,
     setOnboardingDone,
     setSettingsMode,

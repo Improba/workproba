@@ -150,11 +150,7 @@ export async function openLocalFile(
 
 export async function listPlugins(): Promise<PluginInfo[]> {
   if (!isDesktopApp()) return [];
-  try {
-    return await tauriInvoke<PluginInfo[]>('list_plugins');
-  } catch {
-    return [];
-  }
+  return tauriInvoke<PluginInfo[]>('list_plugins');
 }
 
 export async function activatePlugin(id: string): Promise<void> {

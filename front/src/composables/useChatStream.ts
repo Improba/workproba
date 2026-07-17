@@ -51,11 +51,66 @@ import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
 import { contextWindowForSet } from '@utils/providerSetModels';
 import { contextWindowFor } from '@utils/modelCatalog';
 import { t } from '@utils/i18nT';
+import {
+  deriveThinkingSubject,
+  deriveThinkingSubjectDone,
+  deriveThinkingSummary,
+} from '@utils/thinkingPresentation';
 
 /** Délai sans aucune donnée SSE avant de déclarer le stream mort (ms). */
 const IDLE_TIMEOUT_MS = 30_000;
 /** Intervalle de regroupement des tokens avant mutation réactive (ms). */
 const FLUSH_THROTTLE_MS = 50;
+/** Délai entre deux dérivations de subject pendant thinking_delta (ms). */
+const THINKING_SUBJECT_THROTTLE_MS = 275;
+
+const thinkingSubjectThrottleTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function findThinkingPart(
+  parts: ChatMessagePart[],
+  thinkingId: string,
+): Extract<ChatMessagePart, { type: 'thinking' }> | undefined {
+  for (let i = parts.length - 1; i >= 0; i -= 1) {
+    const part = parts[i];
+    if (part.type === 'thinking' && part.thinkingId === thinkingId) {
+      return part;
+    }
+  }
+  return undefined;
+}
+
+function throttleThinkingSubject(
+  messageId: string,
+  thinkingId: string,
+  part: Extract<ChatMessagePart, { type: 'thinking' }>,
+): void {
+  const key = `${messageId}:${thinkingId}`;
+  if (thinkingSubjectThrottleTimers.has(key)) return;
+  const timer = setTimeout(() => {
+    thinkingSubjectThrottleTimers.delete(key);
+    const subject = deriveThinkingSubject(part.content);
+    if (subject) part.subject = subject;
+  }, THINKING_SUBJECT_THROTTLE_MS);
+  thinkingSubjectThrottleTimers.set(key, timer);
+}
+
+function clearAllThinkingSubjectThrottles(): void {
+  for (const timer of thinkingSubjectThrottleTimers.values()) {
+    clearTimeout(timer);
+  }
+  thinkingSubjectThrottleTimers.clear();
+}
+
+function clearThinkingSubjectThrottle(
+  messageId: string,
+  thinkingId: string,
+): void {
+  const key = `${messageId}:${thinkingId}`;
+  const timer = thinkingSubjectThrottleTimers.get(key);
+  if (!timer) return;
+  clearTimeout(timer);
+  thinkingSubjectThrottleTimers.delete(key);
+}
 
 /** Levée quand le stream SSE reste inactif au-delà de IDLE_TIMEOUT_MS. */
 class StreamIdleTimeoutError extends Error {
@@ -414,17 +469,34 @@ function notifyProviderFallback(data: ChatStreamFallbackData): void {
   Notify.create({ message, color: 'warning', timeout: 5000 });
 }
 
+/** Enrichit subject/summary d'une part thinking si absents mais content présent. */
+function enrichThinkingPresentation(
+  part: Extract<ChatMessagePart, { type: 'thinking' }>,
+): void {
+  if (!part.content.trim()) return;
+  if (!part.subject) {
+    const subject = deriveThinkingSubjectDone(part.content);
+    if (subject) part.subject = subject;
+  }
+  if (!part.summary) {
+    const summary = deriveThinkingSummary(part.content);
+    if (summary) part.summary = summary;
+  }
+}
+
 /** Reconstruit des `parts` ordonnées pour un message legacy sans parts. */
 function buildLegacyParts(message: ChatMessage): ChatMessagePart[] {
   const parts: ChatMessagePart[] = [];
   if (message.thinking) {
-    parts.push({
+    const thinkingPart: Extract<ChatMessagePart, { type: 'thinking' }> = {
       type: 'thinking',
       id: `${message.id}__thinking`,
       thinkingId: 'think-0',
       content: message.thinking,
       done: true,
-    });
+    };
+    enrichThinkingPresentation(thinkingPart);
+    parts.push(thinkingPart);
   }
   if (message.content || message.streaming) {
     parts.push({
@@ -483,6 +555,8 @@ function localizeAgentError(code: string, fallback: string): string {
       return t('errors.agentTurnTimeout');
     case 'confirmation_timeout':
       return t('errors.agentConfirmationTimeout');
+    case 'plan_timeout':
+      return t('errors.agentPlanTimeout');
     case 'usage_limit_exceeded':
       return t('errors.agentUsageLimit');
     case 'turn_in_progress':
@@ -543,6 +617,30 @@ function extractSnapshotPathFromResult(result: unknown): string | undefined {
   return typeof versionPath === 'string' && versionPath
     ? versionPath
     : undefined;
+}
+
+/** Efface les human gates orphelines après un abort utilisateur. */
+export function clearHumanGatesOnAbort(messages: ChatMessage[]): void {
+  const now = Date.now();
+  const abortedSummary = t('errors.agentAborted');
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+
+    const pending = message.pendingConfirmation;
+    if (pending) {
+      const tool = message.toolCalls?.find((tc) => tc.id === pending.toolCallId);
+      if (tool) {
+        tool.status = 'error';
+        tool.endedAt = now;
+        tool.humanSummary = abortedSummary;
+      }
+      message.pendingConfirmation = null;
+    }
+
+    if (message.pendingPlan?.status === 'pending') {
+      message.pendingPlan = null;
+    }
+  }
 }
 
 export function applyStreamEvent(
@@ -630,6 +728,7 @@ export function applyStreamEvent(
       const thinkingId = event.data.thinkingId;
       if (!thinkingId) break;
       const parts = assistant.parts ?? (assistant.parts = []);
+      if (findThinkingPart(parts, thinkingId)) break;
       parts.push({
         type: 'thinking',
         id: createPartId(),
@@ -646,32 +745,47 @@ export function applyStreamEvent(
       const thinkingId = event.data.thinkingId;
       const delta = event.data.content;
       if (!thinkingId || !delta) break;
-      const parts = assistant.parts ?? [];
-      const part = [...parts]
-        .reverse()
-        .find(
-          (p): p is Extract<ChatMessagePart, { type: 'thinking' }> =>
-            p.type === 'thinking' && p.thinkingId === thinkingId,
-        );
-      if (part) {
-        part.content += delta;
+      const parts = assistant.parts ?? (assistant.parts = []);
+      let part = findThinkingPart(parts, thinkingId);
+      // Défense : start manqué / thinkingId retardé → créer la part à la volée.
+      if (!part) {
+        part = {
+          type: 'thinking',
+          id: createPartId(),
+          thinkingId,
+          content: '',
+          done: false,
+        };
+        parts.push(part);
       }
+      part.content += delta;
+      throttleThinkingSubject(assistantMessageId, thinkingId, part);
       assistant.thinking = (assistant.thinking ?? '') + delta;
       break;
     }
     case 'thinking_end': {
       const thinkingId = event.data.thinkingId;
       if (!thinkingId) break;
-      const parts = assistant.parts ?? [];
-      const part = [...parts]
-        .reverse()
-        .find(
-          (p): p is Extract<ChatMessagePart, { type: 'thinking' }> =>
-            p.type === 'thinking' && p.thinkingId === thinkingId,
-        );
-      if (part) {
-        part.done = true;
+      const parts = assistant.parts ?? (assistant.parts = []);
+      let part = findThinkingPart(parts, thinkingId);
+      if (!part) {
+        const leftover = (assistant.thinking ?? '').trim();
+        if (!leftover) break;
+        part = {
+          type: 'thinking',
+          id: createPartId(),
+          thinkingId,
+          content: leftover,
+          done: false,
+        };
+        parts.push(part);
       }
+      clearThinkingSubjectThrottle(assistantMessageId, thinkingId);
+      part.done = true;
+      const doneSubject = deriveThinkingSubjectDone(part.content);
+      if (doneSubject) part.subject = doneSubject;
+      const summary = deriveThinkingSummary(part.content);
+      if (summary) part.summary = summary;
       break;
     }
     case 'memory_citations': {
@@ -718,6 +832,10 @@ export function applyStreamEvent(
           }
           assistant.pendingConfirmation = null;
         }
+        break;
+      }
+      if (event.data.code === 'plan_timeout') {
+        if (assistant.pendingPlan) assistant.pendingPlan = null;
         break;
       }
       assistant.streaming = false;
@@ -912,7 +1030,14 @@ export async function resolveAgentPluginDataDir(
 export function useChatStream(
   options: UseChatStreamOptions,
 ): UseChatStreamReturn {
-  const { locale, settingsLocked, permissionsNetwork, confirmBeforeWriteEffective } = useAppSettings();
+  const {
+    locale,
+    settingsLocked,
+    permissionsNetwork,
+    confirmBeforeWriteEffective,
+    codeExecute,
+    auditEnabled,
+  } = useAppSettings();
   const { activePluginIds, getPluginDataDir } = usePlugins();
   // ref (profond) : les objets messages sont réactifs, donc muter
   // `assistant.content` déclenche directement le rendu. Pas de clonage du
@@ -1054,6 +1179,13 @@ export function useChatStream(
     applyStreamEvent(messages.value, currentAssistantId, event, () => {
       setIdlePaused(true);
     });
+    if (
+      event.type === 'error' &&
+      (event.data.code === 'confirmation_timeout' ||
+        event.data.code === 'plan_timeout')
+    ) {
+      setIdlePaused(false);
+    }
     if (event.type === 'tool_call_result') {
       setIdlePaused(false);
     }
@@ -1070,6 +1202,7 @@ export function useChatStream(
 
   function loadMessages(items: ChatMessage[]): void {
     flushPendingTokens();
+    clearAllThinkingSubjectThrottles();
     currentAssistantId = null;
     currentTurnId = null;
     currentWorkId = null;
@@ -1088,9 +1221,15 @@ export function useChatStream(
     // Normalise les messages sans `parts` (vieilles sessions) pour un rendu
     // uniforme : texte puis outils. Les messages déjà munis de parts gardent
     // leur ordre interleaved.
-    messages.value = items.map((m) =>
-      m.parts?.length ? m : { ...m, parts: buildLegacyParts(m) },
-    );
+    messages.value = items.map((m) => {
+      const withParts = m.parts?.length ? m : { ...m, parts: buildLegacyParts(m) };
+      for (const part of withParts.parts ?? []) {
+        if (part.type === 'thinking') {
+          enrichThinkingPresentation(part);
+        }
+      }
+      return withParts;
+    });
     lastUsage.value = {
       inputTokens: null,
       outputTokens: null,
@@ -1109,10 +1248,13 @@ export function useChatStream(
 
   function abort(): void {
     // Abort utilisateur (navigation, stop). Marqué non-idle : silencieux.
+    setIdlePaused(false);
     abortController?.abort();
     abortController = null;
     flushPendingTokens();
+    clearAllThinkingSubjectThrottles();
     resetStreamingFlag();
+    clearHumanGatesOnAbort(messages.value);
     currentAssistantId = null;
     currentTurnId = null;
     currentWorkId = null;
@@ -1164,6 +1306,7 @@ export function useChatStream(
     }
 
     error.value = null;
+    setIdlePaused(false);
     lastUserText = trimmed;
 
     const sentAttachments = payload.attachments ?? [];
@@ -1200,6 +1343,7 @@ export function useChatStream(
           kind: a.kind,
           status: a.status,
           ...(a.error ? { error: a.error } : {}),
+          ...(a.contentBase64 ? { contentBase64: a.contentBase64 } : {}),
         }));
       }
       messages.value.push(userMessage);
@@ -1278,6 +1422,8 @@ export function useChatStream(
           settingsLocked.value,
           permissionsNetwork.value,
           locale.value,
+          codeExecute.value,
+          auditEnabled.value,
         ),
         options.browserPilotagePaused?.value ?? false,
         confirmBeforeWriteEffective.value,
@@ -1398,6 +1544,22 @@ export function useChatStream(
     return messages.value.findIndex((m) => m.id === messageId);
   }
 
+  function attachmentsFromUserMessage(
+    userMessage: ChatMessage,
+  ): SendMessagePayload['attachments'] {
+    if (!userMessage.attachments?.length) return undefined;
+    return userMessage.attachments.map((a) => ({
+      id: a.id,
+      fileName: a.fileName,
+      mimeType: a.mimeType,
+      sizeBytes: a.sizeBytes,
+      kind: a.kind,
+      status: a.status,
+      ...(a.error ? { error: a.error } : {}),
+      ...(a.contentBase64 ? { contentBase64: a.contentBase64 } : {}),
+    }));
+  }
+
   async function retry(): Promise<void> {
     if (!lastUserText || streaming.value) return;
     const msgs = messages.value;
@@ -1408,7 +1570,10 @@ export function useChatStream(
       }
     }
     if (lastRegenerateUserId) {
-      await send(lastUserText, { regenerateFromUserId: lastRegenerateUserId });
+      await send(lastUserText, {
+        regenerateFromUserId: lastRegenerateUserId,
+        attachments: lastPayload.attachments,
+      });
       return;
     }
     for (let i = msgs.length - 1; i >= 0; i--) {
@@ -1437,7 +1602,8 @@ export function useChatStream(
 
     error.value = null;
     messages.value.splice(idx);
-    await send(trimmed);
+    const attachments = attachmentsFromUserMessage(userMessage);
+    await send(trimmed, attachments ? { attachments } : {});
   }
 
   async function regenerateFrom(assistantMessageId: string): Promise<void> {
@@ -1466,7 +1632,11 @@ export function useChatStream(
 
     error.value = null;
     messages.value.splice(idx);
-    await send(userText, { regenerateFromUserId: userMessage.id });
+    const attachments = attachmentsFromUserMessage(userMessage);
+    await send(userText, {
+      regenerateFromUserId: userMessage.id,
+      ...(attachments ? { attachments } : {}),
+    });
   }
 
   async function confirm(decision: 'approve' | 'deny'): Promise<void> {

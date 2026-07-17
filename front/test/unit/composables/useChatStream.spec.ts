@@ -37,6 +37,8 @@ vi.mock('@composables/useAppSettings', () => ({
     settingsLocked: ref(false),
     permissionsNetwork: ref(true),
     confirmBeforeWriteEffective: ref(true),
+    codeExecute: ref(true),
+    auditEnabled: ref(null),
   }),
 }));
 
@@ -405,6 +407,96 @@ describe('useChatStream — feedbacks', () => {
     expect(assistant.toolCalls?.[0]?.endedAt).toBeTypeOf('number');
   });
 
+  it('continue le stream SSE après confirmation_timeout', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sseResponse([
+        {
+          event: 'tool_call_start',
+          data: { tool_call_id: 'tc_1', tool_name: 'write_docx', arguments: {} },
+        },
+        {
+          event: 'confirmation_request',
+          data: {
+            confirmation_id: 'cf_1',
+            tool_call_id: 'tc_1',
+            tool_name: 'write_docx',
+            action: 'create',
+            proposed_path: 'out.docx',
+            human_summary: 'Créer out.docx',
+          },
+        },
+        {
+          event: 'error',
+          data: { code: 'confirmation_timeout', message: 'expiré' },
+        },
+        { event: 'token', data: { content: 'suite' } },
+        { event: 'done', data: { content: '' } },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('hi');
+
+    expect(lastAssistant(api.messages.value)?.content).toBe('suite');
+    expect(api.streaming.value).toBe(false);
+    unmount();
+  });
+
+  it('abort après confirmation permet un nouvel envoi', async () => {
+    const encoder = new TextEncoder();
+    const confirmationEvents = [
+      {
+        event: 'confirmation_request',
+        data: {
+          confirmation_id: 'cf_1',
+          tool_call_id: 'tc_1',
+          tool_name: 'write_docx',
+          action: 'create',
+          proposed_path: 'out.docx',
+          human_summary: 'Créer out.docx',
+        },
+      },
+    ]
+      .map(
+        (e) =>
+          `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`,
+      )
+      .join('');
+
+    const hangingBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(confirmationEvents));
+      },
+      pull() {
+        return new Promise(() => {});
+      },
+    });
+
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: hangingBody,
+      headers: new Headers(),
+    } as Response);
+    fetchMock.mockResolvedValueOnce(
+      sseResponse([
+        { event: 'token', data: { content: 'ok' } },
+        { event: 'done', data: { content: '' } },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    void api.send('hi');
+    await Promise.resolve();
+    await Promise.resolve();
+    api.abort();
+    await api.send('again');
+
+    expect(lastAssistant(api.messages.value)?.content).toBe('ok');
+    unmount();
+  });
+
   it('refus de confirmation via tool_call_result : statut error et résumé annulé', () => {
     const messages: ChatMessage[] = [
       {
@@ -754,6 +846,8 @@ describe('useChatStream — feedbacks', () => {
       thinkingId: 'think-0',
       content: 'Étape 1 puis 2',
       done: true,
+      subject: expect.any(String),
+      summary: expect.any(String),
     });
     expect(assistant?.thinking).toBe('Étape 1 puis 2');
     expect(assistant?.parts?.map((p) => p.type)).toEqual(['text', 'thinking', 'text']);
@@ -975,8 +1069,80 @@ describe('useChatStream — feedbacks', () => {
       thinkingId: 'think-0',
       content: 'Analyse',
       done: true,
+      subject: 'Analyse',
+      summary: 'Analyse',
     });
     expect(messages[0].thinking).toBe('Analyse');
+  });
+
+  it('thinking_delta sans thinking_start crée quand même la part', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        parts: [{ type: 'text', id: 't1', content: 'déjà du texte' }],
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_delta',
+      data: { thinkingId: 'think-orphan', content: 'orphan delta' },
+    });
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_end',
+      data: { thinkingId: 'think-orphan' },
+    });
+
+    const part = messages[0].parts?.find((p) => p.type === 'thinking');
+    expect(part).toMatchObject({
+      type: 'thinking',
+      thinkingId: 'think-orphan',
+      content: 'orphan delta',
+      done: true,
+    });
+    expect(messages[0].thinking).toBe('orphan delta');
+  });
+
+  it('met à jour le subject pendant thinking_delta (throttle)', () => {
+    vi.useFakeTimers();
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        parts: [{ type: 'text', id: 't1', content: '' }],
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_start',
+      data: { thinkingId: 'think-0' },
+    });
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_delta',
+      data: { thinkingId: 'think-0', content: 'Première étape\n' },
+    });
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_delta',
+      data: { thinkingId: 'think-0', content: 'Deuxième étape' },
+    });
+
+    const part = messages[0].parts?.find((p) => p.type === 'thinking');
+    expect(part?.subject).toBeUndefined();
+
+    vi.advanceTimersByTime(300);
+    expect(part).toMatchObject({
+      content: 'Première étape\nDeuxième étape',
+      done: false,
+      subject: 'Deuxième étape',
+    });
+    expect(part?.summary).toBeUndefined();
+    vi.useRealTimers();
   });
 });
 

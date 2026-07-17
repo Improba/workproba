@@ -210,12 +210,20 @@ pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
     ]
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum ToolCallViewMode {
     #[default]
     Human,
     Tech,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum ThinkingDetailViewMode {
+    #[default]
+    Summary,
+    Raw,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Default, PartialEq, Eq)]
@@ -275,6 +283,9 @@ pub struct AppSettings {
     /// Préférence d'affichage des appels d'outil dans le chat.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tool_call_view: Option<ToolCallViewMode>,
+    /// Préférence d'affichage du détail de raisonnement (résumé / brut).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub thinking_detail_view: Option<ThinkingDetailViewMode>,
     /// Demander confirmation avant écriture fichier (mode avancé). Défaut true.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub confirm_before_write: Option<bool>,
@@ -360,6 +371,7 @@ impl Default for AppSettings {
             sets: None,
             active_set_id: None,
             tool_call_view: None,
+            thinking_detail_view: None,
             confirm_before_write: None,
             settings_mode: None,
             settings_locked: None,
@@ -401,13 +413,13 @@ pub fn load_settings(app: &AppHandle) -> Result<AppSettings, String> {
         .ok_or_else(|| "Répertoire app_data introuvable".to_string())?;
     if !path.is_file() {
         let mut settings = AppSettings::default();
-        super::preset::apply_enterprise_preset(app_data, &mut settings);
+        super::preset::apply_preset_flags_to_settings(app_data, &mut settings);
         return Ok(settings);
     }
     let raw = fs::read_to_string(&path).map_err(|error| error.to_string())?;
     if raw.trim().is_empty() {
         let mut settings = AppSettings::default();
-        super::preset::apply_enterprise_preset(app_data, &mut settings);
+        super::preset::apply_preset_flags_to_settings(app_data, &mut settings);
         return Ok(settings);
     }
     let mut settings: AppSettings =
@@ -415,7 +427,7 @@ pub fn load_settings(app: &AppHandle) -> Result<AppSettings, String> {
     // Migration / robustesse : on force la version courante.
     settings.version = SETTINGS_VERSION;
     migrate_provider_sets(&mut settings);
-    super::preset::apply_enterprise_preset(app_data, &mut settings);
+    super::preset::apply_preset_flags_to_settings(app_data, &mut settings);
     Ok(settings)
 }
 
@@ -558,6 +570,39 @@ mod settings_tests {
     }
 
     #[test]
+    fn settings_roundtrip_tool_call_view() {
+        let settings = AppSettings {
+            version: SETTINGS_VERSION,
+            providers: Vec::new(),
+            tool_call_view: Some(ToolCallViewMode::Tech),
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&settings).expect("serialize");
+        let parsed: AppSettings = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.tool_call_view, Some(ToolCallViewMode::Tech));
+    }
+
+    #[test]
+    fn settings_roundtrip_thinking_detail_view() {
+        let settings = AppSettings {
+            version: SETTINGS_VERSION,
+            providers: Vec::new(),
+            thinking_detail_view: Some(ThinkingDetailViewMode::Raw),
+            ..AppSettings::default()
+        };
+        let json = serde_json::to_string(&settings).expect("serialize");
+        let parsed: AppSettings = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(parsed.thinking_detail_view, Some(ThinkingDetailViewMode::Raw));
+    }
+
+    #[test]
+    fn settings_deserialize_thinking_detail_view_camel_case() {
+        let raw = r#"{"version":1,"providers":[],"thinkingDetailView":"raw"}"#;
+        let settings: AppSettings = serde_json::from_str(raw).expect("deserialize");
+        assert_eq!(settings.thinking_detail_view, Some(ThinkingDetailViewMode::Raw));
+    }
+
+    #[test]
     fn default_settings_include_optional_locale() {
         let settings = AppSettings::default();
         assert!(settings.locale.is_none());
@@ -587,6 +632,7 @@ mod settings_tests {
             sets: None,
             active_set_id: None,
             tool_call_view: None,
+            thinking_detail_view: None,
             confirm_before_write: None,
             settings_mode: None,
             settings_locked: None,
@@ -733,6 +779,7 @@ pub fn save_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSet
         sets,
         active_set_id,
         tool_call_view: settings.tool_call_view,
+        thinking_detail_view: settings.thinking_detail_view,
         confirm_before_write: settings.confirm_before_write,
         settings_mode: settings.settings_mode,
         settings_locked: settings.settings_locked,

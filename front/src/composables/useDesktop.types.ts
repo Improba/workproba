@@ -51,6 +51,8 @@ export interface LlmProviderEntry {
 
 export type ToolCallViewMode = 'human' | 'tech';
 
+export type ThinkingDetailViewMode = 'summary' | 'raw';
+
 export type SettingsMode = 'guided' | 'advanced';
 
 export type DensityMode = 'compact' | 'comfortable' | 'spacious';
@@ -165,6 +167,8 @@ export interface AppSettings {
   activeChatProviderId?: string | null;
   activeEmbeddingProviderId?: string | null;
   toolCallView?: ToolCallViewMode;
+  /** Vue par défaut du détail du raisonnement (résumé ou brut). */
+  thinkingDetailView?: ThinkingDetailViewMode;
   /** Demander confirmation avant écriture fichier (mode avancé). Défaut true. */
   confirmBeforeWrite?: boolean | null;
   settingsMode?: SettingsMode;

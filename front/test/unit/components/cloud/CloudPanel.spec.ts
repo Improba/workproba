@@ -2,6 +2,7 @@ import { ref } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CloudPanel from '@components/cloud/CloudPanel.vue';
+import ManagedConnectorsSection from '@components/cloud/ManagedConnectorsSection.vue';
 import { PROJET_PLUGIN_ID } from '@composables/usePlugins';
 
 const mockEnroll = vi.fn();
@@ -9,6 +10,7 @@ const mockDisconnect = vi.fn();
 const mockSync = vi.fn();
 const mockPull = vi.fn();
 const mockSyncRegards = vi.fn();
+const mockRefreshConnectors = vi.fn().mockResolvedValue(undefined);
 const mockRefreshPersonas = vi.fn().mockResolvedValue(undefined);
 const mockStatus = ref({
   configured: false,
@@ -21,6 +23,7 @@ const mockStatus = ref({
   org_id: null,
   org_label: null,
 });
+const mockLoading = ref(false);
 
 const settingsLocked = ref(false);
 const settingsMode = ref<'guided' | 'advanced'>('guided');
@@ -57,7 +60,7 @@ vi.mock('@composables/useAppSettings', () => ({
 vi.mock('@composables/useCloud', () => ({
   useCloud: () => ({
     status: mockStatus,
-    loading: ref(false),
+    loading: mockLoading,
     syncing: ref(false),
     pulling: ref(false),
     loadError: mockLoadError,
@@ -70,6 +73,10 @@ vi.mock('@composables/useCloud', () => ({
     pull: mockPull,
     syncRegards: mockSyncRegards,
     syncingRegards: ref(false),
+    connectors: ref([]),
+    connectorsLoading: ref(false),
+    connectorsError: ref(null),
+    refreshConnectors: mockRefreshConnectors,
   }),
 }));
 
@@ -95,6 +102,9 @@ vi.mock('vue-i18n', () => ({
       if (params?.error) return `${key}:${params.error}`;
       if (params?.count !== undefined && params?.detail !== undefined) {
         return `${key}:${params.count}:${params.detail}`;
+      }
+      if (params?.count !== undefined && params?.lastSync !== undefined) {
+        return `${key}:${params.count}:${params.lastSync}`;
       }
       if (params?.count !== undefined) return `${key}:${params.count}`;
       return key;
@@ -135,6 +145,7 @@ describe('CloudPanel', () => {
     vi.clearAllMocks();
     settingsLocked.value = false;
     settingsMode.value = 'guided';
+    mockLoading.value = false;
     mockLoadError.value = null;
     mockStatus.value = {
       configured: false,
@@ -172,14 +183,25 @@ describe('CloudPanel', () => {
     expect(listProjetProjects).toHaveBeenCalledWith('/data/workproba.projet');
   });
 
+  it('n’affiche pas la section projets en mode guidé non enrollé', async () => {
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.text()).not.toContain('cloud.projectsTitle');
+    expect(wrapper.find('.cloud-panel__projects').exists()).toBe(false);
+  });
+
   it('affiche le formulaire join en mode guidé non enrollé', async () => {
     const wrapper = mountPanel();
     await flushPromises();
 
     expect(wrapper.text()).toContain('cloud.joinTitle');
     expect(wrapper.text()).toContain('cloud.join');
-    expect(wrapper.find('input[type="text"]').exists()).toBe(true);
+    expect(wrapper.find('#cloud-join-token').exists()).toBe(true);
     expect(wrapper.text()).not.toContain('cloud.bearerToken');
+    expect(wrapper.text()).not.toContain('cloud.advancedOptions');
+    expect(wrapper.text()).not.toContain('cloud.connectedBadge');
+    expect(wrapper.text()).not.toContain('cloud.experimental');
   });
 
   it('affiche connecté à org quand enrollé en mode guidé', async () => {
@@ -194,15 +216,39 @@ describe('CloudPanel', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('cloud.connectedTo:Acme RH');
-    expect(wrapper.text()).toContain('cloud.statusSyncedCount');
+    expect(wrapper.text()).toContain('cloud.syncMeta:3:cloud.neverSynced');
     expect(wrapper.text()).toContain('cloud.disconnect');
     expect(wrapper.text()).not.toContain('cloud.bearerToken');
     expect(wrapper.find('.cloud-panel__sync-btn').exists()).toBe(false);
     expect(wrapper.find('.cloud-panel__pull-btn').exists()).toBe(false);
-    expect(wrapper.text()).toContain('cloud.cacheOptions');
+    expect(wrapper.text()).toContain('cloud.localOptions');
+    expect(wrapper.text()).not.toContain('cloud.connectedBadge');
   });
 
-  it('masque les opérations de cache quand enrollé en mode avancé', async () => {
+  it('affiche le pull après ouverture des options locales en mode guidé enrollé', async () => {
+    mockStatus.value = {
+      ...mockStatus.value,
+      enrolled: true,
+      org_label: 'Acme RH',
+    };
+
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.find('.cloud-panel__pull-btn').exists()).toBe(false);
+
+    const localOptionsBtn = wrapper
+      .findAll('.cloud-panel__link-btn')
+      .find((btn) => btn.text().includes('cloud.localOptions'));
+    expect(localOptionsBtn).toBeDefined();
+    await localOptionsBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.find('.cloud-panel__pull-btn').exists()).toBe(true);
+    expect(wrapper.text()).toContain('cloud.hideLocalOptions');
+  });
+
+  it('affiche le pull et masque le sync quand enrollé en mode avancé', async () => {
     settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
@@ -214,9 +260,9 @@ describe('CloudPanel', () => {
     await flushPromises();
 
     expect(wrapper.text()).not.toContain('cloud.pushLocalCache');
-    expect(wrapper.text()).not.toContain('cloud.reloadCache');
+    expect(wrapper.text()).toContain('cloud.reloadCache');
     expect(wrapper.find('.cloud-panel__sync-btn').exists()).toBe(false);
-    expect(wrapper.find('.cloud-panel__pull-btn').exists()).toBe(false);
+    expect(wrapper.find('.cloud-panel__pull-btn').exists()).toBe(true);
   });
 
   it('affiche les opérations de cache en mode avancé non enrollé', async () => {
@@ -231,9 +277,9 @@ describe('CloudPanel', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('cloud.pushLocalCache');
-    expect(wrapper.text()).toContain('cloud.reloadCache');
     expect(wrapper.find('.cloud-panel__sync-btn').exists()).toBe(true);
-    expect(wrapper.find('.cloud-panel__pull-btn').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('cloud.reloadCache');
+    expect(wrapper.find('.cloud-panel__pull-btn').exists()).toBe(false);
   });
 
   it('humanise les erreurs techniques en mode guidé', async () => {
@@ -256,7 +302,7 @@ describe('CloudPanel', () => {
     const wrapper = mountPanel();
     await flushPromises();
 
-    await wrapper.find('.cloud-panel__disconnect-btn').trigger('click');
+    await wrapper.find('.cloud-panel__link-btn--danger').trigger('click');
     await flushPromises();
 
     expect(mockDialogCreate).toHaveBeenCalledWith(
@@ -266,6 +312,61 @@ describe('CloudPanel', () => {
       }),
     );
     expect(mockDisconnect).toHaveBeenCalled();
+  });
+
+  it('réinitialise le dossier local après déconnexion réussie', async () => {
+    mockStatus.value = {
+      ...mockStatus.value,
+      enrolled: true,
+      org_label: 'Acme RH',
+    };
+    mockDisconnect.mockImplementation(async () => {
+      mockStatus.value = { ...mockStatus.value, enrolled: false, org_label: null };
+      return true;
+    });
+
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    const localOptionsBtn = wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('cloud.localOptions'));
+    await localOptionsBtn!.trigger('click');
+    await flushPromises();
+    expect(wrapper.text()).toContain('cloud.hideLocalOptions');
+
+    await wrapper.find('.cloud-panel__link-btn--danger').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('cloud.joinTitle');
+    expect(wrapper.text()).not.toContain('cloud.hideLocalOptions');
+    expect(wrapper.text()).not.toContain('cloud.localOptions');
+  });
+
+  it('rafraîchit les projets après un join réussi', async () => {
+    mockEnroll.mockImplementation(async () => {
+      mockStatus.value = {
+        ...mockStatus.value,
+        enrolled: true,
+        org_label: 'Acme RH',
+        base_url: 'https://cloud.preset.test',
+      };
+      return true;
+    });
+
+    const wrapper = mountPanel();
+    await flushPromises();
+    listProjetProjects.mockClear();
+
+    await wrapper.find('#cloud-join-token').setValue('invite-1');
+    await wrapper.find('form').trigger('submit');
+    await flushPromises();
+
+    expect(mockEnroll).toHaveBeenCalled();
+    expect(listProjetProjects).toHaveBeenCalled();
+    expect(mockNotifyCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'cloud.joinSuccess' }),
+    );
   });
 
   it('n’appelle pas disconnect si la confirmation est annulée', async () => {
@@ -279,7 +380,7 @@ describe('CloudPanel', () => {
     const wrapper = mountPanel();
     await flushPromises();
 
-    await wrapper.find('.cloud-panel__disconnect-btn').trigger('click');
+    await wrapper.find('.cloud-panel__link-btn--danger').trigger('click');
     await flushPromises();
 
     expect(mockDialogCreate).toHaveBeenCalled();
@@ -328,12 +429,27 @@ describe('CloudPanel', () => {
     expect(mockSync).not.toHaveBeenCalled();
   });
 
-  it('demande confirmation avant pull', async () => {
+  it('n’affiche pas le pull hors enrollment en mode avancé', async () => {
     settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
       configured: true,
       enrolled: false,
+    };
+
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.find('.cloud-panel__pull-btn').exists()).toBe(false);
+    expect(mockPull).not.toHaveBeenCalled();
+  });
+
+  it('demande confirmation avant pull quand enrollé en mode avancé', async () => {
+    settingsMode.value = 'advanced';
+    mockStatus.value = {
+      ...mockStatus.value,
+      enrolled: true,
+      org_label: 'Acme RH',
     };
 
     const wrapper = mountPanel();
@@ -351,79 +467,31 @@ describe('CloudPanel', () => {
     expect(mockPull).toHaveBeenCalledWith('p1');
   });
 
-  it('n’appelle pas pull si la confirmation est annulée', async () => {
-    mockDialogConfirm(false);
-    settingsMode.value = 'advanced';
+  it('affiche la section connecteurs quand enrollé en mode guidé', async () => {
     mockStatus.value = {
       ...mockStatus.value,
-      configured: true,
-      enrolled: false,
+      enrolled: true,
+      org_label: 'Acme RH',
     };
 
     const wrapper = mountPanel();
     await flushPromises();
 
-    await wrapper.find('.cloud-panel__pull-btn').trigger('click');
-    await flushPromises();
-
-    expect(mockDialogCreate).toHaveBeenCalled();
-    expect(mockPull).not.toHaveBeenCalled();
+    expect(wrapper.findComponent(ManagedConnectorsSection).exists()).toBe(true);
   });
 
-  it('affiche une notification négative si le pull retourne des erreurs', async () => {
+  it('affiche la section connecteurs quand enrollé en mode avancé', async () => {
     settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
-      configured: true,
-      enrolled: false,
+      enrolled: true,
+      org_label: 'Acme RH',
     };
-    mockPull.mockResolvedValue({
-      ok: true,
-      data: { pulled: ['doc.pdf'], errors: ['doc2.pdf: timeout', 'doc3.pdf: checksum'] },
-    });
 
     const wrapper = mountPanel();
     await flushPromises();
 
-    await wrapper.find('.cloud-panel__pull-btn').trigger('click');
-    await flushPromises();
-
-    expect(mockNotifyCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message: 'cloud.pullErrorsNotify:2:doc2.pdf: timeout; doc3.pdf: checksum',
-        color: 'negative',
-      }),
-    );
-  });
-
-  it('affiche une notification info si le pull retourne des skipped', async () => {
-    settingsMode.value = 'advanced';
-    mockStatus.value = {
-      ...mockStatus.value,
-      configured: true,
-      enrolled: false,
-    };
-    mockPull.mockResolvedValue({
-      ok: true,
-      data: {
-        pulled: [],
-        skipped: ['contrat.docx:local_up_to_date', 'note.md:not_confirmed'],
-      },
-    });
-
-    const wrapper = mountPanel();
-    await flushPromises();
-
-    await wrapper.find('.cloud-panel__pull-btn').trigger('click');
-    await flushPromises();
-
-    expect(mockNotifyCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        message:
-          'cloud.pullSkippedNotify:2:contrat.docx:local_up_to_date; note.md:not_confirmed',
-        color: 'info',
-      }),
-    );
+    expect(wrapper.findComponent(ManagedConnectorsSection).exists()).toBe(true);
   });
 
   it('affiche le bouton de mise à jour des regards quand enrollé en mode guidé', async () => {
@@ -437,7 +505,10 @@ describe('CloudPanel', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('cloud.syncRegards');
-    expect(wrapper.find('.cloud-panel__regards-btn').exists()).toBe(true);
+    const regardsBtn = wrapper
+      .findAll('.cloud-panel__save-btn')
+      .find((btn) => btn.text().includes('cloud.syncRegards'));
+    expect(regardsBtn).toBeDefined();
   });
 
   it('notifie le succès après mise à jour des regards', async () => {
@@ -451,7 +522,10 @@ describe('CloudPanel', () => {
     const wrapper = mountPanel();
     await flushPromises();
 
-    await wrapper.find('.cloud-panel__regards-btn').trigger('click');
+    const regardsBtn = wrapper
+      .findAll('.cloud-panel__save-btn')
+      .find((btn) => btn.text().includes('cloud.syncRegards'));
+    await regardsBtn!.trigger('click');
     await flushPromises();
 
     expect(mockSyncRegards).toHaveBeenCalled();
@@ -476,7 +550,10 @@ describe('CloudPanel', () => {
     const wrapper = mountPanel();
     await flushPromises();
 
-    await wrapper.find('.cloud-panel__regards-btn').trigger('click');
+    const regardsBtn = wrapper
+      .findAll('.cloud-panel__save-btn')
+      .find((btn) => btn.text().includes('cloud.syncRegards'));
+    await regardsBtn!.trigger('click');
     await flushPromises();
 
     expect(mockNotifyCreate).toHaveBeenCalledWith(
@@ -493,9 +570,26 @@ describe('CloudPanel', () => {
     const wrapper = mountPanel();
     await flushPromises();
 
-    expect(wrapper.text()).toContain('cloud.advancedOptions');
+    expect(wrapper.text()).toContain('cloud.technicalSettings');
     expect(wrapper.text()).toContain('cloud.bearerToken');
     expect(wrapper.text()).toContain('cloud.mountPathTitle');
+  });
+
+  it('affiche sync regards et déconnexion quand enrollé en mode avancé', async () => {
+    settingsMode.value = 'advanced';
+    mockStatus.value = {
+      ...mockStatus.value,
+      enrolled: true,
+      org_label: 'Acme RH',
+    };
+
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('cloud.connectedTo:Acme RH');
+    expect(wrapper.text()).toContain('cloud.syncRegards');
+    expect(wrapper.text()).toContain('cloud.disconnect');
+    expect(wrapper.text()).not.toContain('cloud.localOptions');
   });
 
   it('n’appelle pas listProjetProjects si le plugin projet est inactif', async () => {
@@ -505,5 +599,17 @@ describe('CloudPanel', () => {
     await flushPromises();
 
     expect(listProjetProjects).not.toHaveBeenCalled();
+  });
+
+  it('affiche uniquement le chargement initial sans formulaire join', async () => {
+    mockLoading.value = true;
+    mockStatus.value = null as unknown as typeof mockStatus.value;
+
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('common.loading');
+    expect(wrapper.text()).not.toContain('cloud.joinTitle');
+    expect(wrapper.find('#cloud-join-token').exists()).toBe(false);
   });
 });

@@ -358,9 +358,13 @@ async function onOpen(node: FileNode): Promise<void> {
 
 async function onReveal(node: FileNode): Promise<void> {
   if (!props.activePath) return;
-  const full = `${props.activePath.replace(/\/$/, '')}/${node.relativePath}`;
+  const normalized = node.relativePath.replace(/\\/g, '/');
+  const fullPath =
+    normalized.startsWith('/') || /^[A-Za-z]:\//.test(normalized)
+      ? normalized
+      : `${props.activePath.replace(/\\/g, '/').replace(/\/$/, '')}/${normalized}`;
   try {
-    await revealInOs(full);
+    await revealInOs(fullPath);
   } catch {
     Notify.create({ message: t('shell.revealFailed'), classes: 'bg-danger text-white' });
   }

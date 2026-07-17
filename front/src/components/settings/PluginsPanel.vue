@@ -51,14 +51,7 @@
               {{ t('settings.plugins.upcoming') }}
             </span>
             <span
-              v-else-if="isExperimentalPlugin(plugin)"
-              class="plugins-panel__experimental"
-              :title="t('settings.plugins.experimentalTooltipCloud')"
-            >
-              {{ t('settings.plugins.experimental') }}
-            </span>
-            <span
-              v-else-if="isPreinstalledPlugin(plugin)"
+              v-if="isPreinstalledPlugin(plugin)"
               class="plugins-panel__preinstalled"
             >
               {{ t('settings.plugins.sourceBuiltin') }}
@@ -164,10 +157,6 @@ const panelTitle = computed(() =>
 
 function isUpcomingPlugin(plugin: PluginInfo): boolean {
   return isUpcomingPluginId(plugin.manifest.id);
-}
-
-function isExperimentalPlugin(plugin: PluginInfo): boolean {
-  return plugin.manifest.id === CLOUD_PLUGIN_ID;
 }
 
 function isPreinstalledPlugin(plugin: PluginInfo): boolean {

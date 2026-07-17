@@ -4,6 +4,7 @@ import {
   disconnectCloud,
   enrollCloud,
   fetchCloudStatus,
+  listManagedConnectors,
   pullCloud,
   syncCloud,
   syncManagedRegards,
@@ -11,6 +12,7 @@ import {
   type CloudStatus,
   type CloudSyncRegardsResult,
   type CloudSyncResult,
+  type ManagedConnector,
   type SidecarResult,
 } from '@services/aiSidecar';
 import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
@@ -21,6 +23,9 @@ const syncing = ref(false);
 const pulling = ref(false);
 const syncingRegards = ref(false);
 const loadError = ref<string | null>(null);
+const connectors = ref<ManagedConnector[]>([]);
+const connectorsLoading = ref(false);
+const connectorsError = ref<string | null>(null);
 let pluginDataDir: string | null = null;
 
 export interface UseCloudReturn {
@@ -30,6 +35,9 @@ export interface UseCloudReturn {
   pulling: Ref<boolean>;
   syncingRegards: Ref<boolean>;
   loadError: Ref<string | null>;
+  connectors: Ref<ManagedConnector[]>;
+  connectorsLoading: Ref<boolean>;
+  connectorsError: Ref<string | null>;
   /** Cloud enrolled — « projet partagé » product vocabulary (not mount-only). */
   isActive: ComputedRef<boolean>;
   isEnrolled: ComputedRef<boolean>;
@@ -37,6 +45,7 @@ export interface UseCloudReturn {
   canSync: ComputedRef<boolean>;
   init: () => Promise<void>;
   refreshStatus: () => Promise<void>;
+  refreshConnectors: () => Promise<void>;
   configure: (mountPath: string) => Promise<boolean>;
   enroll: (opts: {
     baseUrl: string;
@@ -56,6 +65,34 @@ export function useCloud(): UseCloudReturn {
   const canSync = computed(() => Boolean(status.value?.configured || status.value?.enrolled));
   const isActive = computed(() => isEnrolled.value);
 
+  async function refreshConnectors(): Promise<void> {
+    if (!pluginDataDir || !status.value?.enrolled) {
+      connectors.value = [];
+      connectorsError.value = null;
+      return;
+    }
+    connectorsLoading.value = true;
+    connectorsError.value = null;
+    try {
+      const result = await listManagedConnectors(pluginDataDir);
+      if (!result.ok) {
+        connectors.value = [];
+        connectorsError.value = result.error;
+        return;
+      }
+      if (!result.data.enrolled) {
+        connectors.value = [];
+        return;
+      }
+      connectors.value = result.data.connectors;
+    } catch (err) {
+      connectors.value = [];
+      connectorsError.value = err instanceof Error ? err.message : 'cloud_connectors_failed';
+    } finally {
+      connectorsLoading.value = false;
+    }
+  }
+
   async function init(): Promise<void> {
     pluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
     await refreshStatus();
@@ -64,6 +101,7 @@ export function useCloud(): UseCloudReturn {
   async function refreshStatus(): Promise<void> {
     if (!pluginDataDir) {
       status.value = null;
+      connectors.value = [];
       return;
     }
     loading.value = true;
@@ -73,12 +111,20 @@ export function useCloud(): UseCloudReturn {
       if (!result.ok) {
         status.value = null;
         loadError.value = result.error;
+        connectors.value = [];
         return;
       }
       status.value = result.data;
+      if (result.data.enrolled) {
+        await refreshConnectors();
+      } else {
+        connectors.value = [];
+        connectorsError.value = null;
+      }
     } catch (err) {
       status.value = null;
       loadError.value = err instanceof Error ? err.message : 'cloud_status_failed';
+      connectors.value = [];
     } finally {
       loading.value = false;
     }
@@ -129,6 +175,8 @@ export function useCloud(): UseCloudReturn {
       return false;
     }
     await refreshStatus();
+    connectors.value = [];
+    connectorsError.value = null;
     return result.data;
   }
 
@@ -223,11 +271,15 @@ export function useCloud(): UseCloudReturn {
     pulling,
     syncingRegards,
     loadError,
+    connectors,
+    connectorsLoading,
+    connectorsError,
     isActive,
     isEnrolled,
     canSync,
     init,
     refreshStatus,
+    refreshConnectors,
     configure,
     enroll,
     disconnect,

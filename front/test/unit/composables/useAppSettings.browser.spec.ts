@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const desktopMocks = vi.hoisted(() => ({
   getAppSettings: vi.fn(),
@@ -59,5 +59,81 @@ describe('useAppSettings hors Tauri', () => {
 
     expect(activeSet.value?.id).toBe('ollama-local');
     expect(desktopMocks.saveAppSettings).not.toHaveBeenCalled();
+  });
+});
+
+describe('setThinkingDetailView', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.resetModules();
+    desktopMocks.isDesktopApp.mockReturnValue(true);
+    desktopMocks.getAppSettings.mockResolvedValue({
+      version: 1,
+      providers: [],
+      sets: builtinSets,
+      activeSetId: 'mistral-default',
+      thinkingDetailView: 'summary',
+    });
+    desktopMocks.saveAppSettings.mockImplementation(async (settings) => settings);
+    desktopMocks.saveAppSettings.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('met à jour thinkingDetailView immédiatement et debounce save (400 ms)', async () => {
+    const { useAppSettings } = await import('@composables/useAppSettings');
+    const { load, setThinkingDetailView, thinkingDetailView } = useAppSettings();
+    await load();
+
+    const savePromise = setThinkingDetailView('raw');
+
+    expect(thinkingDetailView.value).toBe('raw');
+    expect(desktopMocks.saveAppSettings).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(400);
+    await savePromise;
+
+    expect(desktopMocks.saveAppSettings).toHaveBeenCalledTimes(1);
+    expect(desktopMocks.saveAppSettings).toHaveBeenCalledWith(
+      expect.objectContaining({ thinkingDetailView: 'raw' }),
+    );
+  });
+
+  it('ne laisse pas un load concurrent écraser thinkingDetailView pendant le debounce', async () => {
+    const { useAppSettings } = await import('@composables/useAppSettings');
+    const { load, setThinkingDetailView, thinkingDetailView } = useAppSettings();
+
+    desktopMocks.getAppSettings.mockResolvedValue({
+      version: 1,
+      providers: [],
+      sets: builtinSets,
+      activeSetId: 'mistral-default',
+      thinkingDetailView: 'summary',
+    });
+    await load();
+
+    let resolveGet: ((value: unknown) => void) | null = null;
+    desktopMocks.getAppSettings.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveGet = resolve;
+        }),
+    );
+    const loadPromise = load();
+    void setThinkingDetailView('raw');
+    expect(thinkingDetailView.value).toBe('raw');
+
+    resolveGet?.({
+      version: 1,
+      providers: [],
+      sets: builtinSets,
+      activeSetId: 'mistral-default',
+      thinkingDetailView: 'summary',
+    });
+    await loadPromise;
+
+    expect(thinkingDetailView.value).toBe('raw');
   });
 });

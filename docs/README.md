@@ -20,7 +20,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 
 ## Product framing
 
-- **[intention.md](./intention.md)**: Product intent, local-first desktop pivot decision, goals
+- **[intention.md](./intention.md)**: Product intent, desktop pivot, Improba Cloud scope (see roadmaps)
 - **[desktop.md](./desktop.md)**: Desktop architecture, phasing, message flow, phase validation
 
 ## Technical architecture

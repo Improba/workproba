@@ -64,7 +64,7 @@ Sensitive agent tools pause until the user approves via `POST /agent/confirm`.
 2. The front displays `ConfirmationCard` and posts `{ session_id, turn_id, confirmation_id, decision }` to `/agent/confirm`.
 3. On deny or timeout (300 s), the tool is not executed; the model receives `ModelRetry` with `workproba:approval_denied` or `workproba:approval_timeout`.
 
-Effect classification: `app/agent/effects.py` (`classify_effect`). Gate: `app/agent/confirmation.py` (`ConfirmationGate.request_effect`). Gated tools include file writes, `publish_artifact`, `web_search`, `browser_*`, `run_code`, `sync_to_cloud`. Read-only tools are not gated.
+Effect classification: `app/agent/effects.py` (`classify_effect`). Gate: `app/agent/confirmation.py` (`ConfirmationGate.request_effect`). Gated tools include file writes, `publish_artifact`, `web_search`, `browser_*`, `run_code`, `sync_to_cloud`, **`invoke_managed_connector`**. Read-only tools are not gated.
 
 Work events (`work_started`, `work_contribution`, `work_completed`, `work_failed`) are emitted alongside tool events; see `app/agent/work_events.py` and [docs/architecture.md](../../docs/architecture.md#human-approval-and-work-events).
 
@@ -141,7 +141,20 @@ Agent tool: `web_search`. Always registered; **executable** when the active prov
 
 Full documentation: [docs/web-search.md](../../docs/web-search.md).
 
-### Cloud plugin
+### Cloud plugin (`workproba.cloud`) — Mode A MVP
+
+Join org, managed connectors, artefact sync, enterprise regards. Agent tools (if active): `enroll_to_cloud`, `sync_managed_regards`, `sync_to_cloud`, **`invoke_managed_connector`** (Human Approval Gate `external_send`).
+
+| Method | Route | Secret | Role |
+|---|---|---|---|
+| GET | `/plugins/cloud/connectors` | yes | List managed connectors from control plane |
+| POST | `/plugins/cloud/enroll` | yes | Join device with invitation token |
+| POST | `/plugins/cloud/sync-regards` | yes | Pull and install managed regards catalog |
+| GET/POST | `/plugins/cloud/artefacts` | yes | Shared project list/publish/open/republish |
+| POST | `/plugins/cloud/sync` | yes | Mount sync push (blocked when enrolled) |
+| POST | `/plugins/cloud/pull` | yes | Mount sync pull (blocked when enrolled) |
+
+Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins `echo`, `ihora.shaped` stub). See [architecture-cloud.md](../../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ### Audit
 

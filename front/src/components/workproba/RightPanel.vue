@@ -104,8 +104,7 @@ import DocumentPreview from '@components/workproba/DocumentPreview.vue';
 import VersionsPanel from '@components/workproba/VersionsPanel.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { usePluginSlots } from '@composables/usePluginSlots';
-import { usePlugins, CLOUD_PLUGIN_ID } from '@composables/usePlugins';
-import { useAppSettings } from '@composables/useAppSettings';
+import { usePlugins } from '@composables/usePlugins';
 import { useShellSurfaces } from '@composables/useShellSurfaces';
 
 defineProps<{
@@ -121,17 +120,9 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const { isProjetPluginActive } = usePlugins();
 const { rightPanelPluginTabs } = usePluginSlots();
-const { settingsLocked, settingsMode } = useAppSettings();
 const { rightPanelTab: activeTab } = useShellSurfaces();
 
-const isGuided = computed(
-  () => settingsLocked.value || settingsMode.value !== 'advanced',
-);
-
-const visiblePluginTabs = computed(() => {
-  if (!isGuided.value) return rightPanelPluginTabs.value;
-  return rightPanelPluginTabs.value.filter((tab) => tab.pluginId !== CLOUD_PLUGIN_ID);
-});
+const visiblePluginTabs = computed(() => rightPanelPluginTabs.value);
 const selectedFilePath = ref<string | null>(null);
 const previewRefreshKey = ref(0);
 const publishDialogOpen = ref(false);

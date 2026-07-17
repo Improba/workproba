@@ -12,7 +12,13 @@ PERMISSIONS = [
     "settings:section",
 ]
 
-TOOLS = ["sync_to_cloud", "sync_from_cloud", "enroll_to_cloud", "sync_managed_regards"]
+TOOLS = [
+    "sync_to_cloud",
+    "sync_from_cloud",
+    "enroll_to_cloud",
+    "sync_managed_regards",
+    "invoke_managed_connector",
+]
 
 HOOKS: list[str] = []
 

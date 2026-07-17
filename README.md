@@ -2,9 +2,9 @@
 
 AI is fragmenting: a copilot in every app, contexts that never overlap, features siloed inside each suite. Our conviction is that it should first be **a personal work interface**, centered on the person, connected to their folders and tools, rather than embedded in each one of them.
 
-**Workproba** is a desktop application (**macOS, Linux, Windows**) that embodies this principle. You **open a space** (a local folder on your machine); the assistant works directly on your files (Word, Excel, PDF), indexes and remembers context locally, and relies on the **LLM provider of your choice** (Ollama, Mistral, OpenAI, etc.). Your documents and memory stay on the machine; relevant context is sent to the model on each exchange, according to your configuration.
+**Workproba** is a desktop application (**macOS, Linux, Windows**) that embodies this principle. You **open a space** (a local folder on your machine); the assistant works directly on your files (Word, Excel, PDF), indexes and remembers context locally, and relies on the **LLM provider of your choice** (Ollama, Mistral, OpenAI, etc.). The standard path for managed connectors is **Improba Cloud** (auth, secrets, connector presets, transport relay). Direct desktop-to-external connectors remain a power-user option.
 
-*Local-first desktop app. Local files and memory, configurable LLM providers.*
+*Desktop app for local files and memory, connected to Improba Cloud for managed connectors. Configurable LLM providers.*
 
 ## Preview
 
@@ -17,7 +17,7 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 - **Agent chat**: SSE streaming, model and reasoning per conversation, attachments, composite "+" menu
 - **Human approval**: effect-oriented confirmation before file writes, publishing, network access, or code execution
 - **Scoped memory**: global user memories + project memories, local RAG, agent `remember` tool
-- **Activatable capabilities**: Regards métier, projects & deliverables, web navigation, project sync (integrated plugins; not a third-party extension marketplace in V2)
+- **Activatable capabilities**: Regards métier, projects & deliverables, web navigation, **Improba Cloud Mode A** (join org, managed connectors `echo` / `ihora.shaped` stub, artefact sync; integrated plugins; not a third-party extension marketplace in V2)
 - **Personas / Regards métier**: professional perspectives, simulated meetings, discussions (Improba builtin set)
 - **Spaces**: sidebar, right panel (files, preview, active capabilities), side chat for Regards
 - **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write

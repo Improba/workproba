@@ -7,9 +7,10 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
-use super::fs_watch::start_fs_watch;
+use super::fs_watch::{start_fs_watch, FsWatchStatus};
 use super::settings_store::get_app_settings;
 use super::workspace_store::{self, ConversationSession, WorkspaceInfo, WORKPROBA_DIR_NAME};
+use crate::commands::atomic_io::atomic_write;
 
 const LAST_PROJECT_FILE: &str = "last-project.json";
 
@@ -55,6 +56,44 @@ fn is_hidden(path: &Path) -> bool {
         .is_some_and(|name| name.starts_with('.'))
 }
 
+/// Valide un chemin relatif (pas de `..`, pas de racine absolue, segments non vides).
+fn validate_relative_dir_path(relative: &str) -> Result<(), String> {
+    if relative.is_empty() {
+        return Ok(());
+    }
+    for component in Path::new(relative).components() {
+        match component {
+            std::path::Component::ParentDir => {
+                return Err("Chemin relatif invalide : .. interdit".to_string());
+            }
+            std::path::Component::RootDir | std::path::Component::Prefix(_) => {
+                return Err("Chemin relatif invalide : chemin absolu interdit".to_string());
+            }
+            std::path::Component::Normal(name) => {
+                if name.is_empty() {
+                    return Err("Chemin relatif invalide : segment vide".to_string());
+                }
+            }
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+fn relative_path_under_root(root_canonical: &Path, path: &Path) -> Result<String, String> {
+    let path_canonical = path
+        .canonicalize()
+        .map_err(|error| error.to_string())?;
+    if !path_canonical.starts_with(root_canonical) {
+        return Err("Chemin hors du workspace".to_string());
+    }
+    Ok(path_canonical
+        .strip_prefix(root_canonical)
+        .map_err(|error| error.to_string())?
+        .to_string_lossy()
+        .replace('\\', "/"))
+}
+
 fn collect_documents(
     project_root: &Path,
     current_dir: &Path,
@@ -80,11 +119,7 @@ fn collect_documents(
             continue;
         }
 
-        let relative_path = path
-            .strip_prefix(project_root)
-            .map_err(|error| error.to_string())?
-            .to_string_lossy()
-            .replace('\\', "/");
+        let relative_path = relative_path_under_root(project_root, &path)?;
 
         entries.push(DocumentEntry {
             name: path
@@ -121,6 +156,18 @@ fn activate_workspace(
     *active_workspace_id = Some(workspace.id.clone());
 
     start_fs_watch(app, path);
+    let watch_status = app
+        .state::<super::fs_watch::FsWatchState>()
+        .status
+        .lock()
+        .map(|guard| *guard)
+        .unwrap_or(FsWatchStatus::Inactive);
+    if watch_status == FsWatchStatus::Degraded {
+        log::warn!(
+            "fs watch: mode dégradé pour l'espace {:?} ; l'activation continue",
+            path
+        );
+    }
 
     Ok(workspace)
 }
@@ -321,6 +368,7 @@ fn icon_kind(path: &Path) -> String {
 /// `dir_relative_path` est vide pour la racine du workspace.
 #[tauri::command]
 pub fn list_dir_entries(
+    app: AppHandle,
     project_path: String,
     dir_relative_path: String,
 ) -> Result<Vec<DirEntry>, String> {
@@ -335,17 +383,15 @@ pub fn list_dir_entries(
         ));
     }
 
+    let root_canonical = ensure_path_in_allowed_roots(&app, &project_root)?;
+
     let target_dir = if dir_relative_path.is_empty() {
-        project_root.clone()
+        root_canonical.clone()
     } else {
-        // On refuse tout chemin qui sortirait de la racine (sécurité + cohérence).
-        let candidate = project_root.join(&dir_relative_path);
+        validate_relative_dir_path(&dir_relative_path)?;
+        let candidate = root_canonical.join(&dir_relative_path);
         let canonical = candidate.canonicalize().map_err(|e| {
             log::warn!("list_dir_entries: canonicalize candidate échoué: {e}");
-            e.to_string()
-        })?;
-        let root_canonical = project_root.canonicalize().map_err(|e| {
-            log::warn!("list_dir_entries: canonicalize root échoué: {e}");
             e.to_string()
         })?;
         if !canonical.starts_with(&root_canonical) {
@@ -375,11 +421,7 @@ pub fn list_dir_entries(
             continue;
         }
 
-        let relative_path = path
-            .strip_prefix(&project_root)
-            .map_err(|e| e.to_string())?
-            .to_string_lossy()
-            .replace('\\', "/");
+        let relative_path = relative_path_under_root(&root_canonical, &path)?;
 
         entries.push(DirEntry {
             name: path
@@ -488,13 +530,15 @@ pub fn reveal_in_os(app: AppHandle, path: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn list_documents(project_path: String) -> Result<Vec<DocumentEntry>, String> {
+pub fn list_documents(app: AppHandle, project_path: String) -> Result<Vec<DocumentEntry>, String> {
     let project_root = PathBuf::from(&project_path);
     if !project_root.is_dir() {
         return Err(format!(
             "Le dossier de l'espace n'existe pas : {project_path}"
         ));
     }
+
+    let project_root = ensure_path_in_allowed_roots(&app, &project_root)?;
 
     let mut entries = Vec::new();
     collect_documents(&project_root, &project_root, &mut entries)?;
@@ -573,8 +617,7 @@ fn persist_last_project_path(app: &AppHandle, workspace: &WorkspaceInfo) -> Resu
         fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
     let json = serde_json::to_string_pretty(&config).map_err(|error| error.to_string())?;
-    fs::write(file_path, json).map_err(|error| error.to_string())?;
-    Ok(())
+    atomic_write(&file_path, &json)
 }
 
 fn last_project_file_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -625,3 +668,52 @@ pub fn ensure_workproba_dir(app: AppHandle, project_path: String) -> Result<Stri
 
 // Conservé pour la doc : le dossier métadonnées n'est plus dans le projet utilisateur.
 pub const WORKPROBA_METADATA_DIR: &str = WORKPROBA_DIR_NAME;
+
+#[cfg(test)]
+mod project_tests {
+    use super::*;
+    use std::fs;
+    use uuid::Uuid;
+
+    fn unique_temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "workproba_project_test_{name}_{}",
+            Uuid::new_v4().simple()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create temp dir");
+        dir
+    }
+
+    #[test]
+    fn validate_relative_dir_path_rejects_parent_and_absolute() {
+        assert!(validate_relative_dir_path("subdir").is_ok());
+        assert!(validate_relative_dir_path("").is_ok());
+        assert!(validate_relative_dir_path("../etc").is_err());
+        assert!(validate_relative_dir_path("/etc").is_err());
+    }
+
+    #[test]
+    fn relative_path_under_root_uses_canonical_prefix() {
+        let root = unique_temp_dir("canonical_strip");
+        let sub = root.join("docs");
+        fs::create_dir_all(&sub).expect("mkdir sub");
+        fs::write(sub.join("readme.txt"), "hello").expect("write file");
+
+        let root_canonical = root.canonicalize().expect("canonicalize root");
+        let file_path = sub.join("readme.txt");
+        let relative =
+            relative_path_under_root(&root_canonical, &file_path).expect("relative path");
+        assert_eq!(relative, "docs/readme.txt");
+
+        let outside = std::env::temp_dir().join(format!(
+            "workproba_outside_{}",
+            Uuid::new_v4().simple()
+        ));
+        fs::write(&outside, "x").expect("write outside");
+        assert!(relative_path_under_root(&root_canonical, &outside).is_err());
+
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_file(outside);
+    }
+}

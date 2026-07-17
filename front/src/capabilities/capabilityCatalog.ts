@@ -101,7 +101,6 @@ export const CAPABILITY_CATALOG: readonly CapabilityDefinition[] = [
     icon: 'cloud',
     pluginIds: [CLOUD_PLUGIN_ID],
     parentId: 'projects',
-    comingSoonInGuided: true,
     primarySurface: {
       type: 'nested',
       parentCapabilityId: 'projects',

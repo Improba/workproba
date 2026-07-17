@@ -16,6 +16,10 @@ describe('fallbackHumanLabel', () => {
     expect(fallbackHumanLabel('sync_from_cloud')).toBe("J'ai récupéré des documents depuis le cloud");
     expect(fallbackHumanLabel('enroll_to_cloud')).toBe("J'ai connecté ce poste au cloud");
     expect(fallbackHumanLabel('sync_managed_regards')).toBe("J'ai synchronisé les regards de l'organisation");
+    expect(fallbackHumanLabel('invoke_managed_connector')).toBe("J'ai appelé un connecteur Improba Cloud");
+    expect(
+      fallbackHumanLabel('invoke_managed_connector', { connector_id: 'echo' }),
+    ).toBe("J'ai appelé le connecteur echo");
     expect(fallbackHumanLabel('search_kb')).toBe("J'ai cherché dans la mémoire");
     expect(fallbackHumanLabel('web_search')).toBe('Recherche sur le web');
     expect(fallbackHumanLabel('list_files')).toBe("J'ai listé les fichiers");

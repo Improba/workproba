@@ -5,7 +5,7 @@ génération de documents) pour qu'ils soient cohérents entre l'outil, le clien
 projet et le runner sandbox. Défense en profondeur : le client applique les
 plafonds durs quelle que soit la valeur demandée par le modèle.
 
-Les valeurs par défaut visent un usage bureau local-first : assez généreuses pour
+Les valeurs par défaut visent un usage bureau sur fichiers locaux : assez généreuses pour
 un document métier, assez strictes pour éviter l'explosion du contexte LLM et la
 saturation mémoire du sidecar.
 """

@@ -540,7 +540,7 @@ async function syncPersonasHistory(pluginDataDir: string): Promise<void> {
 }
 
 export function usePersonas(): UsePersonasReturn {
-  const { locale, settingsLocked, permissionsNetwork, settingsMode } = useAppSettings();
+  const { locale, settingsLocked, permissionsNetwork, settingsMode, codeExecute, auditEnabled } = useAppSettings();
   const { isPersonasPluginActive } = usePlugins();
   const { buildContextProviderSet } = useLlmSessionContext();
 
@@ -922,6 +922,8 @@ export function usePersonas(): UsePersonasReturn {
         settingsLocked.value,
         permissionsNetwork.value,
         locale.value,
+        codeExecute.value,
+        auditEnabled.value,
       ),
     });
   }

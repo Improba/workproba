@@ -288,6 +288,38 @@ describe('aiSidecar payload', () => {
     expect(payload.history[1].content!.length).toBe(MAX_TOOL_RESULT_HISTORY_CHARS + 1);
   });
 
+  it('buildAgentTurnPayload agrège thinking depuis parts si m.thinking est absent', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'Réponse',
+          parts: [
+            {
+              type: 'thinking',
+              id: 'th1',
+              thinkingId: 'think-0',
+              content: 'raisonnement parts-only',
+              done: true,
+            },
+            { type: 'text', id: 'tx1', content: 'Réponse' },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      [],
+    );
+
+    expect(payload.history[0]).toMatchObject({
+      role: 'assistant',
+      thinking: 'raisonnement parts-only',
+    });
+  });
+
   it('buildAgentTurnPayload retire screenshot_b64 des tools browser dans history', () => {
     const payload = buildAgentTurnPayload(
       'sess-1',

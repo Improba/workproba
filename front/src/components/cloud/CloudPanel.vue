@@ -1,9 +1,5 @@
 <template>
-  <div class="cloud-panel">
-    <div class="cloud-panel__badge">
-      {{ t('cloud.experimental') }}
-    </div>
-
+  <div class="cloud-panel" :aria-label="t('cloud.tabLabel')">
     <p v-if="displayLoadError" class="cloud-panel__error" role="alert">
       {{ displayLoadError }}
     </p>
@@ -12,28 +8,41 @@
       {{ displayProjectsLoadError }}
     </p>
 
-    <!-- Visage final (guidé / verrouillé) -->
-    <template v-if="isFinalFace">
-      <section v-if="!status?.enrolled" class="cloud-panel__section">
+    <p v-if="loading && status === null" class="cloud-panel__loading">
+      {{ t('common.loading') }}
+    </p>
+
+    <template v-else>
+      <!-- Join (guidé / verrouillé, non enrollé) -->
+      <section
+        v-if="isFinalFace && !status?.enrolled"
+        class="cloud-panel__section"
+      >
         <h3 class="cloud-panel__section-title">{{ t('cloud.joinTitle') }}</h3>
         <p class="cloud-panel__hint">{{ t('cloud.joinHint') }}</p>
         <form class="cloud-panel__config-form" @submit.prevent="onJoin">
-          <input
-            v-model="joinTokenDraft"
-            type="text"
-            class="cloud-panel__input"
-            :placeholder="t('cloud.invitationCode')"
-            :disabled="loading || joining"
-            autocomplete="off"
-          />
-          <input
-            v-if="showCloudUrlField"
-            v-model="baseUrlDraft"
-            type="url"
-            class="cloud-panel__input"
-            :placeholder="t('cloud.baseUrl')"
-            :disabled="loading || joining"
-          />
+          <div class="cloud-panel__field">
+            <label for="cloud-join-token">{{ t('cloud.invitationCode') }}</label>
+            <input
+              id="cloud-join-token"
+              v-model="joinTokenDraft"
+              type="text"
+              class="cloud-panel__input"
+              :disabled="loading || joining"
+              autocomplete="off"
+            />
+          </div>
+          <div v-if="showCloudUrlField" class="cloud-panel__field">
+            <label for="cloud-join-url">{{ t('cloud.joinUrlLabel') }}</label>
+            <input
+              id="cloud-join-url"
+              v-model="baseUrlDraft"
+              type="url"
+              class="cloud-panel__input"
+              :placeholder="t('cloud.baseUrlPlaceholder')"
+              :disabled="loading || joining"
+            />
+          </div>
           <button
             type="submit"
             class="cloud-panel__save-btn"
@@ -42,188 +51,241 @@
             {{ joining ? t('cloud.joining') : t('cloud.join') }}
           </button>
         </form>
-        <button
-          v-if="!isTechnicalFace"
-          type="button"
-          class="cloud-panel__link-btn"
-          @click="showAdvancedOptions = true"
-        >
-          {{ t('cloud.advancedOptions') }}
-        </button>
       </section>
 
-      <section v-else class="cloud-panel__section">
+      <!-- Connexion (guidé et avancé) -->
+      <section v-if="status?.enrolled" class="cloud-panel__section">
         <h3 class="cloud-panel__section-title">
           {{ t('cloud.connectedTo', { org: connectedOrgLabel }) }}
         </h3>
-        <dl class="cloud-panel__status">
-          <div>
-            <dt>{{ t('cloud.statusSyncedCount') }}</dt>
-            <dd>{{ status?.synced_count ?? 0 }}</dd>
-          </div>
-          <div>
-            <dt>{{ t('cloud.statusLastSync') }}</dt>
-            <dd>{{ lastSyncLabel }}</dd>
-          </div>
-        </dl>
+        <p class="cloud-panel__sync-meta">
+          {{ t('cloud.syncMeta', { count: status?.synced_count ?? 0, lastSync: lastSyncLabel }) }}
+        </p>
         <button
           type="button"
-          class="cloud-panel__regards-btn"
+          class="cloud-panel__save-btn"
           :disabled="loading || syncingRegards"
           @click="onSyncRegards"
         >
           {{ syncingRegards ? t('cloud.syncingRegards') : t('cloud.syncRegards') }}
         </button>
+        <div class="cloud-panel__action-links">
+          <button
+            v-if="isFinalFace && !showLocalOptions"
+            type="button"
+            class="cloud-panel__link-btn"
+            @click="showLocalOptions = true"
+          >
+            {{ t('cloud.localOptions') }}
+          </button>
+          <button
+            type="button"
+            class="cloud-panel__link-btn cloud-panel__link-btn--danger"
+            :disabled="loading || disconnecting"
+            @click="onDisconnect"
+          >
+            {{ disconnecting ? t('cloud.disconnecting') : t('cloud.disconnect') }}
+          </button>
+        </div>
+      </section>
+
+      <section
+        v-if="showLocalOptions && isFinalFace && status?.enrolled"
+        class="cloud-panel__section cloud-panel__section--local"
+      >
+        <h4 class="cloud-panel__subsection-title">{{ t('cloud.mountPathTitle') }}</h4>
+        <p class="cloud-panel__hint">{{ t('cloud.mountPathHint') }}</p>
+        <form class="cloud-panel__config-form" @submit.prevent="onSaveMountPath">
+          <div class="cloud-panel__field">
+            <label for="cloud-mount-path-guided">{{ t('cloud.mountPathTitle') }}</label>
+            <input
+              id="cloud-mount-path-guided"
+              v-model="mountPathDraft"
+              type="text"
+              class="cloud-panel__input"
+              :placeholder="t('cloud.mountPathPlaceholder')"
+              :disabled="loading || savingConfig"
+            />
+          </div>
+          <button
+            type="button"
+            class="cloud-panel__pick-btn"
+            :disabled="loading || savingConfig"
+            @click="onPickFolder"
+          >
+            {{ t('cloud.browse') }}
+          </button>
+          <button
+            type="submit"
+            class="cloud-panel__save-btn"
+            :disabled="loading || savingConfig || !mountPathDraft.trim()"
+          >
+            {{ t('cloud.saveMountPath') }}
+          </button>
+        </form>
         <button
-          type="button"
-          class="cloud-panel__disconnect-btn"
-          :disabled="loading || disconnecting"
-          @click="onDisconnect"
-        >
-          {{ disconnecting ? t('cloud.disconnecting') : t('cloud.disconnect') }}
-        </button>
-        <button
-          v-if="!isTechnicalFace"
           type="button"
           class="cloud-panel__link-btn"
-          @click="showAdvancedOptions = true"
+          @click="showLocalOptions = false"
         >
-          {{ t('cloud.cacheOptions') }}
+          {{ t('cloud.hideLocalOptions') }}
         </button>
       </section>
-    </template>
 
-    <!-- Visage technique (admin / avancé) -->
-    <section
-      v-if="isTechnicalFace || showAdvancedOptions"
-      class="cloud-panel__section cloud-panel__section--advanced"
-    >
-      <h3 class="cloud-panel__section-title">{{ t('cloud.advancedOptions') }}</h3>
-      <h4 class="cloud-panel__subsection-title">{{ t('cloud.enrollTitle') }}</h4>
-      <p class="cloud-panel__hint">{{ t('cloud.enrollHint') }}</p>
-      <form class="cloud-panel__config-form" @submit.prevent="onSaveEnroll">
-        <input
-          v-model="baseUrlDraft"
-          type="url"
-          class="cloud-panel__input"
-          :placeholder="t('cloud.baseUrl')"
-          :disabled="loading || savingEnroll"
-        />
-        <input
-          v-model="bearerTokenDraft"
-          type="password"
-          class="cloud-panel__input"
-          :placeholder="t('cloud.bearerToken')"
-          :disabled="loading || savingEnroll"
-        />
-        <button
-          type="submit"
-          class="cloud-panel__save-btn"
-          :disabled="loading || savingEnroll || !baseUrlDraft.trim() || !bearerTokenDraft.trim()"
-        >
-          {{ t('cloud.enrollSave') }}
-        </button>
-      </form>
+      <ManagedConnectorsSection
+        v-if="status?.enrolled"
+        :connectors="connectors"
+        :loading="connectorsLoading"
+        :error="displayConnectorsError"
+        :show-ids="isTechnicalFace"
+      />
 
-      <h4 class="cloud-panel__subsection-title">{{ t('cloud.mountPathTitle') }}</h4>
-      <p class="cloud-panel__hint">{{ t('cloud.mountPathHint') }}</p>
-      <form class="cloud-panel__config-form" @submit.prevent="onSaveMountPath">
-        <input
-          v-model="mountPathDraft"
-          type="text"
-          class="cloud-panel__input"
-          :placeholder="t('cloud.mountPathPlaceholder')"
-          :disabled="loading || savingConfig"
-        />
-        <button
-          type="button"
-          class="cloud-panel__pick-btn"
-          :disabled="loading || savingConfig"
-          @click="onPickFolder"
-        >
-          {{ t('cloud.browse') }}
-        </button>
-        <button
-          type="submit"
-          class="cloud-panel__save-btn"
-          :disabled="loading || savingConfig || !mountPathDraft.trim()"
-        >
-          {{ t('cloud.saveMountPath') }}
-        </button>
-      </form>
+      <!-- Visage technique (admin / avancé) -->
+      <section
+        v-if="isTechnicalFace"
+        class="cloud-panel__section cloud-panel__section--technical"
+      >
+        <h3 class="cloud-panel__section-title">{{ t('cloud.technicalSettings') }}</h3>
 
-      <h4 class="cloud-panel__subsection-title">{{ t('cloud.statusTitle') }}</h4>
-      <dl class="cloud-panel__status">
-        <div>
-          <dt>{{ t('cloud.statusConfigured') }}</dt>
-          <dd>{{ status?.configured ? t('common.yes') : t('common.no') }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('cloud.enrolled') }}</dt>
-          <dd>{{ status?.enrolled ? t('common.yes') : t('common.no') }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('cloud.bearerToken') }}</dt>
-          <dd>{{ status?.has_token ? t('cloud.tokenActive') : t('cloud.tokenMissing') }}</dd>
-        </div>
-        <div v-if="status?.base_url">
-          <dt>{{ t('cloud.baseUrl') }}</dt>
-          <dd>{{ status.base_url }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('cloud.statusLastSync') }}</dt>
-          <dd>{{ lastSyncLabel }}</dd>
-        </div>
-        <div>
-          <dt>{{ t('cloud.statusSyncedCount') }}</dt>
-          <dd>{{ status?.synced_count ?? 0 }}</dd>
-        </div>
-      </dl>
-    </section>
-
-    <section class="cloud-panel__section">
-      <div class="cloud-panel__section-head">
-        <h3 class="cloud-panel__section-title">{{ t('cloud.projectsTitle') }}</h3>
-        <button
-          type="button"
-          class="cloud-panel__refresh-btn"
-          :disabled="loading || syncing || pulling"
-          @click="refreshProjects"
-        >
-          {{ t('common.refresh') }}
-        </button>
-      </div>
-
-      <p v-if="loading && !projects.length" class="cloud-panel__loading">
-        {{ t('common.loading') }}
-      </p>
-      <p v-else-if="!projects.length && !projectsLoadError" class="cloud-panel__empty">
-        {{ t('cloud.noProjects') }}
-      </p>
-      <ul v-else class="cloud-panel__projects" role="list">
-        <li v-for="project in projects" :key="project.id" class="cloud-panel__project">
-          <span class="cloud-panel__project-name">{{ project.name }}</span>
-          <div v-if="showCacheOperations" class="cloud-panel__project-actions">
-            <button
-              type="button"
-              class="cloud-panel__sync-btn"
-              :disabled="syncing || pulling || !canSync"
-              @click="onSync(project.id)"
-            >
-              {{ syncing ? t('cloud.syncing') : t('cloud.pushLocalCache') }}
-            </button>
-            <button
-              type="button"
-              class="cloud-panel__pull-btn"
-              :disabled="syncing || pulling || !canSync"
-              @click="onPull(project.id)"
-            >
-              {{ pulling ? t('cloud.syncing') : t('cloud.reloadCache') }}
-            </button>
+        <h4 class="cloud-panel__subsection-title">{{ t('cloud.enrollTitle') }}</h4>
+        <p class="cloud-panel__hint">{{ t('cloud.enrollHint') }}</p>
+        <form class="cloud-panel__config-form" @submit.prevent="onSaveEnroll">
+          <div class="cloud-panel__field">
+            <label for="cloud-base-url">{{ t('cloud.baseUrl') }}</label>
+            <input
+              id="cloud-base-url"
+              v-model="baseUrlDraft"
+              type="url"
+              class="cloud-panel__input"
+              :placeholder="t('cloud.baseUrl')"
+              :disabled="loading || savingEnroll"
+            />
           </div>
-        </li>
-      </ul>
-    </section>
+          <div class="cloud-panel__field">
+            <label for="cloud-bearer-token">{{ t('cloud.bearerToken') }}</label>
+            <input
+              id="cloud-bearer-token"
+              v-model="bearerTokenDraft"
+              type="password"
+              class="cloud-panel__input"
+              :placeholder="t('cloud.bearerToken')"
+              :disabled="loading || savingEnroll"
+            />
+          </div>
+          <button
+            type="submit"
+            class="cloud-panel__save-btn"
+            :disabled="loading || savingEnroll || !baseUrlDraft.trim() || !bearerTokenDraft.trim()"
+          >
+            {{ t('cloud.enrollSave') }}
+          </button>
+        </form>
+
+        <h4 class="cloud-panel__subsection-title">{{ t('cloud.mountPathTitle') }}</h4>
+        <p class="cloud-panel__hint">{{ t('cloud.mountPathHint') }}</p>
+        <form class="cloud-panel__config-form" @submit.prevent="onSaveMountPath">
+          <div class="cloud-panel__field">
+            <label for="cloud-mount-path-technical">{{ t('cloud.mountPathTitle') }}</label>
+            <input
+              id="cloud-mount-path-technical"
+              v-model="mountPathDraft"
+              type="text"
+              class="cloud-panel__input"
+              :placeholder="t('cloud.mountPathPlaceholder')"
+              :disabled="loading || savingConfig"
+            />
+          </div>
+          <button
+            type="button"
+            class="cloud-panel__pick-btn"
+            :disabled="loading || savingConfig"
+            @click="onPickFolder"
+          >
+            {{ t('cloud.browse') }}
+          </button>
+          <button
+            type="submit"
+            class="cloud-panel__save-btn"
+            :disabled="loading || savingConfig || !mountPathDraft.trim()"
+          >
+            {{ t('cloud.saveMountPath') }}
+          </button>
+        </form>
+
+        <h4 class="cloud-panel__subsection-title">{{ t('cloud.statusTitle') }}</h4>
+        <dl class="cloud-panel__status cloud-panel__status--compact">
+          <div>
+            <dt>{{ t('cloud.statusEnrolled') }}</dt>
+            <dd>{{ status?.enrolled ? t('common.yes') : t('common.no') }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('cloud.bearerToken') }}</dt>
+            <dd>{{ status?.has_token ? t('cloud.tokenActive') : t('cloud.tokenMissing') }}</dd>
+          </div>
+          <div v-if="status?.base_url">
+            <dt>{{ t('cloud.baseUrl') }}</dt>
+            <dd>{{ status.base_url }}</dd>
+          </div>
+          <div v-if="!status?.enrolled">
+            <dt>{{ t('cloud.statusLastSync') }}</dt>
+            <dd>{{ lastSyncLabel }}</dd>
+          </div>
+          <div>
+            <dt>{{ t('cloud.statusConfigured') }}</dt>
+            <dd>{{ status?.configured ? t('common.yes') : t('common.no') }}</dd>
+          </div>
+        </dl>
+      </section>
+
+      <section
+        v-if="status?.enrolled || isTechnicalFace"
+        class="cloud-panel__section"
+      >
+        <div class="cloud-panel__section-head">
+          <h3 class="cloud-panel__section-title">{{ t('cloud.projectsTitle') }}</h3>
+          <button
+            type="button"
+            class="cloud-panel__refresh-btn"
+            :disabled="loading || syncing || pulling"
+            @click="refreshProjects"
+          >
+            {{ t('common.refresh') }}
+          </button>
+        </div>
+
+        <p v-if="loading && !projects.length" class="cloud-panel__loading">
+          {{ t('common.loading') }}
+        </p>
+        <p v-else-if="!projects.length && !projectsLoadError" class="cloud-panel__empty">
+          {{ status?.enrolled ? t('cloud.noProjectsEnrolled') : t('cloud.noProjects') }}
+        </p>
+        <ul v-else class="cloud-panel__projects" role="list">
+          <li v-for="project in projects" :key="project.id" class="cloud-panel__project">
+            <span class="cloud-panel__project-name">{{ project.name }}</span>
+            <div v-if="showProjectCacheActions" class="cloud-panel__project-actions">
+              <button
+                v-if="showSyncButton"
+                type="button"
+                class="cloud-panel__sync-btn"
+                :disabled="syncing || pulling || !canSync"
+                @click="onSync(project.id)"
+              >
+                {{ syncing ? t('cloud.syncing') : t('cloud.pushLocalCache') }}
+              </button>
+              <button
+                v-if="canPull"
+                type="button"
+                class="cloud-panel__pull-btn"
+                :disabled="syncing || pulling || !canSync"
+                @click="onPull(project.id)"
+              >
+                {{ pulling ? t('cloud.syncing') : t('cloud.reloadCache') }}
+              </button>
+            </div>
+          </li>
+        </ul>
+      </section>
+    </template>
   </div>
 </template>
 
@@ -237,6 +299,7 @@ import { PROJET_PLUGIN_ID, PERSONAS_PLUGIN_ID, usePlugins } from '@composables/u
 import { pickProjectFolder } from '@composables/useDesktop';
 import { resolveUiMode, listProjetProjects, type ProjetProject } from '@services/aiSidecar';
 import { usePersonas } from '@composables/usePersonas';
+import ManagedConnectorsSection from '@components/cloud/ManagedConnectorsSection.vue';
 
 const { t } = useI18n();
 const emit = defineEmits<{
@@ -261,6 +324,9 @@ const {
   sync,
   pull,
   syncRegards,
+  connectors,
+  connectorsLoading,
+  connectorsError,
 } = useCloud();
 
 const mountPathDraft = ref('');
@@ -271,15 +337,18 @@ const savingConfig = ref(false);
 const savingEnroll = ref(false);
 const joining = ref(false);
 const disconnecting = ref(false);
-const showAdvancedOptions = ref(false);
+const showLocalOptions = ref(false);
 const projects = ref<ProjetProject[]>([]);
 const projectsLoadError = ref<string | null>(null);
 
 const uiMode = computed(() => resolveUiMode(settingsLocked.value, settingsMode.value));
 const isTechnicalFace = computed(() => uiMode.value === 'advanced');
 const isFinalFace = computed(() => !isTechnicalFace.value);
-const showCacheOperations = computed(
-  () => !status.value?.enrolled && (isTechnicalFace.value || showAdvancedOptions.value),
+const showProjectCacheActions = computed(
+  () => isTechnicalFace.value || showLocalOptions.value,
+);
+const showSyncButton = computed(
+  () => showProjectCacheActions.value && !status.value?.enrolled,
 );
 
 const presetCloudUrl = computed(() => settings.value.cloudEndpoint?.trim() ?? '');
@@ -292,6 +361,7 @@ const connectedOrgLabel = computed(
 );
 
 const canSync = computed(() => Boolean(status.value?.configured || status.value?.enrolled));
+const canPull = computed(() => Boolean(status.value?.enrolled));
 
 const lastSyncLabel = computed(() => {
   const raw = status.value?.last_sync;
@@ -314,8 +384,19 @@ function isTechnicalError(message: string): boolean {
   return /\b(bearer|token|enroll|blob|mount_path|stubbearer|api)\b/i.test(trimmed);
 }
 
+function mapConnectorError(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (trimmed === 'invalid_device_token') return t('cloud.connectors.authFailed');
+  if (trimmed.startsWith('connectors_unavailable:')) return t('cloud.connectors.loadFailed');
+  return null;
+}
+
 function humanizeError(raw: string | null, fallbackKey: string): string | null {
   if (!raw) return null;
+  if (fallbackKey === 'cloud.connectors.loadFailed') {
+    const mapped = mapConnectorError(raw);
+    if (mapped) return mapped;
+  }
   if (isTechnicalError(raw)) return t(fallbackKey);
   return raw;
 }
@@ -324,6 +405,19 @@ const displayLoadError = computed(() => humanizeError(loadError.value, 'cloud.lo
 const displayProjectsLoadError = computed(() =>
   humanizeError(projectsLoadError.value, 'cloud.projectsLoadFailed'),
 );
+const displayConnectorsError = computed(() => {
+  const raw = connectorsError.value;
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (trimmed === 'invalid_device_token') return t('cloud.connectors.authFailed');
+  if (
+    trimmed.includes('code d\'invitation')
+    || trimmed.toLowerCase().includes('invitation code')
+  ) {
+    return trimmed;
+  }
+  return humanizeError(raw, 'cloud.connectors.loadFailed');
+});
 
 function notifyError(raw: string | null, fallbackKey: string): void {
   Notify.create({
@@ -428,11 +522,20 @@ async function onJoin(): Promise<void> {
     const ok = await enroll({ baseUrl, joinToken: joinTokenDraft.value });
     if (ok) {
       joinTokenDraft.value = '';
+      showLocalOptions.value = false;
+      await refreshProjects();
       Notify.create({
         message: t('cloud.joinSuccess'),
         color: 'positive',
         timeout: 2000,
       });
+      if (connectorsError.value) {
+        Notify.create({
+          message: displayConnectorsError.value ?? t('cloud.connectors.loadFailed'),
+          color: 'warning',
+          timeout: 4000,
+        });
+      }
     } else {
       notifyError(loadError.value, 'cloud.joinFailed');
     }
@@ -450,13 +553,22 @@ async function onSaveEnroll(): Promise<void> {
     });
     if (ok) {
       bearerTokenDraft.value = '';
+      showLocalOptions.value = false;
+      await refreshProjects();
       Notify.create({
         message: t('cloud.enrolled'),
         color: 'positive',
         timeout: 2000,
       });
+      if (connectorsError.value) {
+        Notify.create({
+          message: displayConnectorsError.value ?? t('cloud.connectors.requireDevice'),
+          color: 'warning',
+          timeout: 4000,
+        });
+      }
     } else {
-      notifyError(loadError.value, 'cloud.syncFailed');
+      notifyError(loadError.value, 'cloud.enrollFailed');
     }
   } finally {
     savingEnroll.value = false;
@@ -502,6 +614,10 @@ async function onDisconnect(): Promise<void> {
   try {
     const ok = await disconnect();
     if (ok) {
+      showLocalOptions.value = false;
+      joinTokenDraft.value = '';
+      bearerTokenDraft.value = '';
+      await refreshProjects();
       Notify.create({
         message: t('cloud.disconnected'),
         color: 'positive',
@@ -599,9 +715,21 @@ async function onPull(projectId: string): Promise<void> {
   }
 }
 
-watch(isProjetPluginActive, () => {
-  void refreshProjects();
-});
+watch(
+  () => isProjetPluginActive.value,
+  () => {
+    void refreshProjects();
+  },
+);
+
+watch(
+  () => status.value?.enrolled === true,
+  (enrolled) => {
+    if (!enrolled) {
+      showLocalOptions.value = false;
+    }
+  },
+);
 
 watch(status, (next) => {
   if (next?.mount_path) {
@@ -630,28 +758,18 @@ defineExpose({
 .cloud-panel {
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: 12px;
+  gap: var(--wp-space-3);
+  padding: var(--wp-space-3);
   min-height: 0;
   overflow-y: auto;
 }
 
 .cloud-panel__empty,
 .cloud-panel__loading {
-  padding: 24px 8px;
+  padding: var(--wp-space-6) var(--wp-space-2);
   text-align: center;
   color: var(--wp-text-faint);
   font-size: var(--wp-fs-sm);
-}
-
-.cloud-panel__badge {
-  align-self: flex-start;
-  font-size: var(--wp-fs-xs);
-  padding: 2px 8px;
-  border-radius: var(--wp-r-pill);
-  background: var(--wp-gold-soft, var(--wp-surface-3));
-  color: var(--wp-gold, var(--wp-text-muted));
-  font-weight: 600;
 }
 
 .cloud-panel__error {
@@ -663,8 +781,8 @@ defineExpose({
 .cloud-panel__section {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 10px 0;
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-2) 0;
   border-top: 1px solid var(--wp-border);
 
   &:first-of-type {
@@ -673,7 +791,8 @@ defineExpose({
   }
 }
 
-.cloud-panel__section--advanced {
+.cloud-panel__section--technical,
+.cloud-panel__section--local {
   border-top: 1px dashed var(--wp-border);
 }
 
@@ -681,7 +800,7 @@ defineExpose({
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--wp-space-2);
 }
 
 .cloud-panel__section-title {
@@ -704,16 +823,42 @@ defineExpose({
   color: var(--wp-text-muted);
 }
 
+.cloud-panel__sync-meta {
+  margin: 0;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-muted);
+}
+
+.cloud-panel__action-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-3);
+}
+
+.cloud-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-1);
+  flex: 1 1 180px;
+
+  label {
+    font-size: var(--wp-fs-xs);
+    color: var(--wp-text-muted);
+    font-weight: 500;
+  }
+}
+
 .cloud-panel__config-form {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--wp-space-2);
 }
 
 .cloud-panel__input {
   flex: 1 1 180px;
   min-height: 34px;
-  padding: 6px 10px;
+  padding: var(--wp-space-2) var(--wp-space-3);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-sm);
   background: var(--wp-surface);
@@ -724,11 +869,9 @@ defineExpose({
 .cloud-panel__save-btn,
 .cloud-panel__refresh-btn,
 .cloud-panel__sync-btn,
-.cloud-panel__pull-btn,
-.cloud-panel__regards-btn,
-.cloud-panel__disconnect-btn {
+.cloud-panel__pull-btn {
   min-height: 34px;
-  padding: 6px 10px;
+  padding: var(--wp-space-2) var(--wp-space-3);
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-sm);
   background: var(--wp-surface-2);
@@ -746,12 +889,6 @@ defineExpose({
   border-color: var(--wp-accent);
 }
 
-.cloud-panel__disconnect-btn {
-  align-self: flex-start;
-  color: var(--wp-danger);
-  border-color: var(--wp-danger);
-}
-
 .cloud-panel__link-btn {
   align-self: flex-start;
   padding: 0;
@@ -761,12 +898,21 @@ defineExpose({
   font-size: var(--wp-fs-xs);
   cursor: pointer;
   text-decoration: underline;
+
+  &:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+}
+
+.cloud-panel__link-btn--danger {
+  color: var(--wp-danger);
 }
 
 .cloud-panel__status {
   margin: 0;
   display: grid;
-  gap: 8px;
+  gap: var(--wp-space-2);
   font-size: var(--wp-fs-xs);
 
   dt {
@@ -779,24 +925,35 @@ defineExpose({
   }
 }
 
+.cloud-panel__status--compact {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+}
+
 .cloud-panel__projects {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 0;
 }
 
 .cloud-panel__project {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-r-sm);
-  background: var(--wp-surface);
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-2) 0;
+  border-bottom: 1px solid var(--wp-border);
+
+  &:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  &:first-child {
+    padding-top: 0;
+  }
 }
 
 .cloud-panel__project-name {
@@ -807,6 +964,6 @@ defineExpose({
 .cloud-panel__project-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--wp-space-2);
 }
 </style>

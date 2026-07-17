@@ -129,7 +129,7 @@ describe('useCapabilities', () => {
 
     expect(getById('projects')?.state.kind).toBe('active');
     expect(getById('regards')?.state.kind).toBe('available');
-    expect(getById('project_sync')?.state.kind).toBe('coming_soon');
+    expect(getById('project_sync')?.state.kind).toBe('available');
   });
 
   it('marque blocked avec managedByOrganization quand le preset bloque', () => {

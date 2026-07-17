@@ -2,7 +2,7 @@
 
 > **Last updated:** 14/07/2026
 
-Workproba provides **local-first, scoped memory** for the desktop agent. Data stays on the user's machine (SQLite, JSON session files). No cloud memory service is required.
+Workproba provides **scoped local memory** for the desktop agent. Data stays on the user's machine (SQLite, JSON session files). No cloud memory service is required (conversations and RAG stay on the desktop; Improba Cloud handles auth, secrets, and managed connectors separately).
 
 The system combines **three complementary layers**:
 
@@ -18,7 +18,7 @@ Explicit memories use two **scopes** (`user`, `project`). RAG is **project-only*
 
 ## Design principles
 
-1. **Local-first**: all durable memory lives under `{app_data}`; the sidecar binds to loopback only.
+1. **Local storage**: all durable memory lives under `{app_data}`; the sidecar binds to loopback only.
 2. **Scoped sharing**: user facts follow the person; project facts follow the workspace.
 3. **Injection over tool calls**: the agent receives relevant context every turn without reading memory explicitly.
 4. **Untrusted context**: injected memories and session extracts are wrapped in `<untrusted>` blocks with guardrail text (prompt-injection mitigation).

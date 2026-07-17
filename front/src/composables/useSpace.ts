@@ -47,6 +47,22 @@ function applySpace(workspace: WorkspaceInfo): void {
   persistSpaceState(workspace);
 }
 
+/**
+ * Best-effort rollback when `set_active_project_path` succeeded but front activation failed.
+ * No Rust command clears the active project; re-activate the previous path when known.
+ */
+async function rollbackRustActiveProject(previousPath: string | null): Promise<void> {
+  if (!previousPath) {
+    // TODO: no IPC to clear Rust active project when there was no prior space.
+    return;
+  }
+  try {
+    await setActiveProjectPath(previousPath);
+  } catch {
+    // Front state is already unchanged; Rust may stay on the failed activation.
+  }
+}
+
 export interface UseSpaceReturn {
   activePath: Ref<string | null>;
   activeSpaceId: Ref<string | null>;
@@ -84,21 +100,27 @@ export function useSpace(): UseSpaceReturn {
   }
 
   async function activateSpace(workspace: WorkspaceInfo): Promise<void> {
-    applySpace(workspace);
     await ensureWorkspaceSessions(workspace.id, workspace.folderPath);
+    applySpace(workspace);
     await refreshDocuments();
   }
 
   async function openSpace(): Promise<void> {
     loading.value = true;
     error.value = null;
+    const previousPath = activePath.value;
 
     try {
       const picked = await pickProjectFolder();
       if (!picked) return;
 
       const workspace = await setActiveProjectPath(picked);
-      await activateSpace(workspace);
+      try {
+        await activateSpace(workspace);
+      } catch (err) {
+        await rollbackRustActiveProject(previousPath);
+        throw err;
+      }
     } catch (err) {
       error.value =
         err instanceof Error ? err.message : t('errors.openSpaceFailed');
@@ -110,9 +132,15 @@ export function useSpace(): UseSpaceReturn {
   async function switchSpace(folderPath: string): Promise<void> {
     loading.value = true;
     error.value = null;
+    const previousPath = activePath.value;
     try {
       const workspace = await setActiveProjectPath(folderPath);
-      await activateSpace(workspace);
+      try {
+        await activateSpace(workspace);
+      } catch (err) {
+        await rollbackRustActiveProject(previousPath);
+        throw err;
+      }
     } catch (err) {
       error.value =
         err instanceof Error ? err.message : t('errors.switchSpaceFailed');
@@ -132,11 +160,17 @@ export function useSpace(): UseSpaceReturn {
   async function initFromStoredPath(): Promise<void> {
     loading.value = true;
     error.value = null;
+    const previousPath = activePath.value;
 
     try {
       const restored = await restoreLastProjectPath();
       if (restored) {
-        await activateSpace(restored);
+        try {
+          await activateSpace(restored);
+        } catch (err) {
+          await rollbackRustActiveProject(previousPath);
+          throw err;
+        }
         return;
       }
 
@@ -149,7 +183,12 @@ export function useSpace(): UseSpaceReturn {
       if (!path) return;
 
       const workspace = await setActiveProjectPath(path);
-      await activateSpace(workspace);
+      try {
+        await activateSpace(workspace);
+      } catch (err) {
+        await rollbackRustActiveProject(previousPath);
+        throw err;
+      }
     } catch (err) {
       error.value =
         err instanceof Error

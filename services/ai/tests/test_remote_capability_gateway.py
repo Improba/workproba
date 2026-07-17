@@ -35,6 +35,7 @@ def test_minimize_remote_payload_strips_local_data() -> None:
         "project_path": "/secret/project",
         "conversations": [{"role": "user", "content": "hi"}],
         "nested": {"local_files": ["a.txt"], "keep": True},
+        "items": [{"conversation": "leak", "ok": 1}, {"keep": 2}],
     }
     minimized = minimize_remote_payload(payload)
     assert "workspace_data_dir" not in minimized
@@ -42,6 +43,7 @@ def test_minimize_remote_payload_strips_local_data() -> None:
     assert "conversations" not in minimized
     assert minimized["action"] == "sync"
     assert minimized["nested"] == {"keep": True}
+    assert minimized["items"] == [{"ok": 1}, {"keep": 2}]
 
 
 def test_open_remote_capability_gateway_requires_permission(tmp_path: Path) -> None:
@@ -112,11 +114,38 @@ async def test_local_stub_timeout(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_http_gateway_surfaces_server_error_body(tmp_path: Path) -> None:
+    clear_remote_capability_audit_log()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            403,
+            json={"statusCode": 403, "message": "connector_not_allowed:echo"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    client = httpx.AsyncClient(transport=transport, base_url="https://cloud.test")
+    gateway = HttpRemoteCapabilityGateway(
+        base_url="https://cloud.test",
+        caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
+        app_data_dir=tmp_path / "app_data",
+        allowed_capability_ids=frozenset({"echo"}),
+        http_client=client,
+    )
+    with pytest.raises(RemoteCapabilityRejected, match="connector_not_allowed:echo"):
+        await gateway.invoke_remote(
+            "echo",
+            {"ping": True},
+            IdentityDelegation(subject_id="dev-1", access_token="tok"),
+        )
+
+
+@pytest.mark.asyncio
 async def test_http_gateway_mock_transport(tmp_path: Path) -> None:
     clear_remote_capability_audit_log()
 
     def handler(request: httpx.Request) -> httpx.Response:
-        assert request.url.path == "/capabilities/demo.cap/invoke"
+        assert request.url.path == "/connectors/demo.cap/invoke"
         body = __import__("json").loads(request.content.decode("utf-8"))
         assert "conversations" not in body["payload"]
         assert body["identity"]["subject_id"] == "user-42"

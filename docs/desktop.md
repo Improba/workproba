@@ -1,12 +1,12 @@
 # Workproba Desktop (application locale)
 
 > **Status:** Product decision: desktop pivot  
-> **Last updated:** 15/07/2026  
+> **Last updated:** 17/07/2026  
 > **Terminology:** user-facing **space** (FR: **espace**) = one local folder you work in
 
 ## Decision
 
-Workproba becomes a **local-first desktop application** (Claude Cowork style), multi-platform:
+Workproba becomes a **desktop application** (Claude Cowork style) working on local folders, connected to **Improba Cloud** for managed connectors (standard path). Multi-platform:
 
 | OS | Target formats |
 |---|---|
@@ -114,7 +114,8 @@ Workproba metadata lives in the **application folder**, not in the client folder
 | Desktop shell | Rust / Tauri | Window, OS APIs, filesystem, packaging |
 | AI core | Python / FastAPI | Agent loop, extraction, RAG, fixed tool implementations |
 | Local data | `{app_data}/spaces/{id}/.workproba/` | Sessions, versions, memory |
-| Cloud (archived) | `legacy/` | Former NestJS stack |
+| Cloud legacy (archived) | `legacy/` | Former NestJS stack |
+| Improba Cloud (Mode A MVP) | `workproba-cloud/` | Auth device, managed connectors, transport relay |
 
 ## Security and trust (UX)
 
@@ -147,7 +148,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, builtin plugins (Regards métier), attachments, document preview, audit, Human Approval Gate, Work Event Bus |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
-| **F** | To do | Plan de contrôle cloud (`workproba-cloud/`) + sync artefacts publiés |
+| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`) : join device, managed connectors (`echo`, `ihora.shaped` stub), relay via `invoke_managed_connector`, CloudPanel, sync published artefacts |
 
 ### Phase D: validation
 
@@ -160,7 +161,16 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 ### Product (phase F)
 
-- **Phase F: Cloud (plan de contrôle)** : monorepo `workproba-cloud/` (NestJS + Quasar admin, dérivé du template Improba), consommé par le plugin desktop `workproba.cloud` via `CloudControlPlaneClient`. Sync limitée aux **artefacts publiés** ; pas de réactivation de `legacy/api/` (agent-gateway, sessions serveur). Spec : [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
+**Livré (MVP Mode A, 17/07/2026)** :
+
+- Join device (`POST /devices/join`), `device_id` requis, allowlist fail-closed
+- Connecteurs managés builtins : `echo`, `ihora.shaped` (stub) via `GET /connectors`, `POST /connectors/:id/invoke`
+- Desktop : `RemoteCapabilityGateway`, outil agent `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`
+- CloudPanel (join, connecteurs, regards, projets), sync artefacts publiés
+
+**Ouvert** : SSO org, IHora HTTP réel, vault secrets persistant, Mode B deploy, smoke E2E HTTP.
+
+Monorepo `workproba-cloud/` (NestJS + Quasar admin). Plugin desktop `workproba.cloud` via `CloudControlPlaneClient` et `RemoteCapabilityGateway`. Agent loop stays on desktop. Pas de réactivation de `legacy/api/` (`agent-gateway`). Spec : [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ### CI / release (operational since 14/07/2026, commit `1155d2d`)
 

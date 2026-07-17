@@ -59,16 +59,21 @@ function persistLocal(profile: UserProfile): void {
 
 async function persistToAppSettings(profile: UserProfile): Promise<void> {
   try {
-    const { isDesktopApp, getAppSettings, saveAppSettings } = await import('@composables/useDesktop');
+    const { isDesktopApp } = await import('@composables/useDesktop');
     if (!isDesktopApp()) return;
-    const current = await getAppSettings();
-    const next = {
-      ...current,
+    // Passer par le singleton useAppSettings pour éviter un RMW qui
+    // écraserait des champs mémoire (ex. thinkingDetailView) non encore persistés.
+    const { useAppSettings } = await import('@composables/useAppSettings');
+    const { settings, save, load, loaded } = useAppSettings();
+    if (!loaded.value) {
+      await load();
+    }
+    await save({
+      ...settings.value,
       userName: profile.name || null,
       userOrg: profile.organisation || null,
       profileOnboardingDone: true,
-    };
-    await saveAppSettings(next);
+    });
   } catch {
     // Tauri indisponible : localStorage suffit.
   }

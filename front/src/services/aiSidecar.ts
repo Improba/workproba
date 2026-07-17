@@ -57,6 +57,8 @@ export interface AgentTurnPayload {
   permissions_network?: boolean;
   confirm_before_write?: boolean;
   browser_pilotage_paused?: boolean;
+  code_execute?: boolean;
+  audit_enabled?: boolean | null;
 }
 
 export function getAiSidecarUrl(): string {
@@ -111,6 +113,17 @@ function parseOptionalInt(value: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function assistantThinkingText(m: ChatMessage): string | null {
+  if (m.thinking?.trim()) return m.thinking;
+  const chunks: string[] = [];
+  for (const p of m.parts ?? []) {
+    if (p.type === 'thinking' && p.content?.trim()) {
+      chunks.push(p.content);
+    }
+  }
+  return chunks.length ? chunks.join('\n') : null;
+}
+
 function toSummaryMessages(messages: ChatMessage[]): Array<{
   role: 'user' | 'assistant';
   content: string | null;
@@ -129,7 +142,8 @@ function toSummaryMessages(messages: ChatMessage[]): Array<{
         content: m.content || null,
       };
       if (m.role === 'assistant') {
-        if (m.thinking) entry.thinking = m.thinking;
+        const thinking = assistantThinkingText(m);
+        if (thinking) entry.thinking = thinking;
         if (m.toolCalls?.length) {
           entry.tool_calls = m.toolCalls.map((tc) => ({
             id: tc.id,
@@ -177,7 +191,8 @@ export function toPythonHistory(messages: ChatMessage[]): AgentTurnPayload['hist
       role: 'assistant',
       content: m.content || null,
     };
-    if (m.thinking) entry.thinking = m.thinking;
+    const thinking = assistantThinkingText(m);
+    if (thinking) entry.thinking = thinking;
     if (m.toolCalls?.length) {
       entry.tool_calls = m.toolCalls.map((tc) => ({
         id: tc.id,
@@ -203,11 +218,22 @@ export function toPythonHistory(messages: ChatMessage[]): AgentTurnPayload['hist
 
 export function sanitizeChatMessagesForPersistence(messages: ChatMessage[]): ChatMessage[] {
   return messages.map((message) => {
+    const {
+      pendingConfirmation: _pc,
+      pendingPlan: _pp,
+      ...rest
+    } = message;
+    const base: ChatMessage = { ...rest };
+    if (base.attachments?.length) {
+      base.attachments = base.attachments.map(
+        ({ contentBase64: _b64, previewUrl: _url, ...att }) => att,
+      );
+    }
     if (message.role !== 'assistant' || !message.toolCalls?.length) {
-      return message;
+      return base;
     }
     return {
-      ...message,
+      ...base,
       toolCalls: message.toolCalls.map((toolCall) => ({
         ...toolCall,
         result:
@@ -288,6 +314,14 @@ export function buildAgentTurnPayload(
     permissions_network: security?.permissionsNetwork ?? undefined,
     browser_pilotage_paused: browserPilotagePaused ? true : undefined,
     confirm_before_write: confirmBeforeWrite === false ? false : undefined,
+    code_execute:
+      security?.codeExecute === false || security?.codeExecute === true
+        ? security.codeExecute
+        : undefined,
+    audit_enabled:
+      security?.auditEnabled === false || security?.auditEnabled === true
+        ? security.auditEnabled
+        : undefined,
   };
 }
 
@@ -1262,17 +1296,23 @@ export interface SidecarSecurityContext {
   settingsLocked: boolean;
   permissionsNetwork: boolean;
   locale?: string | null;
+  codeExecute?: boolean | null;
+  auditEnabled?: boolean | null;
 }
 
 export function buildSidecarSecurityContext(
   settingsLocked: boolean,
   permissionsNetwork: boolean,
   locale?: string | null,
+  codeExecute?: boolean | null,
+  auditEnabled?: boolean | null,
 ): SidecarSecurityContext {
   return {
     settingsLocked,
     permissionsNetwork,
     locale: locale ?? undefined,
+    codeExecute: codeExecute ?? undefined,
+    auditEnabled: auditEnabled ?? undefined,
   };
 }
 
@@ -1284,6 +1324,14 @@ function sidecarSecurityPayload(
     settings_locked: security.settingsLocked,
     permissions_network: security.permissionsNetwork,
     locale: security.locale ? toSidecarLocale(security.locale) : undefined,
+    code_execute:
+      security.codeExecute === false || security.codeExecute === true
+        ? security.codeExecute
+        : undefined,
+    audit_enabled:
+      security.auditEnabled === false || security.auditEnabled === true
+        ? security.auditEnabled
+        : undefined,
   };
 }
 
@@ -2248,6 +2296,44 @@ export async function syncManagedRegards(opts: {
     return {
       ok: false,
       error: err instanceof Error ? err.message : 'cloud_sync_regards_failed',
+    };
+  }
+}
+
+export interface ManagedConnector {
+  id: string;
+  name: string;
+  runtime?: string;
+  description?: string;
+}
+
+export interface ManagedConnectorsResult {
+  connectors: ManagedConnector[];
+  enrolled: boolean;
+}
+
+export async function listManagedConnectors(
+  pluginDataDir: string,
+): Promise<SidecarResult<ManagedConnectorsResult>> {
+  const params = new URLSearchParams({ plugin_data_dir: pluginDataDir });
+  try {
+    const response = await fetch(
+      `${getAiSidecarUrl()}/plugins/cloud/connectors?${params.toString()}`,
+      { headers: { 'X-Internal-Secret': getDesktopSecret() } },
+    );
+    const parsed = await parseSidecarJson<ManagedConnectorsResult>(response);
+    if (!parsed.ok) return parsed;
+    return {
+      ok: true,
+      data: {
+        connectors: parsed.data.connectors ?? [],
+        enrolled: Boolean(parsed.data.enrolled),
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_connectors_failed',
     };
   }
 }

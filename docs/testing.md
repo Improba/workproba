@@ -26,7 +26,7 @@ Framework: **pytest** + `pytest-asyncio`. Offline tests are deterministic (no LL
 - `tests/test_compaction.py`: in-conversation history compaction
 - `tests/test_plugin_personas.py`, `test_personas_estimate_cost.py`: personas plugin
 - `tests/test_plugin_projet.py`, `test_plugin_projet_http.py`: project plugin
-- `tests/test_plugin_browser.py`, `test_plugin_cloud.py`: experimental plugins (browser: 38 tests — tools, HTTP, audit, bbox, piloting pause, screenshot limits, history sanitization)
+- `tests/test_plugin_browser.py`, `test_plugin_cloud.py`: browser (experimental) and cloud plugin (Mode A MVP: join, connectors, sync; browser: 38 tests — tools, HTTP, audit, bbox, piloting pause, screenshot limits, history sanitization)
 - `tests/test_documents_preview.py`, `test_preview_change.py`: document preview
 - `tests/test_attachments.py`, `test_reprocess_attachment.py`: attachments
 - `tests/test_audit.py`, `test_audit_export.py`: audit log

@@ -5,12 +5,12 @@ use commands::{
     activate_plugin, create_conversation, deactivate_plugin, delete_conversation,
     ensure_workproba_dir, export_enterprise_preset, find_conversation_by_id,
     get_active_project_path, get_app_settings, get_conversation, get_enterprise_preset,
-    get_plugin_data_dir, get_workproba_dir, get_workspace_data_dir, get_workspace_info,
-    install_local_plugin, is_preset_active, list_conversations, list_dir_entries, list_documents,
-    list_plugins, list_workspaces, open_external_url, open_path, pick_project_folder,
-    restore_last_project_path, reveal_in_os, save_app_settings, save_conversation,
-    set_active_project_path, uninstall_local_plugin, update_workspace_title, FsWatchState,
-    ProjectState,
+    get_fs_watch_status, get_plugin_data_dir, get_workproba_dir, get_workspace_data_dir,
+    get_workspace_info, install_local_plugin, is_preset_active, list_conversations,
+    list_dir_entries, list_documents, list_plugins, list_workspaces, open_external_url,
+    open_path, pick_project_folder, restore_last_project_path, retry_fs_watch, reveal_in_os,
+    save_app_settings, save_conversation, set_active_project_path, uninstall_local_plugin,
+    update_workspace_title, FsWatchState, ProjectState,
 };
 use sidecar::{ai_sidecar_status, spawn_packaged_sidecar, start_ai_sidecar, try_spawn_dev_uvicorn};
 
@@ -44,6 +44,9 @@ pub fn run() {
             } else if let Err(error) = spawn_packaged_sidecar(app.handle()) {
                 eprintln!("Sidecar empaqueté: {error}");
             }
+            if let Err(error) = commands::preset::run_enterprise_preset_side_effects(app.handle()) {
+                log::warn!("preset side effects au démarrage: {error}");
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -68,6 +71,8 @@ pub fn run() {
             open_path,
             open_external_url,
             reveal_in_os,
+            get_fs_watch_status,
+            retry_fs_watch,
             start_ai_sidecar,
             ai_sidecar_status,
             get_app_settings,

@@ -194,7 +194,7 @@ export interface UseBrowserReturn {
 
 export function useBrowser(): UseBrowserReturn {
   const { isBrowserPluginActive, getPluginDataDir } = usePlugins();
-  const { settingsLocked, permissionsNetwork, locale } = useAppSettings();
+  const { settingsLocked, permissionsNetwork, locale, codeExecute, auditEnabled } = useAppSettings();
 
   registerBrowserWatches(isBrowserPluginActive);
 
@@ -203,6 +203,8 @@ export function useBrowser(): UseBrowserReturn {
       settingsLocked.value,
       permissionsNetwork.value,
       locale.value,
+      codeExecute.value,
+      auditEnabled.value,
     );
   }
 

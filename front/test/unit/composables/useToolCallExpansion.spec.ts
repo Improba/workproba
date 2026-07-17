@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   clearExpansionState,
+  collapseThinking,
   expansionEpoch,
   useThinkingExpansion,
   useToolCallExpansion,
@@ -28,5 +29,30 @@ describe('useToolCallExpansion', () => {
     expect(tool.showRaw.value).toBe(false);
     expect(thinking.expanded.value).toBe(false);
     expect(expansionEpoch.value).toBe(epochBefore + 1);
+  });
+
+  it('collapseThinking replie un bloc raisonnement déplié', () => {
+    clearExpansionState();
+    const thinking = useThinkingExpansion(() => 'think-collapse');
+
+    thinking.expanded.value = true;
+    expect(thinking.expanded.value).toBe(true);
+
+    const epochBefore = expansionEpoch.value;
+    collapseThinking('think-collapse');
+
+    expect(thinking.expanded.value).toBe(false);
+    expect(expansionEpoch.value).toBe(epochBefore + 1);
+  });
+
+  it('collapseThinking est un no-op si déjà replié', () => {
+    clearExpansionState();
+    const thinking = useThinkingExpansion(() => 'think-idle');
+    const epochBefore = expansionEpoch.value;
+
+    collapseThinking('think-idle');
+
+    expect(thinking.expanded.value).toBe(false);
+    expect(expansionEpoch.value).toBe(epochBefore);
   });
 });

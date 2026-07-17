@@ -145,6 +145,11 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "will_act": "Je vais effectuer une action",
             },
             "cancelled": "Action annulée",
+            "invoke_managed_connector": {
+                "will": "Je vais appeler le connecteur managé {connector_id}",
+                "cannot": "Je n'ai pas pu appeler le connecteur {connector_id}",
+                "done": "J'ai appelé le connecteur managé {connector_id}",
+            },
         },
         "loop": {
             "internal_error": (
@@ -403,6 +408,18 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "use_cloud_sot_not_mirror_sync": (
                 "La synchronisation miroir est désactivée : le cloud est la source de vérité."
             ),
+            "not_authenticated": (
+                "Ce poste n'est pas authentifié auprès d'Improba Cloud. "
+                "Utilisez enroll_to_cloud d'abord."
+            ),
+            "connectors_load_failed": "Impossible de charger les connecteurs managés.",
+            "connectors_auth_failed": (
+                "Jeton cloud invalide ou expiré. Reconnectez ce poste via un code d'invitation."
+            ),
+            "connectors_require_device": (
+                "Les connecteurs nécessitent une connexion organisation "
+                "(code d'invitation), pas un jeton technique seul."
+            ),
         },
         "preset": {
             "active": "Preset enterprise actif",
@@ -418,6 +435,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "web_search_query_empty": "Requête de recherche vide",
             "web_search_limit_reached": "Limite de recherches web atteinte pour ce message",
             "web_search_bad_response": "Réponse de recherche web illisible",
+            "network_locked": "Accès réseau interdit par le preset",
         },
         "personas": {
             "estimate": {
@@ -617,6 +635,11 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "will_act": "I will perform an action",
             },
             "cancelled": "Action cancelled",
+            "invoke_managed_connector": {
+                "will": "I will call the managed connector {connector_id}",
+                "cannot": "I could not call the connector {connector_id}",
+                "done": "I called the managed connector {connector_id}",
+            },
         },
         "loop": {
             "internal_error": "An internal error occurred. Please try again.",
@@ -863,6 +886,18 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "use_cloud_sot_not_mirror_sync": (
                 "Mirror sync is disabled: the cloud is the source of truth."
             ),
+            "not_authenticated": (
+                "This workstation is not authenticated with Improba Cloud. "
+                "Use enroll_to_cloud first."
+            ),
+            "connectors_load_failed": "Could not load managed connectors.",
+            "connectors_auth_failed": (
+                "Invalid or expired cloud token. Reconnect this workstation with an invitation code."
+            ),
+            "connectors_require_device": (
+                "Connectors require an organization connection (invitation code), "
+                "not a technical token alone."
+            ),
         },
         "preset": {
             "active": "Enterprise preset active",
@@ -878,6 +913,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "web_search_query_empty": "Empty search query",
             "web_search_limit_reached": "Web search limit reached for this message",
             "web_search_bad_response": "Unreadable web search response",
+            "network_locked": "Network access is forbidden by the preset",
         },
         "personas": {
             "estimate": {

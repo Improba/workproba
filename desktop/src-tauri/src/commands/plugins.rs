@@ -212,6 +212,12 @@ fn validate_plugin_id(id: &str) -> Result<(), String> {
     if id.trim().is_empty() {
         return Err("Identifiant plugin manquant".to_string());
     }
+    if id.contains('/') || id.contains('\\') {
+        return Err(format!("Identifiant plugin invalide : séparateurs interdits : {id}"));
+    }
+    if id.contains("..") {
+        return Err(format!("Identifiant plugin invalide : séquence .. interdite : {id}"));
+    }
     let parts: Vec<&str> = id.split('.').collect();
     if parts.len() < 2 {
         return Err(format!(
@@ -481,6 +487,7 @@ pub fn activate_plugin_at(
     settings: &AppSettings,
     plugin_id: &str,
 ) -> Result<(), String> {
+    validate_plugin_id(plugin_id)?;
     let (manifest, source) = find_manifest(app_data, plugin_id)?;
     can_activate(settings, &manifest, &source)?;
 
@@ -500,6 +507,7 @@ pub fn activate_plugin_at(
 }
 
 pub fn deactivate_plugin_at(app_data: &Path, plugin_id: &str) -> Result<(), String> {
+    validate_plugin_id(plugin_id)?;
     let (manifest, source) = find_manifest(app_data, plugin_id)?;
     let mut registry = load_registry(app_data)?;
     upsert_registry_entry(&mut registry, manifest.id, false, &source);
@@ -688,6 +696,7 @@ pub fn install_local_plugin_at(
 }
 
 pub fn uninstall_local_plugin_at(app_data: &Path, plugin_id: &str) -> Result<(), String> {
+    validate_plugin_id(plugin_id)?;
     let (_, source) = find_manifest(app_data, plugin_id)?;
     if source != PluginSource::Local {
         return Err("Seuls les plugins locaux peuvent être désinstallés".to_string());
@@ -976,6 +985,16 @@ mod plugins_tests {
         assert_eq!(info.manifest.id, "acme.hello");
         assert_eq!(info.source, "local");
         assert!(local_plugin_dir(&app_data, "acme.hello").is_dir());
+    }
+
+    #[test]
+    fn validate_plugin_id_rejects_path_traversal() {
+        assert!(validate_plugin_id("acme.hello").is_ok());
+        assert!(validate_plugin_id("../escape").is_err());
+        assert!(validate_plugin_id("acme/evil").is_err());
+        assert!(validate_plugin_id("acme\\evil").is_err());
+        assert!(validate_plugin_id("").is_err());
+        assert!(validate_plugin_id("single").is_err());
     }
 
     #[test]

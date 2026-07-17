@@ -7,7 +7,7 @@ pub mod project;
 pub mod settings_store;
 pub mod workspace_store;
 
-pub use fs_watch::FsWatchState;
+pub use fs_watch::{get_fs_watch_status, retry_fs_watch, FsWatchState};
 pub use plugins::{
     activate_plugin, deactivate_plugin, get_plugin_data_dir, install_local_plugin, list_plugins,
     uninstall_local_plugin,
