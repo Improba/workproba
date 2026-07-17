@@ -78,8 +78,10 @@ vi.mock('@composables/useLlmSessionContext', () => ({
 
 vi.mock('@composables/usePlugins', () => ({
   PERSONAS_PLUGIN_ID: 'workproba.personas',
+  CLOUD_PLUGIN_ID: 'workproba.cloud',
   usePlugins: () => ({
     isPersonasPluginActive: ref(true),
+    getPluginDataDir: async () => '/tmp/cloud-plugin',
   }),
 }));
 

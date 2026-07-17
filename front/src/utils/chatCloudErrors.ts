@@ -12,6 +12,7 @@ export const NON_RETRYABLE_CLOUD_LLM_CODES = new Set([
   'bearer_token_required',
   'invalid_device_token',
   'device_organization_required',
+  'org_id_required',
 ]);
 
 export function isNonRetryableCloudLlmCode(code: string): boolean {

@@ -1443,6 +1443,7 @@ class PersonasAskRequest(BaseModel):
     locale: str = "fr"
     workspace_data_dir: str | None = None
     include_memory: bool = False
+    cloud_plugin_data_dir: str | None = None
 
 
 class PersonasMeetingRequest(BaseModel):
@@ -1456,6 +1457,7 @@ class PersonasMeetingRequest(BaseModel):
     workspace_data_dir: str | None = None
     include_memory: bool = False
     meeting_id: str | None = None
+    cloud_plugin_data_dir: str | None = None
 
 
 class PersonasDiscussRequest(BaseModel):
@@ -1469,6 +1471,7 @@ class PersonasDiscussRequest(BaseModel):
     locale: str = "fr"
     workspace_data_dir: str | None = None
     include_memory: bool = False
+    cloud_plugin_data_dir: str | None = None
 
 
 class PersonasMeetingsListResponse(BaseModel):
@@ -1559,6 +1562,8 @@ def _memory_store_for_workspace(
     settings: Settings,
     workspace_data_dir: Path,
     provider_set: ProviderSet | None = None,
+    *,
+    cloud_plugin_data_dir: Path | None = None,
 ) -> RagStore:
     from app.rag.store import open_memory_store
 
@@ -1567,6 +1572,7 @@ def _memory_store_for_workspace(
         workspace_data_dir,
         workspace_data_dir,
         provider_set=provider_set,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
     )
     if rag is not None:
         return rag
@@ -1580,6 +1586,8 @@ def _memory_store_for_scope(
     workspace_data_dir: Path,
     memory_scope: str,
     provider_set: ProviderSet | None = None,
+    *,
+    cloud_plugin_data_dir: Path | None = None,
 ) -> RagStore:
     """Ouvre le store de mémoire adapté au scope (user global ou project)."""
     from app.memory_stores import VALID_SCOPES, open_memory_store_for_scope
@@ -1588,7 +1596,12 @@ def _memory_store_for_scope(
         raise HTTPException(status_code=400, detail="Invalid memory scope")
     if memory_scope == "user":
         return open_memory_store_for_scope("user", workspace_data_dir)
-    return _memory_store_for_workspace(settings, workspace_data_dir, provider_set)
+    return _memory_store_for_workspace(
+        settings,
+        workspace_data_dir,
+        provider_set,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+    )
 
 
 @app.get("/plugins/personas/sets", response_model=PersonasSetsResponse)
@@ -1779,10 +1792,20 @@ async def personas_ask(request: Request, payload: PersonasAskRequest) -> EventSo
     from app.plugins.workproba_personas import orchestrator as personas_orchestrator
 
     plugin_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    cloud_dir = (
+        Path(payload.cloud_plugin_data_dir).expanduser().resolve()
+        if payload.cloud_plugin_data_dir
+        else None
+    )
     rag_store = None
     if payload.include_memory and payload.workspace_data_dir:
         ws_dir = _resolve_workspace_data_dir_path(payload.workspace_data_dir)
-        rag_store = _memory_store_for_workspace(settings, ws_dir, payload.provider_set)
+        rag_store = _memory_store_for_workspace(
+            settings,
+            ws_dir,
+            payload.provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+        )
 
     stream = personas_orchestrator.stream_ask(
         plugin_data_dir=plugin_dir,
@@ -1793,6 +1816,7 @@ async def personas_ask(request: Request, payload: PersonasAskRequest) -> EventSo
         provider_set=payload.provider_set,
         locale=locale,
         rag_store=rag_store,
+        cloud_plugin_data_dir=cloud_dir,
     )
     return EventSourceResponse(
         _personas_sse_stream(stream, rag_store)(),
@@ -1813,10 +1837,20 @@ async def personas_meeting(
     from app.plugins.workproba_personas import orchestrator as personas_orchestrator
 
     plugin_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    cloud_dir = (
+        Path(payload.cloud_plugin_data_dir).expanduser().resolve()
+        if payload.cloud_plugin_data_dir
+        else None
+    )
     rag_store = None
     if payload.include_memory and payload.workspace_data_dir:
         ws_dir = _resolve_workspace_data_dir_path(payload.workspace_data_dir)
-        rag_store = _memory_store_for_workspace(settings, ws_dir, payload.provider_set)
+        rag_store = _memory_store_for_workspace(
+            settings,
+            ws_dir,
+            payload.provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+        )
 
     stream = personas_orchestrator.stream_meeting(
         plugin_data_dir=plugin_dir,
@@ -1829,6 +1863,7 @@ async def personas_meeting(
         locale=locale,
         rag_store=rag_store,
         meeting_id=payload.meeting_id,
+        cloud_plugin_data_dir=cloud_dir,
     )
     return EventSourceResponse(
         _personas_sse_stream(stream, rag_store)(),
@@ -1849,10 +1884,20 @@ async def personas_discuss(
     from app.plugins.workproba_personas import orchestrator as personas_orchestrator
 
     plugin_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    cloud_dir = (
+        Path(payload.cloud_plugin_data_dir).expanduser().resolve()
+        if payload.cloud_plugin_data_dir
+        else None
+    )
     rag_store = None
     if payload.include_memory and payload.workspace_data_dir:
         ws_dir = _resolve_workspace_data_dir_path(payload.workspace_data_dir)
-        rag_store = _memory_store_for_workspace(settings, ws_dir, payload.provider_set)
+        rag_store = _memory_store_for_workspace(
+            settings,
+            ws_dir,
+            payload.provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+        )
 
     stream = personas_orchestrator.stream_discuss(
         plugin_data_dir=plugin_dir,
@@ -1866,6 +1911,7 @@ async def personas_discuss(
         locale=locale,
         rag_store=rag_store,
         include_memory=payload.include_memory,
+        cloud_plugin_data_dir=cloud_dir,
     )
     return EventSourceResponse(
         _personas_sse_stream(stream, rag_store)(),
@@ -3294,13 +3340,7 @@ async def cloud_list_connectors_endpoint(
         return CloudConnectorsResponse(connectors=[], enrolled=False)
 
     client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
-    tokens = client.load_tokens()
-    device_id = tokens.get("device_id")
-    if not isinstance(device_id, str) or not device_id.strip():
-        raise HTTPException(
-            status_code=403,
-            detail=t(loc, "cloud.connectors_require_device"),
-        )
+    # Auth via DeviceBearer (access_token) : pas d'exigence de device_id local.
 
     try:
         payload = await client.list_connectors()
@@ -3357,13 +3397,8 @@ async def cloud_llm_quota_endpoint(
         )
 
     client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
-    tokens = client.load_tokens()
-    device_id = tokens.get("device_id")
-    if not isinstance(device_id, str) or not device_id.strip():
-        raise HTTPException(
-            status_code=403,
-            detail=t(loc, "cloud.connectors_require_device"),
-        )
+    # DeviceBearer suffit pour /llm/v1/quota : pas d'exigence de device_id local
+    # (l'enrôlement bearer ne le persiste pas toujours, contrairement au join).
 
     try:
         payload = await client.get_llm_quota()
@@ -3375,6 +3410,7 @@ async def cloud_llm_quota_endpoint(
             "not_subscribed",
             "device_organization_required",
             "quota_exceeded",
+            "org_id_required",
         ):
             status = 429 if detail == "quota_exceeded" else 403
             raise HTTPException(status_code=status, detail=detail) from exc

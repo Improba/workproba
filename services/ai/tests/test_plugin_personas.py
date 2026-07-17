@@ -35,6 +35,7 @@ def _mock_persona_llm(monkeypatch: pytest.MonkeyPatch) -> None:
         system_prompt: str,
         user_prompt: str,
         locale: str,
+        **_kwargs: Any,
     ) -> str:
         _ = (settings, provider_set, system_prompt, locale)
         if "synthèse" in user_prompt.lower():
@@ -460,6 +461,7 @@ async def test_stream_discuss_injects_main_conversation_context(
         system_prompt: str,
         user_prompt: str,
         locale: str,
+        **_kwargs: Any,
     ) -> str:
         _ = (settings, provider_set, locale)
         captured_system.append(system_prompt)
@@ -614,6 +616,7 @@ async def test_stream_ask_yields_before_slow_persona_finishes(
         system_prompt: str,
         user_prompt: str,
         locale: str,
+        **_kwargs: Any,
     ) -> str:
         _ = (settings, provider_set, system_prompt, user_prompt, locale)
         if "RH" in system_prompt or "rh" in system_prompt.lower():
@@ -657,6 +660,7 @@ async def test_generate_opinions_parallelizes_llm_calls(
         system_prompt: str,
         user_prompt: str,
         locale: str,
+        **_kwargs: Any,
     ) -> str:
         _ = (settings, provider_set, system_prompt, user_prompt, locale)
         in_flight["current"] += 1
@@ -694,6 +698,7 @@ async def test_stream_ask_cancels_pending_personas_when_consumer_closes(
         system_prompt: str,
         user_prompt: str,
         locale: str,
+        **_kwargs: Any,
     ) -> str:
         _ = (settings, provider_set, user_prompt, locale)
         if "rh" in system_prompt.lower():

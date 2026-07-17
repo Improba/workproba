@@ -70,6 +70,7 @@ export type ChatErrorCode =
   | 'bearer_token_required'
   | 'invalid_device_token'
   | 'device_organization_required'
+  | 'org_id_required'
   | 'provider_unavailable'
   | 'unknown';
 
@@ -104,6 +105,7 @@ const KNOWN_CHAT_ERROR_CODES = new Set<string>([
   'bearer_token_required',
   'invalid_device_token',
   'device_organization_required',
+  'org_id_required',
   'provider_unavailable',
   'unknown',
 ]);

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 from pydantic_ai import Agent
@@ -91,8 +92,15 @@ def _build_agent(
     settings: Any,
     provider_set: ProviderSet | None,
     system_prompt: str,
+    *,
+    cloud_plugin_data_dir: Path | str | None = None,
 ) -> Agent[None, str]:
-    llm_config = resolve_llm_config(None, settings, provider_set=provider_set)
+    llm_config = resolve_llm_config(
+        None,
+        settings,
+        provider_set=provider_set,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+    )
     return Agent(
         build_model(llm_config),
         system_prompt=system_prompt,
@@ -108,9 +116,15 @@ async def _run_persona_prompt(
     system_prompt: str,
     user_prompt: str,
     locale: str,
+    cloud_plugin_data_dir: Path | str | None = None,
 ) -> str:
     full_system = prompts.build_persona_system_prompt(system_prompt, locale=locale)
-    agent = _build_agent(settings, provider_set, full_system)
+    agent = _build_agent(
+        settings,
+        provider_set,
+        full_system,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+    )
     result = await agent.run(user_prompt, message_history=[], deps=None)
     output = getattr(result, "output", result)
     return output.strip() if isinstance(output, str) else str(output).strip()
@@ -142,6 +156,7 @@ async def _run_personas_parallel(
     provider_set: ProviderSet | None,
     user_prompt: str,
     locale: str,
+    cloud_plugin_data_dir: Path | str | None = None,
 ) -> list[tuple[JsonDict, str]]:
     """Exécute les appels persona indépendants en parallèle (ordre préservé à la sortie)."""
 
@@ -153,6 +168,7 @@ async def _run_personas_parallel(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             locale=locale,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
         )
         return persona, content
 
@@ -168,6 +184,7 @@ async def _stream_personas_parallel(
     provider_set: ProviderSet | None,
     user_prompt: str,
     locale: str,
+    cloud_plugin_data_dir: Path | str | None = None,
 ) -> AsyncIterator[tuple[JsonDict, str]]:
     """Exécute les personas en parallèle et yield au fur et à mesure des réponses."""
 
@@ -179,6 +196,7 @@ async def _stream_personas_parallel(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             locale=locale,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
         )
         return persona, content
 
@@ -225,6 +243,7 @@ async def generate_opinions(
     provider_set: ProviderSet | None,
     locale: str,
     rag_store: RagStore | None = None,
+    cloud_plugin_data_dir: Path | str | None = None,
 ) -> tuple[list[JsonDict], list[str]]:
     clamped_ids, warnings = clamp_persona_ids(persona_ids, locale=locale)
     personas = storage.resolve_personas(plugin_data_dir, clamped_ids)
@@ -247,6 +266,7 @@ async def generate_opinions(
         provider_set=provider_set,
         user_prompt=user_prompt,
         locale=locale,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
     )
     for persona, content in parallel_results:
         opinions.append(
@@ -265,6 +285,7 @@ async def stream_ask(
     provider_set: ProviderSet | None,
     locale: str,
     rag_store: RagStore | None = None,
+    cloud_plugin_data_dir: Path | str | None = None,
 ) -> AsyncIterator[JsonDict]:
     clamped_ids, warnings = clamp_persona_ids(persona_ids, locale=locale)
     if warnings:
@@ -290,6 +311,7 @@ async def stream_ask(
         provider_set=provider_set,
         user_prompt=user_prompt,
         locale=locale,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
     ):
         yield {
             "type": "persona_opinion",
@@ -327,6 +349,7 @@ async def stream_meeting(
     locale: str,
     rag_store: RagStore | None = None,
     meeting_id: str | None = None,
+    cloud_plugin_data_dir: Path | str | None = None,
 ) -> AsyncIterator[JsonDict]:
     resolved_meeting_id = meeting_id or storage.new_meeting_id()
     clamped_ids, persona_warnings = clamp_persona_ids(persona_ids, locale=locale)
@@ -378,6 +401,7 @@ async def stream_meeting(
                 system_prompt=system_prompt,
                 user_prompt=user_prompt,
                 locale=locale,
+                cloud_plugin_data_dir=cloud_plugin_data_dir,
             )
             turn = {
                 "round": round_no,
@@ -411,6 +435,7 @@ async def stream_meeting(
         system_prompt=summary_system,
         user_prompt=summary_user,
         locale=locale,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
     )
     transcript = {
         "id": resolved_meeting_id,
@@ -451,6 +476,7 @@ async def stream_discuss(
     locale: str,
     rag_store: RagStore | None = None,
     include_memory: bool = False,
+    cloud_plugin_data_dir: Path | str | None = None,
 ) -> AsyncIterator[JsonDict]:
     disc_id = discussion_id or storage.new_discussion_id()
     clamped_ids, warnings = clamp_persona_ids(persona_ids, locale=locale)
@@ -496,6 +522,7 @@ async def stream_discuss(
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             locale=locale,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
         )
         entry = {
             "role": "persona",

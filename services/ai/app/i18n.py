@@ -196,6 +196,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "device_organization_required": (
                     "Ce poste cloud n'est pas rattaché à une organisation."
                 ),
+                "org_id_required": (
+                    "Organisation cloud manquante. Reconnectez ce poste ou contactez "
+                    "votre administrateur."
+                ),
                 "cloud_unreachable": (
                     "Improba Cloud est injoignable. Vérifiez votre connexion ou "
                     "choisissez un autre moteur."
@@ -720,6 +724,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 ),
                 "device_organization_required": (
                     "This cloud device is not linked to an organization."
+                ),
+                "org_id_required": (
+                    "Cloud organization missing. Reconnect this device or contact your administrator."
                 ),
                 "cloud_unreachable": (
                     "Improba Cloud is unreachable. Check your connection or choose another engine."

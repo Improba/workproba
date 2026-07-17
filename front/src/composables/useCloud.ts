@@ -81,10 +81,38 @@ export function useCloud(): UseCloudReturn {
   const isActive = computed(() => isEnrolled.value);
   const providerReadiness = computed<CloudProviderReadiness | null>(() => {
     if (!status.value) return null;
+    if (!status.value.enrolled) {
+      return { enrolled: false, reachable: true };
+    }
+    const err = (quotaError.value ?? '').trim();
+    if (!quotaReachable.value) {
+      return { enrolled: true, reachable: false };
+    }
+    // Erreurs machine du GET quota → readiness explicite (pas de fail-open).
+    if (err === 'not_subscribed') {
+      return { enrolled: true, reachable: true, subscribed: false };
+    }
+    if (err === 'quota_exceeded') {
+      return {
+        enrolled: true,
+        reachable: true,
+        subscribed: true,
+        quotaExceeded: true,
+      };
+    }
+    if (
+      err === 'cloud_not_enrolled'
+      || err === 'invalid_device_token'
+      || err === 'bearer_token_required'
+      || err === 'device_organization_required'
+      || err === 'org_id_required'
+    ) {
+      return { enrolled: false, reachable: true };
+    }
     return cloudReadinessFromQuota(
-      Boolean(status.value.enrolled),
+      true,
       quota.value,
-      quotaReachable.value,
+      true,
     );
   });
 
@@ -101,8 +129,8 @@ export function useCloud(): UseCloudReturn {
       const result = await fetchCloudLlmQuota(pluginDataDir);
       if (!result.ok) {
         quota.value = null;
-        quotaError.value = result.error;
-        const err = result.error ?? '';
+        const err = (result.error ?? '').trim();
+        quotaError.value = err;
         quotaReachable.value = !(
           err === 'cloud_unreachable'
           || err.startsWith('quota_unavailable')
@@ -112,6 +140,7 @@ export function useCloud(): UseCloudReturn {
         return;
       }
       quotaReachable.value = true;
+      quotaError.value = null;
       quota.value = result.data.enrolled ? result.data : null;
     } catch (err) {
       quota.value = null;

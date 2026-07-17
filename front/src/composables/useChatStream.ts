@@ -591,6 +591,7 @@ function localizeAgentError(code: string, fallback: string): string {
     case 'bearer_token_required':
     case 'invalid_device_token':
     case 'device_organization_required':
+    case 'org_id_required':
       return t('errors.cloudAuthRequired');
     case 'provider_unavailable':
       return t('errors.providerUnavailable');
@@ -615,6 +616,7 @@ const NON_RETRYABLE_AGENT_CODES = new Set([
   'bearer_token_required',
   'invalid_device_token',
   'device_organization_required',
+  'org_id_required',
 ]);
 
 function isChatErrorRetryable(code: string): boolean {
@@ -1089,7 +1091,7 @@ export function useChatStream(
     auditEnabled,
   } = useAppSettings();
   const { activePluginIds, getPluginDataDir } = usePlugins();
-  const { providerReadiness, init: initCloud } = useCloud();
+  const { providerReadiness, init: initCloud, refreshQuota } = useCloud();
   // ref (profond) : les objets messages sont réactifs, donc muter
   // `assistant.content` déclenche directement le rendu. Pas de clonage du
   // tableau à chaque token.
@@ -1231,6 +1233,13 @@ export function useChatStream(
         totalTokens: parseOptionalInt(event.data.total_tokens),
       };
       completedTurns.value += 1;
+      const active = buildActiveProviderSet(
+        options.sessionModel?.value ?? null,
+        options.reasoningEffort?.value ?? null,
+      );
+      if (active && usesDeviceBearerAuth(active)) {
+        void refreshQuota();
+      }
     }
     applyStreamEvent(messages.value, currentAssistantId, event, () => {
       setIdlePaused(true);

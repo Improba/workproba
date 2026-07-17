@@ -34,7 +34,7 @@ import {
   validateProviderSetChatReady,
 } from '@utils/providerSetValidation';
 import { t } from '@utils/i18nT';
-import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import { CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 
 const MEETINGS_STORAGE_KEY = 'workproba.personas.meetings';
 const DISCUSSIONS_STORAGE_KEY = 'workproba.personas.discussions';
@@ -549,7 +549,7 @@ async function syncPersonasHistory(pluginDataDir: string): Promise<void> {
 
 export function usePersonas(): UsePersonasReturn {
   const { locale, settingsLocked, permissionsNetwork, settingsMode, codeExecute, auditEnabled } = useAppSettings();
-  const { isPersonasPluginActive } = usePlugins();
+  const { isPersonasPluginActive, getPluginDataDir } = usePlugins();
   const { buildContextProviderSet } = useLlmSessionContext();
   const { providerReadiness, init: initCloud } = useCloud();
 
@@ -638,6 +638,7 @@ export function usePersonas(): UsePersonasReturn {
     const providerSet = buildContextProviderSet();
     await assertProviderSetReady(providerSet);
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
+    const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
 
     const controller = new AbortController();
     let streamError: Error | null = null;
@@ -653,6 +654,7 @@ export function usePersonas(): UsePersonasReturn {
           includeMemory,
           providerSet: providerSetPayload,
           locale: locale.value,
+          cloudPluginDataDir,
         },
         (type, data) => {
           if (type === 'persona_opinion') {
@@ -737,6 +739,7 @@ export function usePersonas(): UsePersonasReturn {
       return state;
     }
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
+    const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
     const controller = new AbortController();
     const onExternalAbort = (): void => controller.abort();
     abortSignal?.addEventListener('abort', onExternalAbort, { once: true });
@@ -759,6 +762,7 @@ export function usePersonas(): UsePersonasReturn {
           includeMemory,
           providerSet: providerSetPayload,
           locale: locale.value,
+          cloudPluginDataDir,
         },
         (type, data) => {
           if (abortSignal?.aborted) return;
@@ -854,6 +858,7 @@ export function usePersonas(): UsePersonasReturn {
     onUpdate?.([...messages]);
 
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
+    const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
     const controller = new AbortController();
     let newDiscussionId = discussionId;
     let streamError: Error | null = null;
@@ -880,6 +885,7 @@ export function usePersonas(): UsePersonasReturn {
           context,
           providerSet: providerSetPayload,
           locale: locale.value,
+          cloudPluginDataDir,
         },
         (type, data) => {
           if (type === 'discuss_message') {

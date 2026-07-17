@@ -44,8 +44,8 @@ const MISTRAL_CHAT_MODELS: ProviderSetChatModel[] = [
 export const MISTRAL_BUILTIN_SET: ProviderSet = {
   id: 'mistral-default',
   name: 'Mistral',
-  description: 'Cloud Improba, tout-intégré.',
-  badges: ['Cloud Improba', 'Recommandé'],
+  description: 'API Mistral directe. Chat, vision, OCR, embeddings.',
+  badges: ['Clé API'],
   authMode: 'api_key',
   chat: {
     provider: 'mistral',

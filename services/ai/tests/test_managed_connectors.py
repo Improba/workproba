@@ -219,10 +219,11 @@ def test_cloud_list_connectors_not_enrolled(
         assert body["enrolled"] is False
 
 
-def test_cloud_list_connectors_bearer_without_device_returns_403(
+def test_cloud_list_connectors_bearer_without_device_id_ok(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """Bearer enroll sans device_id local : DeviceBearer suffit pour lister."""
     import json
 
     import app.auth as authmod
@@ -230,6 +231,7 @@ def test_cloud_list_connectors_bearer_without_device_returns_403(
 
     import app.main as mainmod
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
 
     monkeypatch.setattr(authmod, "is_loopback_host", lambda host: True)
 
@@ -241,15 +243,31 @@ def test_cloud_list_connectors_bearer_without_device_returns_403(
     }
     (cloud_dir / "config.json").write_text(json.dumps(config), encoding="utf-8")
 
+    async def fake_list(self: CloudControlPlaneClient) -> dict:
+        return {
+            "connectors": [
+                {
+                    "id": "c1",
+                    "name": "Conn",
+                    "runtime": "managed",
+                    "description": "",
+                }
+            ]
+        }
+
+    monkeypatch.setattr(CloudControlPlaneClient, "list_connectors", fake_list)
+
     with TestClient(mainmod.app) as test_client:
         resp = test_client.get(
             "/plugins/cloud/connectors",
             params={"plugin_data_dir": str(cloud_dir)},
             headers={"X-Internal-Secret": "desktop-dev-secret"},
         )
-        assert resp.status_code == 403
-        detail = resp.json()["detail"]
-        assert "invitation" in detail.lower() or "code" in detail.lower()
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["enrolled"] is True
+        assert len(body["connectors"]) == 1
+        assert body["connectors"][0]["id"] == "c1"
 
 
 def test_cloud_llm_quota_not_enrolled(
@@ -277,3 +295,56 @@ def test_cloud_llm_quota_not_enrolled(
         body = resp.json()
         assert body["enrolled"] is False
         assert body["enabled"] is False
+
+
+def test_cloud_llm_quota_bearer_enroll_without_device_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """L'enrôlement bearer n'écrit pas device_id : le quota doit quand même passer."""
+    import app.auth as authmod
+    from fastapi.testclient import TestClient
+
+    import app.main as mainmod
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+
+    monkeypatch.setattr(authmod, "is_loopback_host", lambda host: True)
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    (cloud_dir / "config.json").write_text(
+        '{"base_url": "https://cloud.example.com"}',
+        encoding="utf-8",
+    )
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.example.com",
+        plugin_data_dir=cloud_dir,
+    )
+    client.save_tokens({"access_token": "tok", "org_id": "org-a"})
+
+    async def fake_quota(self: CloudControlPlaneClient) -> dict:
+        return {
+            "enabled": True,
+            "periodKey": "2026-07",
+            "tokensUsed": 10,
+            "tokensLimit": 1000,
+            "requestsCount": 1,
+            "requestsLimit": 100,
+            "remainingTokens": 990,
+            "remainingRequests": 99,
+        }
+
+    monkeypatch.setattr(CloudControlPlaneClient, "get_llm_quota", fake_quota)
+
+    with TestClient(mainmod.app) as test_client:
+        resp = test_client.get(
+            "/plugins/cloud/llm-quota",
+            params={"plugin_data_dir": str(cloud_dir)},
+            headers={"X-Internal-Secret": "desktop-dev-secret"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["enrolled"] is True
+        assert body["enabled"] is True
+        assert body["remaining_tokens"] == 990

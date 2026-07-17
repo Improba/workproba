@@ -1512,6 +1512,7 @@ export interface AskPersonasPayload {
   includeMemory?: boolean;
   providerSet?: Record<string, unknown> | null;
   locale?: string | null;
+  cloudPluginDataDir?: string | null;
 }
 
 export async function askPersonasOpinion(
@@ -1531,6 +1532,7 @@ export async function askPersonasOpinion(
       include_memory: payload.includeMemory ?? false,
       provider_set: payload.providerSet ?? null,
       locale: payload.locale ?? undefined,
+      cloud_plugin_data_dir: payload.cloudPluginDataDir ?? undefined,
     }),
     signal,
   });
@@ -1551,6 +1553,7 @@ export interface StartPersonasMeetingPayload {
   includeMemory?: boolean;
   providerSet?: Record<string, unknown> | null;
   locale?: string | null;
+  cloudPluginDataDir?: string | null;
 }
 
 export async function startPersonasMeeting(
@@ -1572,6 +1575,7 @@ export async function startPersonasMeeting(
       include_memory: payload.includeMemory ?? false,
       provider_set: payload.providerSet ?? null,
       locale: payload.locale ?? undefined,
+      cloud_plugin_data_dir: payload.cloudPluginDataDir ?? undefined,
     }),
     signal,
   });
@@ -1597,6 +1601,7 @@ export interface DiscussWithPersonasPayload {
   includeMemory?: boolean;
   providerSet?: Record<string, unknown> | null;
   locale?: string | null;
+  cloudPluginDataDir?: string | null;
 }
 
 export async function discussWithPersonas(
@@ -1618,6 +1623,7 @@ export async function discussWithPersonas(
       include_memory: payload.includeMemory ?? false,
       provider_set: payload.providerSet ?? null,
       locale: payload.locale ?? undefined,
+      cloud_plugin_data_dir: payload.cloudPluginDataDir ?? undefined,
     }),
     signal,
   });

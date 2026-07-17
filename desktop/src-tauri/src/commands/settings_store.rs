@@ -184,8 +184,8 @@ pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
         ProviderSetEntry {
             id: MISTRAL_BUILTIN_SET_ID.to_string(),
             name: "Mistral".to_string(),
-            description: "Cloud Improba, tout-intégré. Chat, vision, OCR, embeddings.".to_string(),
-            badges: vec!["Cloud Improba".to_string(), "Recommandé".to_string()],
+            description: "API Mistral directe. Chat, vision, OCR, embeddings.".to_string(),
+            badges: vec!["Clé API".to_string()],
             chat: ProviderSetChatEntry {
                 provider: "mistral".to_string(),
                 model: "mistral-small-latest".to_string(),

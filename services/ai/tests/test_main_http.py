@@ -203,7 +203,13 @@ async def _fake_personas_stream(**_kwargs: Any) -> Any:
 def test_personas_ask_closes_rag_store(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     close_calls: list[str] = []
 
-    def fake_memory_store(_settings: Any, _ws_dir: Any, provider_set: Any = None) -> Any:
+    def fake_memory_store(
+        _settings: Any,
+        _ws_dir: Any,
+        provider_set: Any = None,
+        *,
+        cloud_plugin_data_dir: Any = None,
+    ) -> Any:
         from unittest.mock import MagicMock
 
         store = MagicMock(name="RagStore")
