@@ -40,6 +40,9 @@ vi.mock('@composables/useAppSettings', () => ({
     locale: ref('fr'),
     settingsLocked: ref(false),
     permissionsNetwork: ref(true),
+    settingsMode: ref('guided'),
+    codeExecute: ref(true),
+    auditEnabled: ref(null),
   }),
 }));
 

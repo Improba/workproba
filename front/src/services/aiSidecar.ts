@@ -135,7 +135,9 @@ function toSummaryMessages(messages: ChatMessage[]): Array<{
   }>;
 }> {
   return messages
-    .filter((m) => m.role === 'user' || m.role === 'assistant')
+    .filter((m): m is ChatMessage & { role: 'user' | 'assistant' } =>
+      m.role === 'user' || m.role === 'assistant',
+    )
     .map((m) => {
       const entry: ReturnType<typeof toSummaryMessages>[number] = {
         role: m.role,

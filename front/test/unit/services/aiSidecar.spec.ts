@@ -4,11 +4,65 @@ import {
   fetchDocumentPreview,
   isSafeRelativePath,
   resolveUiMode,
+  sanitizeChatMessagesForPersistence,
   truncateToolResult,
   MAX_TOOL_RESULT_HISTORY_CHARS,
 } from '@services/aiSidecar';
 
 describe('aiSidecar payload', () => {
+  it('sanitizeChatMessagesForPersistence strip gates et bytes attachments', () => {
+    const sanitized = sanitizeChatMessagesForPersistence([
+      {
+        id: 'u1',
+        role: 'user',
+        content: 'avec pj',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        attachments: [
+          {
+            id: 'att1',
+            fileName: 'a.pdf',
+            mimeType: 'application/pdf',
+            sizeBytes: 12,
+            kind: 'document',
+            status: 'ready',
+            contentBase64: 'YWJj',
+            previewUrl: 'blob:preview',
+          },
+        ],
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: 'ok',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        pendingConfirmation: {
+          confirmationId: 'cf_1',
+          toolCallId: 'tc_1',
+          toolName: 'write_docx',
+          action: 'create',
+          proposedPath: 'out.docx',
+          humanSummary: 'Créer',
+        },
+        pendingPlan: {
+          planId: 'plan-1',
+          steps: [],
+          rationale: 'r',
+          status: 'pending',
+        },
+      },
+    ]);
+
+    expect(sanitized[0].attachments?.[0]).toMatchObject({
+      id: 'att1',
+      fileName: 'a.pdf',
+      sizeBytes: 12,
+    });
+    expect(sanitized[0].attachments?.[0].contentBase64).toBeUndefined();
+    expect(sanitized[0].attachments?.[0].previewUrl).toBeUndefined();
+    expect(sanitized[1].pendingConfirmation).toBeUndefined();
+    expect(sanitized[1].pendingPlan).toBeUndefined();
+  });
+
   it('resolveUiMode renvoie locked si settingsLocked', () => {
     expect(resolveUiMode(true, 'guided')).toBe('locked');
     expect(resolveUiMode(true, 'advanced')).toBe('locked');

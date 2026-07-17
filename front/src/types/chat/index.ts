@@ -50,6 +50,7 @@ export type ChatErrorCode =
   | 'internal_error'
   | 'turn_timeout'
   | 'confirmation_timeout'
+  | 'plan_timeout'
   | 'usage_limit_exceeded'
   | 'unexpected_model_behavior'
   | 'turn_in_progress'
@@ -70,6 +71,7 @@ const KNOWN_CHAT_ERROR_CODES = new Set<string>([
   'internal_error',
   'turn_timeout',
   'confirmation_timeout',
+  'plan_timeout',
   'usage_limit_exceeded',
   'unexpected_model_behavior',
   'turn_in_progress',

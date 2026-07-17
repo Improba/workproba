@@ -257,7 +257,7 @@ const {
   sessionId: toRef(() => sessionId.value),
   projectPath: activePath,
   workspaceDataDir: activeDataDir,
-  spaceTitle,
+  workspaceTitle: spaceTitle,
   documents,
   uiMode,
   reasoningEffort: sessionReasoningOverride,

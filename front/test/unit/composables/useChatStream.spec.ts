@@ -439,6 +439,65 @@ describe('useChatStream — feedbacks', () => {
 
     expect(lastAssistant(api.messages.value)?.content).toBe('suite');
     expect(api.streaming.value).toBe(false);
+    expect(api.error.value).toBeNull();
+    unmount();
+  });
+
+  it('plan_timeout efface pendingPlan sans bannière error', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        pendingPlan: {
+          planId: 'plan-1',
+          steps: [{ tool: 'write_docx', summary: 'écrire', target: 'a.docx' }],
+          rationale: 'parce que',
+          status: 'pending',
+        },
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'error',
+      data: {
+        code: 'plan_timeout',
+        message: 'Le plan a expiré.',
+      },
+    });
+
+    expect(messages[0].streaming).toBe(true);
+    expect(messages[0].error).toBeUndefined();
+    expect(messages[0].pendingPlan).toBeNull();
+  });
+
+  it('continue le stream SSE après plan_timeout sans error.value', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sseResponse([
+        {
+          event: 'plan_proposed',
+          data: {
+            plan_id: 'plan-1',
+            rationale: 'r',
+            steps: [{ tool: 'write_docx', summary: 'écrire', target: 'a.docx' }],
+          },
+        },
+        {
+          event: 'error',
+          data: { code: 'plan_timeout', message: 'expiré' },
+        },
+        { event: 'token', data: { content: 'après plan' } },
+        { event: 'done', data: { content: '' } },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('hi');
+
+    expect(lastAssistant(api.messages.value)?.content).toBe('après plan');
+    expect(lastAssistant(api.messages.value)?.pendingPlan).toBeNull();
+    expect(api.error.value).toBeNull();
     unmount();
   });
 
