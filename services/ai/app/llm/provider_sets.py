@@ -2,8 +2,15 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from pydantic import SecretStr
 
+from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+from app.plugins.workproba_cloud.storage import (
+    get_access_token,
+    get_control_plane_base_url,
+)
 from app.schemas import (
     LLMProviderConfig,
     ProviderSet,
@@ -18,6 +25,7 @@ from app.schemas import (
 
 MISTRAL_DEFAULT_BASE_URL = "https://api.mistral.ai/v1"
 OLLAMA_DEFAULT_BASE_URL = "http://127.0.0.1:11434/v1"
+WORKPROBA_CLOUD_BUILTIN_SET_ID = "workproba-cloud"
 
 MISTRAL_CHAT_MODELS: tuple[ProviderSetChatModel, ...] = (
     ProviderSetChatModel(
@@ -70,8 +78,41 @@ MISTRAL_BUILTIN_SET = ProviderSet(
         tools=True,
         web_search=True,
     ),
+    is_default=False,
+    is_builtin=True,
+)
+
+WORKPROBA_CLOUD_BUILTIN_SET = ProviderSet(
+    id=WORKPROBA_CLOUD_BUILTIN_SET_ID,
+    name="Improba Cloud",
+    description="Cloud Improba géré. Chat, vision, OCR et embeddings via votre compte.",
+    badges=["Cloud Improba", "Recommandé"],
+    auth_mode="device_bearer",
+    chat=ProviderSetChat(
+        # mistral : active MistralChatModel (thinking chunks) tout en passant
+        # par le proxy OpenAI-compat cloud (`base_url` résolu à {cp}/llm/v1).
+        provider="mistral",
+        model="mistral-small-latest",
+        reasoning="auto",
+        models=list(MISTRAL_CHAT_MODELS),
+    ),
+    embeddings=ProviderSetEmbeddings(
+        # openai_compat : LiteLLM route via api_base custom vers le proxy cloud.
+        provider="openai_compat",
+        model="mistral-embed",
+    ),
+    ocr=ProviderSetOcr(provider="mistral", mode="auto"),
+    vision=ProviderSetVision(mode="chat"),
+    capabilities=ProviderSetCapabilities(
+        reasoning="medium",
+        vision=True,
+        tools=True,
+        # Le proxy /llm/v1 n'expose pas l'API Agents / web search Mistral.
+        web_search=False,
+    ),
     is_default=True,
     is_builtin=True,
+    ui_mode_locked=True,
 )
 
 OLLAMA_BUILTIN_SET = ProviderSet(
@@ -102,7 +143,11 @@ OLLAMA_BUILTIN_SET = ProviderSet(
     is_builtin=True,
 )
 
-BUILTIN_PROVIDER_SETS: tuple[ProviderSet, ...] = (MISTRAL_BUILTIN_SET, OLLAMA_BUILTIN_SET)
+BUILTIN_PROVIDER_SETS: tuple[ProviderSet, ...] = (
+    WORKPROBA_CLOUD_BUILTIN_SET,
+    MISTRAL_BUILTIN_SET,
+    OLLAMA_BUILTIN_SET,
+)
 
 _LOCAL_PROVIDERS = frozenset({"ollama", "vllm"})
 
@@ -118,8 +163,56 @@ class MissingApiKeyError(ValueError):
         )
 
 
+class CloudNotEnrolledError(ValueError):
+    """Appareil non connecté au cloud Improba (DeviceBearer absent)."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Appareil non connecté au cloud Improba. "
+            "Connectez-vous depuis Projets → Cloud."
+        )
+
+
 def provider_requires_api_key(provider: str) -> bool:
     return provider not in _LOCAL_PROVIDERS
+
+
+def resolve_cloud_plugin_data_dir(
+    *,
+    cloud_plugin_data_dir: Path | str | None = None,
+    plugin_data_dir: Path | str | None = None,
+) -> Path | None:
+    if cloud_plugin_data_dir:
+        return Path(cloud_plugin_data_dir).expanduser().resolve()
+    if plugin_data_dir:
+        return (
+            Path(plugin_data_dir).expanduser().resolve().parent / PLUGIN_WORKPROBA_CLOUD
+        )
+    return None
+
+
+def build_cloud_llm_base_url(control_plane_base_url: str) -> str:
+    return f"{control_plane_base_url.rstrip('/')}/llm/v1"
+
+
+def _resolve_base_url(
+    block: ProviderSetChat | ProviderSetEmbeddings,
+    *,
+    provider_set: ProviderSet,
+    cloud_plugin_data_dir: Path | None,
+) -> str | None:
+    if provider_set.auth_mode == "device_bearer":
+        # Jamais de fallback vers un provider public : le DeviceBearer
+        # ne doit pas quitter le plan de contrôle.
+        if cloud_plugin_data_dir is None:
+            raise CloudNotEnrolledError()
+        control_plane = get_control_plane_base_url(cloud_plugin_data_dir)
+        if not control_plane:
+            raise CloudNotEnrolledError()
+        return build_cloud_llm_base_url(control_plane)
+    if block.base_url:
+        return block.base_url.rstrip("/")
+    return block.base_url
 
 
 def _chat_reasoning_to_effort(reasoning: str) -> ReasoningEffort | None:
@@ -130,11 +223,24 @@ def _chat_reasoning_to_effort(reasoning: str) -> ReasoningEffort | None:
     return None
 
 
+def _resolve_device_bearer_token(cloud_plugin_data_dir: Path | None) -> SecretStr:
+    if cloud_plugin_data_dir is None:
+        raise CloudNotEnrolledError()
+    token = get_access_token(cloud_plugin_data_dir)
+    if not token:
+        raise CloudNotEnrolledError()
+    return SecretStr(token)
+
+
 def _resolve_api_key(
     chat_or_embed: ProviderSetChat | ProviderSetEmbeddings,
     *,
+    provider_set: ProviderSet,
+    cloud_plugin_data_dir: Path | None = None,
     fallback_key: SecretStr | None = None,
 ) -> SecretStr | None:
+    if provider_set.auth_mode == "device_bearer":
+        return _resolve_device_bearer_token(cloud_plugin_data_dir)
     if chat_or_embed.api_key is not None:
         raw = chat_or_embed.api_key.get_secret_value().strip()
         if raw:
@@ -148,50 +254,103 @@ def _resolve_api_key(
     return None
 
 
-def resolve_chat_from_set(provider_set: ProviderSet) -> LLMProviderConfig:
+def resolve_chat_from_set(
+    provider_set: ProviderSet,
+    *,
+    cloud_plugin_data_dir: Path | str | None = None,
+    plugin_data_dir: Path | str | None = None,
+) -> LLMProviderConfig:
     """Construit une config LLM chat depuis le sous-bloc chat du set."""
     chat = provider_set.chat
     if chat is None:
         raise ValueError("Provider set sans configuration chat")
+    cloud_dir = resolve_cloud_plugin_data_dir(
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+        plugin_data_dir=plugin_data_dir,
+    )
     return LLMProviderConfig(
         provider=chat.provider,
         model=chat.model,
-        base_url=chat.base_url,
-        api_key=_resolve_api_key(chat),
+        base_url=_resolve_base_url(
+            chat,
+            provider_set=provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+        ),
+        api_key=_resolve_api_key(
+            chat,
+            provider_set=provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+        ),
         reasoning_effort=_chat_reasoning_to_effort(chat.reasoning),
     )
 
 
-def resolve_fallback_chat_config(provider_set: ProviderSet) -> LLMProviderConfig | None:
+def resolve_fallback_chat_config(
+    provider_set: ProviderSet,
+    *,
+    cloud_plugin_data_dir: Path | str | None = None,
+    plugin_data_dir: Path | str | None = None,
+) -> LLMProviderConfig | None:
     """Construit la config chat de repli, ou None si absente ou non utilisable."""
     chat_fallback = provider_set.chat_fallback
     if chat_fallback is None:
         return None
+    cloud_dir = resolve_cloud_plugin_data_dir(
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+        plugin_data_dir=plugin_data_dir,
+    )
     chat_key = provider_set.chat.api_key if provider_set.chat else None
     try:
-        api_key = _resolve_api_key(chat_fallback, fallback_key=chat_key)
-    except MissingApiKeyError:
+        api_key = _resolve_api_key(
+            chat_fallback,
+            provider_set=provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+            fallback_key=chat_key,
+        )
+    except (MissingApiKeyError, CloudNotEnrolledError):
         return None
     return LLMProviderConfig(
         provider=chat_fallback.provider,
         model=chat_fallback.model,
-        base_url=chat_fallback.base_url,
+        base_url=_resolve_base_url(
+            chat_fallback,
+            provider_set=provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+        ),
         api_key=api_key,
         reasoning_effort=_chat_reasoning_to_effort(chat_fallback.reasoning),
     )
 
 
-def resolve_embeddings_from_set(provider_set: ProviderSet) -> LLMProviderConfig | None:
+def resolve_embeddings_from_set(
+    provider_set: ProviderSet,
+    *,
+    cloud_plugin_data_dir: Path | str | None = None,
+    plugin_data_dir: Path | str | None = None,
+) -> LLMProviderConfig | None:
     """Construit une config embeddings depuis le set, ou None si absent."""
     if provider_set.embeddings is None:
         return None
     embed = provider_set.embeddings
+    cloud_dir = resolve_cloud_plugin_data_dir(
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+        plugin_data_dir=plugin_data_dir,
+    )
     chat_key = provider_set.chat.api_key if provider_set.chat else None
     return LLMProviderConfig(
         provider=embed.provider,
         model=embed.model,
-        base_url=embed.base_url,
-        api_key=_resolve_api_key(embed, fallback_key=chat_key),
+        base_url=_resolve_base_url(
+            embed,
+            provider_set=provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+        ),
+        api_key=_resolve_api_key(
+            embed,
+            provider_set=provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+            fallback_key=chat_key,
+        ),
     )
 
 
@@ -204,6 +363,10 @@ def set_capabilities(provider_set: ProviderSet) -> ProviderSetCapabilities:
     """Capacités effectives du set (reasoning, vision, tools, web_search)."""
     caps = provider_set.capabilities.model_copy()
     if caps.web_search:
+        return caps
+    # Proxy cloud : ne pas activer la recherche web native Mistral
+    # (API Agents absente du plan de contrôle V1).
+    if provider_set.auth_mode == "device_bearer":
         return caps
     chat = provider_set.chat
     if chat and chat.provider:

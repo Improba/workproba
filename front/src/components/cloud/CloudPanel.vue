@@ -61,6 +61,9 @@
         <p class="cloud-panel__sync-meta">
           {{ t('cloud.syncMeta', { count: status?.synced_count ?? 0, lastSync: lastSyncLabel }) }}
         </p>
+        <p v-if="cloudQuotaLabel" class="cloud-panel__quota-meta">
+          {{ cloudQuotaLabel }}
+        </p>
         <button
           type="button"
           class="cloud-panel__save-btn"
@@ -327,6 +330,8 @@ const {
   connectors,
   connectorsLoading,
   connectorsError,
+  quota,
+  quotaLoading,
 } = useCloud();
 
 const mountPathDraft = ref('');
@@ -359,6 +364,17 @@ const showCloudUrlField = computed(
 const connectedOrgLabel = computed(
   () => status.value?.org_label ?? status.value?.org_id ?? t('cloud.unknownOrg'),
 );
+
+const cloudQuotaLabel = computed(() => {
+  if (!status.value?.enrolled) return '';
+  if (quotaLoading.value) return t('cloud.quotaLoading');
+  if (!quota.value) return '';
+  if (!quota.value.enabled) return t('cloud.quotaDisabled');
+  return t('cloud.quotaSummary', {
+    tokens: quota.value.remainingTokens.toLocaleString(),
+    requests: quota.value.remainingRequests.toLocaleString(),
+  });
+});
 
 const canSync = computed(() => Boolean(status.value?.configured || status.value?.enrolled));
 const canPull = computed(() => Boolean(status.value?.enrolled));
@@ -824,6 +840,12 @@ defineExpose({
 }
 
 .cloud-panel__sync-meta {
+  margin: 0;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-muted);
+}
+
+.cloud-panel__quota-meta {
   margin: 0;
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-muted);

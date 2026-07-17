@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 from pydantic import SecretStr
 
@@ -13,7 +14,10 @@ from app.llm.config import resolve_llm_config
 from app.llm.provider_sets import (
     MISTRAL_BUILTIN_SET,
     OLLAMA_BUILTIN_SET,
+    OLLAMA_DEFAULT_BASE_URL,
+    WORKPROBA_CLOUD_BUILTIN_SET,
     BUILTIN_PROVIDER_SETS,
+    CloudNotEnrolledError,
     MissingApiKeyError,
     ocr_is_supported,
     resolve_chat_from_set,
@@ -47,15 +51,23 @@ def test_provider_set_schema_roundtrip() -> None:
     assert parsed.id == "mistral-default"
     assert parsed.chat.provider == "mistral"
     assert parsed.embeddings is not None
-    assert parsed.is_default is True
+    assert parsed.is_default is False
+    assert parsed.auth_mode == "api_key"
 
 
-def test_builtin_sets_mistral_is_default() -> None:
-    assert len(BUILTIN_PROVIDER_SETS) == 2
-    assert MISTRAL_BUILTIN_SET.is_default
+def test_builtin_sets_workproba_cloud_is_default() -> None:
+    assert len(BUILTIN_PROVIDER_SETS) == 3
+    assert WORKPROBA_CLOUD_BUILTIN_SET.is_default
+    assert WORKPROBA_CLOUD_BUILTIN_SET.auth_mode == "device_bearer"
+    assert WORKPROBA_CLOUD_BUILTIN_SET.ui_mode_locked is True
+    assert not MISTRAL_BUILTIN_SET.is_default
     assert not OLLAMA_BUILTIN_SET.is_default
     assert MISTRAL_BUILTIN_SET.is_builtin
     assert OLLAMA_BUILTIN_SET.is_builtin
+    dumped = WORKPROBA_CLOUD_BUILTIN_SET.model_dump()
+    assert "access_token" not in str(dumped).lower()
+    assert WORKPROBA_CLOUD_BUILTIN_SET.chat.api_key is None
+    assert WORKPROBA_CLOUD_BUILTIN_SET.chat.api_key_ref is None
 
 
 def test_resolve_chat_from_set_maps_reasoning() -> None:
@@ -79,6 +91,61 @@ def test_resolve_chat_auto_reasoning_is_none() -> None:
 def test_resolve_chat_raises_when_cloud_key_missing() -> None:
     with pytest.raises(MissingApiKeyError):
         resolve_chat_from_set(MISTRAL_BUILTIN_SET)
+
+
+def test_resolve_workproba_cloud_without_token_raises_not_enrolled() -> None:
+    with pytest.raises(CloudNotEnrolledError):
+        resolve_chat_from_set(WORKPROBA_CLOUD_BUILTIN_SET)
+
+
+def test_resolve_workproba_cloud_injects_device_token(tmp_path) -> None:
+    cloud_dir = tmp_path / "workproba.cloud"
+    cloud_dir.mkdir()
+    config = {
+        "base_url": "https://cloud.example.com",
+        "tokens": {"access_token": "device-token-xyz"},
+    }
+    (cloud_dir / "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+    cfg = resolve_chat_from_set(
+        WORKPROBA_CLOUD_BUILTIN_SET,
+        cloud_plugin_data_dir=cloud_dir,
+    )
+    assert cfg.api_key is not None
+    assert cfg.api_key.get_secret_value() == "device-token-xyz"
+    assert cfg.base_url == "https://cloud.example.com/llm/v1"
+    assert cfg.provider == "mistral"
+
+    embed = resolve_embeddings_from_set(
+        WORKPROBA_CLOUD_BUILTIN_SET,
+        cloud_plugin_data_dir=cloud_dir,
+    )
+    assert embed is not None
+    assert embed.provider == "openai_compat"
+    assert embed.api_key is not None
+    assert embed.api_key.get_secret_value() == "device-token-xyz"
+    assert embed.base_url == "https://cloud.example.com/llm/v1"
+
+
+def test_resolve_workproba_cloud_token_without_base_url_raises(tmp_path) -> None:
+    """DeviceBearer ne doit jamais tomber sur un endpoint public."""
+    cloud_dir = tmp_path / "workproba.cloud"
+    cloud_dir.mkdir()
+    config = {"tokens": {"access_token": "device-token-xyz"}}
+    (cloud_dir / "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+    with pytest.raises(CloudNotEnrolledError):
+        resolve_chat_from_set(
+            WORKPROBA_CLOUD_BUILTIN_SET,
+            cloud_plugin_data_dir=cloud_dir,
+        )
+
+
+def test_resolve_workproba_cloud_serialized_builtin_has_no_token() -> None:
+    payload = WORKPROBA_CLOUD_BUILTIN_SET.model_dump(mode="json")
+    serialized = json.dumps(payload)
+    assert "device-token" not in serialized
+    assert "access_token" not in serialized
 
 
 def test_resolve_embeddings_raises_when_cloud_key_missing() -> None:
@@ -288,3 +355,53 @@ def test_minimal_provider_set_without_ocr() -> None:
     )
     assert not ocr_is_supported(minimal)
     assert not vision_is_supported(minimal)
+
+
+def test_enrollment_resolve_quota_error_then_switch_set(tmp_path) -> None:
+    """Parcours : cloud enrollé → resolve → quota_exceeded → switch mistral/ollama."""
+    from openai import RateLimitError
+
+    from app.llm.cloud_errors import parse_cloud_llm_error_code
+    from app.llm.fallback import is_fallbackable
+
+    cloud_dir = tmp_path / "workproba.cloud"
+    cloud_dir.mkdir()
+    config = {
+        "base_url": "https://cloud.example.com",
+        "tokens": {"access_token": "device-token-xyz"},
+    }
+    (cloud_dir / "config.json").write_text(json.dumps(config), encoding="utf-8")
+
+    cloud_cfg = resolve_chat_from_set(
+        WORKPROBA_CLOUD_BUILTIN_SET,
+        cloud_plugin_data_dir=cloud_dir,
+    )
+    assert cloud_cfg.provider == "mistral"
+    assert cloud_cfg.api_key is not None
+    assert cloud_cfg.api_key.get_secret_value() == "device-token-xyz"
+    assert cloud_cfg.base_url == "https://cloud.example.com/llm/v1"
+
+    quota_exc = RateLimitError(
+        "quota_exceeded",
+        response=httpx.Response(
+            429,
+            request=httpx.Request("POST", f"{cloud_cfg.base_url}/chat/completions"),
+            json={"statusCode": 429, "message": "quota_exceeded"},
+        ),
+        body={"message": "quota_exceeded"},
+    )
+    assert parse_cloud_llm_error_code(quota_exc) == "quota_exceeded"
+    assert is_fallbackable(quota_exc) == (False, "")
+
+    mistral = MISTRAL_BUILTIN_SET.model_copy(deep=True)
+    mistral.chat = mistral.chat.model_copy(update={"api_key": SecretStr("mistral-key")})
+    mistral_cfg = resolve_chat_from_set(mistral)
+    assert mistral_cfg.provider == "mistral"
+    assert mistral_cfg.api_key is not None
+    assert mistral_cfg.api_key.get_secret_value() == "mistral-key"
+    assert mistral_cfg.base_url == MISTRAL_BUILTIN_SET.chat.base_url
+
+    ollama_cfg = resolve_chat_from_set(OLLAMA_BUILTIN_SET)
+    assert ollama_cfg.provider == "ollama"
+    assert ollama_cfg.base_url == OLLAMA_DEFAULT_BASE_URL
+    assert ollama_cfg.api_key is None

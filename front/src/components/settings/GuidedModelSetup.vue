@@ -39,6 +39,17 @@
       </article>
     </div>
 
+    <p v-if="cloudQuotaHint" class="guided-setup__cloud-hint">
+      {{ cloudQuotaHint }}
+    </p>
+    <p
+      v-if="cloudReadinessHint"
+      class="guided-setup__cloud-hint guided-setup__cloud-hint--warn"
+      role="status"
+    >
+      {{ cloudReadinessHint }}
+    </p>
+
     <div v-if="selectedBuiltinId === 'mistral-default'" class="guided-setup__fields">
       <q-input
         v-model="accessKey"
@@ -138,8 +149,12 @@ import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useAppSettings, testSet } from '@composables/useAppSettings';
+import { useCloud } from '@composables/useCloud';
+import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import type { ProviderSet } from '@composables/useDesktop.types';
 import { fetchOllamaModels } from '@services/ollamaModels';
+import { chatErrorMessageForReadiness } from '@utils/providerSetNotify';
+import { validateProviderSetChatReady } from '@utils/providerSetValidation';
 import {
   applyAccessKeyToSet,
   applyOllamaOverrides,
@@ -147,6 +162,7 @@ import {
   cloneProviderSet,
   localizedSetDescription,
   localizedSetName,
+  WORKPROBA_CLOUD_BUILTIN_SET,
 } from '@utils/providerSets';
 
 const emit = defineEmits<{
@@ -154,6 +170,15 @@ const emit = defineEmits<{
 }>();
 
 const { sets, activeSet, load, setActiveSet, updateSet, settings } = useAppSettings();
+const {
+  quota,
+  quotaLoading,
+  providerReadiness,
+  isEnrolled,
+  init: initCloud,
+  refreshQuota,
+} = useCloud();
+const { getPluginDataDir } = usePlugins();
 const { t } = useI18n();
 
 const accessKey = ref('');
@@ -173,17 +198,21 @@ const guidedCards = computed(() => {
   return cards.map((set) => {
     const description = localizedSetDescription(set, t);
     const displayBadges =
-      set.id === 'mistral-default'
-        ? [t('settings.badgeRecommended')]
-        : set.id === 'ollama-local'
-          ? [t('settings.badgeLocal')]
-          : set.badges;
+      set.id === 'workproba-cloud'
+        ? [t('settings.badgeCloud'), t('settings.badgeRecommended')]
+        : set.id === 'mistral-default'
+          ? [t('settings.badgeRecommended')]
+          : set.id === 'ollama-local'
+            ? [t('settings.badgeLocal')]
+            : set.badges;
     const badgeToneClass =
-      set.id === 'mistral-default'
-        ? 'guided-card__badge--recommended'
-        : set.id === 'ollama-local'
-          ? 'guided-card__badge--local'
-          : 'guided-card__badge--cloud';
+      set.id === 'workproba-cloud'
+        ? 'guided-card__badge--cloud'
+        : set.id === 'mistral-default'
+          ? 'guided-card__badge--recommended'
+          : set.id === 'ollama-local'
+            ? 'guided-card__badge--local'
+            : 'guided-card__badge--cloud';
     return {
       set,
       displayName: localizedSetName(set, t),
@@ -196,6 +225,27 @@ const guidedCards = computed(() => {
 });
 
 const selectedBuiltinId = computed(() => activeSet.value?.id ?? null);
+
+const cloudQuotaHint = computed(() => {
+  if (selectedBuiltinId.value !== WORKPROBA_CLOUD_BUILTIN_SET.id) return '';
+  if (!isEnrolled.value) return '';
+  if (quotaLoading.value) return t('cloud.quotaLoading');
+  if (!quota.value) return '';
+  if (!quota.value.enabled) return t('cloud.quotaDisabled');
+  return t('cloud.quotaSummary', {
+    tokens: quota.value.remainingTokens.toLocaleString(),
+    requests: quota.value.remainingRequests.toLocaleString(),
+  });
+});
+
+const cloudReadinessHint = computed(() => {
+  if (selectedBuiltinId.value !== WORKPROBA_CLOUD_BUILTIN_SET.id) return '';
+  const readiness = providerReadiness.value;
+  if (!readiness) return '';
+  const check = validateProviderSetChatReady(WORKPROBA_CLOUD_BUILTIN_SET, readiness);
+  if (check.ok) return '';
+  return chatErrorMessageForReadiness(check.reason);
+});
 
 function hydrateFromActiveSet(set: ProviderSet | null): void {
   if (!set) return;
@@ -254,7 +304,11 @@ async function onTest(): Promise<void> {
   testing.value = true;
   testResults.value = [];
   try {
-    const result = await testSet(cloneProviderSet(set));
+    const cloudPluginDataDir =
+      set.authMode === 'device_bearer'
+        ? await getPluginDataDir(CLOUD_PLUGIN_ID)
+        : null;
+    const result = await testSet(cloneProviderSet(set), { cloudPluginDataDir });
     testResults.value = [
       {
         ok: result.chat.ok,
@@ -304,14 +358,21 @@ async function onRefreshOllama(): Promise<void> {
 
 onMounted(async () => {
   await load();
+  await initCloud();
   hydrateFromActiveSet(activeSet.value);
   if (activeSet.value?.id === 'ollama-local') {
     void onRefreshOllama();
+  }
+  if (activeSet.value?.id === WORKPROBA_CLOUD_BUILTIN_SET.id) {
+    void refreshQuota();
   }
 });
 
 watch(activeSet, (set) => {
   hydrateFromActiveSet(set);
+  if (set?.id === WORKPROBA_CLOUD_BUILTIN_SET.id) {
+    void refreshQuota();
+  }
 });
 </script>
 
@@ -460,6 +521,17 @@ watch(activeSet, (set) => {
   font-size: var(--wp-fs-xs);
   line-height: var(--wp-lh-normal);
   color: var(--wp-text-muted);
+}
+
+.guided-setup__cloud-hint {
+  margin: 0;
+  font-size: var(--wp-fs-xs);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-text-muted);
+}
+
+.guided-setup__cloud-hint--warn {
+  color: var(--wp-danger);
 }
 
 .guided-setup__refresh {

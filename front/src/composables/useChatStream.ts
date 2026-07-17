@@ -42,12 +42,14 @@ import {
   BROWSER_PLUGIN_ID,
   PERSONAS_PLUGIN_ID,
   PROJET_PLUGIN_ID,
+  CLOUD_PLUGIN_ID,
   usePlugins,
 } from '@composables/usePlugins';
 import type { LlmProviderName } from '@composables/useDesktop.types';
 import { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
 import { isBrowserAgentTool, type BrowserAgentToolName } from '@utils/browserTools';
-import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
+import { ensureProviderSetChatReady, chatErrorCodeForReadiness, chatErrorMessageForReadiness } from '@utils/providerSetNotify';
+import { isMistralOutageCode, isNonRetryableCloudLlmCode } from '@utils/chatCloudErrors';
 import { contextWindowForSet } from '@utils/providerSetModels';
 import { contextWindowFor } from '@utils/modelCatalog';
 import { t } from '@utils/i18nT';
@@ -56,6 +58,11 @@ import {
   deriveThinkingSubjectDone,
   deriveThinkingSummary,
 } from '@utils/thinkingPresentation';
+import { useCloud } from '@composables/useCloud';
+import {
+  usesDeviceBearerAuth,
+  validateProviderSetChatReady,
+} from '@utils/providerSetValidation';
 
 /** Délai sans aucune donnée SSE avant de déclarer le stream mort (ms). */
 const IDLE_TIMEOUT_MS = 30_000;
@@ -565,6 +572,28 @@ function localizeAgentError(code: string, fallback: string): string {
       return t('errors.agentInputTooLarge');
     case 'api_key_missing':
       return t('errors.apiKeyMissing');
+    case 'cloud_not_enrolled':
+      return t('errors.cloudNotEnrolled');
+    case 'not_subscribed':
+      return t('errors.cloudNotSubscribed');
+    case 'quota_exceeded':
+      return t('errors.cloudQuotaExceeded');
+    case 'cloud_unreachable':
+      return t('errors.cloudUnreachable');
+    case 'mistral_unavailable':
+    case 'mistral_timeout':
+    case 'mistral_upstream_error':
+      return t('errors.cloudServiceUnavailable');
+    case 'unsupported_model':
+      return t('errors.cloudUnsupportedModel');
+    case 'bad_request':
+      return t('errors.cloudBadRequest');
+    case 'bearer_token_required':
+    case 'invalid_device_token':
+    case 'device_organization_required':
+      return t('errors.cloudAuthRequired');
+    case 'provider_unavailable':
+      return t('errors.providerUnavailable');
     case 'internal_error':
     case 'parse_error':
       return t('errors.agentInternalError');
@@ -573,15 +602,36 @@ function localizeAgentError(code: string, fallback: string): string {
   }
 }
 
-const NON_RETRYABLE_AGENT_CODES = new Set(['api_key_missing', 'input_too_large', 'no_project']);
+const NON_RETRYABLE_AGENT_CODES = new Set([
+  'api_key_missing',
+  'input_too_large',
+  'no_project',
+  'cloud_not_enrolled',
+  'not_subscribed',
+  'quota_exceeded',
+  'cloud_unreachable',
+  'unsupported_model',
+  'bad_request',
+  'bearer_token_required',
+  'invalid_device_token',
+  'device_organization_required',
+]);
+
+function isChatErrorRetryable(code: string): boolean {
+  if (NON_RETRYABLE_AGENT_CODES.has(code)) return false;
+  if (isNonRetryableCloudLlmCode(code)) return false;
+  if (isMistralOutageCode(code)) return false;
+  return true;
+}
 
 function chatErrorFromSidecarHttp(err: SidecarHttpError): ChatError {
+  const rawCode = err.code ?? '';
   const code = err.code ? normalizeChatErrorCode(err.code) : 'sidecar_unreachable';
   if (code !== 'sidecar_unreachable' && code !== 'unknown') {
     return {
       code,
-      message: localizeAgentError(err.code!, err.message),
-      retryable: !NON_RETRYABLE_AGENT_CODES.has(err.code!),
+      message: localizeAgentError(rawCode, err.message),
+      retryable: isChatErrorRetryable(rawCode),
     };
   }
   return {
@@ -842,7 +892,7 @@ export function applyStreamEvent(
       assistant.error = {
         code: event.data.code,
         message: event.data.message,
-        retryable: true,
+        retryable: isChatErrorRetryable(event.data.code),
       };
       break;
     }
@@ -1039,6 +1089,7 @@ export function useChatStream(
     auditEnabled,
   } = useAppSettings();
   const { activePluginIds, getPluginDataDir } = usePlugins();
+  const { providerReadiness, init: initCloud } = useCloud();
   // ref (profond) : les objets messages sont réactifs, donc muter
   // `assistant.content` déclenche directement le rendu. Pas de clonage du
   // tableau à chaque token.
@@ -1290,10 +1341,18 @@ export function useChatStream(
       options.reasoningEffort?.value ?? null,
     );
     if (providerSet) {
-      if (!ensureProviderSetChatReady(providerSet)) {
+      if (usesDeviceBearerAuth(providerSet) && !providerReadiness.value) {
+        await initCloud();
+      }
+      const cloudCtx = usesDeviceBearerAuth(providerSet)
+        ? providerReadiness.value
+        : null;
+      const readiness = validateProviderSetChatReady(providerSet, cloudCtx);
+      if (!readiness.ok) {
+        ensureProviderSetChatReady(providerSet, cloudCtx);
         error.value = {
-          code: 'api_key_missing',
-          message: t('errors.apiKeyMissing'),
+          code: chatErrorCodeForReadiness(readiness.reason),
+          message: chatErrorMessageForReadiness(readiness.reason),
           retryable: false,
         };
         return;
@@ -1406,6 +1465,7 @@ export function useChatStream(
         activePluginIds.value,
         getPluginDataDir,
       );
+      const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
       const body = buildAgentTurnPayload(
         options.sessionId.value,
         projectPath,
@@ -1432,6 +1492,7 @@ export function useChatStream(
         ),
         options.browserPilotagePaused?.value ?? false,
         confirmBeforeWriteEffective.value,
+        cloudPluginDataDir,
       );
 
       const workspaceDataDir = options.workspaceDataDir?.value;
@@ -1710,10 +1771,25 @@ export function useChatStream(
       options.sessionModel?.value ?? null,
       options.reasoningEffort?.value ?? null,
     );
-    if (providerSet && !ensureProviderSetChatReady(providerSet)) {
-      throw new Error(t('errors.apiKeyMissing'));
+    if (providerSet) {
+      if (usesDeviceBearerAuth(providerSet) && !providerReadiness.value) {
+        await initCloud();
+      }
+      const cloudCtx = usesDeviceBearerAuth(providerSet)
+        ? providerReadiness.value
+        : null;
+      const readiness = validateProviderSetChatReady(providerSet, cloudCtx);
+      if (!readiness.ok) {
+        ensureProviderSetChatReady(providerSet, cloudCtx);
+        throw new Error(chatErrorMessageForReadiness(readiness.reason));
+      }
     }
 
+    const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
+    const pluginDataDir = await resolveAgentPluginDataDir(
+      activePluginIds.value,
+      getPluginDataDir,
+    );
     const result = await callReprocessAttachment({
       workspaceDataDir,
       projectPath,
@@ -1726,6 +1802,8 @@ export function useChatStream(
       mimeType: meta.mimeType,
       providerSet,
       locale: locale.value,
+      cloudPluginDataDir,
+      pluginDataDir,
     });
 
     applyAttachmentStatusEvent(attachmentStatuses.value, {

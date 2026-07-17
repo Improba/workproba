@@ -492,8 +492,11 @@ export default {
       capabilityWebSearch: 'Recherche sur le web',
       mistralName: 'Mistral',
       ollamaName: 'Ollama local',
+      cloudName: 'Improba Cloud',
       mistralDescription: 'Service cloud tout-intégré. Recommandé pour démarrer.',
       ollamaDescription: 'Tout sur votre machine. Aucune donnée transmise.',
+      cloudDescription:
+        'Via votre organisation Improba Cloud. Conversation, vision et lecture de documents gérées.',
     },
     test: {
       chatOk: 'Conversation : OK',
@@ -607,6 +610,21 @@ export default {
     apiKeyMissing:
       'Clé API manquante pour ce moteur. Ouvrez Réglages → Modèles IA et renseignez votre clé.',
     apiKeyMissingAction: 'Réglages',
+    cloudNotEnrolled:
+      'Connectez ce poste à Improba Cloud (panneau Cloud) ou choisissez un autre moteur IA.',
+    cloudNotSubscribed:
+      'L\'abonnement cloud IA n\'est pas actif. Contactez votre administrateur ou choisissez un autre moteur.',
+    cloudQuotaExceeded:
+      'Quota cloud IA atteint. Réessayez plus tard, souscrivez ou choisissez un autre moteur.',
+    cloudServiceUnavailable:
+      'Le service cloud IA est temporairement indisponible. Réessayez plus tard.',
+    cloudUnreachable:
+      'Impossible de joindre le cloud IA. Vérifiez votre connexion ou choisissez un autre moteur.',
+    cloudUnsupportedModel: 'Ce modèle n\'est pas pris en charge par le cloud IA.',
+    cloudBadRequest: 'Requête cloud IA invalide.',
+    cloudAuthRequired:
+      'Session cloud expirée ou absente. Reconnectez ce poste ou choisissez un autre moteur.',
+    providerUnavailable: 'Le fournisseur IA est indisponible. Réessayez plus tard.',
   },
   toolCalls: {
     readDocuments: 'J\'ai lu des documents',
@@ -845,6 +863,9 @@ export default {
     joinSuccess: 'Connecté au cloud.',
     joinFailed: 'Connexion impossible. Vérifiez le code d\'invitation.',
     connectedTo: 'Connecté à {org}',
+    quotaSummary: '{tokens} tokens · {requests} requêtes restantes ce mois',
+    quotaLoading: 'Chargement du quota cloud…',
+    quotaDisabled: 'Abonnement cloud IA inactif pour cette organisation.',
     syncMeta: '{count} document(s) · {lastSync}',
     unknownOrg: 'votre organisation',
     disconnect: 'Se déconnecter',

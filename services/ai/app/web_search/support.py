@@ -27,6 +27,9 @@ def web_search_available(context: ToolContext) -> bool:
     provider_set = context.provider_set
     if provider_set is None or provider_set.chat is None:
         return False
+    # Proxy Improba Cloud : pas d'API Agents Mistral ; Tavily uniquement si configuré.
+    if provider_set.auth_mode == "device_bearer":
+        return bool(resolve_tavily_api_key())
     provider = provider_set.chat.provider
     if not provider:
         return False

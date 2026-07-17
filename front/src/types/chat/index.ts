@@ -58,6 +58,19 @@ export type ChatErrorCode =
   | 'api_key_missing'
   | 'no_model'
   | 'parse_error'
+  | 'cloud_not_enrolled'
+  | 'not_subscribed'
+  | 'quota_exceeded'
+  | 'cloud_unreachable'
+  | 'mistral_unavailable'
+  | 'mistral_timeout'
+  | 'mistral_upstream_error'
+  | 'unsupported_model'
+  | 'bad_request'
+  | 'bearer_token_required'
+  | 'invalid_device_token'
+  | 'device_organization_required'
+  | 'provider_unavailable'
   | 'unknown';
 
 const KNOWN_CHAT_ERROR_CODES = new Set<string>([
@@ -79,6 +92,19 @@ const KNOWN_CHAT_ERROR_CODES = new Set<string>([
   'api_key_missing',
   'no_model',
   'parse_error',
+  'cloud_not_enrolled',
+  'not_subscribed',
+  'quota_exceeded',
+  'cloud_unreachable',
+  'mistral_unavailable',
+  'mistral_timeout',
+  'mistral_upstream_error',
+  'unsupported_model',
+  'bad_request',
+  'bearer_token_required',
+  'invalid_device_token',
+  'device_organization_required',
+  'provider_unavailable',
   'unknown',
 ]);
 

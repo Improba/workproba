@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 from typing import Any, cast
 
 from pydantic import ValidationError
@@ -10,9 +11,11 @@ from pydantic_ai import Agent
 from app.config import ProviderName
 from app.i18n import DEFAULT_LOCALE, t
 from app.llm.config import build_model, build_model_settings
+from app.llm.provider_sets import resolve_chat_from_set
 from app.schemas import (
     ChatMessage,
     LLMProviderConfig,
+    ProviderSet,
     UtilitySummarizeRequest,
     UtilitySummarizeResponse,
     UtilityTitleRequest,
@@ -36,7 +39,20 @@ def resolve_utility_config(
     utility: LLMProviderConfig | None,
     chat: LLMProviderConfig | None,
     settings: Any,
+    *,
+    provider_set: ProviderSet | None = None,
+    cloud_plugin_data_dir: str | Path | None = None,
 ) -> LLMProviderConfig:
+    """Résout la config utilitaire.
+
+    Si ``provider_set`` est fourni (ex. Improba Cloud), on résout via le set
+    pour injecter DeviceBearer + base URL du proxy — jamais l'API publique.
+    """
+    if provider_set is not None:
+        return resolve_chat_from_set(
+            provider_set,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
+        )
     if utility is not None:
         return utility
     if chat is not None:
@@ -48,7 +64,8 @@ def resolve_utility_config(
 
     raise ValueError(
         "Aucune configuration LLM utilitaire disponible. Fournissez utility_llm_config, "
-        "llm_provider_config ou les variables LLM_UTILITY_PROVIDER et LLM_UTILITY_MODEL."
+        "llm_provider_config, provider_set ou les variables LLM_UTILITY_PROVIDER et "
+        "LLM_UTILITY_MODEL."
     )
 
 
@@ -58,6 +75,8 @@ async def generate_title(req: UtilityTitleRequest, settings: Any) -> UtilityTitl
         req.utility_llm_config,
         req.llm_provider_config,
         settings,
+        provider_set=req.provider_set,
+        cloud_plugin_data_dir=req.cloud_plugin_data_dir,
     )
     agent = Agent(
         build_model(config),
@@ -86,6 +105,8 @@ async def summarize_conversation(
         req.utility_llm_config,
         req.llm_provider_config,
         settings,
+        provider_set=req.provider_set,
+        cloud_plugin_data_dir=req.cloud_plugin_data_dir,
     )
     agent = Agent(
         build_model(config),

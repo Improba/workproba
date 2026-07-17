@@ -333,19 +333,28 @@ export async function testLlmConfig(
   };
 }
 
-export async function testSet(set: ProviderSet): Promise<ProviderSetTestResult> {
+export async function testSet(
+  set: ProviderSet,
+  opts?: { cloudPluginDataDir?: string | null },
+): Promise<ProviderSetTestResult> {
+  const body: Record<string, unknown> = {
+    ...providerSetToSidecar(set),
+  };
+  if (opts?.cloudPluginDataDir) {
+    body.cloud_plugin_data_dir = opts.cloudPluginDataDir;
+  }
   const response = await fetch(`${getAiSidecarUrl()}/llm/sets/test`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Internal-Secret': getDesktopSecret(),
     },
-    body: JSON.stringify(providerSetToSidecar(set)),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(`HTTP ${response.status} ${body}`.trim());
+    const bodyText = await response.text().catch(() => '');
+    throw new Error(`HTTP ${response.status} ${bodyText}`.trim());
   }
 
   const data = (await response.json()) as ProviderSetTestResult;

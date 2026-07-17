@@ -4,10 +4,20 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import httpx
 
+from app.llm.provider_sets import (
+    CloudNotEnrolledError,
+    build_cloud_llm_base_url,
+    resolve_cloud_plugin_data_dir,
+)
+from app.plugins.workproba_cloud.storage import (
+    get_access_token,
+    get_control_plane_base_url,
+)
 from app.schemas import ProviderSet
 
 
@@ -18,8 +28,24 @@ class OcrResult:
     metadata: dict[str, Any]
 
 
-def resolve_ocr_api_key(provider_set: ProviderSet) -> str:
-    """Résout la clé OCR : bloc ocr puis repli sur chat."""
+def resolve_ocr_api_key(
+    provider_set: ProviderSet,
+    *,
+    cloud_plugin_data_dir: Path | str | None = None,
+    plugin_data_dir: Path | str | None = None,
+) -> str:
+    """Résout la clé OCR : bloc ocr puis repli sur chat ou DeviceBearer cloud."""
+    if provider_set.auth_mode == "device_bearer":
+        cloud_dir = resolve_cloud_plugin_data_dir(
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
+            plugin_data_dir=plugin_data_dir,
+        )
+        if cloud_dir is None:
+            raise CloudNotEnrolledError()
+        token = get_access_token(cloud_dir)
+        if not token:
+            raise CloudNotEnrolledError()
+        return token
     ocr = provider_set.ocr
     if ocr is not None and ocr.api_key is not None:
         return ocr.api_key.get_secret_value()
@@ -29,7 +55,25 @@ def resolve_ocr_api_key(provider_set: ProviderSet) -> str:
     return ""
 
 
-def resolve_ocr_base_url(provider_set: ProviderSet) -> str:
+def resolve_ocr_base_url(
+    provider_set: ProviderSet,
+    *,
+    cloud_plugin_data_dir: Path | str | None = None,
+    plugin_data_dir: Path | str | None = None,
+) -> str:
+    if provider_set.auth_mode == "device_bearer":
+        # Pas de repli Mistral public : le token device ne doit jamais
+        # être envoyé hors du plan de contrôle.
+        cloud_dir = resolve_cloud_plugin_data_dir(
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
+            plugin_data_dir=plugin_data_dir,
+        )
+        if cloud_dir is None:
+            raise CloudNotEnrolledError()
+        control_plane = get_control_plane_base_url(cloud_dir)
+        if not control_plane:
+            raise CloudNotEnrolledError()
+        return build_cloud_llm_base_url(control_plane)
     ocr = provider_set.ocr
     if ocr is not None and ocr.base_url:
         return ocr.base_url.rstrip("/")
@@ -39,20 +83,38 @@ def resolve_ocr_base_url(provider_set: ProviderSet) -> str:
     return "https://api.mistral.ai/v1"
 
 
+CLOUD_OCR_TIMEOUT_SECONDS = 180.0
+
+
 class MistralOcrClient:
     def __init__(
         self,
         *,
         provider_set: ProviderSet,
-        timeout_seconds: float = 120.0,
+        timeout_seconds: float | None = None,
+        cloud_plugin_data_dir: Path | str | None = None,
+        plugin_data_dir: Path | str | None = None,
     ) -> None:
         ocr = provider_set.ocr
         if ocr is None or ocr.provider != "mistral":
             raise ValueError("Mistral OCR config missing from provider set")
-        self._base_url = resolve_ocr_base_url(provider_set)
-        self._api_key = resolve_ocr_api_key(provider_set)
+        self._base_url = resolve_ocr_base_url(
+            provider_set,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
+            plugin_data_dir=plugin_data_dir,
+        )
+        self._api_key = resolve_ocr_api_key(
+            provider_set,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
+            plugin_data_dir=plugin_data_dir,
+        )
         self._model = ocr.model or "mistral-ocr-latest"
-        self._timeout = timeout_seconds
+        if timeout_seconds is not None:
+            self._timeout = timeout_seconds
+        elif provider_set.auth_mode == "device_bearer":
+            self._timeout = CLOUD_OCR_TIMEOUT_SECONDS
+        else:
+            self._timeout = 120.0
 
     async def ocr_pdf(
         self,

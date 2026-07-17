@@ -49,6 +49,13 @@ vi.mock('@composables/useAppSettings', () => ({
 vi.mock('@utils/providerSetNotify', () => ({
   ensureProviderSetChatReady: () => true,
   ensureProviderSetEmbeddingsReady: () => true,
+  chatErrorMessageForReadiness: (reason: string) => reason,
+}));
+
+vi.mock('@composables/useCloud', () => ({
+  useCloud: () => ({
+    providerReadiness: ref(null),
+  }),
 }));
 
 vi.mock('@composables/useLlmSessionContext', () => ({

@@ -3,11 +3,13 @@ import {
   configCloud,
   disconnectCloud,
   enrollCloud,
+  fetchCloudLlmQuota,
   fetchCloudStatus,
   listManagedConnectors,
   pullCloud,
   syncCloud,
   syncManagedRegards,
+  type CloudLlmQuota,
   type CloudPullResult,
   type CloudStatus,
   type CloudSyncRegardsResult,
@@ -16,6 +18,10 @@ import {
   type SidecarResult,
 } from '@services/aiSidecar';
 import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import {
+  type CloudProviderReadiness,
+  cloudReadinessFromQuota,
+} from '@utils/providerSetValidation';
 
 const status = ref<CloudStatus | null>(null);
 const loading = ref(false);
@@ -26,6 +32,10 @@ const loadError = ref<string | null>(null);
 const connectors = ref<ManagedConnector[]>([]);
 const connectorsLoading = ref(false);
 const connectorsError = ref<string | null>(null);
+const quota = ref<CloudLlmQuota | null>(null);
+const quotaLoading = ref(false);
+const quotaError = ref<string | null>(null);
+const quotaReachable = ref(true);
 let pluginDataDir: string | null = null;
 
 export interface UseCloudReturn {
@@ -38,6 +48,10 @@ export interface UseCloudReturn {
   connectors: Ref<ManagedConnector[]>;
   connectorsLoading: Ref<boolean>;
   connectorsError: Ref<string | null>;
+  quota: Ref<CloudLlmQuota | null>;
+  quotaLoading: Ref<boolean>;
+  quotaError: Ref<string | null>;
+  providerReadiness: ComputedRef<CloudProviderReadiness | null>;
   /** Cloud enrolled — « projet partagé » product vocabulary (not mount-only). */
   isActive: ComputedRef<boolean>;
   isEnrolled: ComputedRef<boolean>;
@@ -46,6 +60,7 @@ export interface UseCloudReturn {
   init: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   refreshConnectors: () => Promise<void>;
+  refreshQuota: () => Promise<void>;
   configure: (mountPath: string) => Promise<boolean>;
   enroll: (opts: {
     baseUrl: string;
@@ -64,6 +79,48 @@ export function useCloud(): UseCloudReturn {
   const isEnrolled = computed(() => Boolean(status.value?.enrolled));
   const canSync = computed(() => Boolean(status.value?.configured || status.value?.enrolled));
   const isActive = computed(() => isEnrolled.value);
+  const providerReadiness = computed<CloudProviderReadiness | null>(() => {
+    if (!status.value) return null;
+    return cloudReadinessFromQuota(
+      Boolean(status.value.enrolled),
+      quota.value,
+      quotaReachable.value,
+    );
+  });
+
+  async function refreshQuota(): Promise<void> {
+    if (!pluginDataDir || !status.value?.enrolled) {
+      quota.value = null;
+      quotaError.value = null;
+      quotaReachable.value = true;
+      return;
+    }
+    quotaLoading.value = true;
+    quotaError.value = null;
+    try {
+      const result = await fetchCloudLlmQuota(pluginDataDir);
+      if (!result.ok) {
+        quota.value = null;
+        quotaError.value = result.error;
+        const err = result.error ?? '';
+        quotaReachable.value = !(
+          err === 'cloud_unreachable'
+          || err.startsWith('quota_unavailable')
+          || (typeof result.status === 'number' && result.status >= 500)
+          || result.status === 0
+        );
+        return;
+      }
+      quotaReachable.value = true;
+      quota.value = result.data.enrolled ? result.data : null;
+    } catch (err) {
+      quota.value = null;
+      quotaError.value = err instanceof Error ? err.message : 'cloud_quota_failed';
+      quotaReachable.value = false;
+    } finally {
+      quotaLoading.value = false;
+    }
+  }
 
   async function refreshConnectors(): Promise<void> {
     if (!pluginDataDir || !status.value?.enrolled) {
@@ -116,10 +173,13 @@ export function useCloud(): UseCloudReturn {
       }
       status.value = result.data;
       if (result.data.enrolled) {
-        await refreshConnectors();
+        await Promise.all([refreshConnectors(), refreshQuota()]);
       } else {
         connectors.value = [];
         connectorsError.value = null;
+        quota.value = null;
+        quotaError.value = null;
+        quotaReachable.value = true;
       }
     } catch (err) {
       status.value = null;
@@ -274,12 +334,17 @@ export function useCloud(): UseCloudReturn {
     connectors,
     connectorsLoading,
     connectorsError,
+    quota,
+    quotaLoading,
+    quotaError,
+    providerReadiness,
     isActive,
     isEnrolled,
     canSync,
     init,
     refreshStatus,
     refreshConnectors,
+    refreshQuota,
     configure,
     enroll,
     disconnect,

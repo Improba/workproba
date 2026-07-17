@@ -164,6 +164,43 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "La confirmation a expiré. Relancez l'action si nécessaire."
             ),
             "provider_unavailable": "Le fournisseur IA est indisponible.",
+            "cloud_llm": {
+                "cloud_not_enrolled": (
+                    "Connectez ce poste à Improba Cloud ou choisissez un autre moteur IA."
+                ),
+                "not_subscribed": (
+                    "L'abonnement cloud IA n'est pas actif. Contactez votre administrateur "
+                    "ou choisissez un autre moteur."
+                ),
+                "quota_exceeded": (
+                    "Le quota cloud IA est atteint. Réessayez plus tard, souscrivez à un "
+                    "abonnement ou choisissez un autre moteur."
+                ),
+                "mistral_unavailable": (
+                    "Le service cloud IA est temporairement indisponible. Réessayez plus tard."
+                ),
+                "mistral_timeout": (
+                    "Le service cloud IA est temporairement indisponible. Réessayez plus tard."
+                ),
+                "mistral_upstream_error": (
+                    "Le service cloud IA est temporairement indisponible. Réessayez plus tard."
+                ),
+                "unsupported_model": "Ce modèle n'est pas pris en charge par le cloud IA.",
+                "bad_request": "Requête cloud IA invalide.",
+                "bearer_token_required": (
+                    "Jeton cloud manquant. Reconnectez ce poste ou choisissez un autre moteur."
+                ),
+                "invalid_device_token": (
+                    "Session cloud expirée. Reconnectez ce poste ou choisissez un autre moteur."
+                ),
+                "device_organization_required": (
+                    "Ce poste cloud n'est pas rattaché à une organisation."
+                ),
+                "cloud_unreachable": (
+                    "Improba Cloud est injoignable. Vérifiez votre connexion ou "
+                    "choisissez un autre moteur."
+                ),
+            },
         },
         "main": {
             "confirmation_not_found": "Confirmation introuvable ou expirée.",
@@ -413,6 +450,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Utilisez enroll_to_cloud d'abord."
             ),
             "connectors_load_failed": "Impossible de charger les connecteurs managés.",
+            "quota_load_failed": "Impossible de charger le quota cloud IA.",
             "connectors_auth_failed": (
                 "Jeton cloud invalide ou expiré. Reconnectez ce poste via un code d'invitation."
             ),
@@ -652,6 +690,41 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "The confirmation expired. Retry the action if needed."
             ),
             "provider_unavailable": "The AI provider is unavailable.",
+            "cloud_llm": {
+                "cloud_not_enrolled": (
+                    "Enroll this device with Improba Cloud or choose another AI engine."
+                ),
+                "not_subscribed": (
+                    "Cloud AI subscription is not active. Contact your administrator "
+                    "or choose another engine."
+                ),
+                "quota_exceeded": (
+                    "Cloud AI quota reached. Try again later, subscribe, or choose another engine."
+                ),
+                "mistral_unavailable": (
+                    "Cloud AI service is temporarily unavailable. Please try again later."
+                ),
+                "mistral_timeout": (
+                    "Cloud AI service is temporarily unavailable. Please try again later."
+                ),
+                "mistral_upstream_error": (
+                    "Cloud AI service is temporarily unavailable. Please try again later."
+                ),
+                "unsupported_model": "This model is not supported by cloud AI.",
+                "bad_request": "Invalid cloud AI request.",
+                "bearer_token_required": (
+                    "Cloud token missing. Reconnect this device or choose another engine."
+                ),
+                "invalid_device_token": (
+                    "Cloud session expired. Reconnect this device or choose another engine."
+                ),
+                "device_organization_required": (
+                    "This cloud device is not linked to an organization."
+                ),
+                "cloud_unreachable": (
+                    "Improba Cloud is unreachable. Check your connection or choose another engine."
+                ),
+            },
         },
         "main": {
             "confirmation_not_found": "Confirmation not found or expired.",
@@ -891,6 +964,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Use enroll_to_cloud first."
             ),
             "connectors_load_failed": "Could not load managed connectors.",
+            "quota_load_failed": "Could not load cloud AI quota.",
             "connectors_auth_failed": (
                 "Invalid or expired cloud token. Reconnect this workstation with an invitation code."
             ),

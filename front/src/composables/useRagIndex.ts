@@ -4,7 +4,12 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 
 import { useSpace } from '@composables/useSpace';
 import { buildActiveProviderSet, useAppSettings } from '@composables/useAppSettings';
+import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import { useCloud } from '@composables/useCloud';
 import { ensureProviderSetEmbeddingsReady } from '@utils/providerSetNotify';
+import {
+  usesDeviceBearerAuth,
+} from '@utils/providerSetValidation';
 import {
   indexWorkspace,
   type RagStatus,
@@ -41,23 +46,33 @@ async function runIndex(opts: {
   workspaceDataDir: string | null;
   paths?: string[] | null;
 }): Promise<void> {
+  const { getPluginDataDir } = usePlugins();
+  const { providerReadiness, init: initCloud } = useCloud();
   const providerSet = buildActiveProviderSet(null, null);
   if (!providerSet?.embeddings) {
     status.value = 'disabled';
     return;
   }
-  if (!ensureProviderSetEmbeddingsReady(providerSet)) {
+  if (usesDeviceBearerAuth(providerSet) && !providerReadiness.value) {
+    await initCloud();
+  }
+  const cloudCtx = usesDeviceBearerAuth(providerSet)
+    ? providerReadiness.value
+    : null;
+  if (!ensureProviderSetEmbeddingsReady(providerSet, cloudCtx)) {
     status.value = 'disabled';
     error.value = 'api_key_missing';
     return;
   }
 
   try {
+    const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
     const result = await indexWorkspace({
       projectPath: opts.projectPath,
       workspaceDataDir: opts.workspaceDataDir,
       providerSet,
       paths: opts.paths ?? null,
+      cloudPluginDataDir,
     });
     report.value = result;
     error.value = null;

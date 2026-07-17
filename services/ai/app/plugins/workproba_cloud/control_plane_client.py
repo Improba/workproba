@@ -379,6 +379,10 @@ class CloudControlPlaneClient:
         _ = org_id  # org is implied by DeviceBearer on the server
         return await self._get_json("/connectors")
 
+    async def get_llm_quota(self) -> JsonDict:
+        """GET /llm/v1/quota — statut quota LLM de l'organisation."""
+        return await self._get_json("/llm/v1/quota")
+
     async def fetch_allowed_connector_ids(self) -> frozenset[str]:
         """GET /connectors → ids ; liste vide = org sans connecteurs (pas un fallback)."""
         payload = await self._get_json("/connectors")

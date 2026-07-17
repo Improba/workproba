@@ -64,6 +64,7 @@ export type ProviderSetOcrProvider = 'mistral' | 'docling';
 export type ProviderSetOcrMode = 'auto' | 'none';
 export type ProviderSetVisionMode = 'chat' | 'none';
 export type ProviderSetCapabilitiesReasoning = 'low' | 'medium' | 'high';
+export type ProviderSetAuthMode = 'api_key' | 'device_bearer';
 
 export interface ProviderSetChatModel {
   model: string;
@@ -117,8 +118,10 @@ export interface ProviderSet {
   ocr: ProviderSetOcr | null;
   vision: ProviderSetVision;
   capabilities: ProviderSetCapabilities;
+  authMode?: ProviderSetAuthMode;
   isDefault: boolean;
   isBuiltin: boolean;
+  uiModeLocked?: boolean;
 }
 
 export type PluginSource = 'builtin' | 'local';

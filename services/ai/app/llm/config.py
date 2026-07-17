@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from pydantic_ai.models import Model
@@ -29,11 +30,18 @@ def resolve_llm_config(
     request_config: LLMProviderConfig | None,
     settings: Any,
     provider_set: ProviderSet | None = None,
+    *,
+    cloud_plugin_data_dir: Path | str | None = None,
+    plugin_data_dir: Path | str | None = None,
 ) -> LLMProviderConfig:
     """Priorise le set actif, puis la config par tour, puis l'environnement."""
 
     if provider_set is not None:
-        return resolve_chat_from_set(provider_set)
+        return resolve_chat_from_set(
+            provider_set,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
+            plugin_data_dir=plugin_data_dir,
+        )
 
     if request_config is not None:
         return request_config
@@ -53,6 +61,13 @@ def build_model(config: LLMProviderConfig) -> Model:
 
     if provider in _OPENAI_COMPAT_PROVIDERS:
         base_url = config.base_url or _DEFAULT_BASE_URL.get(provider)
+        # openai : le SDK utilise l'URL publique par défaut si base_url est None.
+        # openai_compat / vllm : une base URL explicite est obligatoire.
+        if not base_url and provider in ("openai_compat", "vllm"):
+            raise ValueError(
+                f"base_url manquante pour le provider {provider} "
+                f"(modèle {config.model})"
+            )
         # Ollama ignore l'API key mais le client OpenAI peut exiger une valeur non-nulle.
         effective_key = api_key if api_key is not None else ("ollama" if provider == "ollama" else None)
 

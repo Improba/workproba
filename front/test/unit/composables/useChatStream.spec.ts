@@ -21,9 +21,21 @@ vi.mock('@composables/usePlugins', () => ({
   PROJET_PLUGIN_ID: 'workproba.projet',
   PERSONAS_PLUGIN_ID: 'workproba.personas',
   BROWSER_PLUGIN_ID: 'workproba.browser',
+  CLOUD_PLUGIN_ID: 'workproba.cloud',
   usePlugins: () => ({
     activePluginIds: ref([]),
     getPluginDataDir: vi.fn(async () => null),
+  }),
+}));
+vi.mock('@composables/useCloud', () => ({
+  useCloud: () => ({
+    providerReadiness: ref(null),
+    status: ref(null),
+    quota: ref(null),
+    isEnrolled: ref(false),
+    init: vi.fn(),
+    refreshStatus: vi.fn(),
+    refreshQuota: vi.fn(),
   }),
 }));
 vi.mock('@composables/useAppSettings', () => ({
@@ -680,6 +692,16 @@ describe('useChatStream — feedbacks', () => {
     expect(api.error.value?.retryable).toBe(false);
     expect(api.messages.value).toHaveLength(0);
     unmount();
+  });
+
+  it('localise quota_exceeded depuis le SSE', () => {
+    const mapped = mapPythonSseEvent({
+      type: 'error',
+      data: { code: 'quota_exceeded', message: 'quota_exceeded' },
+    });
+    expect(mapped.type).toBe('error');
+    expect(mapped.data.code).toBe('quota_exceeded');
+    expect(mapped.data.message.toLowerCase()).toContain('quota');
   });
 
   it('mappe confirmation_request', () => {

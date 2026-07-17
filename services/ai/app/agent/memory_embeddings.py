@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from app.agent.embedding_cache import (
@@ -37,10 +38,16 @@ def resolve_embedding_credentials(
     embedding_config: LLMProviderConfig | None,
     *,
     provider_set: ProviderSet | None = None,
+    cloud_plugin_data_dir: Path | None = None,
+    plugin_data_dir: Path | None = None,
 ) -> tuple[str | None, str | None, str | None]:
     """Résout modèle / base_url / api_key pour les embeddings d'un tour."""
     if provider_set is not None:
-        set_embed = resolve_embeddings_from_set(provider_set)
+        set_embed = resolve_embeddings_from_set(
+            provider_set,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
+            plugin_data_dir=plugin_data_dir,
+        )
         if set_embed is not None and set_embed.model:
             model = set_embed.model
             if "/" not in model and set_embed.provider:
@@ -211,6 +218,8 @@ async def prepare_ranking_for_turn(
     embedding_config: LLMProviderConfig | None,
     provider_set: ProviderSet | None,
     memories: list[dict] | None = None,
+    cloud_plugin_data_dir: Path | None = None,
+    plugin_data_dir: Path | None = None,
 ) -> MemoryRankingContext | None:
     """Point d'entrée : respecte le flag settings et résout les credentials."""
     settings = get_settings()
@@ -221,6 +230,8 @@ async def prepare_ranking_for_turn(
         settings,
         embedding_config,
         provider_set=provider_set,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+        plugin_data_dir=plugin_data_dir,
     )
     if not model:
         return None

@@ -109,7 +109,11 @@ import {
   useAppSettings,
 } from '@composables/useAppSettings';
 import { setLlmSessionContext } from '@composables/useLlmSessionContext';
-import { buildSessionAwareLlmConfigs, buildUtilityLlmConfig } from '@utils/llmRouting';
+import {
+  buildSessionAwareLlmConfigs,
+  buildUtilityLlmConfig,
+  buildRoutedProviderSet,
+} from '@utils/llmRouting';
 import { isProvisionalConversationTitle } from '@utils/conversationTitle';
 import { openLocalFile } from '@composables/useDesktop';
 import { useSpace } from '@composables/useSpace';
@@ -134,7 +138,7 @@ import {
 import { effectiveReasoningEffortFromSet } from '@utils/providerSets';
 import { defaultReasoningEffort, supportsReasoning } from '@utils/reasoningSupport';
 import type { ChatMessage, PersonasOpinionCard, ReasoningEffort } from '#types';
-import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import { CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import { usePersonasNavigation } from '@composables/usePersonasNavigation';
 import {
   toolResultToOpinionCard,
@@ -463,11 +467,15 @@ async function tryAutoTitle(loadGen?: number): Promise<void> {
   autoTitleStarted.value = true;
 
   try {
+    const providerSet = buildRoutedProviderSet();
+    const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
     const title = await requestTitle({
       firstUserMessage,
       firstAssistantReply,
       chatConfig: sessionLlmConfigs().chat,
       utilityConfig: buildUtilityLlmConfig(),
+      providerSet,
+      cloudPluginDataDir,
       locale: toSidecarLocale(locale.value),
     });
     if (loadGen !== undefined && sessionLoadGuard.isStale(loadGen)) return;
@@ -528,10 +536,14 @@ watch(completedTurns, async (turns) => {
   lastSummaryTurn.value = turns;
 
   try {
+    const providerSet = buildRoutedProviderSet();
+    const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
     const result = await requestSummary({
       messages: transcript,
       chatConfig: sessionLlmConfigs().chat,
       utilityConfig: buildUtilityLlmConfig(),
+      providerSet,
+      cloudPluginDataDir,
       focus: t('chat.page.summaryFocus'),
       locale: toSidecarLocale(locale.value),
     });
@@ -548,6 +560,8 @@ watch(completedTurns, async (turns) => {
         summary: sessionSummary.value,
         chatConfig: sessionLlmConfigs().chat,
         utilityConfig: buildUtilityLlmConfig(),
+        providerSet,
+        cloudPluginDataDir,
         locale: toSidecarLocale(locale.value),
       }).catch(() => {
         // Promotion mémoire en arrière-plan : échec silencieux.

@@ -5,6 +5,8 @@ import { describe, expect, it } from 'vitest';
 import type { ProviderSet, ProviderSetChatModel } from '@composables/useDesktop.types';
 import {
   MISTRAL_BUILTIN_SET,
+  WORKPROBA_CLOUD_BUILTIN_SET,
+  enrichSetFromBuiltin,
   normalizeStoredSet,
   providerSetToSidecar,
   sidecarSetToProviderSet,
@@ -41,13 +43,24 @@ function sidecarCatalogFields(chat: Record<string, unknown>) {
 }
 
 describe('providerSets serialization contract', () => {
-    it('providerSetToSidecar produit du snake_case avec le catalogue Mistral', () => {
+    it('providerSetToSidecar produit auth_mode device_bearer pour workproba-cloud', () => {
+    const sidecar = providerSetToSidecar(WORKPROBA_CLOUD_BUILTIN_SET);
+    expect(sidecar.id).toBe('workproba-cloud');
+    expect(sidecar.is_default).toBe(true);
+    expect(sidecar.auth_mode).toBe('device_bearer');
+    expect(sidecar.ui_mode_locked).toBe(true);
+    const chat = sidecar.chat as Record<string, unknown>;
+    expect(chat.api_key_ref).toBeUndefined();
+    expect(chat.base_url).toBeUndefined();
+  });
+
+  it('providerSetToSidecar produit du snake_case avec le catalogue Mistral', () => {
     const sidecar = providerSetToSidecar(MISTRAL_BUILTIN_SET);
     const chat = sidecar.chat as Record<string, unknown>;
     const caps = sidecar.capabilities as Record<string, unknown>;
 
     expect(sidecar.id).toBe('mistral-default');
-    expect(sidecar.is_default).toBe(true);
+    expect(sidecar.is_default).toBe(false);
     expect(sidecar.is_builtin).toBe(true);
     expect(chat.provider).toBe('mistral');
     expect(caps.web_search).toBe(true);
@@ -132,5 +145,16 @@ describe('providerSets serialization contract', () => {
     );
     expect(normalized.isDefault).toBe(true);
     expect(normalized.isBuiltin).toBe(true);
+  });
+
+  it('enrichSetFromBuiltin restaure authMode device_bearer pour workproba-cloud legacy', () => {
+    const legacy = {
+      ...WORKPROBA_CLOUD_BUILTIN_SET,
+      authMode: undefined,
+      uiModeLocked: undefined,
+    } as ProviderSet;
+    const enriched = enrichSetFromBuiltin(legacy);
+    expect(enriched.authMode).toBe('device_bearer');
+    expect(enriched.uiModeLocked).toBe(true);
   });
 });

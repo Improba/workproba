@@ -131,13 +131,56 @@ pub struct ProviderSetEntry {
     pub is_default: bool,
     #[serde(default)]
     pub is_builtin: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auth_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ui_mode_locked: Option<bool>,
 }
 
+pub const WORKPROBA_CLOUD_BUILTIN_SET_ID: &str = "workproba-cloud";
 pub const MISTRAL_BUILTIN_SET_ID: &str = "mistral-default";
 pub const OLLAMA_BUILTIN_SET_ID: &str = "ollama-local";
 
 pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
     vec![
+        ProviderSetEntry {
+            id: WORKPROBA_CLOUD_BUILTIN_SET_ID.to_string(),
+            name: "Improba Cloud".to_string(),
+            description: "Cloud Improba géré. Chat, vision, OCR et embeddings via votre compte.".to_string(),
+            badges: vec!["Cloud Improba".to_string(), "Recommandé".to_string()],
+            chat: ProviderSetChatEntry {
+                provider: "mistral".to_string(),
+                model: "mistral-small-latest".to_string(),
+                api_key_ref: None,
+                api_key: None,
+                base_url: None,
+                reasoning: Some("auto".to_string()),
+            },
+            embeddings: Some(ProviderSetEmbeddingsEntry {
+                provider: "openai_compat".to_string(),
+                model: "mistral-embed".to_string(),
+                api_key_ref: None,
+                api_key: None,
+                base_url: None,
+            }),
+            ocr: Some(ProviderSetOcrEntry {
+                provider: "mistral".to_string(),
+                mode: Some("auto".to_string()),
+            }),
+            vision: Some(ProviderSetVisionEntry {
+                mode: Some("chat".to_string()),
+            }),
+            capabilities: Some(ProviderSetCapabilitiesEntry {
+                reasoning: Some("medium".to_string()),
+                vision: true,
+                tools: true,
+                web_search: false,
+            }),
+            is_default: true,
+            is_builtin: true,
+            auth_mode: Some("device_bearer".to_string()),
+            ui_mode_locked: Some(true),
+        },
         ProviderSetEntry {
             id: MISTRAL_BUILTIN_SET_ID.to_string(),
             name: "Mistral".to_string(),
@@ -171,8 +214,10 @@ pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
                 tools: true,
                 web_search: true,
             }),
-            is_default: true,
+            is_default: false,
             is_builtin: true,
+            auth_mode: Some("api_key".to_string()),
+            ui_mode_locked: None,
         },
         ProviderSetEntry {
             id: OLLAMA_BUILTIN_SET_ID.to_string(),
@@ -206,6 +251,8 @@ pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
             }),
             is_default: false,
             is_builtin: true,
+            auth_mode: Some("api_key".to_string()),
+            ui_mode_locked: None,
         },
     ]
 }
@@ -501,6 +548,8 @@ fn migrate_provider_sets(settings: &mut AppSettings) {
         }),
         is_default: true,
         is_builtin: false,
+        auth_mode: Some("api_key".to_string()),
+        ui_mode_locked: None,
     };
 
     settings.sets = Some(vec![migrated]);
@@ -734,13 +783,26 @@ mod settings_tests {
     }
 
     #[test]
-    fn builtin_sets_include_mistral_default() {
+    fn builtin_sets_include_cloud_default() {
         let sets = builtin_provider_sets();
-        assert_eq!(sets.len(), 2);
-        let mistral = &sets[0];
-        assert_eq!(mistral.id, MISTRAL_BUILTIN_SET_ID);
-        assert!(mistral.is_default);
-        assert!(mistral.is_builtin);
+        assert_eq!(sets.len(), 3);
+        let cloud = &sets[0];
+        assert_eq!(cloud.id, WORKPROBA_CLOUD_BUILTIN_SET_ID);
+        assert!(cloud.is_default);
+        assert!(cloud.is_builtin);
+        assert_eq!(cloud.auth_mode.as_deref(), Some("device_bearer"));
+        assert_eq!(cloud.ui_mode_locked, Some(true));
+        assert_eq!(cloud.chat.provider, "mistral");
+        assert_eq!(
+            cloud.embeddings.as_ref().map(|e| e.provider.as_str()),
+            Some("openai_compat")
+        );
+        assert_eq!(
+            cloud.capabilities.as_ref().map(|c| c.web_search),
+            Some(false)
+        );
+        let mistral = sets.iter().find(|s| s.id == MISTRAL_BUILTIN_SET_ID).expect("mistral");
+        assert!(!mistral.is_default);
     }
 }
 

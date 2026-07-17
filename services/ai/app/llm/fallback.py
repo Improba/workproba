@@ -107,6 +107,8 @@ _NON_FALLBACKABLE_TYPES: tuple[type[BaseException], ...] = (
     *_AUTH_TYPES,
 )
 
+from app.llm.cloud_errors import parse_cloud_llm_error_code  # noqa: E402
+
 
 class FallbackableProviderError(Exception):
     """Erreur provider éligible au repli, propagée vers main.py."""
@@ -166,6 +168,8 @@ def is_fallbackable(exc: BaseException) -> tuple[bool, str]:
     au repli court-circuite immédiatement la remontée (même si son contexte
     serait fallbackable).
     """
+    if parse_cloud_llm_error_code(exc):
+        return False, ""
     seen: set[int] = set()
     current: BaseException | None = exc
     while current is not None and id(current) not in seen:

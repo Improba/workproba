@@ -19,6 +19,7 @@ from pydantic_ai.messages import BinaryContent
 from app.documents.extractor import LocalExtractor, is_binary_document
 from app.i18n import DEFAULT_LOCALE, attachment_status_label, t
 from app.limits import Limits
+from app.llm.provider_sets import CloudNotEnrolledError
 from app.ocr import MistralOcrClient, is_scanned_pdf
 from app.provider_set import (
     ProviderSet,
@@ -112,6 +113,8 @@ async def reprocess_attachment(
     locale: str = DEFAULT_LOCALE,
     provider_set: ProviderSet | None = None,
     ui_mode: str = "guided",
+    cloud_plugin_data_dir: Path | None = None,
+    plugin_data_dir: Path | None = None,
 ) -> ReprocessAttachmentResult:
     """Re-traite une pièce stockée avec le set fourni (sans tour agent)."""
     target = _resolve_attachment_path(workspace_data_dir, file_path)
@@ -131,6 +134,8 @@ async def reprocess_attachment(
         locale=locale,
         provider_set=provider_set,
         ui_mode=ui_mode,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+        plugin_data_dir=plugin_data_dir,
     )
     if not processed.statuses:
         return ReprocessAttachmentResult(
@@ -300,6 +305,8 @@ async def process_inline_attachments(
     locale: str = DEFAULT_LOCALE,
     provider_set: ProviderSet | None = None,
     ui_mode: str = "guided",
+    cloud_plugin_data_dir: Path | None = None,
+    plugin_data_dir: Path | None = None,
 ) -> ProcessedAttachments:
     """Route et traite les pièces jointes inline selon les capacités du set."""
     inline = [d for d in documents if d.content_base64]
@@ -317,8 +324,12 @@ async def process_inline_attachments(
     ocr_client: MistralOcrClient | None = None
     if has_ocr and provider_set is not None:
         try:
-            ocr_client = MistralOcrClient(provider_set=provider_set)
-        except ValueError:
+            ocr_client = MistralOcrClient(
+                provider_set=provider_set,
+                cloud_plugin_data_dir=cloud_plugin_data_dir,
+                plugin_data_dir=plugin_data_dir,
+            )
+        except (ValueError, CloudNotEnrolledError):
             has_ocr = False
 
     for doc in inline:

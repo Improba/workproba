@@ -46,6 +46,7 @@ export const MISTRAL_BUILTIN_SET: ProviderSet = {
   name: 'Mistral',
   description: 'Cloud Improba, tout-intégré.',
   badges: ['Cloud Improba', 'Recommandé'],
+  authMode: 'api_key',
   chat: {
     provider: 'mistral',
     model: 'mistral-small-latest',
@@ -63,8 +64,40 @@ export const MISTRAL_BUILTIN_SET: ProviderSet = {
   ocr: { provider: 'mistral', mode: 'auto' },
   vision: { mode: 'chat' },
   capabilities: { reasoning: 'medium', vision: true, tools: true, webSearch: true },
+  isDefault: false,
+  isBuiltin: true,
+};
+
+export const WORKPROBA_CLOUD_BUILTIN_SET: ProviderSet = {
+  id: 'workproba-cloud',
+  name: 'Improba Cloud',
+  description: 'Cloud Improba géré. Chat, vision, OCR et embeddings via votre compte.',
+  badges: ['Cloud Improba', 'Recommandé'],
+  authMode: 'device_bearer',
+  chat: {
+    // mistral : thinking/reasoning Mistral via le proxy cloud OpenAI-compat.
+    provider: 'mistral',
+    model: 'mistral-small-latest',
+    reasoning: 'auto',
+    models: MISTRAL_CHAT_MODELS,
+  },
+  embeddings: {
+    // openai_compat : LiteLLM + api_base vers {cloud}/llm/v1.
+    provider: 'openai_compat',
+    model: 'mistral-embed',
+  },
+  ocr: { provider: 'mistral', mode: 'auto' },
+  vision: { mode: 'chat' },
+  capabilities: {
+    reasoning: 'medium',
+    vision: true,
+    tools: true,
+    // Proxy cloud V1 : pas d'API Agents / web search Mistral.
+    webSearch: false,
+  },
   isDefault: true,
   isBuiltin: true,
+  uiModeLocked: true,
 };
 
 export const OLLAMA_BUILTIN_SET: ProviderSet = {
@@ -91,6 +124,7 @@ export const OLLAMA_BUILTIN_SET: ProviderSet = {
 };
 
 export const BUILTIN_PROVIDER_SETS: ProviderSet[] = [
+  WORKPROBA_CLOUD_BUILTIN_SET,
   MISTRAL_BUILTIN_SET,
   OLLAMA_BUILTIN_SET,
 ];
@@ -144,9 +178,31 @@ export function enrichSetFromBuiltin(set: ProviderSet): ProviderSet {
       ...enriched,
       capabilities: {
         ...enriched.capabilities,
-        webSearch: enriched.capabilities.webSearch || template.capabilities.webSearch,
+        webSearch:
+          template.id === 'workproba-cloud'
+            ? template.capabilities.webSearch
+            : enriched.capabilities.webSearch || template.capabilities.webSearch,
       },
+      // Les builtins managés doivent conserver leur mode d'auth (ex. device_bearer),
+      // même si un settings.json ancien ne sérialisait pas encore authMode.
+      authMode: template.authMode ?? enriched.authMode,
+      uiModeLocked: template.uiModeLocked ?? enriched.uiModeLocked,
     };
+    if (template.id === 'workproba-cloud') {
+      enriched = {
+        ...enriched,
+        chat: {
+          ...enriched.chat,
+          provider: template.chat.provider,
+        },
+        embeddings: enriched.embeddings && template.embeddings
+          ? {
+              ...enriched.embeddings,
+              provider: template.embeddings.provider,
+            }
+          : enriched.embeddings,
+      };
+    }
   }
 
   return enriched;
@@ -203,9 +259,13 @@ export function toEmbeddingLlmConfigFromSet(set: ProviderSet | null): LlmConfigP
   };
 }
 
-/** Config LLM utilitaire (titre, résumé) : preset sans override session ni raisonnement. */
+/** Config LLM utilitaire (titre, résumé) : preset sans override session ni raisonnement.
+ *  Pour ``device_bearer`` (Improba Cloud), retourne null : le sidecar doit recevoir
+ *  le provider_set + cloud_plugin_data_dir pour injecter le DeviceBearer.
+ */
 export function toUtilityLlmConfigFromSet(set: ProviderSet | null): LlmConfigPayload | null {
   if (!set) return null;
+  if (set.authMode === 'device_bearer') return null;
   const chat = set.chat;
   return {
     provider: chat.provider,
@@ -382,16 +442,20 @@ export function localizedSetName(
   set: ProviderSet,
   t: (key: string) => string,
 ): string {
+  if (set.id === 'workproba-cloud') return t('settings.engine.cloudName');
   if (set.id === 'mistral-default') return t('settings.engine.mistralName');
   if (set.id === 'ollama-local') return t('settings.engine.ollamaName');
   return set.name;
 }
 
-/** Libellé preset en mode guidé (titlebar) : Mistral, Ollama local, etc. */
+/** Libellé preset en mode guidé (titlebar) : Improba Cloud, Mistral, Ollama local, etc. */
 export function guidedPresetLabel(
   set: ProviderSet,
   t: (key: string) => string,
 ): string {
+  if (set.id === 'workproba-cloud') {
+    return t('settings.engine.cloudName');
+  }
   if (set.id === 'mistral-default' || set.chat.provider === 'mistral') {
     return t('settings.engine.mistralName');
   }
@@ -406,6 +470,7 @@ export function localizedSetDescription(
   set: ProviderSet,
   t: (key: string) => string,
 ): string {
+  if (set.id === 'workproba-cloud') return t('settings.engine.cloudDescription');
   if (set.id === 'mistral-default') return t('settings.engine.mistralDescription');
   if (set.id === 'ollama-local') return t('settings.engine.ollamaDescription');
   return set.description;
@@ -487,6 +552,9 @@ export function providerSetToSidecar(set: ProviderSet): Record<string, unknown> 
     is_default: set.isDefault,
     is_builtin: set.isBuiltin,
   };
+
+  if (set.authMode) payload.auth_mode = set.authMode;
+  if (set.uiModeLocked) payload.ui_mode_locked = set.uiModeLocked;
 
   if (set.embeddings) {
     const embed: Record<string, unknown> = {
@@ -613,5 +681,10 @@ export function sidecarSetToProviderSet(raw: Record<string, unknown>): ProviderS
     },
     isDefault: Boolean(raw.is_default ?? raw.isDefault),
     isBuiltin: Boolean(raw.is_builtin ?? raw.isBuiltin),
+    authMode:
+      raw.auth_mode === 'device_bearer' || raw.authMode === 'device_bearer'
+        ? 'device_bearer'
+        : 'api_key',
+    uiModeLocked: Boolean(raw.ui_mode_locked ?? raw.uiModeLocked),
   };
 }

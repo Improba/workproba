@@ -250,3 +250,30 @@ def test_cloud_list_connectors_bearer_without_device_returns_403(
         assert resp.status_code == 403
         detail = resp.json()["detail"]
         assert "invitation" in detail.lower() or "code" in detail.lower()
+
+
+def test_cloud_llm_quota_not_enrolled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import app.auth as authmod
+    from fastapi.testclient import TestClient
+
+    import app.main as mainmod
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+
+    monkeypatch.setattr(authmod, "is_loopback_host", lambda host: True)
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+
+    with TestClient(mainmod.app) as test_client:
+        resp = test_client.get(
+            "/plugins/cloud/llm-quota",
+            params={"plugin_data_dir": str(cloud_dir)},
+            headers={"X-Internal-Secret": "desktop-dev-secret"},
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["enrolled"] is False
+        assert body["enabled"] is False

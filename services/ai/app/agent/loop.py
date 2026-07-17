@@ -57,6 +57,7 @@ from app.agent.work_events import (
 )
 from app.i18n import DEFAULT_LOCALE, t
 from app.limits import DEFAULT_LIMITS, Limits
+from app.llm.cloud_errors import cloud_llm_error_message, parse_cloud_llm_error_code
 from app.llm.fallback import FallbackableProviderError, is_fallbackable
 from app.llm.provider import parse_tool_arguments
 from app.llm.utility import extract_usage_tokens
@@ -241,12 +242,24 @@ class AgentLoop:
         inline_docs = [d for d in request.documents if d.content_base64]
         project_docs = [d for d in request.documents if not d.content_base64]
         provider_set = resolve_provider_set(request.provider_set)
+        plugin_data_dir = (
+            Path(request.plugin_data_dir).expanduser().resolve()
+            if request.plugin_data_dir
+            else None
+        )
+        cloud_plugin_data_dir = (
+            Path(request.cloud_plugin_data_dir).expanduser().resolve()
+            if request.cloud_plugin_data_dir
+            else None
+        )
         processed = await process_inline_attachments(
             inline_docs,
             self._limits,
             locale=request.locale,
             provider_set=provider_set,
             ui_mode=request.ui_mode,
+            plugin_data_dir=plugin_data_dir,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
         )
         if not is_fallback_attempt:
             for status in processed.statuses:
@@ -257,11 +270,6 @@ class AgentLoop:
                     label_locale=status.label_locale,
                 )
         user_prompt = build_user_prompt(request.message, processed)
-        plugin_data_dir = (
-            Path(request.plugin_data_dir).expanduser().resolve()
-            if request.plugin_data_dir
-            else None
-        )
         register_plugin_hooks(request.active_plugins)
         plugin_contexts = build_plugin_contexts(
             active_plugins=request.active_plugins,
@@ -308,6 +316,8 @@ class AgentLoop:
                     embedding_config=request.embedding_config,
                     provider_set=provider_set,
                     memories=tagged_memories,
+                    cloud_plugin_data_dir=cloud_plugin_data_dir,
+                    plugin_data_dir=plugin_data_dir,
                 )
                 if ranking_context is not None:
                     memory_query_embedding = ranking_context.query_embedding
@@ -508,6 +518,20 @@ class AgentLoop:
         except asyncio.CancelledError:
             raise
         except Exception as exc:
+            cloud_code = parse_cloud_llm_error_code(exc)
+            if cloud_code:
+                message = cloud_llm_error_message(cloud_code, request.locale)
+                yield derive_work_event(
+                    phase="failed",
+                    work_id=work_id,
+                    code=cloud_code,
+                    message=message,
+                )
+                yield ErrorEvent(
+                    code=cloud_code,
+                    message=message,
+                )
+                return
             fallbackable, reason = is_fallbackable(exc)
             if fallbackable and not emitted:
                 raise FallbackableProviderError(reason) from exc

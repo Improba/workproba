@@ -16,6 +16,7 @@ ProviderSetOcrProvider = Literal["mistral", "mistral_ocr", "docling", "none"]
 ProviderSetOcrMode = Literal["auto", "none"]
 ProviderSetVisionMode = Literal["chat", "none"]
 ProviderSetCapabilitiesReasoning = Literal["low", "medium", "high"]
+ProviderSetAuthMode = Literal["api_key", "device_bearer"]
 
 
 def _coerce_locale(value: Any) -> str:
@@ -138,6 +139,7 @@ class ProviderSet(BaseModel):
     ocr: ProviderSetOcr | None = None
     vision: ProviderSetVision = Field(default_factory=ProviderSetVision)
     capabilities: ProviderSetCapabilities = Field(default_factory=ProviderSetCapabilities)
+    auth_mode: ProviderSetAuthMode = "api_key"
     is_default: bool = False
     is_builtin: bool = False
     ui_mode_locked: bool = False
@@ -173,6 +175,13 @@ class ProviderSetTestResponse(BaseModel):
     vision: ProviderSetTestVisionResult
 
 
+class ProviderSetTestRequest(ProviderSet):
+    """Provider set + chemins cloud pour le test de connectivité."""
+
+    cloud_plugin_data_dir: str | None = None
+    plugin_data_dir: str | None = None
+
+
 class AgentTurnRequest(BaseModel):
     # Réservé pour une future isolation multi-tenant ; non appliqué côté local_client.
     tenant_id: str | None = None
@@ -197,6 +206,7 @@ class AgentTurnRequest(BaseModel):
     locale: Locale = "fr"
     active_plugins: list[str] | None = None
     plugin_data_dir: str | None = None
+    cloud_plugin_data_dir: str | None = None
     settings_locked: bool = False
     permissions_network: bool = True
     code_execute: bool = True
@@ -242,6 +252,8 @@ class UtilityTitleRequest(BaseModel):
     first_assistant_reply: str
     llm_provider_config: LLMProviderConfig | None = None
     utility_llm_config: LLMProviderConfig | None = None
+    provider_set: ProviderSet | None = None
+    cloud_plugin_data_dir: str | None = None
     locale: Locale = "fr"
 
     @field_validator("locale", mode="before")
@@ -258,6 +270,8 @@ class UtilitySummarizeRequest(BaseModel):
     messages: list[ChatMessage]
     llm_provider_config: LLMProviderConfig | None = None
     utility_llm_config: LLMProviderConfig | None = None
+    provider_set: ProviderSet | None = None
+    cloud_plugin_data_dir: str | None = None
     focus: str | None = None
     prior_summary: str | None = None
     locale: Locale = "fr"
@@ -665,6 +679,8 @@ class WorkspaceIndexRequest(BaseModel):
     # incrémental déclenché par le watcher FS). None = passe complète.
     paths: list[str] | None = None
     provider_set: ProviderSet | None = None
+    cloud_plugin_data_dir: str | None = None
+    plugin_data_dir: str | None = None
 
 
 class WorkspaceIndexReport(BaseModel):

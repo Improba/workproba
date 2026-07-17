@@ -493,8 +493,11 @@ export default {
       capabilityWebSearch: 'Web search',
       mistralName: 'Mistral',
       ollamaName: 'Local Ollama',
+      cloudName: 'Improba Cloud',
       mistralDescription: 'All-in-one cloud service. Recommended to get started.',
       ollamaDescription: 'Everything on your machine. No data sent out.',
+      cloudDescription:
+        'Through your Improba Cloud organization. Managed conversation, vision and document reading.',
     },
     test: {
       chatOk: 'Chat: OK',
@@ -608,6 +611,21 @@ export default {
     apiKeyMissing:
       'API key missing for this engine. Open Settings → AI Models and enter your key.',
     apiKeyMissingAction: 'Settings',
+    cloudNotEnrolled:
+      'Enroll this device with Improba Cloud (Cloud panel) or choose another AI engine.',
+    cloudNotSubscribed:
+      'Cloud AI subscription is not active. Contact your administrator or choose another engine.',
+    cloudQuotaExceeded:
+      'Cloud AI quota reached. Try again later, subscribe, or choose another engine.',
+    cloudServiceUnavailable:
+      'Cloud AI service is temporarily unavailable. Please try again later.',
+    cloudUnreachable:
+      'Could not reach cloud AI. Check your connection or choose another engine.',
+    cloudUnsupportedModel: 'This model is not supported by cloud AI.',
+    cloudBadRequest: 'Invalid cloud AI request.',
+    cloudAuthRequired:
+      'Cloud session missing or expired. Reconnect this device or choose another engine.',
+    providerUnavailable: 'The AI provider is unavailable. Please try again later.',
   },
   toolCalls: {
     readDocuments: 'I read documents',
@@ -846,6 +864,9 @@ export default {
     joinSuccess: 'Connected to the cloud.',
     joinFailed: 'Could not connect. Check the invitation code.',
     connectedTo: 'Connected to {org}',
+    quotaSummary: '{tokens} tokens · {requests} requests remaining this month',
+    quotaLoading: 'Loading cloud quota…',
+    quotaDisabled: 'Cloud AI subscription is not active for this organization.',
     syncMeta: '{count} document(s) · {lastSync}',
     unknownOrg: 'your organization',
     disconnect: 'Disconnect',

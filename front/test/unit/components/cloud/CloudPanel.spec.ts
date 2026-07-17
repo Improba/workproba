@@ -1,4 +1,4 @@
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { flushPromises, shallowMount } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CloudPanel from '@components/cloud/CloudPanel.vue';
@@ -76,7 +76,15 @@ vi.mock('@composables/useCloud', () => ({
     connectors: ref([]),
     connectorsLoading: ref(false),
     connectorsError: ref(null),
+    quota: ref(null),
+    quotaLoading: ref(false),
+    quotaError: ref(null),
+    providerReadiness: ref(null),
+    isEnrolled: computed(() => Boolean(mockStatus.value?.enrolled)),
+    isActive: computed(() => Boolean(mockStatus.value?.enrolled)),
+    canSync: computed(() => Boolean(mockStatus.value?.configured || mockStatus.value?.enrolled)),
     refreshConnectors: mockRefreshConnectors,
+    refreshQuota: vi.fn().mockResolvedValue(undefined),
   }),
 }));
 

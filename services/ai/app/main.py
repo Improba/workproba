@@ -10,6 +10,7 @@ from pathlib import Path
 from secrets import compare_digest
 from typing import Any, Literal
 
+import httpx
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -33,9 +34,11 @@ from app.capabilities import Capabilities, detect_capabilities
 from app.config import Settings, get_settings
 from app.local_client import LocalProjectClient
 from app.llm.config import build_model, build_model_settings, resolve_llm_config
+from app.llm.cloud_errors import cloud_llm_error_message, parse_cloud_llm_error_code
 from app.llm.fallback import FallbackableProviderError
 from app.llm.provider import resolve_litellm_model
 from app.llm.provider_sets import (
+    CloudNotEnrolledError,
     MissingApiKeyError,
     ocr_is_supported,
     resolve_chat_from_set,
@@ -61,6 +64,7 @@ from app.schemas import (
     PreviewChangeRequest,
     PreviewChangeResponse,
     ProviderSet,
+    ProviderSetTestRequest,
     ProviderSetTestResponse,
     TurnStartEvent,
     WorkFailedEvent,
@@ -208,7 +212,7 @@ async def llm_test(payload: LLMProviderConfig) -> LlmTestResult:
 
 
 @app.post("/llm/sets/test", response_model=ProviderSetTestResponse)
-async def llm_sets_test(payload: ProviderSet) -> ProviderSetTestResponse:
+async def llm_sets_test(payload: ProviderSetTestRequest) -> ProviderSetTestResponse:
     """Teste chaque sous-composant d'un provider set (chat, embeddings, OCR, vision).
 
   La persistance des sets est côté Rust (AppSettings.sets). Le sidecar ne
@@ -221,44 +225,87 @@ async def llm_sets_test(payload: ProviderSet) -> ProviderSetTestResponse:
         ProviderSetTestVisionResult,
     )
 
-    chat_cfg = resolve_chat_from_set(payload)
-    chat_result_raw = await llm_test(chat_cfg)
-    model_ids: list[str] | None = None
-    if chat_result_raw.ok and chat_result_raw.model_count is not None:
-        model_ids = []
-
-    chat_result = ProviderSetTestChatResult(
-        ok=chat_result_raw.ok,
-        detail=chat_result_raw.detail,
-        models=model_ids,
+    provider_set = ProviderSet.model_validate(
+        payload.model_dump(exclude={"cloud_plugin_data_dir", "plugin_data_dir"})
     )
+    cloud_dir = payload.cloud_plugin_data_dir
+    plugin_dir = payload.plugin_data_dir
 
-    embed_cfg = resolve_embeddings_from_set(payload)
-    if embed_cfg is None:
-        embed_result = ProviderSetTestEmbeddingsResult(
-            ok=True,
-            detail="Embeddings non configurés dans ce set",
+    try:
+        chat_cfg = resolve_chat_from_set(
+            provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+            plugin_data_dir=plugin_dir,
         )
-    else:
-        embed_chat_result = await llm_test(embed_cfg)
-        embed_result = ProviderSetTestEmbeddingsResult(
-            ok=embed_chat_result.ok,
-            detail=embed_chat_result.detail,
+        chat_result_raw = await llm_test(chat_cfg)
+        model_ids: list[str] | None = None
+        if chat_result_raw.ok and chat_result_raw.model_count is not None:
+            model_ids = []
+        chat_result = ProviderSetTestChatResult(
+            ok=chat_result_raw.ok,
+            detail=chat_result_raw.detail,
+            models=model_ids,
         )
+    except CloudNotEnrolledError:
+        chat_result = ProviderSetTestChatResult(
+            ok=False,
+            detail="Poste non connecté à Improba Cloud",
+        )
+    except MissingApiKeyError as exc:
+        chat_result = ProviderSetTestChatResult(ok=False, detail=str(exc))
+    except ValueError as exc:
+        chat_result = ProviderSetTestChatResult(ok=False, detail=str(exc))
 
-    ocr_supported = ocr_is_supported(payload)
+    try:
+        embed_cfg = resolve_embeddings_from_set(
+            provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+            plugin_data_dir=plugin_dir,
+        )
+        if embed_cfg is None:
+            embed_result = ProviderSetTestEmbeddingsResult(
+                ok=True,
+                detail="Embeddings non configurés dans ce set",
+            )
+        else:
+            embed_chat_result = await llm_test(embed_cfg)
+            embed_result = ProviderSetTestEmbeddingsResult(
+                ok=embed_chat_result.ok,
+                detail=embed_chat_result.detail,
+            )
+    except CloudNotEnrolledError:
+        embed_result = ProviderSetTestEmbeddingsResult(
+            ok=False,
+            detail="Poste non connecté à Improba Cloud",
+        )
+    except MissingApiKeyError as exc:
+        embed_result = ProviderSetTestEmbeddingsResult(ok=False, detail=str(exc))
+    except ValueError as exc:
+        embed_result = ProviderSetTestEmbeddingsResult(ok=False, detail=str(exc))
+
+    ocr_supported = ocr_is_supported(provider_set)
     ocr_ok = False
     ocr_detail = "OCR absent ou désactivé"
     if ocr_supported:
         from app.ocr.mistral import MistralOcrClient, resolve_ocr_api_key
 
         try:
-            MistralOcrClient(provider_set=payload)
-            if resolve_ocr_api_key(payload):
+            MistralOcrClient(
+                provider_set=provider_set,
+                cloud_plugin_data_dir=cloud_dir,
+                plugin_data_dir=plugin_dir,
+            )
+            if resolve_ocr_api_key(
+                provider_set,
+                cloud_plugin_data_dir=cloud_dir,
+                plugin_data_dir=plugin_dir,
+            ):
                 ocr_ok = True
                 ocr_detail = "OCR configuré"
             else:
                 ocr_detail = "Clé API OCR manquante"
+        except CloudNotEnrolledError:
+            ocr_detail = "Poste non connecté à Improba Cloud"
         except ValueError as exc:
             ocr_detail = str(exc)
     ocr_result = ProviderSetTestOcrResult(
@@ -267,7 +314,7 @@ async def llm_sets_test(payload: ProviderSet) -> ProviderSetTestResponse:
         detail=ocr_detail,
     )
 
-    vision_supported = vision_is_supported(payload)
+    vision_supported = vision_is_supported(provider_set)
     vision_result = ProviderSetTestVisionResult(
         ok=vision_supported,
         supported=vision_supported,
@@ -302,6 +349,11 @@ async def util_title(request: Request, payload: UtilityTitleRequest) -> UtilityT
             status_code=400,
             detail={"code": "api_key_missing", "message": str(exc)},
         ) from exc
+    except CloudNotEnrolledError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "cloud_not_enrolled", "message": str(exc)},
+        ) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
@@ -319,6 +371,11 @@ async def util_summarize(
         raise HTTPException(
             status_code=400,
             detail={"code": "api_key_missing", "message": str(exc)},
+        ) from exc
+    except CloudNotEnrolledError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "cloud_not_enrolled", "message": str(exc)},
         ) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -357,6 +414,34 @@ async def agent_plan_approve(payload: AgentPlanApproveRequest) -> dict[str, bool
     return {"ok": True}
 
 
+def _provider_set_cloud_dirs(payload: AgentTurnRequest) -> tuple[Path | None, Path | None]:
+    plugin_dir = (
+        Path(payload.plugin_data_dir).expanduser().resolve()
+        if payload.plugin_data_dir
+        else None
+    )
+    cloud_dir = (
+        Path(payload.cloud_plugin_data_dir).expanduser().resolve()
+        if payload.cloud_plugin_data_dir
+        else None
+    )
+    return cloud_dir, plugin_dir
+
+
+def _raise_provider_set_resolution_error(exc: Exception) -> None:
+    if isinstance(exc, CloudNotEnrolledError):
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "cloud_not_enrolled", "message": str(exc)},
+        ) from exc
+    if isinstance(exc, MissingApiKeyError):
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "api_key_missing", "message": str(exc)},
+        ) from exc
+    raise exc
+
+
 @app.post("/agent/turn")
 async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSourceResponse:
     settings: Settings = request.app.state.settings
@@ -371,18 +456,18 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
             },
         )
 
+    cloud_dir, plugin_dir = _provider_set_cloud_dirs(payload)
     try:
         resolve_llm_config(
             payload.llm_provider_config,
             settings,
             provider_set=payload.provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+            plugin_data_dir=plugin_dir,
         )
-    except MissingApiKeyError as exc:
+    except (MissingApiKeyError, CloudNotEnrolledError) as exc:
         await turn_manager.release(payload.session_id, turn_id)
-        raise HTTPException(
-            status_code=400,
-            detail={"code": "api_key_missing", "message": str(exc)},
-        ) from exc
+        _raise_provider_set_resolution_error(exc)
 
     project_root = resolve_project_root(settings, payload)
     workspace_data_dir = resolve_workspace_data_dir(payload)
@@ -397,6 +482,8 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
             project_root,
             payload.embedding_config,
             provider_set=payload.provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+            plugin_data_dir=plugin_dir,
         ),
     )
     sandbox_runner = SandboxRunner(timeout_seconds=settings.sandbox_timeout_seconds, limits=limits)
@@ -412,6 +499,8 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                 payload.llm_provider_config,
                 settings,
                 provider_set=payload.provider_set,
+                cloud_plugin_data_dir=cloud_dir,
+                plugin_data_dir=plugin_dir,
             )
             compaction_event: CompactionEvent | None = None
             if payload.context_window and payload.auto_compact:
@@ -433,7 +522,11 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                 yield to_sse_event(compaction_event)
 
             fallback_config = (
-                resolve_fallback_chat_config(payload.provider_set)
+                resolve_fallback_chat_config(
+                    payload.provider_set,
+                    cloud_plugin_data_dir=cloud_dir,
+                    plugin_data_dir=plugin_dir,
+                )
                 if payload.provider_set
                 else None
             )
@@ -532,6 +625,26 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                                 yield to_sse_event(event)
                             break
                         except FallbackableProviderError as exc:
+                            cloud_code = parse_cloud_llm_error_code(exc)
+                            if cloud_code:
+                                cloud_message = cloud_llm_error_message(
+                                    cloud_code,
+                                    payload.locale,
+                                )
+                                yield to_sse_event(
+                                    WorkFailedEvent(
+                                        work_id=work_id_for_turn(turn_id),
+                                        code=cloud_code,
+                                        message=cloud_message,
+                                    )
+                                )
+                                yield to_sse_event(
+                                    ErrorEvent(
+                                        code=cloud_code,
+                                        message=cloud_message,
+                                    )
+                                )
+                                break
                             fallback_reason = exc.reason
                             if (
                                 attempt_index == 0
@@ -623,6 +736,16 @@ async def agent_index_workspace(request: Request, payload: WorkspaceIndexRequest
     settings: Settings = request.app.state.settings
     project_root = _resolve_root(settings, payload.project_path, payload.project_id)
     workspace_data_dir = resolve_workspace_data_dir(payload)
+    cloud_dir = (
+        Path(payload.cloud_plugin_data_dir).expanduser().resolve()
+        if payload.cloud_plugin_data_dir
+        else None
+    )
+    plugin_dir = (
+        Path(payload.plugin_data_dir).expanduser().resolve()
+        if payload.plugin_data_dir
+        else None
+    )
     try:
         rag_store = build_rag_store(
             settings,
@@ -630,12 +753,20 @@ async def agent_index_workspace(request: Request, payload: WorkspaceIndexRequest
             project_root,
             payload.embedding_config,
             provider_set=payload.provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+            plugin_data_dir=plugin_dir,
         )
     except MissingApiKeyError:
         return WorkspaceIndexReport(
             project_root=project_root.as_posix(),
             enabled=False,
             metadata={"reason": "api_key_missing"},
+        )
+    except CloudNotEnrolledError:
+        return WorkspaceIndexReport(
+            project_root=project_root.as_posix(),
+            enabled=False,
+            metadata={"reason": "cloud_not_enrolled"},
         )
 
     if rag_store is None:
@@ -675,9 +806,15 @@ def build_rag_store(
     embedding_config: LLMProviderConfig | None = None,
     *,
     provider_set: ProviderSet | None = None,
+    cloud_plugin_data_dir: Path | None = None,
+    plugin_data_dir: Path | None = None,
 ) -> RagStore | None:
     embedding_model, embedding_base_url, embedding_api_key = resolve_embedding_config(
-        settings, embedding_config, provider_set=provider_set
+        settings,
+        embedding_config,
+        provider_set=provider_set,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+        plugin_data_dir=plugin_data_dir,
     )
     if not embedding_model:
         return None
@@ -704,10 +841,16 @@ def resolve_embedding_config(
     embedding_config: LLMProviderConfig | None,
     *,
     provider_set: ProviderSet | None = None,
+    cloud_plugin_data_dir: Path | None = None,
+    plugin_data_dir: Path | None = None,
 ) -> tuple[str | None, str | None, str | None]:
     """Priorise le set actif, puis la config par tour, puis les env du sidecar."""
     if provider_set is not None:
-        set_embed = resolve_embeddings_from_set(provider_set)
+        set_embed = resolve_embeddings_from_set(
+            provider_set,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
+            plugin_data_dir=plugin_data_dir,
+        )
         if set_embed is not None and set_embed.model:
             model = set_embed.model
             if "/" not in model and set_embed.provider:
@@ -923,6 +1066,8 @@ class ReprocessAttachmentRequest(BaseModel):
     locale: str = "fr"
     content_base64: str | None = None
     persist_only: bool = False
+    cloud_plugin_data_dir: str | None = None
+    plugin_data_dir: str | None = None
 
 
 class ReprocessAttachmentResponse(BaseModel):
@@ -981,6 +1126,16 @@ async def agent_reprocess_attachment(
             )
 
     file_name = Path(payload.file_path).name
+    cloud_dir = (
+        Path(payload.cloud_plugin_data_dir).expanduser().resolve()
+        if payload.cloud_plugin_data_dir
+        else None
+    )
+    plugin_dir = (
+        Path(payload.plugin_data_dir).expanduser().resolve()
+        if payload.plugin_data_dir
+        else None
+    )
     try:
         result = await reprocess_attachment(
             workspace_data_dir=workspace_root,
@@ -992,9 +1147,16 @@ async def agent_reprocess_attachment(
             locale=normalize_locale(payload.locale),
             provider_set=provider_set,
             ui_mode=ui_mode,
+            cloud_plugin_data_dir=cloud_dir,
+            plugin_data_dir=plugin_dir,
         )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except CloudNotEnrolledError as exc:
+        raise HTTPException(
+            status_code=401,
+            detail={"code": "cloud_not_enrolled", "message": str(exc)},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
@@ -1348,6 +1510,8 @@ class MemoryPromoteSessionRequest(BaseModel):
     summary: str
     llm_provider_config: LLMProviderConfig | None = None
     utility_llm_config: LLMProviderConfig | None = None
+    provider_set: ProviderSet | None = None
+    cloud_plugin_data_dir: str | None = None
     locale: str = "fr"
 
 
@@ -1901,6 +2065,14 @@ async def memory_promote_session(
 
     store = _memory_store_for_scope(settings, ws_dir, "project")
     try:
+        chat_cfg = payload.llm_provider_config
+        utility_cfg = payload.utility_llm_config
+        if payload.provider_set is not None:
+            chat_cfg = resolve_chat_from_set(
+                payload.provider_set,
+                cloud_plugin_data_dir=payload.cloud_plugin_data_dir,
+            )
+            utility_cfg = None
         result = await promote_session_summary(
             store,
             summary=summary,
@@ -1908,13 +2080,23 @@ async def memory_promote_session(
             workspace_data_dir=ws_dir,
             locale=locale,
             settings=settings,
-            utility_llm_config=payload.utility_llm_config,
-            chat_llm_config=payload.llm_provider_config,
+            utility_llm_config=utility_cfg,
+            chat_llm_config=chat_cfg,
             max_facts=settings.memory_promotion_max_facts,
             update_threshold=settings.memory_promotion_overlap_threshold,
             contradiction_enabled=settings.memory_promotion_contradiction_enabled,
             max_entries=settings.memory_project_max_entries,
         )
+    except CloudNotEnrolledError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "cloud_not_enrolled", "message": str(exc)},
+        ) from exc
+    except MissingApiKeyError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={"code": "api_key_missing", "message": str(exc)},
+        ) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -2410,6 +2592,18 @@ class CloudConnectorItem(BaseModel):
 
 class CloudConnectorsResponse(BaseModel):
     connectors: list[CloudConnectorItem]
+    enrolled: bool = False
+
+
+class CloudLlmQuotaResponse(BaseModel):
+    enabled: bool
+    period_key: str
+    tokens_used: int = 0
+    tokens_limit: int = 0
+    requests_count: int = 0
+    requests_limit: int = 0
+    remaining_tokens: int = 0
+    remaining_requests: int = 0
     enrolled: bool = False
 
 
@@ -3136,3 +3330,85 @@ async def cloud_list_connectors_endpoint(
                 )
             )
     return CloudConnectorsResponse(connectors=items, enrolled=True)
+
+
+@app.get("/plugins/cloud/llm-quota", response_model=CloudLlmQuotaResponse)
+async def cloud_llm_quota_endpoint(
+    request: Request,
+    plugin_data_dir: str,
+    locale: str = "fr",
+) -> CloudLlmQuotaResponse:
+    """Consulte le quota LLM cloud pour le poste enrollé."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    loc = normalize_locale(locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.sync_service import is_cloud_enrolled
+
+    cloud_dir = _resolve_plugin_data_dir(plugin_data_dir)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not base_url or not is_cloud_enrolled(cloud_dir):
+        return CloudLlmQuotaResponse(
+            enabled=False,
+            period_key="",
+            enrolled=False,
+        )
+
+    client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+    tokens = client.load_tokens()
+    device_id = tokens.get("device_id")
+    if not isinstance(device_id, str) or not device_id.strip():
+        raise HTTPException(
+            status_code=403,
+            detail=t(loc, "cloud.connectors_require_device"),
+        )
+
+    try:
+        payload = await client.get_llm_quota()
+    except PermissionError as exc:
+        detail = str(exc).strip()
+        if detail in ("invalid_device_token", "cloud_not_enrolled", "bearer_token_required"):
+            raise HTTPException(status_code=401, detail=detail) from exc
+        if detail in (
+            "not_subscribed",
+            "device_organization_required",
+            "quota_exceeded",
+        ):
+            status = 429 if detail == "quota_exceeded" else 403
+            raise HTTPException(status_code=status, detail=detail) from exc
+        raise HTTPException(
+            status_code=403,
+            detail=t(loc, "cloud.connectors_auth_failed"),
+        ) from exc
+    except httpx.RequestError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail="cloud_unreachable",
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        detail = t(loc, "cloud.quota_load_failed")
+        if detail == "cloud.quota_load_failed":
+            detail = f"quota_unavailable:{exc}"
+        raise HTTPException(status_code=502, detail=detail) from exc
+
+    return CloudLlmQuotaResponse(
+        enabled=bool(payload.get("enabled")),
+        period_key=str(payload.get("periodKey") or payload.get("period_key") or ""),
+        tokens_used=int(payload.get("tokensUsed") or payload.get("tokens_used") or 0),
+        tokens_limit=int(payload.get("tokensLimit") or payload.get("tokens_limit") or 0),
+        requests_count=int(
+            payload.get("requestsCount") or payload.get("requests_count") or 0
+        ),
+        requests_limit=int(
+            payload.get("requestsLimit") or payload.get("requests_limit") or 0
+        ),
+        remaining_tokens=int(
+            payload.get("remainingTokens") or payload.get("remaining_tokens") or 0
+        ),
+        remaining_requests=int(
+            payload.get("remainingRequests") or payload.get("remaining_requests") or 0
+        ),
+        enrolled=True,
+    )

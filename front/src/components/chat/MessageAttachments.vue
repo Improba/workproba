@@ -59,6 +59,9 @@ import {
   reprocessAttachment,
 } from '@services/aiSidecar';
 import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
+import { usesDeviceBearerAuth } from '@utils/providerSetValidation';
+import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import { useCloud } from '@composables/useCloud';
 
 const props = defineProps<{
   attachments: ChatAttachmentSnapshot[];
@@ -71,6 +74,8 @@ const route = useRoute();
 const { activePath, activeDataDir } = useSpace();
 const { sets, activeSet, setActiveSet } = useAppSettings();
 const { buildContextProviderSet } = useLlmSessionContext();
+const { getPluginDataDir } = usePlugins();
+const { providerReadiness, init: initCloud } = useCloud();
 
 const statuses = computed(() => props.attachmentStatuses ?? {});
 const rereadingId = ref<string | null>(null);
@@ -165,10 +170,17 @@ async function onRereadWithCurrent(att: ChatAttachmentSnapshot): Promise<void> {
 
   const providerSet = buildContextProviderSet();
   if (!providerSet || !setCanReadAttachments(providerSet, att.kind)) return;
-  if (!ensureProviderSetChatReady(providerSet)) return;
+  if (usesDeviceBearerAuth(providerSet) && !providerReadiness.value) {
+    await initCloud();
+  }
+  const cloudCtx = usesDeviceBearerAuth(providerSet)
+    ? providerReadiness.value
+    : null;
+  if (!ensureProviderSetChatReady(providerSet, cloudCtx)) return;
 
   rereadingId.value = att.id;
   try {
+    const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
     const result = await reprocessAttachment({
       workspaceDataDir,
       projectPath,
@@ -177,6 +189,7 @@ async function onRereadWithCurrent(att: ChatAttachmentSnapshot): Promise<void> {
       mimeType: att.mimeType,
       providerSet,
       locale: locale.value,
+      cloudPluginDataDir,
     });
     if (props.attachmentStatuses) {
       applyAttachmentStatusEvent(props.attachmentStatuses, {

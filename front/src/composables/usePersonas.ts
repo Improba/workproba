@@ -23,8 +23,16 @@ import {
 } from '@services/aiSidecar';
 import { buildActiveProviderSet, useAppSettings } from '@composables/useAppSettings';
 import { useLlmSessionContext } from '@composables/useLlmSessionContext';
-import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
+import { useCloud } from '@composables/useCloud';
+import {
+  ensureProviderSetChatReady,
+  chatErrorMessageForReadiness,
+} from '@utils/providerSetNotify';
 import { providerSetToSidecar } from '@utils/providerSets';
+import {
+  usesDeviceBearerAuth,
+  validateProviderSetChatReady,
+} from '@utils/providerSetValidation';
 import { t } from '@utils/i18nT';
 import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 
@@ -543,6 +551,23 @@ export function usePersonas(): UsePersonasReturn {
   const { locale, settingsLocked, permissionsNetwork, settingsMode, codeExecute, auditEnabled } = useAppSettings();
   const { isPersonasPluginActive } = usePlugins();
   const { buildContextProviderSet } = useLlmSessionContext();
+  const { providerReadiness, init: initCloud } = useCloud();
+
+  async function assertProviderSetReady(
+    providerSet: ReturnType<typeof buildContextProviderSet>,
+  ): Promise<void> {
+    if (providerSet && usesDeviceBearerAuth(providerSet) && !providerReadiness.value) {
+      await initCloud();
+    }
+    const cloudCtx = providerSet && usesDeviceBearerAuth(providerSet)
+      ? providerReadiness.value
+      : null;
+    const check = validateProviderSetChatReady(providerSet, cloudCtx);
+    if (!check.ok) {
+      ensureProviderSetChatReady(providerSet, cloudCtx);
+      throw new Error(chatErrorMessageForReadiness(check.reason));
+    }
+  }
 
   const selectablePersonas = computed(() =>
     settingsMode.value === 'advanced' ? personas.value : builtinPersonas.value,
@@ -611,9 +636,7 @@ export function usePersonas(): UsePersonasReturn {
     };
 
     const providerSet = buildContextProviderSet();
-    if (!ensureProviderSetChatReady(providerSet)) {
-      throw new Error('api_key_missing');
-    }
+    await assertProviderSetReady(providerSet);
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;
 
     const controller = new AbortController();
@@ -700,8 +723,15 @@ export function usePersonas(): UsePersonasReturn {
     onUpdate?.(state);
 
     const providerSet = buildContextProviderSet();
-    if (!ensureProviderSetChatReady(providerSet)) {
-      state.error = 'api_key_missing';
+    if (providerSet && usesDeviceBearerAuth(providerSet) && !providerReadiness.value) {
+      await initCloud();
+    }
+    const cloudCtx = providerSet && usesDeviceBearerAuth(providerSet)
+      ? providerReadiness.value
+      : null;
+    if (!ensureProviderSetChatReady(providerSet, cloudCtx)) {
+      const check = validateProviderSetChatReady(providerSet, cloudCtx);
+      state.error = check.ok ? 'api_key_missing' : check.reason;
       state.streaming = false;
       onUpdate?.(state);
       return state;
@@ -812,9 +842,7 @@ export function usePersonas(): UsePersonasReturn {
     context?: string,
   ): Promise<{ discussionId: string | null; messages: DiscussionMessage[] }> {
     const providerSet = buildContextProviderSet();
-    if (!ensureProviderSetChatReady(providerSet)) {
-      throw new Error('api_key_missing');
-    }
+    await assertProviderSetReady(providerSet);
 
     const messages = [...history];
     const userMsg: DiscussionMessage = {
@@ -908,7 +936,13 @@ export function usePersonas(): UsePersonasReturn {
     rounds?: number,
   ): Promise<PersonasCostEstimate | null> {
     const providerSet = buildContextProviderSet();
-    if (!ensureProviderSetChatReady(providerSet)) {
+    if (providerSet && usesDeviceBearerAuth(providerSet) && !providerReadiness.value) {
+      await initCloud();
+    }
+    const cloudCtx = providerSet && usesDeviceBearerAuth(providerSet)
+      ? providerReadiness.value
+      : null;
+    if (!ensureProviderSetChatReady(providerSet, cloudCtx)) {
       return null;
     }
     const providerSetPayload = providerSet ? providerSetToSidecar(providerSet) : null;

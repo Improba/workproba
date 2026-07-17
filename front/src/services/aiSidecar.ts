@@ -53,6 +53,7 @@ export interface AgentTurnPayload {
   }>;
   active_plugins?: string[];
   plugin_data_dir?: string;
+  cloud_plugin_data_dir?: string;
   settings_locked?: boolean;
   permissions_network?: boolean;
   confirm_before_write?: boolean;
@@ -270,6 +271,7 @@ export function buildAgentTurnPayload(
   security?: SidecarSecurityContext | null,
   browserPilotagePaused?: boolean | null,
   confirmBeforeWrite?: boolean | null,
+  cloudPluginDataDir?: string | null,
 ): AgentTurnPayload {
   const projectDocs = documents.map((doc) => ({
     id: doc.relativePath,
@@ -312,6 +314,7 @@ export function buildAgentTurnPayload(
     active_plugins:
       activePlugins && activePlugins.length > 0 ? activePlugins : undefined,
     plugin_data_dir: pluginDataDir ?? undefined,
+    cloud_plugin_data_dir: cloudPluginDataDir ?? undefined,
     settings_locked: security?.settingsLocked ?? undefined,
     permissions_network: security?.permissionsNetwork ?? undefined,
     browser_pilotage_paused: browserPilotagePaused ? true : undefined,
@@ -353,6 +356,8 @@ export interface IndexWorkspaceOptions {
   maxFiles?: number | null;
   /** Restreint l'indexation à ces chemins relatifs (re-index incrémental). */
   paths?: string[] | null;
+  cloudPluginDataDir?: string | null;
+  pluginDataDir?: string | null;
 }
 
 export async function indexWorkspace(
@@ -371,6 +376,8 @@ export async function indexWorkspace(
       provider_set: opts.providerSet ? providerSetToSidecar(opts.providerSet) : null,
       max_files: opts.maxFiles ?? null,
       paths: opts.paths ?? null,
+      cloud_plugin_data_dir: opts.cloudPluginDataDir ?? null,
+      plugin_data_dir: opts.pluginDataDir ?? null,
     }),
   });
 
@@ -396,6 +403,8 @@ export async function requestTitle(opts: {
   firstAssistantReply: string;
   chatConfig?: LlmConfigPayload | null;
   utilityConfig?: LlmConfigPayload | null;
+  providerSet?: ProviderSet | null;
+  cloudPluginDataDir?: string | null;
   locale?: 'fr' | 'en' | null;
 }): Promise<string> {
   const response = await fetch(`${getAiSidecarUrl()}/util/title`, {
@@ -407,8 +416,10 @@ export async function requestTitle(opts: {
     body: JSON.stringify({
       first_user_message: opts.firstUserMessage,
       first_assistant_reply: opts.firstAssistantReply,
-      llm_provider_config: opts.chatConfig ?? null,
-      utility_llm_config: opts.utilityConfig ?? null,
+      llm_provider_config: opts.providerSet ? null : (opts.chatConfig ?? null),
+      utility_llm_config: opts.providerSet ? null : (opts.utilityConfig ?? null),
+      provider_set: opts.providerSet ? providerSetToSidecar(opts.providerSet) : null,
+      cloud_plugin_data_dir: opts.cloudPluginDataDir ?? null,
       locale: opts.locale ?? undefined,
     }),
   });
@@ -426,6 +437,8 @@ export async function requestSummary(opts: {
   messages: ChatMessage[];
   chatConfig?: LlmConfigPayload | null;
   utilityConfig?: LlmConfigPayload | null;
+  providerSet?: ProviderSet | null;
+  cloudPluginDataDir?: string | null;
   focus?: string | null;
   locale?: 'fr' | 'en' | null;
 }): Promise<{ summary: string; inputTokens?: number; outputTokens?: number }> {
@@ -437,8 +450,10 @@ export async function requestSummary(opts: {
     },
     body: JSON.stringify({
       messages: toSummaryMessages(opts.messages),
-      llm_provider_config: opts.chatConfig ?? null,
-      utility_llm_config: opts.utilityConfig ?? null,
+      llm_provider_config: opts.providerSet ? null : (opts.chatConfig ?? null),
+      utility_llm_config: opts.providerSet ? null : (opts.utilityConfig ?? null),
+      provider_set: opts.providerSet ? providerSetToSidecar(opts.providerSet) : null,
+      cloud_plugin_data_dir: opts.cloudPluginDataDir ?? null,
       focus: opts.focus ?? null,
       locale: opts.locale ?? undefined,
     }),
@@ -467,6 +482,8 @@ export async function promoteSessionMemory(opts: {
   summary: string;
   chatConfig?: LlmConfigPayload | null;
   utilityConfig?: LlmConfigPayload | null;
+  providerSet?: ProviderSet | null;
+  cloudPluginDataDir?: string | null;
   locale?: 'fr' | 'en' | null;
 }): Promise<{
   facts: string[];
@@ -483,8 +500,10 @@ export async function promoteSessionMemory(opts: {
       workspace_data_dir: opts.workspaceDataDir,
       session_id: opts.sessionId,
       summary: opts.summary,
-      llm_provider_config: opts.chatConfig ?? null,
-      utility_llm_config: opts.utilityConfig ?? null,
+      llm_provider_config: opts.providerSet ? null : (opts.chatConfig ?? null),
+      utility_llm_config: opts.providerSet ? null : (opts.utilityConfig ?? null),
+      provider_set: opts.providerSet ? providerSetToSidecar(opts.providerSet) : null,
+      cloud_plugin_data_dir: opts.cloudPluginDataDir ?? null,
       locale: opts.locale ?? undefined,
     }),
   });
@@ -588,6 +607,8 @@ export interface ReprocessAttachmentPayload {
   locale?: string | null;
   contentBase64?: string | null;
   persistOnly?: boolean;
+  cloudPluginDataDir?: string | null;
+  pluginDataDir?: string | null;
 }
 
 export interface ReprocessAttachmentResult {
@@ -613,6 +634,12 @@ export async function reprocessAttachment(
   }
   if (payload.persistOnly) {
     body.persist_only = true;
+  }
+  if (payload.cloudPluginDataDir) {
+    body.cloud_plugin_data_dir = payload.cloudPluginDataDir;
+  }
+  if (payload.pluginDataDir) {
+    body.plugin_data_dir = payload.pluginDataDir;
   }
 
   const response = await fetch(`${getAiSidecarUrl()}/agent/reprocess-attachment`, {
@@ -2336,6 +2363,62 @@ export async function listManagedConnectors(
     return {
       ok: false,
       error: err instanceof Error ? err.message : 'cloud_connectors_failed',
+    };
+  }
+}
+
+export interface CloudLlmQuota {
+  enabled: boolean;
+  periodKey: string;
+  tokensUsed: number;
+  tokensLimit: number;
+  requestsCount: number;
+  requestsLimit: number;
+  remainingTokens: number;
+  remainingRequests: number;
+  enrolled: boolean;
+}
+
+export async function fetchCloudLlmQuota(
+  pluginDataDir: string,
+): Promise<SidecarResult<CloudLlmQuota>> {
+  const params = new URLSearchParams({ plugin_data_dir: pluginDataDir });
+  try {
+    const response = await fetch(
+      `${getAiSidecarUrl()}/plugins/cloud/llm-quota?${params.toString()}`,
+      { headers: { 'X-Internal-Secret': getDesktopSecret() } },
+    );
+    const parsed = await parseSidecarJson<{
+      enabled: boolean;
+      period_key: string;
+      tokens_used: number;
+      tokens_limit: number;
+      requests_count: number;
+      requests_limit: number;
+      remaining_tokens: number;
+      remaining_requests: number;
+      enrolled: boolean;
+    }>(response);
+    if (!parsed.ok) return parsed;
+    const data = parsed.data;
+    return {
+      ok: true,
+      data: {
+        enabled: Boolean(data.enabled),
+        periodKey: data.period_key ?? '',
+        tokensUsed: Number(data.tokens_used ?? 0),
+        tokensLimit: Number(data.tokens_limit ?? 0),
+        requestsCount: Number(data.requests_count ?? 0),
+        requestsLimit: Number(data.requests_limit ?? 0),
+        remainingTokens: Number(data.remaining_tokens ?? 0),
+        remainingRequests: Number(data.remaining_requests ?? 0),
+        enrolled: Boolean(data.enrolled),
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_quota_failed',
     };
   }
 }

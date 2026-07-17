@@ -170,11 +170,13 @@ import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useAppSettings, testSet, type ProviderSetTestResult } from '@composables/useAppSettings';
 import type { ProviderSet, LlmProviderName } from '@composables/useDesktop.types';
+import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import { capabilityLabels, cloneProviderSet, emptyCustomSet, localizedSetDescription } from '@utils/providerSets';
 
 const emit = defineEmits<{ 'switch-to-guided': [] }>();
 
 const { sets, settings, setActiveSet, createSet, updateSet, deleteSet, confirmBeforeWrite, setConfirmBeforeWrite, settingsLocked } = useAppSettings();
+const { getPluginDataDir } = usePlugins();
 const { t } = useI18n();
 
 const formOpen = ref(false);
@@ -371,7 +373,11 @@ async function onSetActive(id: string): Promise<void> {
 async function onTestAll(set: ProviderSet): Promise<void> {
   testingId.value = set.id;
   try {
-    testResults[set.id] = await testSet(cloneProviderSet(set));
+    const cloudPluginDataDir =
+      set.authMode === 'device_bearer'
+        ? await getPluginDataDir(CLOUD_PLUGIN_ID)
+        : null;
+    testResults[set.id] = await testSet(cloneProviderSet(set), { cloudPluginDataDir });
   } catch (err) {
     testResults[set.id] = {
       chat: { ok: false, detail: err instanceof Error ? err.message : 'error' },
