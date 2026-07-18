@@ -2,13 +2,28 @@ import { defineComponent, ref } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { notifyCreate, startPersonasMeeting, fetchPersonasMeetings, fetchPersonasMeeting, fetchPersonasDiscussions, fetchPersonasDiscussion } = vi.hoisted(() => ({
+const { notifyCreate, startPersonasMeeting, fetchPersonasMeetings, fetchPersonasMeeting, fetchPersonasDiscussions, fetchPersonasDiscussion, ensureChatReady, contextProviderSet } = vi.hoisted(() => ({
   notifyCreate: vi.fn(),
   startPersonasMeeting: vi.fn(),
   fetchPersonasMeetings: vi.fn(),
   fetchPersonasMeeting: vi.fn(),
   fetchPersonasDiscussions: vi.fn(),
   fetchPersonasDiscussion: vi.fn(),
+  ensureChatReady: vi.fn(() => true),
+  contextProviderSet: {
+    current: {
+      id: 'mistral-default',
+      name: 'Mistral',
+      chat: { provider: 'mistral', model: 'mistral-small-latest', apiKey: 'k' },
+      embeddings: null,
+      vision: { mode: 'none' },
+      capabilities: { reasoning: 'medium', vision: false, tools: true },
+      badges: [],
+      description: '',
+      isDefault: true,
+      isBuiltin: true,
+    },
+  },
 }));
 
 vi.mock('quasar', () => ({
@@ -47,7 +62,7 @@ vi.mock('@composables/useAppSettings', () => ({
 }));
 
 vi.mock('@utils/providerSetNotify', () => ({
-  ensureProviderSetChatReady: () => true,
+  ensureProviderSetChatReady: (...args: unknown[]) => ensureChatReady(...args),
   ensureProviderSetEmbeddingsReady: () => true,
   chatErrorMessageForReadiness: (reason: string) => reason,
 }));
@@ -60,18 +75,7 @@ vi.mock('@composables/useCloud', () => ({
 
 vi.mock('@composables/useLlmSessionContext', () => ({
   useLlmSessionContext: () => ({
-    buildContextProviderSet: () => ({
-      id: 'mistral-default',
-      name: 'Mistral',
-      chat: { provider: 'mistral', model: 'mistral-small-latest', apiKey: 'k' },
-      embeddings: null,
-      vision: { mode: 'none' },
-      capabilities: { reasoning: 'medium', vision: false, tools: true },
-      badges: [],
-      description: '',
-      isDefault: true,
-      isBuiltin: true,
-    }),
+    buildContextProviderSet: () => contextProviderSet.current,
     buildContextLlmConfigs: () => ({ chat: null, embedding: null }),
   }),
 }));
@@ -91,6 +95,8 @@ import {
   usePersonas,
   type MeetingState,
 } from '@composables/usePersonas';
+import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
+import { MISTRAL_BUILTIN_SET } from '@utils/providerSets';
 
 function mountPersonas() {
   let api!: ReturnType<typeof usePersonas>;
@@ -109,6 +115,20 @@ function mountPersonas() {
 describe('usePersonas', () => {
   beforeEach(() => {
     notifyCreate.mockClear();
+    ensureChatReady.mockReset();
+    ensureChatReady.mockReturnValue(true);
+    contextProviderSet.current = {
+      id: 'mistral-default',
+      name: 'Mistral',
+      chat: { provider: 'mistral', model: 'mistral-small-latest', apiKey: 'k' },
+      embeddings: null,
+      vision: { mode: 'none' },
+      capabilities: { reasoning: 'medium', vision: false, tools: true },
+      badges: [],
+      description: '',
+      isDefault: true,
+      isBuiltin: true,
+    };
     startPersonasMeeting.mockReset();
     fetchPersonasMeetings.mockReset();
     fetchPersonasMeeting.mockReset();
@@ -273,5 +293,28 @@ describe('usePersonas', () => {
 
     expect(state.summary).toBe('Résumé final');
     expect(state.summaryPersonaName).toBe('Alice');
+  });
+
+  it('startMeeting stocke missing_api_key quand le set n’est pas prêt', async () => {
+    contextProviderSet.current = MISTRAL_BUILTIN_SET;
+    ensureChatReady.mockReturnValue(false);
+
+    const { api, unmount } = mountPersonas();
+    const state = await api.startMeeting('/tmp/personas', ['p1'], 'Sujet', 1);
+    unmount();
+
+    expect(state.error).toBe('missing_api_key');
+    expect(startPersonasMeeting).not.toHaveBeenCalled();
+  });
+
+  it('askOpinion lève ProviderSetNotReadyError quand le set n’est pas prêt', async () => {
+    contextProviderSet.current = MISTRAL_BUILTIN_SET;
+    ensureChatReady.mockReturnValue(false);
+
+    const { api, unmount } = mountPersonas();
+    await expect(
+      api.askOpinion('/tmp/personas', ['p1'], 'Question'),
+    ).rejects.toBeInstanceOf(ProviderSetNotReadyError);
+    unmount();
   });
 });

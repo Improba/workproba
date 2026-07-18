@@ -2,6 +2,8 @@ import { mount, flushPromises } from '@vue/test-utils';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { ref } from 'vue';
 import PersonasSideChat from '@components/personas/PersonasSideChat.vue';
+import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
+import { Notify } from 'quasar';
 
 const personas = ref([
   {
@@ -104,13 +106,45 @@ describe('PersonasSideChat', () => {
 
     expect(wrapper.find('.personas-side-chat').exists()).toBe(true);
     expect(wrapper.find('.personas-side-chat__input').attributes('placeholder')).toBe(
-      'Posez votre question aux personas…',
+      'Posez votre question…',
     );
 
     await wrapper.findAll('.personas-side-chat__mode')[1]?.trigger('click');
     expect(wrapper.find('.personas-side-chat__input').attributes('placeholder')).toBe(
-      'Écrivez à la persona…',
+      'Écrivez au regard sélectionné…',
     );
+  });
+
+  it('affiche l\'état vide avec invitation à choisir quand aucun regard sélectionné', async () => {
+    initialPayload.value = {
+      personaIds: [],
+      mode: 'avis',
+      draft: '',
+      discussionSeed: null,
+      conversationContext: '',
+      autoAsk: false,
+      resume: null,
+    };
+
+    const wrapper = mount(PersonasSideChat, {
+      props: { pluginId: 'workproba.personas' },
+      global: {
+        stubs: {
+          Lucide: true,
+          PersonaAvatar: true,
+          PersonasOpinionCard: true,
+          PersonasPicker: true,
+          PersonasConfidentialityHint: true,
+          PublishToProjectDialog: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('Choisissez d\'abord qui consulter.');
+    expect(wrapper.find('.personas-side-chat__choose-first').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Aucun échange pour l\'instant.');
   });
 
   it('envoie une question en mode avis via askOpinion', async () => {
@@ -180,5 +214,37 @@ describe('PersonasSideChat', () => {
       '/tmp/workspace',
       false,
     );
+  });
+
+  it('ne toast pas askFailed quand readiness a déjà notifié', async () => {
+    const notifyCreate = vi.mocked(Notify.create);
+    notifyCreate.mockClear();
+    askOpinion.mockRejectedValueOnce(new ProviderSetNotReadyError('missing_api_key'));
+
+    const wrapper = mount(PersonasSideChat, {
+      props: { pluginId: 'workproba.personas' },
+      global: {
+        stubs: {
+          Lucide: true,
+          PersonaAvatar: true,
+          PersonasOpinionCard: true,
+          PersonasPicker: true,
+          PersonasConfidentialityHint: true,
+          PublishToProjectDialog: true,
+        },
+      },
+    });
+
+    await flushPromises();
+
+    const textarea = wrapper.find('.personas-side-chat__input');
+    await textarea.setValue('Question sans modèle');
+    await wrapper.find('form.personas-side-chat__composer').trigger('submit.prevent');
+    await flushPromises();
+
+    const negativeToasts = notifyCreate.mock.calls.filter(
+      ([opts]) => typeof opts === 'object' && opts !== null && opts.color === 'negative',
+    );
+    expect(negativeToasts).toHaveLength(0);
   });
 });

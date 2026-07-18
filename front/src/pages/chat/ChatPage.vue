@@ -150,6 +150,7 @@ import { formatMainChatContext } from '@utils/mainChatContext';
 import { useSideChat } from '@composables/useSideChat';
 import { useMainChatContext } from '@composables/useMainChatContext';
 import { useBrowser } from '@composables/useBrowser';
+import { isProviderSetReadinessIssue } from '@utils/providerSetErrors';
 
 const route = useRoute();
 const router = useRouter();
@@ -872,7 +873,9 @@ async function onMeetingStart(payload: {
   meetingState.value = result;
 
   if (meetingState.value?.error) {
-    Notify.create({ message: t('personas.errors.meetingFailed'), color: 'negative' });
+    if (!isProviderSetReadinessIssue(meetingState.value.error)) {
+      Notify.create({ message: t('personas.errors.meetingFailed'), color: 'negative' });
+    }
     return;
   }
   if (meetingState.value && !meetingState.value.streaming) {

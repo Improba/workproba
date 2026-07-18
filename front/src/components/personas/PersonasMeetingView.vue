@@ -156,6 +156,8 @@ import PersonasHistoryPanel from '@components/personas/PersonasHistoryPanel.vue'
 import PersonasConfidentialityHint from '@components/personas/PersonasConfidentialityHint.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { formatMeetingMarkdown, usePersonas, type MeetingState } from '@composables/usePersonas';
+import { chatErrorMessageForReadiness } from '@utils/providerSetNotify';
+import { normalizeReadinessIssue } from '@utils/providerSetErrors';
 import type { PersonaInfo } from '@services/aiSidecar';
 
 const props = defineProps<{
@@ -218,8 +220,9 @@ const summaryTitle = computed(() => {
 const meetingErrorMessage = computed(() => {
   const code = props.meetingState?.error;
   if (!code) return '';
-  if (code === 'api_key_missing') return t('errors.apiKeyMissing');
   if (code === 'unavailable') return t('personas.errors.unavailable');
+  const readinessIssue = normalizeReadinessIssue(code);
+  if (readinessIssue) return chatErrorMessageForReadiness(readinessIssue);
   return t('personas.errors.meetingFailed');
 });
 

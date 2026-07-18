@@ -2,10 +2,10 @@
   <aside
     v-if="sideChatOpen"
     class="wp-side-chat"
-    :aria-label="t('shell.sideChat.title')"
+    :aria-label="panelTitle"
   >
     <header class="wp-side-chat__header">
-      <h2 class="wp-side-chat__title">{{ t('shell.sideChat.title') }}</h2>
+      <h2 class="wp-side-chat__title">{{ panelTitle }}</h2>
       <div v-if="sideChatPluginPanels.length > 1" class="wp-side-chat__selector" role="tablist">
         <button
           v-for="panel in sideChatPluginPanels"
@@ -57,6 +57,8 @@ const { sideChatOpen, activeSideChatPluginId, openSideChat, closeSideChat } = us
 const activePanel = computed(() =>
   sideChatPluginPanels.value.find((p) => p.pluginId === activeSideChatPluginId.value) ?? null,
 );
+
+const panelTitle = computed(() => activePanel.value?.label ?? t('shell.sideChat.title'));
 </script>
 
 <style scoped lang="scss">

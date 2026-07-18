@@ -26,8 +26,8 @@ import { useLlmSessionContext } from '@composables/useLlmSessionContext';
 import { useCloud } from '@composables/useCloud';
 import {
   ensureProviderSetChatReady,
-  chatErrorMessageForReadiness,
 } from '@utils/providerSetNotify';
+import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
 import { providerSetToSidecar } from '@utils/providerSets';
 import {
   usesDeviceBearerAuth,
@@ -565,7 +565,7 @@ export function usePersonas(): UsePersonasReturn {
     const check = validateProviderSetChatReady(providerSet, cloudCtx);
     if (!check.ok) {
       ensureProviderSetChatReady(providerSet, cloudCtx);
-      throw new Error(chatErrorMessageForReadiness(check.reason));
+      throw new ProviderSetNotReadyError(check.reason, true);
     }
   }
 
@@ -733,7 +733,7 @@ export function usePersonas(): UsePersonasReturn {
       : null;
     if (!ensureProviderSetChatReady(providerSet, cloudCtx)) {
       const check = validateProviderSetChatReady(providerSet, cloudCtx);
-      state.error = check.ok ? 'api_key_missing' : check.reason;
+      state.error = check.ok ? 'missing_api_key' : check.reason;
       state.streaming = false;
       onUpdate?.(state);
       return state;

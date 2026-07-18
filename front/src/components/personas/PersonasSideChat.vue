@@ -64,6 +64,19 @@
         <p v-if="feedEmpty && busy" class="personas-side-chat__empty">
           {{ t('common.inProgress') }}
         </p>
+        <div
+          v-else-if="showChooseFirst"
+          class="personas-side-chat__empty personas-side-chat__empty--choose"
+        >
+          <p>{{ t('personas.sideChat.chooseFirst') }}</p>
+          <button
+            type="button"
+            class="personas-side-chat__choose-first"
+            @click="pickerOpen = true"
+          >
+            {{ t('personas.sideChat.chooseFirstAction') }}
+          </button>
+        </div>
         <p v-else-if="feedEmpty" class="personas-side-chat__empty">
           {{ t('personas.sideChat.empty') }}
         </p>
@@ -184,6 +197,7 @@ import {
 } from '@composables/usePersonas';
 import { useSideChat } from '@composables/useSideChat';
 import { usePersonasActions } from '@composables/usePersonasActions';
+import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
 import type { PersonasOpinionCard as PersonasOpinionCardType } from '#types';
 import type { PersonaInfo } from '@services/aiSidecar';
 
@@ -262,6 +276,14 @@ const feedEmpty = computed(() =>
   mode.value === 'avis'
     ? avisEntries.value.length === 0
     : discussionMessages.value.length === 0,
+);
+
+const showChooseFirst = computed(
+  () =>
+    feedEmpty.value
+    && !busy.value
+    && selectablePersonas.value.length > 0
+    && selectedPersonas.value.length === 0,
 );
 
 const canSend = computed(
@@ -403,15 +425,17 @@ async function sendMessage(text: string): Promise<boolean> {
       }
     }
     return true;
-  } catch {
+  } catch (err) {
     if (gen !== sendGeneration.value) return false;
-    Notify.create({
-      message:
-        mode.value === 'avis'
-          ? t('personas.errors.askFailed')
-          : t('personas.errors.discussFailed'),
-      color: 'negative',
-    });
+    if (!(err instanceof ProviderSetNotReadyError && err.notified)) {
+      Notify.create({
+        message:
+          mode.value === 'avis'
+            ? t('personas.errors.askFailed')
+            : t('personas.errors.discussFailed'),
+        color: 'negative',
+      });
+    }
     return false;
   } finally {
     if (gen === sendGeneration.value) {
@@ -707,6 +731,28 @@ defineExpose({ close: () => emit('close') });
   font-size: var(--wp-fs-sm);
   color: var(--wp-text-muted);
   text-align: center;
+
+  &--choose {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--wp-space-3);
+  }
+}
+
+.personas-side-chat__choose-first {
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: none;
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-accent);
+  color: var(--wp-on-accent);
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    filter: brightness(1.05);
+  }
 }
 
 .personas-side-chat__avis-entry {
