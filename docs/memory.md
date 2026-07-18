@@ -1,6 +1,6 @@
 # Workproba memory
 
-> **Last updated:** 14/07/2026
+> **Last updated:** 18/07/2026
 
 Workproba provides **scoped local memory** for the desktop agent. Data stays on the user's machine (SQLite, JSON session files). No cloud memory service is required (conversations and RAG stay on the desktop; Improba Cloud handles auth, secrets, and managed connectors separately).
 
@@ -203,9 +203,9 @@ Disable semantic ranking: `MEMORY_RANKING_SEMANTIC_ENABLED=false` (falls back to
 
 In `ChatPage.vue`, every **3 completed turns** (minimum 4 messages):
 
-1. Regenerate a concise session summary via `POST /util/summarize`.
+1. Regenerate a concise session summary via `POST /util/summarize` (with `provider_set` + `cloud_plugin_data_dir` when Improba Cloud is active).
 2. Persist it on the session JSON (`summary` field).
-3. Call `POST /memory/promote-session` silently in the background.
+3. Call `POST /memory/promote-session` silently in the background (same cloud fields when applicable).
 
 Failures are ignored (non-blocking).
 
@@ -339,11 +339,15 @@ Request body:
   "workspace_data_dir": "/path/to/.workproba",
   "session_id": "sess_…",
   "summary": "Structured session summary text",
+  "provider_set": { "id": "workproba-cloud", "auth_mode": "device_bearer", "…": "…" },
+  "cloud_plugin_data_dir": "/path/to/app_data/plugins/workproba.cloud",
   "llm_provider_config": null,
   "utility_llm_config": null,
   "locale": "fr"
 }
 ```
+
+When the active engine is **Improba Cloud** (`device_bearer`), pass `provider_set` and `cloud_plugin_data_dir`; flat `utility_llm_config` is not used for auth. For **Mistral direct** or legacy mode, `utility_llm_config` / `llm_provider_config` remain valid fallbacks.
 
 Response:
 

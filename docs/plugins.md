@@ -1,6 +1,6 @@
 # Workproba plugins
 
-> **Last updated:** 17/07/2026 (V2.2 PR 1–4)
+> **Last updated:** 18/07/2026 (V2.2 PR 1–4 + cloud LLM)
 
 Workproba extends the agent core with a **plugin system** (technical layer): agent tools, HTTP endpoints, UI slots, and namespaced storage. User-facing discovery uses **activatable capabilities** (hub « Capacités », V2.2) — see [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
@@ -69,6 +69,8 @@ Useful shortcuts: `Ctrl+B` (right panel), `Ctrl+Shift+L` (side chat).
 ### Concept
 
 Simulate **complementary professional perspectives** (HR, legal, CFO, engineer, etc.). Guided UI vocabulary: « Regards métier », « Demander un avis », « Croiser plusieurs regards » — not « Personas » or « Consult experts ».
+
+LLM calls use the same **active provider set** as chat. With **Improba Cloud** (`device_bearer`), personas SSE endpoints receive `provider_set` + `cloud_plugin_data_dir`; the front runs `initCloud()` before launch (fail-closed on readiness errors).
 
 ### Surfaces
 

@@ -1,7 +1,7 @@
 # Provider sets and reasoning effort
 
-> **Last updated:** 15/07/2026  
-> **Status:** implemented (catalog-driven UI + backend clamp)
+> **Last updated:** 18/07/2026  
+> **Status:** implemented (catalog-driven UI + backend clamp + Improba Cloud DeviceBearer)
 
 This document describes how Workproba routes LLM models and **reasoning effort** through **provider sets**, how the front and sidecar stay aligned, and how we avoid provider API errors (notably Mistral's `none` / `high`-only models).
 
@@ -25,7 +25,31 @@ Model-specific behaviour (context window, supported reasoning efforts, labels) i
 | Front (set mode) | `providerSet.chat.models[]` | Legacy heuristics in `reasoningSupport.ts` + `modelCatalog.ts` |
 | Sidecar (set mode) | Same catalogue on the set in the payload | Legacy heuristics in `app/llm/config.py` |
 
-Builtin sets (`mistral-default`, `ollama-local`) ship with a full catalogue. Custom sets without a catalogue still work via legacy provider heuristics.
+Builtin sets (`workproba-cloud`, `mistral-default`, `ollama-local`) ship with a full catalogue. Custom sets without a catalogue still work via legacy provider heuristics.
+
+## Builtin sets: Improba Cloud vs Mistral direct
+
+| Set ID | UI name | Badges | `auth_mode` | `isDefault` | Auth at runtime |
+|---|---|---|---|---|---|
+| `workproba-cloud` | Improba Cloud | Cloud Improba · Recommandé | `device_bearer` | `true` | DeviceBearer from cloud plugin storage |
+| `mistral-default` | Mistral | Clé API | `api_key` | `false` | User API key in `set.chat.apiKey` |
+| `ollama-local` | Ollama local | 100 % local | (absent) | `false` | None (local) |
+
+**Improba Cloud** routes chat, embeddings, OCR and vision through the control-plane proxy (`{control_plane}/llm/v1`, OpenAI-compatible). No Mistral API key in settings.
+
+**Mistral direct** is a public Mistral API profile: the user supplies their own key. It is not the Improba Cloud subscription.
+
+### DeviceBearer resolution (`device_bearer`)
+
+When `provider_set.auth_mode === "device_bearer"`:
+
+1. The front sends `provider_set` plus `cloud_plugin_data_dir` (path to `{app_data}/plugins/workproba.cloud/`).
+2. The sidecar reads the enrolled access token from that directory (`get_access_token`).
+3. It resolves `base_url` to `{control_plane}/llm/v1` and injects `Authorization: Bearer <token>`.
+
+Flat `llm_provider_config` / `utility_llm_config` alone are **not** sufficient for cloud sets: `toUtilityLlmConfigFromSet` returns `null` for `device_bearer`; callers must pass the set + `cloud_plugin_data_dir`.
+
+Implementation: `services/ai/app/llm/provider_sets.py` (`resolve_chat_from_set`, `_resolve_device_bearer_token`).
 
 ### Schema
 
@@ -193,15 +217,39 @@ Custom sets (`isBuiltin: false`) without a catalogue keep legacy heuristics.
 | Compaction summarize (sidecar) | `chat_config` copied with `reasoning_effort=None` before summarize |
 | Memory consolidation | Uses utility config when available |
 
-## Secondary sidecar paths (personas)
+## Secondary sidecar paths (`cloud_plugin_data_dir`)
 
-Personas resolve config from `provider_set` and call:
+These endpoints accept optional `provider_set` and `cloud_plugin_data_dir` (in addition to legacy flat `llm_provider_config` / `utility_llm_config`). When the active set uses `device_bearer`, both fields are required for correct auth:
 
-```python
-build_model_settings(llm_config, provider_set)
-```
+| Route | Role |
+|---|---|
+| `POST /llm/sets/test` | Test chat + embeddings for a set |
+| `POST /util/title` | Conversation title generation |
+| `POST /util/summarize` | Text summarization (session summary, compaction) |
+| `POST /memory/promote-session` | Session summary → project memory |
+| `POST /plugins/personas/ask` | Regards métier opinion (SSE) |
+| `POST /plugins/personas/meeting` | Regards croisés (SSE) |
+| `POST /plugins/personas/discuss` | Regards discussion (SSE) |
 
-so catalogue clamping applies consistently.
+Personas and utility paths resolve config from `provider_set` and call `build_model_settings(llm_config, provider_set)` so catalogue clamping applies consistently.
+
+## Front fail-closed readiness (`device_bearer`)
+
+Before chat send or Regards métier SSE (`ask` / `meeting` / `discuss`), the front calls `initCloud()` when the active set has `authMode: 'device_bearer'`. Send is blocked if readiness fails (fail-closed).
+
+Readiness issue codes surfaced to the user:
+
+| Code | Typical cause |
+|---|---|
+| `cloud_not_enrolled` | No device join / missing token |
+| `not_subscribed` | Org LLM quota disabled |
+| `quota_exceeded` | Monthly token or request cap reached |
+| `cloud_unreachable` | Control plane unreachable |
+| `org_id_required` | Enrolled but org context missing |
+
+After a successful cloud chat turn, the front calls `refreshQuota()` to update the quota chip.
+
+Implementation: `useChatStream.ts`, `usePersonas.ts`, `useCloud.ts`.
 
 ## Known limitations / residual risks
 

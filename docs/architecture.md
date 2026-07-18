@@ -1,6 +1,6 @@
 # Workproba architecture
 
-> **Last updated:** 15/07/2026 (V2.2 PR 1–3)
+> **Last updated:** 18/07/2026 (V2.2 PR 1–3 + Improba Cloud LLM)
 
 ## Overview
 
@@ -140,6 +140,7 @@ Four builtin plugins; guided UX presents them as **activatable capabilities** (R
 - [stack.md](./stack.md)
 - [memory.md](./memory.md)
 - [plugins.md](./plugins.md)
+- [provider-sets-reasoning.md](./provider-sets-reasoning.md)
 
 ## Managing LLM models from the app
 
@@ -158,12 +159,25 @@ the app: **"AI Models"** screen (settings icon at sidebar footer, route `/settin
   `embedding_config` (legacy). The sidecar always prioritizes `provider_set` in
   `resolve_llm_config`. Environment variables `LLM_DEFAULT_*` /
   `LLM_EMBEDDING_*` serve only as **dev fallback**.
-- **API key**: for cloud engines (e.g. Mistral), the key is entered in
-  Settings → AI Models and stored in `set.chat.apiKey`. If missing, the
+- **Recommended builtin**: **`workproba-cloud`** (Improba Cloud, badges
+  « Cloud Improba » + « Recommandé », `auth_mode: device_bearer`,
+  `isDefault: true`). Chat/embeddings/OCR/vision go through the control-plane
+  proxy `{control_plane}/llm/v1` with a **DeviceBearer** token read from
+  `{app_data}/plugins/workproba.cloud/` (`cloud_plugin_data_dir` on each
+  request). No Mistral API key in settings.
+- **Mistral direct** (`mistral-default`, badge « Clé API », `isDefault: false`):
+  user's own Mistral API key in `set.chat.apiKey`. Not the Improba Cloud
+  subscription.
+- **API key sets**: if `auth_mode` is `api_key` and the key is missing, the
   front blocks send and the sidecar returns `api_key_missing`. The
   `api_key_ref` field on builtin sets is an internal marker; only `api_key`
   matters at runtime.
-- The key can be changed at any time from the app, without touching `.env`.
+- **Fail-closed cloud readiness**: before chat or Regards métier when the
+  active set is `device_bearer`, the front runs `initCloud()`. Issues such as
+  `cloud_not_enrolled`, `not_subscribed`, `quota_exceeded`, `cloud_unreachable`,
+  `org_id_required` block send. After a cloud turn, `refreshQuota()` updates
+  the quota indicator. See [provider-sets-reasoning.md](./provider-sets-reasoning.md).
+- Keys and tokens can be changed from the app, without touching `.env`.
 
 ## Model and reasoning per conversation
 

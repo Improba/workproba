@@ -494,7 +494,7 @@ export default {
       mistralName: 'Mistral',
       ollamaName: 'Local Ollama',
       cloudName: 'Improba Cloud',
-      mistralDescription: 'All-in-one cloud service. Recommended to get started.',
+      mistralDescription: 'Direct Mistral API. Requires a Mistral API key.',
       ollamaDescription: 'Everything on your machine. No data sent out.',
       cloudDescription:
         'Through your Improba Cloud organization. Managed conversation, vision and document reading.',

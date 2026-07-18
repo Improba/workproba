@@ -42,9 +42,9 @@ Most endpoints require the `X-Internal-Secret` header (value `INTERNAL_SECRET` o
 | Method | Route | Secret | Role |
 |---|---|---|---|
 | POST | `/llm/test` | yes | Provider connection test |
-| POST | `/llm/sets/test` | yes | Provider set test (chat + embeddings) |
-| POST | `/util/title` | yes | Conversation title generation |
-| POST | `/util/summarize` | yes | Text summarization |
+| POST | `/llm/sets/test` | yes | Provider set test (chat + embeddings). Accepts `provider_set` + `cloud_plugin_data_dir` for Improba Cloud |
+| POST | `/util/title` | yes | Conversation title generation (`provider_set` + `cloud_plugin_data_dir` when cloud) |
+| POST | `/util/summarize` | yes | Text summarization (`provider_set` + `cloud_plugin_data_dir` when cloud) |
 
 ### Agent
 
@@ -92,11 +92,13 @@ Scopes `user` (global) and `project` (workspace). Full design: [docs/memory.md](
 | GET | `/memory/items` | yes | List explicit memories |
 | GET | `/memory/search` | yes | Search (RAG + explicit on project) |
 | POST | `/memory/add` | yes | Manual add (heuristic consolidation) |
-| POST | `/memory/promote-session` | yes | Promote session summary → project memory |
+| POST | `/memory/promote-session` | yes | Promote session summary → project memory (`provider_set` + `cloud_plugin_data_dir` when cloud) |
 | POST | `/memory/forget` | yes | Delete by id |
 | DELETE | `/memory` | yes | Wipe (conversations, memories, all) |
 
 ### Personas plugin (`workproba.personas`)
+
+Guided UI: **Regards métier**. SSE routes accept `provider_set` + `cloud_plugin_data_dir` when the active engine is Improba Cloud.
 
 | Method | Route | Secret | Role |
 |---|---|---|---|
@@ -155,6 +157,12 @@ Join org, managed connectors, artefact sync, enterprise regards. Agent tools (if
 | POST | `/plugins/cloud/pull` | yes | Mount sync pull (blocked when enrolled) |
 
 Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins `echo`, `ihora.shaped` stub). See [architecture-cloud.md](../../../workproba-improba/roadmaps/architecture-cloud.md).
+
+### Improba Cloud LLM (`device_bearer`)
+
+Builtin set `workproba-cloud` (`auth_mode: device_bearer`). The sidecar resolves the DeviceBearer from `{app_data}/plugins/workproba.cloud/` via `cloud_plugin_data_dir` and calls `{control_plane}/llm/v1` (chat, embeddings, OCR). Quota: `GET /llm/v1/quota` (bearer only; no `device_id` in client body).
+
+Routes that honor `provider_set` + `cloud_plugin_data_dir`: `/agent/turn`, `/llm/sets/test`, `/util/title`, `/util/summarize`, `/memory/promote-session`, personas SSE (`/plugins/personas/ask|meeting|discuss`). Details: [docs/provider-sets-reasoning.md](../../docs/provider-sets-reasoning.md).
 
 ### Audit
 
