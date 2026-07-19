@@ -626,6 +626,17 @@ export default {
     cloudAuthRequired:
       'Cloud session missing or expired. Reconnect this device or choose another engine.',
     providerUnavailable: 'The AI provider is unavailable. Please try again later.',
+    reportTitle: 'Error report',
+    reportSubtitle: 'Copy this report or contact support for help.',
+    reportCopy: 'Copy report',
+    reportCopied: 'Report copied to clipboard.',
+    reportCopyFailed: 'Could not copy the report.',
+    reportContact: 'Contact support',
+    reportContactNoEmail:
+      'No support email configured. The report was copied to your clipboard.',
+    reportDetails: 'Technical details',
+    reportOpenAction: 'View report',
+    unexpectedUiError: 'An unexpected error occurred in the interface.',
   },
   toolCalls: {
     readDocuments: 'I read documents',
@@ -783,6 +794,13 @@ export default {
     exportPresetSuccess: 'Preset exported to {path}',
     exportPresetFailed: 'Could not export the preset.',
     exportPresetCancelled: 'Export cancelled.',
+    supportEmailTitle: 'Support contact',
+    supportEmailHint: 'Address used by the error report « Contact support » button.',
+    supportEmailLabel: 'Support email',
+    supportEmailPlaceholder: 'support@example.com',
+    supportEmailSaved: 'Support address saved.',
+    supportEmailInvalid: 'Enter a valid email address (e.g. support@example.com).',
+    supportEmailSaveFailed: 'Could not save the support address.',
   },
   audit: {
     title: 'Audit log',

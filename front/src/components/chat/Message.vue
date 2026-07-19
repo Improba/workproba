@@ -178,6 +178,13 @@
           <span v-if="message.error.code" class="chat-message__error-code">
             {{ message.error.code }}
           </span>
+          <button
+            type="button"
+            class="chat-message__error-report"
+            @click="openMessageErrorReport"
+          >
+            {{ t('errors.reportOpenAction') }}
+          </button>
         </div>
       </div>
       </template>
@@ -244,6 +251,7 @@ import WebSearchCitationsBar from '@components/chat/WebSearchCitationsBar.vue';
 import { extractWebSearchCitations } from '@utils/webSearchCitations';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { collapseThinking } from '@composables/useToolCallExpansion';
+import { useErrorReport } from '@composables/useErrorReport';
 import { usePlugins } from '@composables/usePlugins';
 import { formatOpinionMarkdown } from '@composables/usePersonas';
 import { isCompactionMessageLike } from '@utils/compactionMessage';
@@ -291,6 +299,16 @@ const editFieldId = computed(() => `chat-edit-${props.message.id}`);
 const copyLabel = ref('');
 const opinionPublishOpen = ref(false);
 const { t, locale } = useI18n();
+const { openFromChatError } = useErrorReport();
+
+function openMessageErrorReport(): void {
+  if (!props.message.error) return;
+  openFromChatError(props.message.error, {
+    sessionId: props.sessionId ?? null,
+    turnId: props.message.error.turnId ?? null,
+    workId: props.message.error.workId ?? null,
+  });
+}
 const { isProjetPluginActive } = usePlugins();
 
 const opinionPublishMarkdown = computed(() =>
@@ -715,6 +733,20 @@ function toolCallById(id: string): ChatToolCall | undefined {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   opacity: 0.8;
+}
+
+.chat-message__error-report {
+  display: inline-flex;
+  margin-top: var(--wp-space-2);
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--wp-accent);
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .chat-message__unknown-tool {

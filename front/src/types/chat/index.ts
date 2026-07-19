@@ -121,6 +121,10 @@ export interface ChatError {
   message: string;
   /** true si l'utilisateur peut tenter un retry. */
   retryable: boolean;
+  incidentId?: string | null;
+  turnId?: string | null;
+  workId?: string | null;
+  sessionId?: string | null;
 }
 
 export interface ChatToolCall {
@@ -372,6 +376,10 @@ export interface ChatStreamConfirmationRequestData {
 export interface ChatStreamErrorData {
   code: ChatErrorCode;
   message: string;
+  turnId?: string | null;
+  workId?: string | null;
+  sessionId?: string | null;
+  incidentId?: string | null;
 }
 
 export interface ChatUsage {

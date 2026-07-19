@@ -10,6 +10,7 @@ import type {
   ChatProposedPlan,
   MemoryCitation,
   ChatStreamCompactionData,
+  ChatStreamErrorData,
   ChatStreamEvent,
   ChatStreamFallbackData,
   ChatToolCall,
@@ -50,6 +51,7 @@ import { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
 import { isBrowserAgentTool, type BrowserAgentToolName } from '@utils/browserTools';
 import { ensureProviderSetChatReady, chatErrorCodeForReadiness, chatErrorMessageForReadiness } from '@utils/providerSetNotify';
 import { isMistralOutageCode, isNonRetryableCloudLlmCode } from '@utils/chatCloudErrors';
+import { createIncidentId } from '@utils/errorReport';
 import { contextWindowForSet } from '@utils/providerSetModels';
 import { contextWindowFor } from '@utils/modelCatalog';
 import { t } from '@utils/i18nT';
@@ -365,6 +367,10 @@ export function mapPythonSseEvent(
             String(data.code ?? 'agent_error'),
             String(data.message ?? ''),
           ),
+          turnId: data.turn_id != null ? String(data.turn_id) : null,
+          workId: data.work_id != null ? String(data.work_id) : null,
+          sessionId: data.session_id != null ? String(data.session_id) : null,
+          incidentId: data.incident_id != null ? String(data.incident_id) : null,
         },
       };
     case 'plan_proposed':
@@ -626,25 +632,69 @@ function isChatErrorRetryable(code: string): boolean {
   return true;
 }
 
-function chatErrorFromSidecarHttp(err: SidecarHttpError): ChatError {
+interface ChatCorrelationContext {
+  turnId?: string | null;
+  workId?: string | null;
+  sessionId?: string | null;
+}
+
+function buildStreamChatError(
+  data: ChatStreamErrorData,
+  ctx?: ChatCorrelationContext,
+): ChatError {
+  return {
+    code: data.code,
+    message: data.message,
+    retryable: isChatErrorRetryable(data.code),
+    incidentId: data.incidentId ?? createIncidentId(),
+    turnId: data.turnId ?? ctx?.turnId ?? null,
+    workId: data.workId ?? ctx?.workId ?? null,
+    sessionId: data.sessionId ?? ctx?.sessionId ?? null,
+  };
+}
+
+function withChatCorrelation(
+  err: Omit<ChatError, 'incidentId' | 'turnId' | 'workId' | 'sessionId'> &
+    Partial<Pick<ChatError, 'incidentId' | 'turnId' | 'workId' | 'sessionId'>>,
+  ctx?: ChatCorrelationContext,
+): ChatError {
+  return {
+    ...err,
+    incidentId: err.incidentId ?? createIncidentId(),
+    turnId: err.turnId ?? ctx?.turnId ?? null,
+    workId: err.workId ?? ctx?.workId ?? null,
+    sessionId: err.sessionId ?? ctx?.sessionId ?? null,
+  };
+}
+
+function chatErrorFromSidecarHttp(
+  err: SidecarHttpError,
+  ctx?: ChatCorrelationContext,
+): ChatError {
   const rawCode = err.code ?? '';
   const code = err.code ? normalizeChatErrorCode(err.code) : 'sidecar_unreachable';
   if (code !== 'sidecar_unreachable' && code !== 'unknown') {
-    return {
-      code,
-      message: localizeAgentError(rawCode, err.message),
-      retryable: isChatErrorRetryable(rawCode),
-    };
+    return withChatCorrelation(
+      {
+        code,
+        message: localizeAgentError(rawCode, err.message),
+        retryable: isChatErrorRetryable(rawCode),
+      },
+      ctx,
+    );
   }
-  return {
-    code: 'sidecar_unreachable',
-    message: t('errors.sidecarUnreachable', {
-      detail: err.message
-        ? t('errors.sidecarUnreachableDetail', { detail: err.message })
-        : '',
-    }),
-    retryable: true,
-  };
+  return withChatCorrelation(
+    {
+      code: 'sidecar_unreachable',
+      message: t('errors.sidecarUnreachable', {
+        detail: err.message
+          ? t('errors.sidecarUnreachableDetail', { detail: err.message })
+          : '',
+      }),
+      retryable: true,
+    },
+    ctx,
+  );
 }
 
 function extractFilePathFromResult(result: unknown): string | undefined {
@@ -700,6 +750,7 @@ export function applyStreamEvent(
   assistantMessageId: string,
   event: ChatStreamEvent,
   onConfirmationRequest?: () => void,
+  ctx?: ChatCorrelationContext,
 ): void {
   const assistant = messages.find((m) => m.id === assistantMessageId);
   if (!assistant) return;
@@ -891,11 +942,7 @@ export function applyStreamEvent(
         break;
       }
       assistant.streaming = false;
-      assistant.error = {
-        code: event.data.code,
-        message: event.data.message,
-        retryable: isChatErrorRetryable(event.data.code),
-      };
+      assistant.error = buildStreamChatError(event.data, ctx);
       break;
     }
     case 'plan_proposed': {
@@ -1127,6 +1174,14 @@ export function useChatStream(
   let currentWorkId: string | null = null;
   let fallbackNotifiedTurnId: string | null = null;
 
+  function correlationContext(): ChatCorrelationContext {
+    return {
+      turnId: currentTurnId,
+      workId: currentWorkId,
+      sessionId: options.sessionId.value,
+    };
+  }
+
   function setIdlePaused(paused: boolean): void {
     idlePaused = paused;
   }
@@ -1219,11 +1274,7 @@ export function useChatStream(
         event.data.code === 'confirmation_timeout' ||
         event.data.code === 'plan_timeout';
       if (!softGate) {
-        error.value = {
-          code: event.data.code,
-          message: event.data.message,
-          retryable: true,
-        };
+        error.value = buildStreamChatError(event.data, correlationContext());
       }
     }
     if (event.type === 'done') {
@@ -1241,9 +1292,15 @@ export function useChatStream(
         void refreshQuota();
       }
     }
-    applyStreamEvent(messages.value, currentAssistantId, event, () => {
-      setIdlePaused(true);
-    });
+    applyStreamEvent(
+      messages.value,
+      currentAssistantId,
+      event,
+      () => {
+        setIdlePaused(true);
+      },
+      correlationContext(),
+    );
     if (
       event.type === 'error' &&
       (event.data.code === 'confirmation_timeout' ||
@@ -1337,11 +1394,14 @@ export function useChatStream(
 
     const projectPath = options.projectPath?.value;
     if (!projectPath) {
-      error.value = {
-        code: 'no_project',
-        message: t('errors.noSpaceOpen'),
-        retryable: false,
-      };
+      error.value = withChatCorrelation(
+        {
+          code: 'no_project',
+          message: t('errors.noSpaceOpen'),
+          retryable: false,
+        },
+        correlationContext(),
+      );
       return;
     }
 
@@ -1359,21 +1419,27 @@ export function useChatStream(
       const readiness = validateProviderSetChatReady(providerSet, cloudCtx);
       if (!readiness.ok) {
         ensureProviderSetChatReady(providerSet, cloudCtx);
-        error.value = {
-          code: chatErrorCodeForReadiness(readiness.reason),
-          message: chatErrorMessageForReadiness(readiness.reason),
-          retryable: false,
-        };
+        error.value = withChatCorrelation(
+          {
+            code: chatErrorCodeForReadiness(readiness.reason),
+            message: chatErrorMessageForReadiness(readiness.reason),
+            retryable: false,
+          },
+          correlationContext(),
+        );
         return;
       }
     } else {
       const legacyChat = buildActiveLlmConfigs().chat;
       if (!legacyChat) {
-        error.value = {
-          code: 'no_model',
-          message: t('chat.page.noModelConfigured'),
-          retryable: false,
-        };
+        error.value = withChatCorrelation(
+          {
+            code: 'no_model',
+            message: t('chat.page.noModelConfigured'),
+            retryable: false,
+          },
+          correlationContext(),
+        );
         return;
       }
     }
@@ -1558,11 +1624,14 @@ export function useChatStream(
       const name = (err as Error)?.name;
 
       if (name === 'StreamIdleTimeoutError') {
-        const chatError: ChatError = {
-          code: 'idle_timeout',
-          message: t('errors.idleTimeout'),
-          retryable: true,
-        };
+        const chatError = withChatCorrelation(
+          {
+            code: 'idle_timeout',
+            message: t('errors.idleTimeout'),
+            retryable: true,
+          },
+          correlationContext(),
+        );
         error.value = chatError;
         const assistant = messages.value.find(
           (m) => m.id === assistantMessage.id,
@@ -1575,7 +1644,7 @@ export function useChatStream(
         // Abort utilisateur (stop / navigation) : silencieux, le finally normalise.
         // On conserve le contenu partiel déjà streamé, sans marquer d'erreur.
       } else if (err instanceof SidecarHttpError) {
-        const chatError = chatErrorFromSidecarHttp(err);
+        const chatError = chatErrorFromSidecarHttp(err, correlationContext());
         error.value = chatError;
         const assistant = messages.value.find(
           (m) => m.id === assistantMessage.id,
@@ -1586,13 +1655,16 @@ export function useChatStream(
         }
       } else {
         const detail = err instanceof Error ? err.message : '';
-        const chatError: ChatError = {
-          code: 'sidecar_unreachable',
-          message: t('errors.sidecarUnreachable', {
-            detail: detail ? t('errors.sidecarUnreachableDetail', { detail }) : '',
-          }),
-          retryable: true,
-        };
+        const chatError = withChatCorrelation(
+          {
+            code: 'sidecar_unreachable',
+            message: t('errors.sidecarUnreachable', {
+              detail: detail ? t('errors.sidecarUnreachableDetail', { detail }) : '',
+            }),
+            retryable: true,
+          },
+          correlationContext(),
+        );
         error.value = chatError;
         const assistant = messages.value.find(
           (m) => m.id === assistantMessage.id,
@@ -1746,16 +1818,19 @@ export function useChatStream(
       }
     } catch (err) {
       if (err instanceof SidecarHttpError && err.code) {
-        error.value = chatErrorFromSidecarHttp(err);
+        error.value = chatErrorFromSidecarHttp(err, correlationContext());
       } else {
         const detail = err instanceof Error ? err.message : '';
-        error.value = {
-          code: 'confirm_failed',
-          message: t('errors.confirmFailed', {
-            detail: detail ? t('errors.confirmFailedDetail', { detail }) : '',
-          }),
-          retryable: true,
-        };
+        error.value = withChatCorrelation(
+          {
+            code: 'confirm_failed',
+            message: t('errors.confirmFailed', {
+              detail: detail ? t('errors.confirmFailedDetail', { detail }) : '',
+            }),
+            retryable: true,
+          },
+          correlationContext(),
+        );
       }
     } finally {
       confirming.value = false;
@@ -1846,13 +1921,16 @@ export function useChatStream(
       setIdlePaused(false);
     } catch (err) {
       const detail = err instanceof Error ? err.message : '';
-      error.value = {
-        code: 'confirm_failed',
-        message: t('errors.confirmFailed', {
-          detail: detail ? t('errors.confirmFailedDetail', { detail }) : '',
-        }),
-        retryable: true,
-      };
+      error.value = withChatCorrelation(
+        {
+          code: 'confirm_failed',
+          message: t('errors.confirmFailed', {
+            detail: detail ? t('errors.confirmFailedDetail', { detail }) : '',
+          }),
+          retryable: true,
+        },
+        correlationContext(),
+      );
     } finally {
       approvingPlan.value = false;
     }

@@ -8,7 +8,8 @@ from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from app.i18n import t
-from app.schemas import AgentEvent, ErrorEvent, PlanProposedEvent, PlanStepInfo
+from app.schemas import AgentEvent, PlanProposedEvent, PlanStepInfo, make_error_event
+from app.agent.work_events import work_id_for_turn
 
 PlanDecision = Literal["approve", "deny"]
 
@@ -72,9 +73,12 @@ class PlanGate:
         except TimeoutError:
             self._pending.pop(plan_id, None)
             await self.event_queue.put(
-                ErrorEvent(
+                make_error_event(
                     code="plan_timeout",
                     message=t(locale, "plan.timeout"),
+                    turn_id=self.turn_id,
+                    work_id=work_id_for_turn(self.turn_id),
+                    session_id=self.session_id,
                 )
             )
             return {"approved": False, "cancelled": True, "reason": "timeout"}

@@ -23,7 +23,7 @@ export default configure(function (/* ctx */) {
     // app boot file (/src/boot)
     // --> boot files are part of "main.js"
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
-    boot: ['lib-improba', 'axios'],
+    boot: ['lib-improba', 'error-report', 'axios'],
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-js#css
     css: ['app.scss', '_anubis.scss', 'workproba.scss'],

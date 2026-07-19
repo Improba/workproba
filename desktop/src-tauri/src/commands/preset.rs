@@ -46,6 +46,8 @@ pub struct EnterprisePreset {
     pub provider_sets_locked: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_provider_set_ids: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub support_email: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -303,6 +305,9 @@ pub fn apply_preset_to_settings(settings: &mut AppSettings, preset: &EnterpriseP
     if let Some(ids) = &preset.allowed_provider_set_ids {
         settings.allowed_provider_set_ids = Some(ids.clone());
     }
+    if let Some(email) = &preset.support_email {
+        settings.support_email = Some(email.clone());
+    }
 }
 
 fn app_data_root(app: &AppHandle) -> Result<PathBuf, String> {
@@ -393,6 +398,8 @@ struct ExportPresetDocument {
     provider_set: Option<ExportPresetProviderSet>,
     #[serde(skip_serializing_if = "Option::is_none")]
     cloud: Option<ExportPresetCloud>,
+    #[serde(skip_serializing_if = "Option::is_none", rename = "supportEmail")]
+    support_email: Option<String>,
 }
 
 fn export_preset_title(app: &AppHandle) -> &'static str {
@@ -490,6 +497,7 @@ fn settings_to_export_document(settings: &AppSettings) -> ExportPresetDocument {
         audit,
         provider_set,
         cloud,
+        support_email: settings.support_email.clone(),
     }
 }
 
@@ -626,6 +634,7 @@ mod preset_tests {
             audit_retention_days: Some(90),
             provider_sets_locked: Some(true),
             active_set_id: Some("mistral-default".to_string()),
+            support_email: Some("support@example.com".to_string()),
             ..AppSettings::default()
         };
         let doc = settings_to_export_document(&settings);
@@ -638,6 +647,9 @@ mod preset_tests {
             doc.provider_set.as_ref().and_then(|ps| ps.id.as_deref()),
             Some("mistral-default")
         );
+        assert_eq!(doc.support_email.as_deref(), Some("support@example.com"));
+        let json = serde_json::to_string(&doc).expect("serialize");
+        assert!(json.contains("\"supportEmail\":\"support@example.com\""));
     }
 
     #[test]

@@ -14,7 +14,7 @@ from app.agent.effects import EffectProposal, protections_to_dict
 from app.agent.work_events import audit_details_with_work_id, work_id_for_turn
 from app.audit import log_event
 from app.i18n import t
-from app.schemas import AgentEvent, ConfirmationRequestEvent, ErrorEvent
+from app.schemas import AgentEvent, ConfirmationRequestEvent, make_error_event
 
 ConfirmationDecision = Literal["approve", "deny"]
 ApprovalOutcome = Literal["approved", "denied", "timeout"]
@@ -81,9 +81,12 @@ class ConfirmationGate:
         except TimeoutError:
             self._pending.pop(confirmation_id, None)
             await self.event_queue.put(
-                ErrorEvent(
+                make_error_event(
                     code="confirmation_timeout",
                     message=t(self.locale, "loop.confirmation_timeout"),
+                    turn_id=self.turn_id,
+                    work_id=work_id_for_turn(self.turn_id),
+                    session_id=self.session_id,
                 )
             )
             return None

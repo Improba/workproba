@@ -58,7 +58,7 @@ from app.schemas import (
     CapabilitiesResponse,
     CompactionEvent,
     DocumentPreviewResponse,
-    ErrorEvent,
+    make_error_event,
     FallbackEvent,
     LLMProviderConfig,
     PreviewChangeRequest,
@@ -639,9 +639,12 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                                     )
                                 )
                                 yield to_sse_event(
-                                    ErrorEvent(
+                                    make_error_event(
                                         code=cloud_code,
                                         message=cloud_message,
+                                        turn_id=turn_id,
+                                        work_id=work_id_for_turn(turn_id),
+                                        session_id=payload.session_id,
                                     )
                                 )
                                 break
@@ -667,9 +670,12 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                                 )
                             )
                             yield to_sse_event(
-                                ErrorEvent(
+                                make_error_event(
                                     code="provider_unavailable",
                                     message=provider_message,
+                                    turn_id=turn_id,
+                                    work_id=work_id_for_turn(turn_id),
+                                    session_id=payload.session_id,
                                 )
                             )
                             break
@@ -688,9 +694,12 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                     )
                 )
                 yield to_sse_event(
-                    ErrorEvent(
+                    make_error_event(
                         code="turn_timeout",
                         message=timeout_message,
+                        turn_id=turn_id,
+                        work_id=work_id_for_turn(turn_id),
+                        session_id=payload.session_id,
                     )
                 )
         except Exception:
@@ -703,9 +712,12 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                 )
             )
             yield to_sse_event(
-                ErrorEvent(
+                make_error_event(
                     code="internal_error",
                     message=internal_message,
+                    turn_id=turn_id,
+                    work_id=work_id_for_turn(turn_id),
+                    session_id=payload.session_id,
                 )
             )
         finally:

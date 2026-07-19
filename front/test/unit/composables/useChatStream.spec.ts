@@ -374,6 +374,36 @@ describe('useChatStream — feedbacks', () => {
     expect(assistant?.streaming).toBe(false);
     expect(api.error.value?.code).toBe('max_iterations_reached');
     expect(api.error.value?.retryable).toBe(true);
+    expect(assistant?.error?.incidentId).toBeTruthy();
+    expect(api.error.value?.incidentId).toBeTruthy();
+    unmount();
+  });
+
+  it('propage incident_id et corrélation depuis error SSE', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sseResponse([
+        {
+          event: 'error',
+          data: {
+            code: 'internal_error',
+            message: 'Internal failure',
+            incident_id: 'inc-from-sidecar',
+            turn_id: 'turn_abc',
+            work_id: 'work_abc',
+            session_id: 'sess_abc',
+          },
+        },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('hi');
+
+    const assistant = lastAssistant(api.messages.value);
+    expect(assistant?.error?.incidentId).toBe('inc-from-sidecar');
+    expect(assistant?.error?.turnId).toBe('turn_abc');
+    expect(assistant?.error?.workId).toBe('work_abc');
+    expect(assistant?.error?.sessionId).toBe('sess_abc');
     unmount();
   });
 

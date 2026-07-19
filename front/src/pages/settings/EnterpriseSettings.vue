@@ -54,6 +54,25 @@
         <p>{{ t('enterprise.freeMode') }}</p>
       </section>
 
+      <section class="enterprise-settings__support">
+        <h2 class="enterprise-settings__section-title">
+          {{ t('enterprise.supportEmailTitle') }}
+        </h2>
+        <p class="enterprise-settings__export-hint">{{ t('enterprise.supportEmailHint') }}</p>
+        <label class="enterprise-settings__support-label" for="support-email">
+          {{ t('enterprise.supportEmailLabel') }}
+        </label>
+        <input
+          id="support-email"
+          v-model="supportEmailDraft"
+          type="email"
+          class="enterprise-settings__support-input"
+          :placeholder="t('enterprise.supportEmailPlaceholder')"
+          :disabled="settingsLocked"
+          @change="onSupportEmailSave"
+        />
+      </section>
+
       <section v-if="canExportPreset" class="enterprise-settings__export">
         <h2 class="enterprise-settings__section-title">
           {{ t('enterprise.exportPreset') }}
@@ -76,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
@@ -90,12 +109,59 @@ import { exportEnterprisePreset } from '@composables/useDesktop';
 const { t } = useI18n();
 const { presetActive, preset, loading, refresh } = useEnterprise();
 const { activeDataDir } = useSpace();
-const { settingsMode, settingsLocked } = useAppSettings();
+const { settingsMode, settingsLocked, settings, save, load } = useAppSettings();
 
 const exporting = ref(false);
+const supportEmailDraft = ref('');
+
 const canExportPreset = computed(
   () => settingsMode.value === 'advanced' && !settingsLocked.value,
 );
+
+watch(
+  () => settings.value.supportEmail,
+  (value) => {
+    supportEmailDraft.value = value?.trim() ?? '';
+  },
+  { immediate: true },
+);
+
+const SUPPORT_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function isValidSupportEmail(value: string): boolean {
+  return SUPPORT_EMAIL_PATTERN.test(value);
+}
+
+async function onSupportEmailSave(): Promise<void> {
+  if (settingsLocked.value) return;
+  const email = supportEmailDraft.value.trim();
+  if (email && !isValidSupportEmail(email)) {
+    supportEmailDraft.value = settings.value.supportEmail?.trim() ?? '';
+    Notify.create({
+      message: t('enterprise.supportEmailInvalid'),
+      color: 'warning',
+      timeout: 3000,
+    });
+    return;
+  }
+  try {
+    await save({
+      ...settings.value,
+      supportEmail: email || null,
+    });
+    Notify.create({
+      message: t('enterprise.supportEmailSaved'),
+      color: 'positive',
+      timeout: 2000,
+    });
+  } catch (err) {
+    supportEmailDraft.value = settings.value.supportEmail?.trim() ?? '';
+    Notify.create({
+      message: err instanceof Error ? err.message : t('enterprise.supportEmailSaveFailed'),
+      classes: 'bg-danger text-white',
+    });
+  }
+}
 
 const workspaceDataDir = computed(() => activeDataDir.value);
 
@@ -108,6 +174,7 @@ const localeLabel = computed(() => {
 
 onMounted(() => {
   void refresh();
+  void load();
 });
 
 async function onExportPreset(): Promise<void> {
@@ -224,6 +291,29 @@ async function onExportPreset(): Promise<void> {
 
 .enterprise-settings__export {
   margin-bottom: 1.25rem;
+}
+
+.enterprise-settings__support {
+  margin-bottom: 1.25rem;
+}
+
+.enterprise-settings__support-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-muted);
+}
+
+.enterprise-settings__support-input {
+  width: min(360px, 100%);
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-bg);
+  color: var(--wp-text);
+  font-size: var(--wp-fs-sm);
+  font-family: var(--wp-font-ui);
+  box-sizing: border-box;
 }
 
 .enterprise-settings__export-hint {

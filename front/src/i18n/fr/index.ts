@@ -625,6 +625,17 @@ export default {
     cloudAuthRequired:
       'Session cloud expirée ou absente. Reconnectez ce poste ou choisissez un autre moteur.',
     providerUnavailable: 'Le fournisseur IA est indisponible. Réessayez plus tard.',
+    reportTitle: 'Rapport d\'erreur',
+    reportSubtitle: 'Copiez ce rapport ou contactez le support pour obtenir de l\'aide.',
+    reportCopy: 'Copier le rapport',
+    reportCopied: 'Rapport copié dans le presse-papiers.',
+    reportCopyFailed: 'Impossible de copier le rapport.',
+    reportContact: 'Contacter le support',
+    reportContactNoEmail:
+      'Aucune adresse support configurée. Le rapport a été copié dans le presse-papiers.',
+    reportDetails: 'Détails techniques',
+    reportOpenAction: 'Voir le rapport',
+    unexpectedUiError: 'Une erreur inattendue est survenue dans l\'interface.',
   },
   toolCalls: {
     readDocuments: 'J\'ai lu des documents',
@@ -782,6 +793,13 @@ export default {
     exportPresetSuccess: 'Preset exporté vers {path}',
     exportPresetFailed: 'Impossible d\'exporter le preset.',
     exportPresetCancelled: 'Export annulé.',
+    supportEmailTitle: 'Contact support',
+    supportEmailHint: 'Adresse utilisée pour le bouton « Contacter le support » des rapports d\'erreur.',
+    supportEmailLabel: 'E-mail du support',
+    supportEmailPlaceholder: 'support@exemple.com',
+    supportEmailSaved: 'Adresse support enregistrée.',
+    supportEmailInvalid: 'Saisissez une adresse e-mail valide (ex. support@exemple.com).',
+    supportEmailSaveFailed: 'Impossible d\'enregistrer l\'adresse support.',
   },
   audit: {
     title: 'Journal d\'audit',

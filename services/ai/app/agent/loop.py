@@ -72,7 +72,7 @@ from app.schemas import (
     AttachmentStatusEvent,
     ChatMessage,
     DoneEvent,
-    ErrorEvent,
+    make_error_event,
     MemoryCitationInfo,
     MemoryCitationsEvent,
     ThinkingDeltaEvent,
@@ -160,9 +160,12 @@ class AgentLoop:
                     )
                 )
                 await output_queue.put(
-                    ErrorEvent(
+                    make_error_event(
                         code="internal_error",
                         message=t(request.locale, "loop.internal_error"),
+                        turn_id=turn_id,
+                        work_id=work_id_for_turn(turn_id),
+                        session_id=request.session_id,
                     )
                 )
             finally:
@@ -495,9 +498,12 @@ class AgentLoop:
                 code="usage_limit_exceeded",
                 message=message,
             )
-            yield ErrorEvent(
+            yield make_error_event(
                 code="usage_limit_exceeded",
                 message=message,
+                turn_id=gate.turn_id,
+                work_id=work_id,
+                session_id=request.session_id,
             )
         except UnexpectedModelBehavior as exc:
             message = t(
@@ -511,9 +517,12 @@ class AgentLoop:
                 code="unexpected_model_behavior",
                 message=message,
             )
-            yield ErrorEvent(
+            yield make_error_event(
                 code="unexpected_model_behavior",
                 message=message,
+                turn_id=gate.turn_id,
+                work_id=work_id,
+                session_id=request.session_id,
             )
         except asyncio.CancelledError:
             raise
@@ -527,9 +536,12 @@ class AgentLoop:
                     code=cloud_code,
                     message=message,
                 )
-                yield ErrorEvent(
+                yield make_error_event(
                     code=cloud_code,
                     message=message,
+                    turn_id=gate.turn_id,
+                    work_id=work_id,
+                    session_id=request.session_id,
                 )
                 return
             fallbackable, reason = is_fallbackable(exc)
@@ -543,9 +555,12 @@ class AgentLoop:
                     code="provider_unavailable",
                     message=message,
                 )
-                yield ErrorEvent(
+                yield make_error_event(
                     code="provider_unavailable",
                     message=message,
+                    turn_id=gate.turn_id,
+                    work_id=work_id,
+                    session_id=request.session_id,
                 )
                 return
             logger.exception(
@@ -559,9 +574,12 @@ class AgentLoop:
                 code="internal_error",
                 message=message,
             )
-            yield ErrorEvent(
+            yield make_error_event(
                 code="internal_error",
                 message=message,
+                turn_id=gate.turn_id,
+                work_id=work_id,
+                session_id=request.session_id,
             )
 
     async def _iter_model_stream(self, node: Any, ctx: Any) -> AsyncIterator[AgentEvent]:

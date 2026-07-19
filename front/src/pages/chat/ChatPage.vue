@@ -29,6 +29,14 @@
           <Lucide name="alert-circle" size="sm" color="danger" />
           <span class="chat-page__error-msg">{{ streamError.message }}</span>
           <button
+            type="button"
+            class="chat-page__retry"
+            @click="openStreamErrorReport"
+          >
+            <Lucide name="flag" size="xs" color="primary" />
+            {{ t('errors.reportOpenAction') }}
+          </button>
+          <button
             v-if="streamError.retryable"
             type="button"
             class="chat-page__retry"
@@ -105,6 +113,7 @@ import PersonasMeetingView from '@components/personas/PersonasMeetingView.vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useChatActivity } from '@composables/useChatActivity';
 import { useChatStream } from '@composables/useChatStream';
+import { useErrorReport } from '@composables/useErrorReport';
 import {
   useAppSettings,
 } from '@composables/useAppSettings';
@@ -240,6 +249,8 @@ const uiMode = computed(() =>
   resolveUiMode(settingsLocked.value, settingsMode.value),
 );
 
+const { openFromChatError } = useErrorReport();
+
 const {
   messages,
   streaming,
@@ -250,6 +261,7 @@ const {
   completedTurns,
   lastCompaction,
   attachmentStatuses,
+  streamCorrelation,
   send,
   confirm,
   approvePlan,
@@ -275,6 +287,18 @@ const {
   },
   browserPilotagePaused: pilotagePaused,
 });
+
+function openStreamErrorReport(): void {
+  if (!streamError.value) return;
+  openFromChatError(
+    streamError.value,
+    {
+      ...streamCorrelation.value,
+      sessionId: sessionId.value,
+    },
+    streamError.value.retryable ? () => retry() : undefined,
+  );
+}
 
 interface ChatMetaPart {
   text: string;

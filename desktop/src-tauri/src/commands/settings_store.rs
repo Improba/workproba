@@ -406,6 +406,9 @@ pub struct AppSettings {
     /// Identifiants de sets autorisés par preset.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub allowed_provider_set_ids: Option<Vec<String>>,
+    /// Adresse e-mail du support (mailto des rapports d'erreur).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub support_email: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -442,6 +445,7 @@ impl Default for AppSettings {
             audit_enabled: None,
             provider_sets_locked: None,
             allowed_provider_set_ids: None,
+            support_email: None,
         }
     }
 }
@@ -705,6 +709,7 @@ mod settings_tests {
             audit_enabled: None,
             provider_sets_locked: None,
             allowed_provider_set_ids: None,
+            support_email: None,
         };
         let json = serde_json::to_string(&settings).expect("serialize");
         let parsed: AppSettings = serde_json::from_str(&json).expect("deserialize");
@@ -865,6 +870,7 @@ pub fn save_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSet
         audit_enabled: settings.audit_enabled,
         provider_sets_locked: settings.provider_sets_locked,
         allowed_provider_set_ids: settings.allowed_provider_set_ids,
+        support_email: settings.support_email,
     };
     save_settings(&app, &to_persist)?;
     Ok(to_persist)

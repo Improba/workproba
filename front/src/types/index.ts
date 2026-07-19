@@ -4,3 +4,4 @@ export * from './user';
 export * from './enums';
 export * from './pagination';
 export * from './chat';
+export * from './errorReport';

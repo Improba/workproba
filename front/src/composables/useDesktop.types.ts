@@ -162,6 +162,7 @@ export interface EnterprisePreset {
   auditEnabled?: boolean | null;
   providerSetsLocked?: boolean | null;
   allowedProviderSetIds?: string[] | null;
+  supportEmail?: string | null;
 }
 
 export interface AppSettings {
@@ -217,4 +218,6 @@ export interface AppSettings {
   providerSetsLocked?: boolean | null;
   /** Identifiants de sets autorisés (preset). */
   allowedProviderSetIds?: string[] | null;
+  /** Adresse e-mail du support pour les rapports d'erreur. */
+  supportEmail?: string | null;
 }

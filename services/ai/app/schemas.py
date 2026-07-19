@@ -1,4 +1,5 @@
 from typing import Annotated, Any, Literal
+import uuid
 
 from pydantic import BaseModel, Field, SecretStr, field_validator
 
@@ -462,6 +463,29 @@ class ErrorEvent(BaseModel):
     type: Literal["error"] = "error"
     message: str
     code: str = "agent_error"
+    turn_id: str | None = None
+    work_id: str | None = None
+    session_id: str | None = None
+    incident_id: str | None = None
+
+
+def make_error_event(
+    *,
+    code: str,
+    message: str,
+    turn_id: str | None = None,
+    work_id: str | None = None,
+    session_id: str | None = None,
+    incident_id: str | None = None,
+) -> ErrorEvent:
+    return ErrorEvent(
+        code=code,
+        message=message,
+        turn_id=turn_id,
+        work_id=work_id,
+        session_id=session_id,
+        incident_id=incident_id or str(uuid.uuid4()),
+    )
 
 
 class WorkStartedEvent(BaseModel):
