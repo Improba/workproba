@@ -8,12 +8,12 @@
       />
       <p class="tool-call-card__summary">{{ humanLabel }}</p>
       <button
-        v-if="toolCall.filePath"
+        v-if="canOpenFile"
         type="button"
         class="tool-call-card__file-btn"
         @click="emit('open-file', toolCall.filePath!)"
       >
-        <Lucide name="file-text" size="xs" color="wp-accent" />
+        <Lucide :name="fileIcon" size="xs" color="wp-accent" />
         {{ fileName }}
       </button>
       <button
@@ -164,6 +164,24 @@ const fileName = computed(() => {
   const path = props.toolCall.filePath ?? '';
   const parts = path.split(/[/\\]/);
   return parts[parts.length - 1] || path;
+});
+
+/** N'ouvrir que si le fichier a bien été écrit (évite un clic pendant la confirmation). */
+const canOpenFile = computed(
+  () =>
+    Boolean(props.toolCall.filePath) &&
+    props.toolCall.status === 'success' &&
+    !props.confirmationActive,
+);
+
+const fileIcon = computed(() => {
+  const name = fileName.value.toLowerCase();
+  if (name.endsWith('.pptx') || name.endsWith('.ppt')) return 'presentation';
+  if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) {
+    return 'file-spreadsheet';
+  }
+  if (name.endsWith('.pdf')) return 'file-text';
+  return 'file-text';
 });
 </script>
 

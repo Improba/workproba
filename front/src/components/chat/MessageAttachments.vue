@@ -58,8 +58,17 @@ import {
   chatAttachmentRelativePath,
   reprocessAttachment,
 } from '@services/aiSidecar';
-import { ensureProviderSetChatReady } from '@utils/providerSetNotify';
-import { usesDeviceBearerAuth } from '@utils/providerSetValidation';
+import {
+  chatErrorMessageForReadiness,
+  ensureProviderSetChatReady,
+} from '@utils/providerSetNotify';
+import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
+import {
+  getSetActivationReadiness,
+  pickActivatableReadingSet,
+  setCanReadAttachmentKind,
+  usesDeviceBearerAuth,
+} from '@utils/providerSetValidation';
 import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import { useCloud } from '@composables/useCloud';
 
@@ -72,7 +81,7 @@ const props = defineProps<{
 const { t, locale } = useI18n();
 const route = useRoute();
 const { activePath, activeDataDir } = useSpace();
-const { sets, activeSet, setActiveSet } = useAppSettings();
+const { sets, effectiveActiveSet, setActiveSet } = useAppSettings();
 const { buildContextProviderSet } = useLlmSessionContext();
 const { getPluginDataDir } = usePlugins();
 const { providerReadiness, init: initCloud } = useCloud();
@@ -106,7 +115,7 @@ function showActivateButton(att: ChatAttachmentSnapshot): boolean {
   if (props.settingsLocked) return false;
   const status = statusFor(att);
   if (!status || !isUnavailableStatus(status.status_key)) return false;
-  const current = activeSet.value;
+  const current = effectiveActiveSet.value;
   if (current && setCanReadAttachments(current, att.kind)) return false;
   return true;
 }
@@ -114,44 +123,67 @@ function showActivateButton(att: ChatAttachmentSnapshot): boolean {
 function showRereadButton(att: ChatAttachmentSnapshot): boolean {
   const status = statusFor(att);
   if (!status || !isUnavailableStatus(status.status_key)) return false;
-  const current = activeSet.value;
+  const current = effectiveActiveSet.value;
   if (!current || !setCanReadAttachments(current, att.kind)) return false;
   return true;
 }
 
 function setCanReadAttachments(set: ProviderSet, kind: ChatAttachmentKind): boolean {
-  const hasVision =
-    Boolean(set.capabilities.vision) && set.vision.mode !== 'none';
-  const hasOcr = Boolean(set.ocr && set.ocr.mode !== 'none');
-  if (kind === 'image') return hasVision;
-  return hasOcr || hasVision;
+  return setCanReadAttachmentKind(set, kind);
 }
 
-function findReadingCapableSet(kind: ChatAttachmentKind): ProviderSet | null {
-  const candidates = sets.value.filter((set) => setCanReadAttachments(set, kind));
-  if (!candidates.length) return null;
-  const recommended = candidates.find((set) => set.isDefault);
-  return recommended ?? candidates[0];
+function readinessMessageForReadingActivation(
+  kind: ChatAttachmentKind,
+): string | null {
+  const ctx = { cloud: providerReadiness.value };
+  const readingCapable = sets.value.filter((set) => setCanReadAttachments(set, kind));
+  if (!readingCapable.length) return null;
+
+  const cloudCandidate = readingCapable.find((set) => usesDeviceBearerAuth(set));
+  if (cloudCandidate) {
+    const cloudCheck = getSetActivationReadiness(cloudCandidate, ctx);
+    if (!cloudCheck.ok) {
+      return chatErrorMessageForReadiness(cloudCheck.reason);
+    }
+  }
+
+  for (const set of readingCapable) {
+    const check = getSetActivationReadiness(set, ctx);
+    if (!check.ok) {
+      return chatErrorMessageForReadiness(check.reason);
+    }
+  }
+  return null;
 }
 
 async function onActivateReading(att: ChatAttachmentSnapshot): Promise<void> {
-  const target = findReadingCapableSet(att.kind);
+  if (!providerReadiness.value) {
+    await initCloud();
+  }
+  const ctx = { cloud: providerReadiness.value };
+  const target = pickActivatableReadingSet(sets.value, att.kind, ctx);
   if (!target) {
+    const message =
+      readinessMessageForReadingActivation(att.kind) ?? t('common.switchFailed');
     Notify.create({
-      message: t('common.switchFailed'),
+      message,
       color: 'warning',
-      timeout: 4000,
+      timeout: 6000,
     });
     return;
   }
-  if (target.id === activeSet.value?.id) return;
+  if (target.id === effectiveActiveSet.value?.id) return;
   try {
-    await setActiveSet(target.id);
-  } catch {
+    await setActiveSet(target.id, ctx);
+  } catch (err) {
+    const message =
+      err instanceof ProviderSetNotReadyError
+        ? err.message
+        : t('common.switchFailed');
     Notify.create({
-      message: t('common.switchFailed'),
+      message,
       color: 'negative',
-      timeout: 4000,
+      timeout: 6000,
     });
   }
 }

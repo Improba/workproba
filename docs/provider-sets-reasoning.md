@@ -1,6 +1,6 @@
 # Provider sets and reasoning effort
 
-> **Last updated:** 18/07/2026  
+> **Last updated:** 20/07/2026  
 > **Status:** implemented (catalog-driven UI + backend clamp + Improba Cloud DeviceBearer)
 
 This document describes how Workproba routes LLM models and **reasoning effort** through **provider sets**, how the front and sidecar stay aligned, and how we avoid provider API errors (notably Mistral's `none` / `high`-only models).
@@ -250,6 +250,15 @@ Readiness issue codes surfaced to the user:
 After a successful cloud chat turn, the front calls `refreshQuota()` to update the quota chip.
 
 Implementation: `useChatStream.ts`, `usePersonas.ts`, `useCloud.ts`.
+
+### Cloud auth entry points (desktop)
+
+| Flow | Endpoint / surface | Token | Entry points |
+|---|---|---|---|
+| Account login | `POST {control_plane}/devices/login` (username/password) | User JWT | `CloudLoginModal`, `EngineOnboardingWizard`, Settings |
+| Device enroll | `POST {control_plane}/devices/join` (`join_token`) | DeviceBearer (`wp_dev_*`) | `EnrollCloudModal`, `EnrollCloudJoinForm`, CloudPanel, model settings |
+
+`device_bearer` provider sets require a DeviceBearer from enroll, not a User JWT alone. `cloudDesktopAuth.ts` handles login; `cloudWebUrls.ts` builds cloud web login/register URLs (`VITE_CLOUD_WEB_URL`, default `http://localhost:8482`).
 
 ## Known limitations / residual risks
 

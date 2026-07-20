@@ -37,7 +37,7 @@ _NO_EFFECT_TOOLS = frozenset(
 )
 
 _WRITE_TOOLS = frozenset(
-    {"write_docx", "write_xlsx", "write_pdf", "generate_document"}
+    {"write_docx", "write_xlsx", "write_pptx", "write_pdf", "generate_document"}
 )
 
 _BROWSER_TOOLS = frozenset(

@@ -1,96 +1,98 @@
 <template>
   <div class="enterprise-settings">
-    <SettingsSubnav active="enterprise" />
+    <div class="enterprise-settings__inner">
+      <SettingsSubnav active="enterprise" />
 
-    <header class="enterprise-settings__header">
-      <h1 class="enterprise-settings__title">{{ t('enterprise.pageTitle') }}</h1>
-      <p class="enterprise-settings__subtitle">{{ t('enterprise.pageSubtitle') }}</p>
-    </header>
+      <header class="enterprise-settings__header">
+        <h1 class="enterprise-settings__title">{{ t('enterprise.pageTitle') }}</h1>
+        <p class="enterprise-settings__subtitle">{{ t('enterprise.pageSubtitle') }}</p>
+      </header>
 
-    <section v-if="loading" class="enterprise-settings__empty">
-      {{ t('common.loading') }}
-    </section>
-
-    <template v-else>
-      <section v-if="presetActive && preset" class="enterprise-settings__locked">
-        <div class="enterprise-settings__banner">
-          <Lucide name="lock" size="20" color="text-muted" />
-          <p>{{ t('enterprise.lockedBanner') }}</p>
-        </div>
-
-        <h2 class="enterprise-settings__section-title">
-          {{ t('enterprise.constraintsTitle') }}
-        </h2>
-        <ul class="enterprise-settings__constraints" role="list">
-          <li v-if="preset.localeLocked">
-            {{ t('enterprise.constraintLocale', { locale: localeLabel }) }}
-          </li>
-          <li v-if="preset.providerSetsLocked">
-            {{ t('enterprise.constraintProviderSets') }}
-          </li>
-          <li v-if="preset.pluginsAllowed?.length">
-            {{ t('enterprise.constraintPlugins', { list: preset.pluginsAllowed.join(', ') }) }}
-          </li>
-          <li v-if="preset.localPluginsAllowed === false">
-            {{ t('enterprise.constraintLocalPlugins') }}
-          </li>
-          <li>
-            {{ preset.permissionsNetwork
-              ? t('enterprise.constraintNetworkAllowed')
-              : t('enterprise.constraintNetworkBlocked') }}
-          </li>
-          <li>
-            {{ preset.codeExecute
-              ? t('enterprise.constraintCodeExecuteAllowed')
-              : t('enterprise.constraintCodeExecuteBlocked') }}
-          </li>
-          <li v-if="preset.auditEnabled">
-            {{ t('enterprise.constraintAudit', { days: preset.auditRetentionDays ?? 90 }) }}
-          </li>
-        </ul>
+      <section v-if="loading" class="enterprise-settings__empty">
+        {{ t('common.loading') }}
       </section>
 
-      <section v-else class="enterprise-settings__free">
-        <p>{{ t('enterprise.freeMode') }}</p>
-      </section>
+      <template v-else>
+        <section v-if="presetActive && preset" class="enterprise-settings__locked">
+          <div class="enterprise-settings__banner">
+            <Lucide name="lock" size="20" color="text-muted" />
+            <p>{{ t('enterprise.lockedBanner') }}</p>
+          </div>
 
-      <section class="enterprise-settings__support">
-        <h2 class="enterprise-settings__section-title">
-          {{ t('enterprise.supportEmailTitle') }}
-        </h2>
-        <p class="enterprise-settings__export-hint">{{ t('enterprise.supportEmailHint') }}</p>
-        <label class="enterprise-settings__support-label" for="support-email">
-          {{ t('enterprise.supportEmailLabel') }}
-        </label>
-        <input
-          id="support-email"
-          v-model="supportEmailDraft"
-          type="email"
-          class="enterprise-settings__support-input"
-          :placeholder="t('enterprise.supportEmailPlaceholder')"
-          :disabled="settingsLocked"
-          @change="onSupportEmailSave"
-        />
-      </section>
+          <h2 class="enterprise-settings__section-title">
+            {{ t('enterprise.constraintsTitle') }}
+          </h2>
+          <ul class="enterprise-settings__constraints" role="list">
+            <li v-if="preset.localeLocked">
+              {{ t('enterprise.constraintLocale', { locale: localeLabel }) }}
+            </li>
+            <li v-if="preset.providerSetsLocked">
+              {{ t('enterprise.constraintProviderSets') }}
+            </li>
+            <li v-if="preset.pluginsAllowed?.length">
+              {{ t('enterprise.constraintPlugins', { list: preset.pluginsAllowed.join(', ') }) }}
+            </li>
+            <li v-if="preset.localPluginsAllowed === false">
+              {{ t('enterprise.constraintLocalPlugins') }}
+            </li>
+            <li>
+              {{ preset.permissionsNetwork
+                ? t('enterprise.constraintNetworkAllowed')
+                : t('enterprise.constraintNetworkBlocked') }}
+            </li>
+            <li>
+              {{ preset.codeExecute
+                ? t('enterprise.constraintCodeExecuteAllowed')
+                : t('enterprise.constraintCodeExecuteBlocked') }}
+            </li>
+            <li v-if="preset.auditEnabled">
+              {{ t('enterprise.constraintAudit', { days: preset.auditRetentionDays ?? 90 }) }}
+            </li>
+          </ul>
+        </section>
 
-      <section v-if="canExportPreset" class="enterprise-settings__export">
-        <h2 class="enterprise-settings__section-title">
-          {{ t('enterprise.exportPreset') }}
-        </h2>
-        <p class="enterprise-settings__export-hint">{{ t('enterprise.exportPresetHint') }}</p>
-        <button
-          type="button"
-          class="enterprise-settings__export-btn"
-          :disabled="exporting"
-          @click="onExportPreset"
-        >
-          <Lucide name="download" size="16" color="text-muted" />
-          {{ exporting ? t('common.loading') : t('enterprise.exportPreset') }}
-        </button>
-      </section>
+        <section v-else class="enterprise-settings__free">
+          <p>{{ t('enterprise.freeMode') }}</p>
+        </section>
 
-      <AuditPanel :workspace-data-dir="workspaceDataDir" />
-    </template>
+        <section class="enterprise-settings__support">
+          <h2 class="enterprise-settings__section-title">
+            {{ t('enterprise.supportEmailTitle') }}
+          </h2>
+          <p class="enterprise-settings__export-hint">{{ t('enterprise.supportEmailHint') }}</p>
+          <label class="enterprise-settings__support-label" for="support-email">
+            {{ t('enterprise.supportEmailLabel') }}
+          </label>
+          <input
+            id="support-email"
+            v-model="supportEmailDraft"
+            type="email"
+            class="enterprise-settings__support-input"
+            :placeholder="t('enterprise.supportEmailPlaceholder')"
+            :disabled="settingsLocked"
+            @change="onSupportEmailSave"
+          />
+        </section>
+
+        <section v-if="canExportPreset" class="enterprise-settings__export">
+          <h2 class="enterprise-settings__section-title">
+            {{ t('enterprise.exportPreset') }}
+          </h2>
+          <p class="enterprise-settings__export-hint">{{ t('enterprise.exportPresetHint') }}</p>
+          <button
+            type="button"
+            class="enterprise-settings__export-btn"
+            :disabled="exporting"
+            @click="onExportPreset"
+          >
+            <Lucide name="download" size="16" color="text-muted" />
+            {{ exporting ? t('common.loading') : t('enterprise.exportPreset') }}
+          </button>
+        </section>
+
+        <AuditPanel :workspace-data-dir="workspaceDataDir" />
+      </template>
+    </div>
   </div>
 </template>
 
@@ -208,18 +210,24 @@ async function onExportPreset(): Promise<void> {
 
 <style scoped lang="scss">
 .enterprise-settings {
-  display: flex;
-  flex-direction: column;
   height: 100%;
   min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--wp-bg);
+  font-family: var(--wp-font-ui);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.enterprise-settings__inner {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 880px;
   margin: 0 auto;
   padding: 1rem 24px 1.25rem;
   box-sizing: border-box;
-  background: var(--wp-bg);
-  font-family: var(--wp-font-ui);
-  overflow-y: auto;
 }
 
 .enterprise-settings__header {

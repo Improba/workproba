@@ -113,6 +113,10 @@ export function getCapabilityDefinition(id: CapabilityId): CapabilityDefinition 
   return CAPABILITY_CATALOG.find((cap) => cap.id === id);
 }
 
+export function getCapabilityForPlugin(pluginId: string): CapabilityDefinition | undefined {
+  return CAPABILITY_CATALOG.find((cap) => cap.pluginIds.includes(pluginId));
+}
+
 export function getTopLevelCapabilities(): CapabilityDefinition[] {
   return CAPABILITY_CATALOG.filter((cap) => !cap.parentId);
 }

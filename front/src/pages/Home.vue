@@ -1,57 +1,12 @@
 <template>
   <div class="home-page">
     <q-dialog
-      v-model="profileDialogVisible"
+      v-model="engineWizardVisible"
       persistent
       no-esc-dismiss
       no-backdrop-dismiss
     >
-      <div class="home-page__profile-dialog">
-        <header class="home-page__profile-head">
-          <span class="home-page__profile-icon" aria-hidden="true">
-            <Lucide name="user-round" size="28" color="wp-accent" />
-          </span>
-          <h2 class="home-page__profile-title">{{ t('home.onboarding.title') }}</h2>
-          <p class="home-page__profile-lead">{{ t('home.onboarding.lead') }}</p>
-        </header>
-
-        <div class="home-page__profile-fields">
-          <label class="home-page__profile-field" for="home-profile-name">
-            <span class="home-page__profile-label">{{ t('home.onboarding.nameLabel') }}</span>
-            <input
-              id="home-profile-name"
-              v-model="profileNameDraft"
-              type="text"
-              class="home-page__profile-input"
-              :placeholder="t('home.onboarding.namePlaceholder')"
-              autocomplete="name"
-            />
-          </label>
-
-          <label class="home-page__profile-field" for="home-profile-org">
-            <span class="home-page__profile-label">{{ t('home.onboarding.orgLabel') }}</span>
-            <input
-              id="home-profile-org"
-              v-model="profileOrgDraft"
-              type="text"
-              class="home-page__profile-input"
-              :placeholder="t('home.onboarding.orgPlaceholder')"
-              autocomplete="organization"
-            />
-          </label>
-        </div>
-
-        <footer class="home-page__profile-foot">
-          <button
-            type="button"
-            class="home-page__profile-submit"
-            :disabled="!profileNameDraft.trim() || profileSaving"
-            @click="submitProfileOnboarding"
-          >
-            {{ t('home.onboarding.start') }}
-          </button>
-        </footer>
-      </div>
+      <EngineOnboardingWizard />
     </q-dialog>
 
     <section v-if="!activePath && sessionsChecked" class="home-page__onboarding">
@@ -139,7 +94,7 @@ import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import OpenSpaceButton from '@components/workspace/OpenSpaceButton.vue';
 import ChatView from '@components/chat/ChatView.vue';
-import { useUserProfile } from '@composables/useUserProfile';
+import EngineOnboardingWizard from '@components/onboarding/EngineOnboardingWizard.vue';
 import { useSpace } from '@composables/useSpace';
 import { useAppSettings } from '@composables/useAppSettings';
 import { usePlugins } from '@composables/usePlugins';
@@ -154,7 +109,12 @@ const router = useRouter();
 const { t, locale } = useI18n();
 
 const { activePath, activeSpaceId, activeDataDir, loading, error, openSpace } = useSpace();
-const { settingsLocked, activeChatRouting, activeSet } = useAppSettings();
+const {
+  settingsLocked,
+  activeChatRouting,
+  effectiveActiveSet,
+  onboardingDone,
+} = useAppSettings();
 const { isPersonasPluginActive } = usePlugins();
 
 const homeReasoningOverride = ref<ReasoningEffort | null>(null);
@@ -172,9 +132,9 @@ const homeReasoningEffort = computed<ReasoningEffort>({
     const model = homeReasoningModel.value;
     const routing = activeChatRouting.value;
     if (!routing || !model) return 'none';
-    if (activeSet.value) {
+    if (effectiveActiveSet.value) {
       return effectiveReasoningEffortFromSet(
-        activeSet.value,
+        effectiveActiveSet.value,
         homeModelOverride.value,
         null,
       );
@@ -194,34 +154,12 @@ function onHomeReasoningModelChange(model: string): void {
   homeModelOverride.value = model;
 }
 
-const {
-  needsOnboarding: needsProfileOnboarding,
-  completeOnboarding: completeProfileOnboarding,
-} = useUserProfile();
-
-const profileNameDraft = ref('');
-const profileOrgDraft = ref('');
-const profileSaving = ref(false);
-
-const profileDialogVisible = computed({
-  get: () => needsProfileOnboarding.value,
+const engineWizardVisible = computed({
+  get: () => !onboardingDone.value,
   set: () => {
-    // Dialog persistant : fermeture uniquement via completeOnboarding.
+    // Dialog persistant : fermeture uniquement via setOnboardingDone.
   },
 });
-
-async function submitProfileOnboarding(): Promise<void> {
-  if (!profileNameDraft.value.trim() || profileSaving.value) return;
-  profileSaving.value = true;
-  try {
-    await completeProfileOnboarding({
-      name: profileNameDraft.value,
-      organisation: profileOrgDraft.value,
-    });
-  } finally {
-    profileSaving.value = false;
-  }
-}
 
 const recentSessions = ref<LocalSession[]>([]);
 const sessionsChecked = ref(false);
@@ -521,116 +459,4 @@ function startConversationFromComposer(
   }
 }
 
-.home-page__profile-dialog {
-  width: min(28rem, 92vw);
-  padding: 1.75rem;
-  border-radius: var(--wp-r-lg);
-  background: var(--wp-surface);
-  border: 1px solid var(--wp-border);
-  box-shadow: var(--wp-shadow-2);
-}
-
-.home-page__profile-head {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.65rem;
-  margin-bottom: 1.25rem;
-  text-align: center;
-}
-
-.home-page__profile-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 3.25rem;
-  height: 3.25rem;
-  border-radius: var(--wp-r-md);
-  background: var(--wp-accent-soft);
-}
-
-.home-page__profile-title {
-  margin: 0;
-  font-family: var(--wp-font-head);
-  font-size: var(--wp-fs-lg);
-  font-weight: 700;
-  color: var(--wp-text);
-}
-
-.home-page__profile-lead {
-  margin: 0;
-  font-size: var(--wp-fs-sm);
-  line-height: var(--wp-lh-normal);
-  color: var(--wp-text-muted);
-}
-
-.home-page__profile-fields {
-  display: flex;
-  flex-direction: column;
-  gap: 0.85rem;
-}
-
-.home-page__profile-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-}
-
-.home-page__profile-label {
-  font-size: var(--wp-fs-sm);
-  font-weight: 600;
-  color: var(--wp-text);
-}
-
-.home-page__profile-input {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0.6rem 0.75rem;
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-r-sm);
-  background: var(--wp-surface-2);
-  color: var(--wp-text);
-  font-family: var(--wp-font-ui);
-  font-size: var(--wp-fs-base);
-  transition: border-color var(--wp-dur) var(--wp-ease);
-
-  &::placeholder {
-    color: var(--wp-text-faint);
-  }
-
-  &:focus {
-    outline: none;
-    border-color: var(--wp-accent);
-    box-shadow: 0 0 0 2px var(--wp-accent-soft);
-  }
-}
-
-.home-page__profile-foot {
-  margin-top: 1.25rem;
-  display: flex;
-  justify-content: flex-end;
-}
-
-.home-page__profile-submit {
-  min-height: 2.5rem;
-  padding: 0 1.1rem;
-  border: none;
-  border-radius: var(--wp-r-md);
-  background: var(--wp-accent);
-  color: var(--wp-canard);
-  font-family: var(--wp-font-ui);
-  font-size: var(--wp-fs-sm);
-  font-weight: 600;
-  cursor: pointer;
-  transition: background var(--wp-dur) var(--wp-ease);
-
-  &:hover:not(:disabled) {
-    background: var(--wp-accent-strong);
-  }
-
-  &:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
-  }
-}
 </style>

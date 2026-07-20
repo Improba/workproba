@@ -20,37 +20,14 @@
       >
         <h3 class="cloud-panel__section-title">{{ t('cloud.joinTitle') }}</h3>
         <p class="cloud-panel__hint">{{ t('cloud.joinHint') }}</p>
-        <form class="cloud-panel__config-form" @submit.prevent="onJoin">
-          <div class="cloud-panel__field">
-            <label for="cloud-join-token">{{ t('cloud.invitationCode') }}</label>
-            <input
-              id="cloud-join-token"
-              v-model="joinTokenDraft"
-              type="text"
-              class="cloud-panel__input"
-              :disabled="loading || joining"
-              autocomplete="off"
-            />
-          </div>
-          <div v-if="showCloudUrlField" class="cloud-panel__field">
-            <label for="cloud-join-url">{{ t('cloud.joinUrlLabel') }}</label>
-            <input
-              id="cloud-join-url"
-              v-model="baseUrlDraft"
-              type="url"
-              class="cloud-panel__input"
-              :placeholder="t('cloud.baseUrlPlaceholder')"
-              :disabled="loading || joining"
-            />
-          </div>
-          <button
-            type="submit"
-            class="cloud-panel__save-btn"
-            :disabled="loading || joining || !joinTokenDraft.trim() || (showCloudUrlField && !baseUrlDraft.trim())"
-          >
-            {{ joining ? t('cloud.joining') : t('cloud.join') }}
-          </button>
-        </form>
+        <EnrollCloudJoinForm
+          v-model:join-token="joinTokenDraft"
+          v-model:base-url="baseUrlDraft"
+          :show-url-field="showCloudUrlField"
+          :disabled="loading"
+          :submitting="joining"
+          @submit="onJoin"
+        />
       </section>
 
       <!-- Connexion (guidé et avancé) -->
@@ -303,6 +280,7 @@ import { pickProjectFolder } from '@composables/useDesktop';
 import { resolveUiMode, listProjetProjects, type ProjetProject } from '@services/aiSidecar';
 import { usePersonas } from '@composables/usePersonas';
 import ManagedConnectorsSection from '@components/cloud/ManagedConnectorsSection.vue';
+import EnrollCloudJoinForm from '@components/cloud/EnrollCloudJoinForm.vue';
 
 const { t } = useI18n();
 const emit = defineEmits<{

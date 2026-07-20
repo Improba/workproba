@@ -8,6 +8,7 @@ describe('fallbackHumanLabel', () => {
     expect(fallbackHumanLabel('generate_document')).toBe("J'ai créé un document");
     expect(fallbackHumanLabel('write_docx')).toBe("J'ai créé un document Word");
     expect(fallbackHumanLabel('write_xlsx')).toBe("J'ai créé un classeur Excel");
+    expect(fallbackHumanLabel('write_pptx')).toBe("J'ai créé une présentation PowerPoint");
     expect(fallbackHumanLabel('write_pdf')).toBe("J'ai créé un PDF");
     expect(fallbackHumanLabel('publish_artifact')).toBe("J'ai publié un document dans un projet");
     expect(fallbackHumanLabel('create_project')).toBe("J'ai créé un projet");

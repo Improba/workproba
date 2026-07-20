@@ -3,7 +3,41 @@
 from __future__ import annotations
 
 from io import BytesIO
+from pathlib import Path
 from typing import Any
+
+from app.documents.pptx_builder import (
+    MAX_PPTX_SLIDES,
+    PPTX_LAYOUTS,
+    PPTX_THEMES,
+    build_pptx_bytes,
+)
+
+__all__ = [
+    "MAX_PPTX_SLIDES",
+    "PPTX_LAYOUTS",
+    "PPTX_THEMES",
+    "build_docx_bytes",
+    "build_pdf_bytes",
+    "build_pptx_bytes",
+    "build_xlsx_bytes",
+    "require_path_extension",
+]
+
+
+def require_path_extension(path: str, expected_ext: str) -> None:
+    """Refuse un chemin dont l'extension ne correspond pas au format réel.
+
+    Évite notamment un .docx persisté sous un nom .pptx.
+    """
+    suffix = Path(path).suffix.lower()
+    expected = expected_ext.lower()
+    if not expected.startswith("."):
+        expected = f".{expected}"
+    if suffix != expected:
+        raise ValueError(
+            f"Le chemin doit se terminer par {expected} (reçu: {suffix or 'aucune extension'})"
+        )
 
 
 def build_docx_bytes(

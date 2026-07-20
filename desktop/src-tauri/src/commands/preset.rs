@@ -218,7 +218,6 @@ pub fn apply_terrain_preset(settings: &mut AppSettings) {
 }
 
 pub fn apply_preset_flags_to_settings(app_data: &Path, settings: &mut AppSettings) {
-    apply_terrain_preset(settings);
     let Some(preset) = load_enterprise_preset_at(app_data) else {
         return;
     };
@@ -663,12 +662,22 @@ mod preset_tests {
     }
 
     #[test]
-    fn apply_terrain_preset_without_enterprise_file() {
+    fn apply_terrain_preset_directly_still_locks_settings() {
         let mut settings = AppSettings::default();
         apply_terrain_preset(&mut settings);
         assert_eq!(settings.settings_locked, Some(true));
         assert_eq!(settings.permissions_network, Some(false));
         assert_eq!(settings.permissions_project_sync, Some(true));
+    }
+
+    #[test]
+    fn apply_preset_flags_without_enterprise_does_not_lock() {
+        let app_data = temp_app_data();
+        let mut settings = AppSettings::default();
+        apply_preset_flags_to_settings(&app_data, &mut settings);
+        assert_eq!(settings.settings_locked, None);
+        assert_eq!(settings.permissions_network, None);
+        assert_eq!(settings.permissions_project_sync, None);
     }
 
     #[test]

@@ -127,13 +127,14 @@
         <button
           type="button"
           class="wp-sidebar__profile"
-          :title="t('shell.editProfile')"
-          @click="profileDialogOpen = true"
+          :class="{ 'wp-sidebar__profile--guest': isGuestIdentity }"
+          :title="isGuestIdentity ? t('shell.guestOrg') : t('shell.editProfile')"
+          @click="onProfileClick"
         >
-          <span class="wp-sidebar__avatar">{{ initials }}</span>
+          <span class="wp-sidebar__avatar">{{ sidebarInitials }}</span>
           <span class="wp-sidebar__profile-text">
-            <span class="wp-sidebar__profile-name">{{ profile.name }}</span>
-            <span class="wp-sidebar__profile-org">{{ profile.organisation }}</span>
+            <span class="wp-sidebar__profile-name">{{ sidebarDisplayName }}</span>
+            <span class="wp-sidebar__profile-org">{{ sidebarDisplayOrg }}</span>
           </span>
         </button>
         <button
@@ -229,6 +230,13 @@
         </div>
       </q-dialog>
 
+      <CloudLoginModal
+        v-model="cloudLoginModalOpen"
+        @open-invitation="onOpenCloudInvitation"
+      />
+
+      <EnrollCloudModal v-model="enrollCloudModalOpen" />
+
       <q-dialog v-model="memoryDialogOpen">
         <div class="wp-memory-dialog">
           <header class="wp-memory-dialog__head">
@@ -280,8 +288,8 @@
       >
         <Lucide name="brain" size="18" color="wp-violet" />
       </button>
-      <button class="wp-rail-btn" :title="t('common.profile')" @click="profileDialogOpen = true">
-        <span class="wp-sidebar__avatar wp-sidebar__avatar--sm">{{ initials }}</span>
+      <button class="wp-rail-btn" :title="sidebarProfileTitle" @click="onProfileClick">
+        <span class="wp-sidebar__avatar wp-sidebar__avatar--sm">{{ sidebarInitials }}</span>
       </button>
       <button class="wp-rail-btn" :title="t('shell.settingsModelsShort')" @click="onOpenSettings">
         <Lucide name="settings-2" size="18" color="wp-text-muted" />
@@ -298,12 +306,16 @@ import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useSpace } from '@composables/useSpace';
 import { useUserProfile } from '@composables/useUserProfile';
+import { useAppSettings } from '@composables/useAppSettings';
+import { useCloud } from '@composables/useCloud';
 import { listWorkspaces } from '@composables/useDesktop';
 import type { WorkspaceInfo } from '@composables/useDesktop.types';
 import { createSession, listSessions, type LocalSession } from '@services/workspaceSession';
 import { bumpSessions, useSessionSync } from '@composables/useSessionSync';
 import { HOME_ROUTE } from '@router/meta';
 import MemoryPanel from '@components/memory/MemoryPanel.vue';
+import CloudLoginModal from '@components/cloud/CloudLoginModal.vue';
+import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
 import { useMemoryPanel } from '@composables/useMemoryPanel';
 
 const props = defineProps<{
@@ -340,6 +352,66 @@ const PREVIEW_COUNT = 4;
 const currentSessionId = computed(() => String(route.params.id ?? ''));
 
 const { profile, initials, save: saveProfile } = useUserProfile();
+const { onboardingDone } = useAppSettings();
+const { status, isEnrolled, init: initCloud } = useCloud();
+
+type SidebarIdentityMode = 'guest' | 'cloud' | 'local';
+
+const sidebarIdentityMode = computed<SidebarIdentityMode>(() => {
+  if (!onboardingDone.value) return 'guest';
+  if (isEnrolled.value) return 'cloud';
+  return 'local';
+});
+
+const isGuestIdentity = computed(() => sidebarIdentityMode.value === 'guest');
+
+const sidebarDisplayName = computed(() => {
+  switch (sidebarIdentityMode.value) {
+    case 'guest':
+      return t('shell.guestName');
+    case 'cloud':
+      return profile.value.name.trim() || t('shell.cloudAccount');
+    default:
+      return profile.value.name.trim() || t('shell.localMode');
+  }
+});
+
+const sidebarDisplayOrg = computed(() => {
+  switch (sidebarIdentityMode.value) {
+    case 'guest':
+      return t('shell.guestOrg');
+    case 'cloud':
+      return status.value?.org_label?.trim()
+        || status.value?.org_id?.trim()
+        || '';
+    default:
+      return profile.value.organisation.trim() || t('shell.localMode');
+  }
+});
+
+const sidebarInitials = computed(() => {
+  if (isGuestIdentity.value) return '?';
+  return initials.value;
+});
+
+const sidebarProfileTitle = computed(() =>
+  isGuestIdentity.value ? t('shell.guestOrg') : t('common.profile'),
+);
+
+const cloudLoginModalOpen = ref(false);
+const enrollCloudModalOpen = ref(false);
+
+function onProfileClick(): void {
+  if (isGuestIdentity.value) {
+    cloudLoginModalOpen.value = true;
+    return;
+  }
+  profileDialogOpen.value = true;
+}
+
+function onOpenCloudInvitation(): void {
+  enrollCloudModalOpen.value = true;
+}
 const profileDialogOpen = ref(false);
 const renameDialogOpen = ref(false);
 const renameTarget = ref<WorkspaceInfo | null>(null);
@@ -622,6 +694,7 @@ watch(sessionVersion, () => {
 
 onMounted(async () => {
   void import('@pages/chat/ChatPage.vue');
+  void initCloud();
   await initFromStoredPath();
   await refreshWorkspaces();
   // Sans espace ouvert, seule la page chat est inaccessible ; réglages et accueil restent valides.
@@ -970,6 +1043,18 @@ onMounted(async () => {
 
   &:hover {
     background: var(--wp-surface-2);
+  }
+
+  &--guest {
+    .wp-sidebar__profile-name,
+    .wp-sidebar__profile-org {
+      color: var(--wp-text-muted);
+    }
+
+    .wp-sidebar__profile-org {
+      color: var(--wp-accent);
+      font-weight: 600;
+    }
   }
 }
 

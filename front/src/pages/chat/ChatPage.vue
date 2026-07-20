@@ -175,7 +175,7 @@ const chatViewRef = ref<InstanceType<typeof ChatView> | null>(null);
 const sessionLoadGuard = createSessionLoadGuard();
 
 const { activePath, activeDataDir, spaceTitle, documents } = useSpace();
-const { settingsMode, settingsLocked, activeChatRouting, activeSet } = useAppSettings();
+const { settingsMode, settingsLocked, activeChatRouting, effectiveActiveSet } = useAppSettings();
 const { setStreaming, setSidecarState } = useChatActivity();
 const { isPersonasPluginActive, isProjetPluginActive, getPluginDataDir } = usePlugins();
 const { consumeAction, pendingAction } = usePersonasNavigation();
@@ -216,9 +216,9 @@ const displayReasoningEffort = computed<ReasoningEffort>({
     const model = displayReasoningModel.value;
     const routing = activeChatRouting.value;
     if (!routing || !model) return 'none';
-    if (activeSet.value) {
+    if (effectiveActiveSet.value) {
       return effectiveReasoningEffortFromSet(
-        activeSet.value,
+        effectiveActiveSet.value,
         sessionModelOverride.value,
         null,
       );
@@ -322,8 +322,8 @@ const metaParts = computed<ChatMetaPart[]>(() => {
     const model = displayReasoningModel.value ?? routing.model;
     parts.push({ text: routing.label || model });
     if (
-      (activeSet.value
-        ? supportsReasoningForSet(activeSet.value, model)
+      (effectiveActiveSet.value
+        ? supportsReasoningForSet(effectiveActiveSet.value, model)
         : supportsReasoning(routing.provider, model)) &&
       displayReasoningEffort.value !== 'none'
     ) {
@@ -333,7 +333,7 @@ const metaParts = computed<ChatMetaPart[]>(() => {
         text: t('chat.page.reasoningLevel', { level: levelLabel.toLowerCase() }),
       });
     }
-    const contextWindow = contextWindowFor(routing.provider, model, activeSet.value);
+    const contextWindow = contextWindowFor(routing.provider, model, effectiveActiveSet.value);
     const usedTokens =
       lastUsage.value.inputTokens ?? estimateMessagesTokens(messages.value);
     const pct = Math.round((usedTokens / contextWindow) * 100);
@@ -423,8 +423,8 @@ watch(
     sessionModelOverride.value =
       chatProvider &&
       session.model &&
-      (activeSet.value
-        ? isModelApplicableForSet(activeSet.value, session.model)
+      (effectiveActiveSet.value
+        ? isModelApplicableForSet(effectiveActiveSet.value, session.model)
         : isModelApplicable(chatProvider, session.model))
         ? session.model
         : null;
@@ -626,8 +626,8 @@ watch(
     if (!providerName) return;
     const override = sessionModelOverride.value;
     if (override && !(
-      activeSet.value
-        ? isModelApplicableForSet(activeSet.value, override)
+      effectiveActiveSet.value
+        ? isModelApplicableForSet(effectiveActiveSet.value, override)
         : isModelApplicable(providerName, override)
     )) {
       sessionModelOverride.value = null;

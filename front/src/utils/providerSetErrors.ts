@@ -4,6 +4,7 @@ import { chatErrorMessageForReadiness } from '@utils/providerSetNotify';
 const PROVIDER_SET_READINESS_ISSUES: ReadonlySet<ProviderSetReadinessIssue> = new Set([
   'no_set',
   'missing_api_key',
+  'missing_base_url',
   'cloud_not_enrolled',
   'not_subscribed',
   'quota_exceeded',

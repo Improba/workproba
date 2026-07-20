@@ -25,7 +25,13 @@ from app.agent.confirmation import ConfirmationGate, raise_unless_approved
 from app.agent.effects import classify_effect, effect_headline, protection_labels
 from app.agent.human import build_human_summary
 from app.agent.plan import PlanGate
-from app.documents.writer import build_docx_bytes, build_pdf_bytes, build_xlsx_bytes
+from app.documents.writer import (
+    build_docx_bytes,
+    build_pdf_bytes,
+    build_pptx_bytes,
+    build_xlsx_bytes,
+    require_path_extension,
+)
 from app.i18n import DEFAULT_LOCALE, t
 from app.limits import DEFAULT_LIMITS, Limits
 from app.project_client import ProjectClient
@@ -910,6 +916,8 @@ def build_agent(
         except Exception as exc:  # noqa: BLE001 - surfaced to the model
             raise _retry(exc) from exc
 
+    _NATIVE_OFFICE_EXTS = frozenset({".docx", ".xlsx", ".pptx", ".pdf"})
+
     @agent.tool
     async def generate_document(
         ctx: RunContext[ToolDeps],
@@ -917,13 +925,25 @@ def build_agent(
         mime_type: str,
         content_markdown: str,
     ) -> dict[str, Any]:
-        """Save a generated document into the project.
+        """Save a generated markdown/text document into the project.
+
+        Do not use for Office binaries: use write_docx, write_xlsx, write_pptx,
+        or write_pdf instead (path extension must match the real format).
 
         Args:
             name: Relative path/name of the document to create.
             mime_type: MIME type of the document (e.g. text/markdown).
             content_markdown: The markdown content to write.
         """
+        from pathlib import Path as _Path
+
+        suffix = _Path(name).suffix.lower()
+        if suffix in _NATIVE_OFFICE_EXTS:
+            raise ModelRetry(
+                "Pour un fichier Office/PDF natif, utilise write_docx, "
+                "write_xlsx, write_pptx ou write_pdf (jamais generate_document "
+                f"avec l'extension {suffix})."
+            )
         return await _persist_binary_document(
             ctx,
             tool_name="generate_document",
@@ -942,12 +962,15 @@ def build_agent(
         """Create a native Word (.docx) file in the workspace.
 
         Args:
-            path: Relative path for the .docx file.
+            path: Relative path for the .docx file (must end with .docx).
             title: Optional document title (heading).
             paragraphs: Body paragraphs to include.
         """
         try:
+            require_path_extension(path, ".docx")
             content = build_docx_bytes(title=title or None, paragraphs=paragraphs)
+        except ValueError as exc:
+            raise ModelRetry(str(exc)) from exc
         except Exception as exc:  # noqa: BLE001
             raise _retry(exc) from exc
         return await _persist_binary_document(
@@ -971,11 +994,14 @@ def build_agent(
         """Create a native Excel (.xlsx) file in the workspace.
 
         Args:
-            path: Relative path for the .xlsx file.
+            path: Relative path for the .xlsx file (must end with .xlsx).
             sheets: Sheet definitions with `name` and `rows` (list of row arrays).
         """
         try:
+            require_path_extension(path, ".xlsx")
             content = build_xlsx_bytes(sheets=sheets)
+        except ValueError as exc:
+            raise ModelRetry(str(exc)) from exc
         except Exception as exc:  # noqa: BLE001
             raise _retry(exc) from exc
         return await _persist_binary_document(
@@ -990,6 +1016,47 @@ def build_agent(
         )
 
     @agent.tool
+    async def write_pptx(
+        ctx: RunContext[ToolDeps],
+        path: str,
+        slides: list[dict[str, Any]] | None = None,
+        theme: str = "improba",
+    ) -> dict[str, Any]:
+        """Create a native PowerPoint (.pptx) presentation in the workspace.
+
+        Use this whenever the user asks for a .pptx / PowerPoint / présentation
+        éditable. Never write Word or markdown under a .pptx name.
+
+        Each slide is a dict with:
+        - layout: title | section | bullets | two_column | kpi_row | quote | closing
+        - title, subtitle, bullets, left, right, left_title, right_title,
+          metrics (list of {label, value}), quote, attribution
+
+        Args:
+            path: Relative path ending with .pptx.
+            slides: Structured slide definitions (choose layouts from the catalog).
+            theme: Visual theme: improba (default), light, or dark.
+        """
+        try:
+            require_path_extension(path, ".pptx")
+            content = build_pptx_bytes(slides=slides, theme=theme)
+        except ValueError as exc:
+            raise ModelRetry(str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise _retry(exc) from exc
+        return await _persist_binary_document(
+            ctx,
+            tool_name="write_pptx",
+            name=path,
+            mime_type=(
+                "application/vnd.openxmlformats-officedocument"
+                ".presentationml.presentation"
+            ),
+            content=content,
+            metadata={"format": "pptx", "theme": theme or "improba"},
+        )
+
+    @agent.tool
     async def write_pdf(
         ctx: RunContext[ToolDeps],
         path: str,
@@ -999,12 +1066,15 @@ def build_agent(
         """Create a native PDF file in the workspace (ReportLab).
 
         Args:
-            path: Relative path for the .pdf file.
+            path: Relative path for the .pdf file (must end with .pdf).
             title: Optional document title.
             sections: Sections with optional `heading` and `body` text.
         """
         try:
+            require_path_extension(path, ".pdf")
             content = build_pdf_bytes(title=title or None, sections=sections)
+        except ValueError as exc:
+            raise ModelRetry(str(exc)) from exc
         except RuntimeError as exc:
             raise ModelRetry(str(exc)) from exc
         except Exception as exc:  # noqa: BLE001

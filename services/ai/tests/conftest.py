@@ -129,7 +129,14 @@ class FakeProjectClient(ProjectClient):
         metadata: dict[str, Any] | None = None,
     ) -> DocumentContent:
         _ = (tenant_id, project_id, session_id)
-        self.saved.append({"name": name, "mime_type": mime_type, "metadata": metadata})
+        self.saved.append(
+            {
+                "name": name,
+                "mime_type": mime_type,
+                "metadata": metadata,
+                "content_base64": content_base64,
+            }
+        )
         return DocumentContent(
             document_id=name,
             name=name,

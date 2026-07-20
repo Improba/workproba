@@ -73,10 +73,14 @@ async def render_preview(
         }
 
     if preview_type == "pptx":
+        try:
+            pptx_html = _render_pptx_html(content, limits=limits)
+        except Exception:  # noqa: BLE001 - fichier corrompu / non-pptx
+            pptx_html = f"<p>{html.escape('Preview unavailable for this PowerPoint file')}</p>"
         return {
             "type": "pptx",
             "title": title,
-            "html": _render_pptx_html(content, limits=limits),
+            "html": pptx_html,
         }
 
     if preview_type == "pdf":
@@ -182,7 +186,7 @@ def _render_pptx_html(content: bytes, *, limits: Limits = DEFAULT_LIMITS) -> str
         if index > max_slides:
             break
         slide_parts: list[str] = [
-            f'<section class="wp-pptx-slide"><h2>Slide {index}</h2>',
+            f'<div class="wp-pptx-slide"><h2>Slide {index}</h2>',
         ]
         for shape in slide.shapes:
             text = getattr(shape, "text", None)
@@ -192,7 +196,7 @@ def _render_pptx_html(content: bytes, *, limits: Limits = DEFAULT_LIMITS) -> str
                 stripped = line.strip()
                 if stripped:
                     slide_parts.append(f"<p>{html.escape(stripped)}</p>")
-        slide_parts.append("</section>")
+        slide_parts.append("</div>")
         parts.extend(slide_parts)
 
     return "\n".join(parts) if parts else "<p></p>"

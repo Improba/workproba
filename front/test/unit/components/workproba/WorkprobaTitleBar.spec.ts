@@ -11,6 +11,7 @@ vi.mock('vue-router', () => ({
 vi.mock('@composables/useAppSettings', () => ({
   useAppSettings: () => ({
     activeSet: { value: null },
+    effectiveActiveSet: { value: null },
     activeChatProvider: { value: null },
     activeEmbeddingProvider: { value: null },
     settingsMode: { value: 'guided' },
@@ -19,6 +20,35 @@ vi.mock('@composables/useAppSettings', () => ({
 }));
 
 describe('WorkprobaTitleBar', () => {
+  it('affiche le chip en erreur sans effectiveActiveSet même si sidecar connecté', () => {
+    const wrapper = mount(WorkprobaTitleBar, {
+      props: {
+        workspaceTitle: null,
+        activePath: null,
+        rightPanelOpen: false,
+        sidebarRail: false,
+        sidecarState: 'connected',
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          CapabilitiesButton: true,
+          ThemeToggler: true,
+          WorkprobaBrand: true,
+          'q-tooltip': true,
+          'q-dialog': true,
+          'q-menu': true,
+          'q-list': true,
+          'q-item': true,
+          'q-item-section': true,
+          'q-separator': true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.wp-titlebar__chip').classes()).toContain('wp-titlebar__chip--error');
+  });
+
   it('navigue vers l\'accueil au clic sur Workproba', async () => {
     push.mockClear();
 
@@ -34,6 +64,7 @@ describe('WorkprobaTitleBar', () => {
           Lucide: true,
           CapabilitiesButton: true,
           ThemeToggler: true,
+          WorkprobaBrand: true,
           'q-tooltip': true,
           'q-dialog': true,
           'q-menu': true,

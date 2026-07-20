@@ -161,11 +161,11 @@ function ensureStarted(): void {
   started = true;
 
   const { activeSpaceId } = useSpace();
-  const { activeSet } = useAppSettings();
+  const { effectiveActiveSet } = useAppSettings();
 
   const triggerKey = computed(() => {
     const ws = activeSpaceId.value ?? '';
-    const set = activeSet.value;
+    const set = effectiveActiveSet.value;
     if (!set?.embeddings) return `${ws}::none`;
     const embed = set.embeddings;
     return `${ws}::${set.id}::${embed.provider}::${embed.model}`;

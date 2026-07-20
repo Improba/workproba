@@ -2,9 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   CAPABILITY_CATALOG,
   getCapabilityDefinition,
+  getCapabilityForPlugin,
   getNestedCapabilities,
   getTopLevelCapabilities,
 } from '@capabilities/capabilityCatalog';
+import { CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID } from '@composables/usePlugins';
 
 describe('capabilityCatalog', () => {
   it('définit les quatre capacités attendues', () => {
@@ -36,5 +38,11 @@ describe('capabilityCatalog', () => {
     );
     expect(getCapabilityDefinition('project_sync')?.primarySurface.type).toBe('nested');
     expect(getCapabilityDefinition('project_sync')?.pluginIds).toEqual(['workproba.cloud']);
+  });
+
+  it('résout la capacité à partir d\'un pluginId', () => {
+    expect(getCapabilityForPlugin(PERSONAS_PLUGIN_ID)?.id).toBe('regards');
+    expect(getCapabilityForPlugin(CLOUD_PLUGIN_ID)?.id).toBe('project_sync');
+    expect(getCapabilityForPlugin('unknown.plugin')).toBeUndefined();
   });
 });

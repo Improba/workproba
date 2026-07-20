@@ -14,15 +14,21 @@ from app.documents.extractor import is_binary_document
 from app.documents.preview import (
     _render_docx_html,
     _render_pdf_html,
+    _render_pptx_html,
     _render_xlsx_html,
 )
-from app.documents.writer import build_docx_bytes, build_pdf_bytes, build_xlsx_bytes
+from app.documents.writer import (
+    build_docx_bytes,
+    build_pdf_bytes,
+    build_pptx_bytes,
+    build_xlsx_bytes,
+)
 from app.i18n import t
 from app.versions import normalize_relative_path
 
 _IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".svg", ".tiff", ".tif"}
-_OFFICE_EXTS = {".docx", ".xlsx", ".pdf"}
-_OFFICE_WRITE_TOOLS = {"write_docx", "write_xlsx", "write_pdf"}
+_OFFICE_EXTS = {".docx", ".xlsx", ".pdf", ".pptx"}
+_OFFICE_WRITE_TOOLS = {"write_docx", "write_xlsx", "write_pdf", "write_pptx"}
 
 
 def _is_image_file(path: Path) -> bool:
@@ -80,6 +86,8 @@ def _html_to_plain_text(html_content: str) -> str:
 
 
 def _render_office_bytes_to_text(path: Path, content: bytes) -> str:
+    if not content:
+        return ""
     ext = path.suffix.lower()
     if ext == ".docx":
         rendered = _render_docx_html(content)
@@ -87,6 +95,8 @@ def _render_office_bytes_to_text(path: Path, content: bytes) -> str:
         rendered = _render_xlsx_html(content)
     elif ext == ".pdf":
         rendered = _render_pdf_html(content)
+    elif ext == ".pptx":
+        rendered = _render_pptx_html(content)
     else:
         return ""
     return _html_to_plain_text(rendered)
@@ -112,6 +122,13 @@ def _build_proposed_office_bytes(tool_name: str, tool_args: dict[str, Any]) -> b
             title=str(title) if isinstance(title, str) and title else None,
             sections=sections if isinstance(sections, list) else None,
         )
+    if tool_name == "write_pptx":
+        slides = tool_args.get("slides")
+        theme = tool_args.get("theme")
+        return build_pptx_bytes(
+            slides=slides if isinstance(slides, list) else None,
+            theme=str(theme) if isinstance(theme, str) and theme else "improba",
+        )
     raise ValueError(f"Unsupported office tool: {tool_name}")
 
 
@@ -121,11 +138,45 @@ def _office_preview_diff(
     tool_name: str,
     tool_args: dict[str, Any],
     is_new: bool,
+    locale: str = "fr",
 ) -> dict[str, object]:
-    old_bytes = b"" if is_new else target.read_bytes()
-    new_bytes = _build_proposed_office_bytes(tool_name, tool_args)
-    old_text = _render_office_bytes_to_text(target, old_bytes)
-    new_text = _render_office_bytes_to_text(target, new_bytes)
+    old_bytes = b""
+    if not is_new:
+        try:
+            old_bytes = target.read_bytes()
+        except OSError:
+            old_bytes = b""
+            is_new = True
+
+    try:
+        new_bytes = _build_proposed_office_bytes(tool_name, tool_args)
+    except Exception:  # noqa: BLE001 - aperçu non bloquant
+        return {
+            "is_new": is_new,
+            "is_binary": True,
+            "diff_html": "",
+            "message": t(locale, "preview_change.binary_unavailable"),
+            "old_size": len(old_bytes),
+            "new_size": 0,
+        }
+
+    try:
+        new_text = _render_office_bytes_to_text(target, new_bytes)
+    except Exception:  # noqa: BLE001 - rendu proposé impossible
+        return {
+            "is_new": is_new,
+            "is_binary": True,
+            "diff_html": "",
+            "message": t(locale, "preview_change.binary_unavailable"),
+            "old_size": len(old_bytes),
+            "new_size": len(new_bytes),
+        }
+
+    try:
+        old_text = _render_office_bytes_to_text(target, old_bytes) if old_bytes else ""
+    except Exception:  # noqa: BLE001 - ancien fichier illisible: diff = ajout complet
+        old_text = ""
+
     return {
         "is_new": is_new,
         "is_binary": False,
@@ -182,6 +233,7 @@ def preview_change(
             ".docx": "write_docx",
             ".xlsx": "write_xlsx",
             ".pdf": "write_pdf",
+            ".pptx": "write_pptx",
         }.get(ext)
 
     if office_tool and tool_args:
@@ -190,6 +242,7 @@ def preview_change(
             tool_name=office_tool,
             tool_args=tool_args,
             is_new=is_new,
+            locale=locale,
         )
 
     is_binary = False if is_new else _is_binary_for_diff(target)

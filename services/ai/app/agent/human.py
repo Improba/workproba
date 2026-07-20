@@ -148,6 +148,7 @@ def build_human_summary(
     for office_tool, key_prefix in (
         ("write_docx", "human.write_docx"),
         ("write_xlsx", "human.write_xlsx"),
+        ("write_pptx", "human.write_pptx"),
         ("write_pdf", "human.write_pdf"),
     ):
         if tool_name == office_tool:

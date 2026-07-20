@@ -7,7 +7,7 @@
         :aria-label="t('shell.titlebarHome')"
         @click="goHome"
       >
-        {{ t('shell.titlebarBrand') }}
+        <WorkprobaBrand variant="mark" />
       </button>
       <span v-if="workspaceTitle" class="wp-titlebar__sep">{{ t('shell.titlebarSep') }}</span>
       <span v-if="workspaceTitle" class="wp-titlebar__workspace" :title="activePath ?? ''">
@@ -19,7 +19,7 @@
       <button
         type="button"
         class="wp-titlebar__chip"
-        :class="`wp-titlebar__chip--${sidecarState}`"
+        :class="`wp-titlebar__chip--${providerChipState}`"
         :aria-label="providerAriaLabel"
         @click="sidecarDialogOpen = true"
       >
@@ -29,15 +29,6 @@
           {{ providerTooltip }}
         </q-tooltip>
       </button>
-
-      <span
-        v-if="capabilitiesSummary"
-        class="wp-titlebar__caps"
-        :title="capabilitiesTooltip"
-        :aria-label="capabilitiesAriaLabel"
-      >
-        {{ capabilitiesSummary }}
-      </span>
 
       <q-dialog v-model="sidecarDialogOpen">
         <div class="wp-sidecar-dialog">
@@ -177,6 +168,7 @@ import { useRouter } from 'vue-router';
 import ThemeToggler from '@lib-improba/components/layouts/theme-toggler/ThemeToggler.vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import CapabilitiesButton from '@components/capabilities/CapabilitiesButton.vue';
+import WorkprobaBrand from '@components/brand/WorkprobaBrand.vue';
 import { useAppSettings } from '@composables/useAppSettings';
 import { capabilityLabels, guidedPresetLabel, localizedSetName } from '@utils/providerSets';
 
@@ -199,7 +191,7 @@ defineEmits<{
   (e: 'open-shortcuts'): void;
 }>();
 
-const { activeSet, activeChatProvider, activeEmbeddingProvider, settingsMode, settingsLocked } = useAppSettings();
+const { effectiveActiveSet, activeChatProvider, activeEmbeddingProvider, settingsMode, settingsLocked } = useAppSettings();
 const router = useRouter();
 const { t } = useI18n();
 
@@ -224,6 +216,9 @@ const regardsAriaLabel = computed(() =>
 );
 
 const sidecarState = computed(() => props.sidecarState ?? 'idle');
+const providerChipState = computed(() =>
+  effectiveActiveSet.value ? sidecarState.value : 'error',
+);
 const sidecarLabel = computed(() => {
   switch (sidecarState.value) {
     case 'working':
@@ -252,28 +247,13 @@ const labelMode = computed(() => {
 });
 
 const activeSetCapabilities = computed(() => {
-  const set = activeSet.value;
+  const set = effectiveActiveSet.value;
   if (!set) return [];
   return capabilityLabels(set, labelMode.value, t);
 });
 
-const capabilitiesSummary = computed(() => {
-  const caps = activeSetCapabilities.value;
-  if (!caps.length) return '';
-  if (caps.length === 1) return caps[0] ?? '';
-  return `${caps[0]} ${t('shell.titlebarSep')} +${caps.length - 1}`;
-});
-
-const capabilitiesTooltip = computed(() => activeSetCapabilities.value.join(' · '));
-
-const capabilitiesAriaLabel = computed(() =>
-  t('shell.titlebarCapabilitiesAria', {
-    list: capabilitiesTooltip.value,
-  }),
-);
-
 const providerLabel = computed(() => {
-  const set = activeSet.value;
+  const set = effectiveActiveSet.value;
   if (set) {
     if (labelMode.value === 'guided') return guidedPresetLabel(set, t);
     return localizedSetName(set, t);
@@ -296,7 +276,7 @@ const providerTooltip = computed(() =>
 );
 
 const chatProviderLabel = computed(() => {
-  const set = activeSet.value;
+  const set = effectiveActiveSet.value;
   if (set) {
     const name = labelMode.value === 'guided' ? guidedPresetLabel(set, t) : localizedSetName(set, t);
     return `${name} ${t('shell.titlebarSep')} ${set.chat.model || '—'}`;
@@ -307,7 +287,7 @@ const chatProviderLabel = computed(() => {
 });
 
 const embeddingProviderLabel = computed(() => {
-  const set = activeSet.value;
+  const set = effectiveActiveSet.value;
   if (set?.embeddings) {
     return `${localizedSetName(set, t)} ${t('shell.titlebarSep')} ${set.embeddings.model}`;
   }
@@ -343,7 +323,7 @@ function goHome(): void {
 
 .wp-titlebar__brand {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: var(--wp-space-2);
   min-width: 0;
   flex: 1;
@@ -351,21 +331,23 @@ function goHome(): void {
 
 .wp-titlebar__mark {
   flex: none;
+  display: inline-flex;
+  align-items: center;
   padding: 0;
   border: none;
   background: transparent;
-  font-family: var(--wp-font-head);
-  font-weight: 700;
-  font-size: var(--wp-fs-base);
-  line-height: var(--wp-lh-tight);
-  color: var(--wp-primary);
-  letter-spacing: 0.01em;
-  white-space: nowrap;
+  line-height: 0;
+  border-radius: var(--wp-r-sm);
   cursor: pointer;
-  transition: color 120ms var(--wp-ease);
+  transition: opacity 120ms var(--wp-ease);
 
   &:hover {
-    color: var(--wp-accent);
+    opacity: 0.85;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--wp-focus-ring);
+    outline-offset: 2px;
   }
 }
 
@@ -417,20 +399,6 @@ function goHome(): void {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.wp-titlebar__caps {
-  max-width: 240px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: var(--wp-surface-2);
-  border: 1px solid var(--wp-border);
-  color: var(--wp-text-muted);
-  font-size: var(--wp-fs-xs);
-  line-height: var(--wp-lh-tight);
 }
 
 .wp-titlebar__chip-dot {

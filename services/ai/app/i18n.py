@@ -134,6 +134,11 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "cannot": "Je n'ai pas pu créer le classeur Excel {filename}",
                 "done": "J'ai créé le classeur Excel {filename}",
             },
+            "write_pptx": {
+                "will": "Je vais créer la présentation PowerPoint {filename}",
+                "cannot": "Je n'ai pas pu créer la présentation PowerPoint {filename}",
+                "done": "J'ai créé la présentation PowerPoint {filename}",
+            },
             "write_pdf": {
                 "will": "Je vais créer le PDF {filename}",
                 "cannot": "Je n'ai pas pu créer le PDF {filename}",
@@ -288,7 +293,12 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "l'utilisateur à analyser, comprendre et produire du contenu "
                 "à partir des fichiers de son espace de travail local. Utilise "
                 "les outils fournis (list_files, search_kb, read_document, "
-                "run_code, generate_document) quand c'est pertinent. Réponds en "
+                "run_code, generate_document, write_docx, write_xlsx, "
+                "write_pptx, write_pdf) quand c'est pertinent. Pour une "
+                "présentation PowerPoint (.pptx), utilise toujours write_pptx "
+                "(vrai fichier PPTX avec layouts title/section/bullets/"
+                "two_column/kpi_row/quote/closing) : jamais write_docx ni "
+                "generate_document sous une extension .pptx. Réponds en "
                 "français, de façon claire et concise, avec un langage accessible "
                 "aux non-codeurs. Parle de « l'espace » ou « le dossier de "
                 "travail », jamais de « projet » pour désigner le dossier local. "
@@ -666,6 +676,11 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "cannot": "I could not create the Excel workbook {filename}",
                 "done": "I created the Excel workbook {filename}",
             },
+            "write_pptx": {
+                "will": "I will create the PowerPoint presentation {filename}",
+                "cannot": "I could not create the PowerPoint presentation {filename}",
+                "done": "I created the PowerPoint presentation {filename}",
+            },
             "write_pdf": {
                 "will": "I will create the PDF {filename}",
                 "cannot": "I could not create the PDF {filename}",
@@ -812,15 +827,19 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "You are Workproba, Improba's local AI assistant. You help "
                 "the user analyze, understand, and produce content from files "
                 "in their local workspace. Use the provided tools (list_files, "
-                "search_kb, read_document, run_code, generate_document) when "
-                "relevant. Reply in English, clearly and concisely, using "
-                "language accessible to non-developers. Refer to the local "
-                "folder as the « space » or « workspace folder », never as "
-                "« project » for the local directory. Cite relative file paths "
-                "when relying on file content. Tools enforce size limits: if "
-                "read_document returns `truncated: true`, mention it and use a "
-                "larger `offset_lines` to paginate. To describe folder contents, "
-                "start with list_files."
+                "search_kb, read_document, run_code, generate_document, "
+                "write_docx, write_xlsx, write_pptx, write_pdf) when relevant. "
+                "For a PowerPoint presentation (.pptx), always use write_pptx "
+                "(real PPTX with layouts title/section/bullets/two_column/"
+                "kpi_row/quote/closing) : never write_docx or generate_document "
+                "under a .pptx extension. Reply in English, clearly and "
+                "concisely, using language accessible to non-developers. Refer "
+                "to the local folder as the « space » or « workspace folder », "
+                "never as « project » for the local directory. Cite relative "
+                "file paths when relying on file content. Tools enforce size "
+                "limits: if read_document returns `truncated: true`, mention it "
+                "and use a larger `offset_lines` to paginate. To describe "
+                "folder contents, start with list_files."
             ),
             "inventory_empty": (
                 "No space files were sent in context. Use list_files to explore "

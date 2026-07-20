@@ -7,7 +7,14 @@ vi.mock('vue-virtual-scroller', () => ({
   DynamicScroller: {
     name: 'DynamicScroller',
     props: ['items'],
-    template: '<div class="dynamic-scroller"><slot v-for="(item, index) in items" :item="item" :active="true" :index="index" /></div>',
+    template:
+      '<div class="dynamic-scroller vue-recycle-scroller"><slot v-for="(item, index) in items" :item="item" :active="true" :index="index" /><slot name="after" /></div>',
+    methods: {
+      scrollToItem: vi.fn(),
+      scrollToPosition: vi.fn(),
+      getItemOffset: vi.fn(() => 0),
+      getItemSize: vi.fn(() => 72),
+    },
   },
   DynamicScrollerItem: {
     name: 'DynamicScrollerItem',
@@ -123,18 +130,22 @@ describe('MessageList', () => {
             template:
               '<div class="q-scroll-area"><div class="q-scrollarea__container"><slot /></div></div>',
             mounted() {
+              const recycle = (this.$el as HTMLElement).querySelector(
+                '.vue-recycle-scroller',
+              ) as HTMLElement | null;
               const container = (this.$el as HTMLElement).querySelector(
                 '.q-scrollarea__container',
               ) as HTMLElement;
-              Object.defineProperty(container, 'scrollHeight', {
+              const target = recycle ?? container;
+              Object.defineProperty(target, 'scrollHeight', {
                 value: 400,
                 configurable: true,
               });
-              Object.defineProperty(container, 'clientHeight', {
+              Object.defineProperty(target, 'clientHeight', {
                 value: 100,
                 configurable: true,
               });
-              container.scrollTo = scrollTo;
+              target.scrollTo = scrollTo;
             },
           },
         },
@@ -149,6 +160,52 @@ describe('MessageList', () => {
       behavior: 'smooth',
     });
 
+    wrapper.unmount();
+  });
+
+  it('rend le spacer reply quand spacerHeight > 0', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: sampleMessages,
+        streaming: false,
+        spacerHeight: 120,
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          Message: true,
+          QScrollArea: {
+            template: '<div class="q-scroll-area"><slot /></div>',
+          },
+        },
+      },
+    });
+
+    const spacer = wrapper.find('.message-list__reply-spacer');
+    expect(spacer.exists()).toBe(true);
+    expect(spacer.attributes('style')).toContain('height: 120px');
+    wrapper.unmount();
+  });
+
+  it('n\'affiche pas le spacer quand spacerHeight vaut 0', () => {
+    const wrapper = mount(MessageList, {
+      props: {
+        messages: sampleMessages,
+        streaming: false,
+        spacerHeight: 0,
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          Message: true,
+          QScrollArea: {
+            template: '<div class="q-scroll-area"><slot /></div>',
+          },
+        },
+      },
+    });
+
+    expect(wrapper.find('.message-list__reply-spacer').exists()).toBe(false);
     wrapper.unmount();
   });
 });

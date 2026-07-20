@@ -27,7 +27,7 @@
       </div>
 
       <div v-else-if="result?.is_binary" class="preview-change-dialog__state">
-        {{ t('chat.previewChange.binaireNonSupporte') }}
+        {{ result.message?.trim() || t('chat.previewChange.binaireNonSupporte') }}
       </div>
 
       <template v-else-if="result">
@@ -156,6 +156,7 @@ watch(
   ([isOpen]) => {
     if (isOpen) void load();
   },
+  { immediate: true },
 );
 </script>
 

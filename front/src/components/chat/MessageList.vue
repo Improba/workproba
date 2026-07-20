@@ -9,6 +9,7 @@
     >
       <DynamicScroller
         v-if="messages.length"
+        ref="dynamicScrollerRef"
         class="message-list__virtual"
         :items="messages"
         :min-item-size="72"
@@ -55,6 +56,14 @@
             />
           </DynamicScrollerItem>
         </template>
+        <template #after>
+          <div
+            v-if="spacerHeight > 0"
+            class="message-list__reply-spacer"
+            :style="{ height: spacerHeight + 'px' }"
+            aria-hidden="true"
+          />
+        </template>
       </DynamicScroller>
 
       <div v-else class="message-list__empty">
@@ -87,17 +96,36 @@ import { expansionEpoch } from '@composables/useToolCallExpansion';
 import type { ChatMessage } from '#types';
 import type { QScrollArea } from 'quasar';
 
-const props = defineProps<{
-  messages: ChatMessage[];
-  streaming?: boolean;
-  projectPath?: string | null;
-  sessionId?: string | null;
-  workspaceDataDir?: string | null;
-  confirming?: boolean;
-  approvingPlan?: boolean;
-  attachmentStatuses?: Record<string, import('@composables/useChatStream').AttachmentStatusEntry>;
-  settingsLocked?: boolean;
-}>();
+type ScrollToOptions = {
+  align?: 'start' | 'center' | 'end' | 'nearest';
+  smooth?: boolean;
+  offset?: number;
+};
+
+type DynamicScrollerExposed = {
+  scrollToItem: (index: number, options?: ScrollToOptions) => void;
+  scrollToPosition: (position: number, options?: ScrollToOptions) => void;
+  getItemOffset: (index: number) => number;
+  getItemSize: (itemOrIndex: number | ChatMessage) => number;
+};
+
+const props = withDefaults(
+  defineProps<{
+    messages: ChatMessage[];
+    streaming?: boolean;
+    spacerHeight?: number;
+    projectPath?: string | null;
+    sessionId?: string | null;
+    workspaceDataDir?: string | null;
+    confirming?: boolean;
+    approvingPlan?: boolean;
+    attachmentStatuses?: Record<string, import('@composables/useChatStream').AttachmentStatusEntry>;
+    settingsLocked?: boolean;
+  }>(),
+  {
+    spacerHeight: 0,
+  },
+);
 
 const interactionLocked = computed(
   () =>
@@ -154,25 +182,46 @@ onUnmounted(() => {
 });
 
 const scrollAreaRef = ref<QScrollArea | null>(null);
+const dynamicScrollerRef = ref<DynamicScrollerExposed | null>(null);
+
+function getScroller(): DynamicScrollerExposed | null {
+  return dynamicScrollerRef.value;
+}
+
+function scrollToItem(index: number, options?: ScrollToOptions): void {
+  dynamicScrollerRef.value?.scrollToItem(index, options);
+}
+
+function scrollToPosition(position: number, options?: ScrollToOptions): void {
+  dynamicScrollerRef.value?.scrollToPosition(position, options);
+}
+
+function getItemOffset(index: number): number {
+  return dynamicScrollerRef.value?.getItemOffset(index) ?? 0;
+}
+
+function getItemSize(itemOrIndex: number | ChatMessage): number {
+  const scroller = dynamicScrollerRef.value;
+  if (!scroller) return 0;
+  // DynamicScroller indexe les tailles par `id` (key-field), pas par index.
+  if (typeof itemOrIndex === 'number') {
+    const item = props.messages[itemOrIndex];
+    if (!item) return 0;
+    return scroller.getItemSize(item, itemOrIndex);
+  }
+  return scroller.getItemSize(itemOrIndex);
+}
 
 // Pendant le streaming, `_contentRev` remplace `item.content` dans size-dependencies
 // pour limiter les re-mesures du virtual scroller à chaque flush de tokens.
 
-/**
- * Renvoie l'élément réellement scrollable. On a deux candidats empilés
- * (le conteneur `q-scroll-area` et le `DynamicScroller` interne) ; selon le
- * layout, l'un ou l'autre porte réellement le débordement. On détecte celui
- * dont le contenu déborde pour cibler le bon, sinon on retombe sur le
- * recycle-scroller (qui possède sa propre hauteur bornée).
- */
+/** Cible de scroll stable : le recycle-scroller interne (DynamicScroller). */
 function getScrollTarget(): HTMLElement | null {
   const root = scrollAreaRef.value?.$el as HTMLElement | null;
   if (!root) return null;
   const recycle = root.querySelector<HTMLElement>('.vue-recycle-scroller');
-  const qContainer = root.querySelector<HTMLElement>('.q-scrollarea__container');
-  if (recycle && recycle.scrollHeight > recycle.clientHeight) return recycle;
-  if (qContainer && qContainer.scrollHeight > qContainer.clientHeight) return qContainer;
-  return recycle ?? qContainer ?? null;
+  if (recycle) return recycle;
+  return root.querySelector<HTMLElement>('.q-scrollarea__container') ?? null;
 }
 
 function scrollToBottom(smooth = false): void {
@@ -188,6 +237,11 @@ function scrollToBottom(smooth = false): void {
 defineExpose({
   scrollToBottom: (smooth = false) => scrollToBottom(smooth),
   getScrollTarget,
+  scrollToItem,
+  scrollToPosition,
+  getItemOffset,
+  getItemSize,
+  getScroller,
 });
 </script>
 
@@ -214,6 +268,12 @@ defineExpose({
 
 .message-list__item {
   width: 100%;
+}
+
+.message-list__reply-spacer {
+  width: 100%;
+  flex-shrink: 0;
+  pointer-events: none;
 }
 
 .message-list__empty {

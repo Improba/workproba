@@ -41,11 +41,27 @@
             <span v-if="set.id === activeSetId" class="set-badge set-badge--active">
               {{ t('settings.advancedSetActive') }}
             </span>
+            <span v-if="isCloudSet(set) && !isEnrolled" class="set-badge set-badge--warn">
+              {{ t('settings.engine.notEnrolled') }}
+            </span>
             <span v-if="set.isBuiltin" class="set-badge">{{ t('settings.advancedSetBuiltin') }}</span>
+            <span
+              v-if="set.id === 'workproba-cloud'"
+              class="set-badge set-badge--recommended"
+            >
+              {{ t('settings.badgeRecommended') }}
+            </span>
           </div>
         </div>
 
         <p class="set-card__desc">{{ localizedSetDescription(set, t) }}</p>
+        <p
+          v-if="cloudReadinessHint(set)"
+          class="set-card__readiness"
+          role="status"
+        >
+          {{ cloudReadinessHint(set) }}
+        </p>
 
         <div class="set-card__caps">
           <span v-for="cap in capabilityLabels(set, 'advanced', t)" :key="cap" class="set-cap">{{ cap }}</span>
@@ -72,9 +88,9 @@
             type="button"
             class="ghost-btn"
             :class="{ 'ghost-btn--on': set.id === activeSetId }"
-            @click="onSetActive(set.id)"
+            @click="onSetActiveClick(set)"
           >
-            {{ set.id === activeSetId ? t('settings.advancedSetActive') : t('settings.engine.useThisEngine') }}
+            {{ setActiveCtaLabel(set) }}
           </button>
           <button type="button" class="ghost-btn" @click="onEdit(set)">
             <Lucide name="pencil" size="14" color="text" /> {{ t('settings.advancedEdit') }}
@@ -160,23 +176,36 @@
         <q-btn unelevated color="primary" :label="t('common.save')" :disable="!form.name || !form.chat.model" @click="onSaveForm" />
       </div>
     </div>
+
+    <EnrollCloudModal v-model="enrollModalOpen" @enrolled="onCloudEnrolled" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, onMounted, reactive, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
 import { useAppSettings, testSet, type ProviderSetTestResult } from '@composables/useAppSettings';
 import type { ProviderSet, LlmProviderName } from '@composables/useDesktop.types';
 import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
-import { capabilityLabels, cloneProviderSet, emptyCustomSet, localizedSetDescription } from '@utils/providerSets';
+import { useCloud } from '@composables/useCloud';
+import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
+import { chatErrorMessageForReadiness } from '@utils/providerSetNotify';
+import {
+  capabilityLabels,
+  cloneProviderSet,
+  emptyCustomSet,
+  localizedSetDescription,
+  WORKPROBA_CLOUD_BUILTIN_SET,
+} from '@utils/providerSets';
 
 const emit = defineEmits<{ 'switch-to-guided': [] }>();
 
 const { sets, settings, setActiveSet, createSet, updateSet, deleteSet, confirmBeforeWrite, setConfirmBeforeWrite, settingsLocked } = useAppSettings();
 const { getPluginDataDir } = usePlugins();
+const { providerReadiness, isEnrolled, init: initCloud, refreshQuota } = useCloud();
 const { t } = useI18n();
 
 const formOpen = ref(false);
@@ -184,9 +213,68 @@ const editing = ref<ProviderSet | null>(null);
 const showKey = ref(false);
 const testingId = ref<string | null>(null);
 const savingConfirm = ref(false);
+const enrollModalOpen = ref(false);
 const testResults = reactive<Record<string, ProviderSetTestResult>>({});
 
 const activeSetId = computed(() => settings.value.activeSetId ?? null);
+
+function isCloudSet(set: ProviderSet): boolean {
+  return set.id === WORKPROBA_CLOUD_BUILTIN_SET.id;
+}
+
+function cloudReadinessHint(set: ProviderSet): string {
+  if (!isCloudSet(set) || isEnrolled.value) return '';
+  return chatErrorMessageForReadiness('cloud_not_enrolled');
+}
+
+function setActiveCtaLabel(set: ProviderSet): string {
+  if (isCloudSet(set) && !isEnrolled.value) {
+    return t('settings.engine.linkDevice');
+  }
+  if (set.id === activeSetId.value) {
+    return t('settings.advancedSetActive');
+  }
+  return t('settings.engine.useThisEngine');
+}
+
+function notifyActivationError(err: unknown): void {
+  if (err instanceof ProviderSetNotReadyError) {
+    Notify.create({
+      message: chatErrorMessageForReadiness(err.reason),
+      color: 'warning',
+    });
+    return;
+  }
+  Notify.create({
+    message: err instanceof Error ? err.message : t('settings.saveFailed'),
+    color: 'negative',
+  });
+}
+
+async function activateSet(id: string): Promise<void> {
+  try {
+    await setActiveSet(id, { cloud: providerReadiness.value });
+  } catch (err) {
+    notifyActivationError(err);
+  }
+}
+
+function onSetActiveClick(set: ProviderSet): void {
+  if (isCloudSet(set) && !isEnrolled.value) {
+    enrollModalOpen.value = true;
+    return;
+  }
+  void activateSet(set.id);
+}
+
+async function onCloudEnrolled(): Promise<void> {
+  await refreshQuota();
+  await activateSet(WORKPROBA_CLOUD_BUILTIN_SET.id);
+}
+
+onMounted(() => {
+  void initCloud();
+});
 
 async function onConfirmBeforeWrite(enabled: boolean): Promise<void> {
   if (settingsLocked.value || savingConfirm.value) return;
@@ -359,17 +447,6 @@ async function onDelete(set: ProviderSet): Promise<void> {
   }
 }
 
-async function onSetActive(id: string): Promise<void> {
-  try {
-    await setActiveSet(id);
-  } catch (err) {
-    Notify.create({
-      message: err instanceof Error ? err.message : t('settings.saveFailed'),
-      color: 'negative',
-    });
-  }
-}
-
 async function onTestAll(set: ProviderSet): Promise<void> {
   testingId.value = set.id;
   try {
@@ -510,6 +587,23 @@ async function onTestAll(set: ProviderSet): Promise<void> {
 .set-badge--active {
   background: var(--wp-accent-soft);
   color: var(--wp-accent);
+}
+
+.set-badge--warn {
+  background: var(--wp-warning-soft, var(--wp-surface-2));
+  color: var(--wp-warning, var(--wp-danger));
+}
+
+.set-badge--recommended {
+  background: var(--wp-accent-soft);
+  color: var(--wp-accent-strong, var(--wp-accent));
+}
+
+.set-card__readiness {
+  margin: 0;
+  font-size: 12px;
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-danger);
 }
 
 .set-card__desc {

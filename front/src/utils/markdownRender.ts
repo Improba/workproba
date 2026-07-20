@@ -93,7 +93,7 @@ md.renderer.rules.fence = (tokens, idx) => {
   return defaultCodeHtml(code, lang);
 };
 
-/** Rendu markdown sans KaTeX (streaming ou blocs stables). */
+/** Rendu markdown sans KaTeX (queue de streaming encore ouverte). */
 export function renderMarkdownPlain(source: string): string {
   if (!source) return '';
   return md.render(source);
@@ -131,6 +131,11 @@ async function getHighlighter(): Promise<Highlighter> {
   return highlighter;
 }
 
+/** Précharge le highlighter Shiki (fire-and-forget friendly). */
+export function preloadHighlighter(): Promise<void> {
+  return getHighlighter().then(() => undefined);
+}
+
 export async function highlightCodeBlocks(container: ParentNode | null): Promise<void> {
   if (!container) return;
   const blocks = container.querySelectorAll<HTMLElement>('.code-block');
@@ -144,7 +149,10 @@ export async function highlightCodeBlocks(container: ParentNode | null): Promise
 
   blocks.forEach((block) => {
     const lang = block.dataset.lang || 'text';
-    const pre = block.querySelector('code');
+    const pre =
+      block.querySelector<HTMLElement>('pre.code-block__pre') ??
+      block.querySelector<HTMLElement>('pre.shiki') ??
+      block.querySelector<HTMLElement>('pre');
     if (!pre) return;
     const raw = pre.textContent ?? '';
     try {

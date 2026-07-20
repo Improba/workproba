@@ -316,7 +316,7 @@ function iconFor(node: FileNode): string {
   const map: Record<string, string> = {
     spreadsheet: 'file-spreadsheet',
     document: 'file-text',
-    presentation: 'file-text',
+    presentation: 'presentation',
     pdf: 'file-text',
     image: 'file-image',
     text: 'file-text',

@@ -1,12 +1,18 @@
 const FILE_WRITE_TOOL_NAMES = new Set([
   'write_docx',
   'write_xlsx',
+  'write_pptx',
   'write_pdf',
   'generate_document',
   'edit',
 ]);
 
-const OFFICE_WRITE_TOOL_NAMES = new Set(['write_docx', 'write_xlsx', 'write_pdf']);
+const OFFICE_WRITE_TOOL_NAMES = new Set([
+  'write_docx',
+  'write_xlsx',
+  'write_pptx',
+  'write_pdf',
+]);
 
 export function isFileWriteTool(toolName: string): boolean {
   return FILE_WRITE_TOOL_NAMES.has(toolName);
@@ -41,8 +47,25 @@ export function canPreviewFileWrite(
   args: Record<string, unknown> | undefined,
 ): boolean {
   if (!isFileWriteTool(toolName)) return false;
+  if (!args || typeof args !== 'object') return false;
   if (isOfficeWriteTool(toolName)) {
-    return Boolean(args && typeof args === 'object');
+    // write_pptx: exiger une liste slides (même vide → deck par défaut côté builder)
+    if (toolName === 'write_pptx') {
+      return Array.isArray(args.slides);
+    }
+    return true;
   }
   return extractProposedContent(args) !== null;
+}
+
+/** Chemin relatif proposé par un outil d'écriture fichier (path ou name). */
+export function extractProposedPath(
+  args: Record<string, unknown> | undefined,
+): string | null {
+  if (!args) return null;
+  for (const key of ['path', 'name'] as const) {
+    const value = args[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return null;
 }

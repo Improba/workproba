@@ -20,7 +20,9 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 - **Activatable capabilities**: Regards métier, projects & deliverables, web navigation, **Improba Cloud Mode A** (join org via `join_token`, managed connectors `echo` / `ihora.shaped` (stub) / `ihora` (HTTP, allowlist org), artefact sync; integrated plugins; not a third-party extension marketplace in V2)
 - **Personas / Regards métier**: professional perspectives, simulated meetings, discussions (Improba builtin set)
 - **Spaces**: sidebar, right panel (files, preview, active capabilities), side chat for Regards
-- **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write
+- **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write; native PPTX generation (`write_pptx`)
+- **Branding**: `WorkprobaBrand` mark and logo assets in the shell
+- **Improba Cloud desktop auth**: first-run onboarding (`EngineOnboardingWizard`), cloud login (`POST /devices/login`), device enroll (`join_token` → DeviceBearer)
 
 ## License
 

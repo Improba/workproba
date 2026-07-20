@@ -27,25 +27,45 @@
       </dl>
     </article>
 
-    <button type="button" class="locked-setup__request" @click="onRequestAccess">
+    <button
+      v-if="showEnrollCta"
+      type="button"
+      class="locked-setup__request locked-setup__request--primary"
+      @click="enrollModalOpen = true"
+    >
+      {{ t('settings.engine.linkDevice') }}
+    </button>
+    <button
+      v-else
+      type="button"
+      class="locked-setup__request"
+      @click="onRequestAccess"
+    >
       {{ t('settings.lockedRequestAccess') }}
     </button>
     <p v-if="requestMessage" class="locked-setup__feedback">
       {{ requestMessage }}
     </p>
+
+    <EnrollCloudModal v-model="enrollModalOpen" @enrolled="onCloudEnrolled" />
   </section>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
 import { useAppSettings } from '@composables/useAppSettings';
+import { useCloud } from '@composables/useCloud';
 import { capabilityLabels, localizedSetDescription, localizedSetName } from '@utils/providerSets';
+import { usesDeviceBearerAuth } from '@utils/providerSetValidation';
 
-const { activeSet } = useAppSettings();
+const { activeSet, settings } = useAppSettings();
+const { isEnrolled, init: initCloud, refreshQuota } = useCloud();
 const { t } = useI18n();
 const requestMessage = ref('');
+const enrollModalOpen = ref(false);
 
 const capabilities = computed(() => {
   const set = activeSet.value;
@@ -63,9 +83,31 @@ const displayDescription = computed(() => {
   return set ? localizedSetDescription(set, t) : '';
 });
 
+const showEnrollCta = computed(() => {
+  const set = activeSet.value;
+  if (!set) return false;
+  const isCloudEngine = set.id === 'workproba-cloud' || usesDeviceBearerAuth(set);
+  return isCloudEngine && !isEnrolled.value;
+});
+
 function onRequestAccess(): void {
+  const email = settings.value.supportEmail?.trim();
+  if (email) {
+    const subject = encodeURIComponent(t('settings.lockedRequestMailSubject'));
+    const body = encodeURIComponent(t('settings.lockedRequestMailBody'));
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+    return;
+  }
   requestMessage.value = t('settings.lockedRequestMessage');
 }
+
+async function onCloudEnrolled(): Promise<void> {
+  await refreshQuota();
+}
+
+onMounted(async () => {
+  await initCloud();
+});
 </script>
 
 <style scoped lang="scss">
@@ -166,6 +208,17 @@ function onRequestAccess(): void {
   background: var(--wp-surface);
   font-size: var(--wp-fs-sm);
   cursor: pointer;
+
+  &--primary {
+    background: var(--wp-accent);
+    border-color: var(--wp-accent);
+    color: var(--wp-on-accent, #fff);
+    font-weight: 600;
+
+    &:hover {
+      filter: brightness(1.05);
+    }
+  }
 }
 
 .locked-setup__feedback {

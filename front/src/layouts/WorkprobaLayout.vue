@@ -95,7 +95,12 @@ const route = useRoute();
 watch(
   () => route?.name,
   (name) => {
-    if (name === 'home') {
+    if (
+      name === 'home'
+      || name === 'settings_models'
+      || name === 'settings_plugins'
+      || name === 'settings_enterprise'
+    ) {
       closeRightPanel();
     }
   },

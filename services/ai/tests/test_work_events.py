@@ -191,6 +191,7 @@ def test_derive_work_event_accepts_cancelled_status() -> None:
         ("browser_click", "en", "capability", "work.capability.web_browsing"),
         ("write_docx", "fr", "capability", "work.capability.office_generation"),
         ("write_xlsx", "en", "capability", "work.capability.office_generation"),
+        ("write_pptx", "fr", "capability", "work.capability.office_generation"),
         ("write_pdf", "fr", "capability", "work.capability.office_generation"),
         ("generate_document", "en", "capability", "work.capability.office_generation"),
         ("run_code", "fr", "capability", "work.capability.code_execution"),

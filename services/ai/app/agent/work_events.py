@@ -20,7 +20,7 @@ _DOCUMENT_TOOLS = frozenset(
     {"list_files", "search_kb", "read_document", "recall_project_sessions"}
 )
 _OFFICE_TOOLS = frozenset(
-    {"write_docx", "write_xlsx", "write_pdf", "generate_document"}
+    {"write_docx", "write_xlsx", "write_pptx", "write_pdf", "generate_document"}
 )
 _PUBLISHING_TOOLS = frozenset(
     {"publish_artifact", "create_project", "list_projects", "sync_to_cloud"}

@@ -10,6 +10,8 @@ const PROFILE_ONBOARDING_KEY = 'workproba:profileOnboardingDone';
 
 const LEGACY_DEFAULT_NAME = 'Sylvain Meylan';
 const LEGACY_DEFAULT_ORG = 'Improba';
+const LEGACY_NAMES = [LEGACY_DEFAULT_NAME, 'Sylvain'];
+const LEGACY_ORGS = [LEGACY_DEFAULT_ORG];
 
 const EMPTY_PROFILE: UserProfile = {
   name: '',
@@ -17,7 +19,21 @@ const EMPTY_PROFILE: UserProfile = {
 };
 
 function isLegacyDefault(profile: UserProfile): boolean {
-  return profile.name === LEGACY_DEFAULT_NAME && profile.organisation === LEGACY_DEFAULT_ORG;
+  const name = profile.name.trim();
+  const org = profile.organisation.trim();
+  if (name === LEGACY_DEFAULT_NAME && org === LEGACY_DEFAULT_ORG) return true;
+  if (LEGACY_NAMES.includes(name) && (!org || LEGACY_ORGS.includes(org))) return true;
+  if (!name && LEGACY_ORGS.includes(org)) return true;
+  return false;
+}
+
+function sanitizeProfile(profile: UserProfile): UserProfile {
+  if (isLegacyDefault(profile)) return { ...EMPTY_PROFILE };
+  let name = profile.name.trim();
+  let organisation = profile.organisation.trim();
+  if (LEGACY_NAMES.includes(name)) name = '';
+  if (LEGACY_ORGS.includes(organisation)) organisation = '';
+  return { name, organisation };
 }
 
 function readProfileOnboardingDone(): boolean {
@@ -38,11 +54,7 @@ function readStored(): UserProfile {
     const parsed = JSON.parse(raw) as Partial<UserProfile>;
     const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
     const organisation = typeof parsed.organisation === 'string' ? parsed.organisation.trim() : '';
-    const profile = { name, organisation };
-    if (isLegacyDefault(profile)) {
-      return { ...EMPTY_PROFILE };
-    }
-    return profile;
+    return sanitizeProfile({ name, organisation });
   } catch {
     return { ...EMPTY_PROFILE };
   }
@@ -61,8 +73,6 @@ async function persistToAppSettings(profile: UserProfile): Promise<void> {
   try {
     const { isDesktopApp } = await import('@composables/useDesktop');
     if (!isDesktopApp()) return;
-    // Passer par le singleton useAppSettings pour éviter un RMW qui
-    // écraserait des champs mémoire (ex. thinkingDetailView) non encore persistés.
     const { useAppSettings } = await import('@composables/useAppSettings');
     const { settings, save, load, loaded } = useAppSettings();
     if (!loaded.value) {
@@ -72,7 +82,7 @@ async function persistToAppSettings(profile: UserProfile): Promise<void> {
       ...settings.value,
       userName: profile.name || null,
       userOrg: profile.organisation || null,
-      profileOnboardingDone: true,
+      profileOnboardingDone: profileOnboardingDone.value,
     });
   } catch {
     // Tauri indisponible : localStorage suffit.
@@ -86,8 +96,9 @@ async function hydrateFromAppSettings(): Promise<void> {
     const settings = await getAppSettings();
     const name = settings.userName?.trim() ?? '';
     const organisation = settings.userOrg?.trim() ?? '';
-    if (name || organisation) {
-      profile.value = { name, organisation };
+    const sanitized = sanitizeProfile({ name, organisation });
+    if (sanitized.name || sanitized.organisation) {
+      profile.value = sanitized;
       persistLocal(profile.value);
     }
     if (settings.profileOnboardingDone) {
@@ -124,6 +135,10 @@ function ensureDesktopBootstrap(): void {
   void bootstrapFromDesktop();
 }
 
+const hasIdentity = computed(
+  () => Boolean(profile.value.name.trim() || profile.value.organisation.trim()),
+);
+
 const initials = computed(() => {
   const name = profile.value.name.trim();
   if (!name) return '?';
@@ -142,25 +157,27 @@ export interface UseUserProfileReturn {
   profile: typeof profile;
   initials: typeof initials;
   loaded: typeof loaded;
+  hasIdentity: typeof hasIdentity;
   needsOnboarding: typeof needsOnboarding;
   profileOnboardingDone: typeof profileOnboardingDone;
   displayName: typeof displayName;
   displayOrganisation: typeof displayOrganisation;
   save: (next: Partial<UserProfile>) => void;
   completeOnboarding: (next: Partial<UserProfile>) => Promise<void>;
+  clearProfile: () => Promise<void>;
 }
 
 export function useUserProfile(): UseUserProfileReturn {
   ensureDesktopBootstrap();
 
   function save(next: Partial<UserProfile>): void {
-    const merged: UserProfile = {
+    const merged: UserProfile = sanitizeProfile({
       name: typeof next.name === 'string' ? next.name.trim() : profile.value.name,
       organisation:
         typeof next.organisation === 'string'
           ? next.organisation.trim()
           : profile.value.organisation,
-    };
+    });
     profile.value = merged;
     persistLocal(merged);
     void persistToAppSettings(merged);
@@ -170,13 +187,13 @@ export function useUserProfile(): UseUserProfileReturn {
     const name = typeof next.name === 'string' ? next.name.trim() : profile.value.name.trim();
     if (!name) return;
 
-    const merged: UserProfile = {
+    const merged: UserProfile = sanitizeProfile({
       name,
       organisation:
         typeof next.organisation === 'string'
           ? next.organisation.trim()
           : profile.value.organisation.trim(),
-    };
+    });
     profile.value = merged;
     persistLocal(merged);
     profileOnboardingDone.value = true;
@@ -184,15 +201,27 @@ export function useUserProfile(): UseUserProfileReturn {
     await persistToAppSettings(merged);
   }
 
+  async function clearProfile(): Promise<void> {
+    profile.value = { ...EMPTY_PROFILE };
+    profileOnboardingDone.value = false;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(PROFILE_ONBOARDING_KEY);
+    }
+    await persistToAppSettings({ ...EMPTY_PROFILE });
+  }
+
   return {
     profile,
     initials,
     loaded,
+    hasIdentity,
     needsOnboarding,
     profileOnboardingDone,
     displayName,
     displayOrganisation,
     save,
     completeOnboarding,
+    clearProfile,
   };
 }

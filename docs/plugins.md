@@ -1,6 +1,6 @@
 # Workproba plugins
 
-> **Last updated:** 18/07/2026 (V2.2 PR 1–4 + cloud LLM)
+> **Last updated:** 20/07/2026 (V2.2 PR 1–4 + cloud LLM + desktop auth UX)
 
 Workproba extends the agent core with a **plugin system** (technical layer): agent tools, HTTP endpoints, UI slots, and namespaced storage. User-facing discovery uses **activatable capabilities** (hub « Capacités », V2.2) — see [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
@@ -124,6 +124,7 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 
 Standard path for managed connectors (MVP livré 20/07/2026). Plugin `workproba.cloud` :
 
+- **Desktop auth UX**: `CloudLoginModal` + `cloudDesktopAuth.ts` (`POST /devices/login` → User JWT); `EnrollCloudModal` / `EnrollCloudJoinForm` (`join_token` → DeviceBearer). First-run: `EngineOnboardingWizard`. Cloud web links: `cloudWebUrls.ts` (`VITE_CLOUD_WEB_URL`).
 - **`CloudControlPlaneClient`** : join device via `join_token` (ou bearer existant ; `device_code` → `join_token_required`), catalogs, regards (`/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`)
 - **`RemoteCapabilityGateway`** + tool **`invoke_managed_connector`** : relay to `echo`, `ihora.shaped` (stub) and `ihora` (HTTP, allowlist org) via `POST /connectors/{id}/invoke` (payload only ; no client `subject_id` / `org_id`) ; sidecar `GET /plugins/cloud/connectors` ; Human Approval Gate (`external_send`)
 - **`ManagedRegardsPort`** for enterprise regards

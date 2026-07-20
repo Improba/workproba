@@ -24,6 +24,7 @@
         ref="messageListRef"
         :messages="messages"
         :streaming="streaming"
+        :spacer-height="spacerHeight"
         :project-path="projectPath"
         :session-id="sessionId"
         :workspace-data-dir="workspaceDataDir"
@@ -74,6 +75,21 @@
       class="chat-view__composer"
       :class="{ 'chat-view__composer--expanded': isExpanded }"
     >
+      <div
+        v-if="showEngineBanner"
+        class="chat-view__engine-banner"
+        role="status"
+      >
+        <p class="chat-view__engine-banner-text">{{ engineBannerMessage }}</p>
+        <button
+          type="button"
+          class="chat-view__engine-banner-action"
+          @click="onEngineBannerAction"
+        >
+          {{ engineBannerActionLabel }}
+        </button>
+      </div>
+      <EnrollCloudModal v-model="enrollModalOpen" @enrolled="onCloudEnrolled" />
       <ChatComposerAttachments
         v-if="hasAttachments"
         :attachments="attachments"
@@ -208,7 +224,7 @@
                   :model-value="reasoningEffort ?? 'none'"
                   :provider="reasoningProvider"
                   :model="reasoningModel"
-                  :provider-set="activeSet"
+                  :provider-set="effectiveActiveSet"
                   @update:model-value="
                     (value) => emit('update:reasoningEffort', value)
                   "
@@ -269,13 +285,18 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useRouter } from 'vue-router';
 import { useScroll } from '@vueuse/core';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
 import ChatModelMenuContent from '@components/chat/ChatModelMenuContent.vue';
 import ChatComposerAttachments from '@components/chat/ChatComposerAttachments.vue';
 import MessageList from '@components/chat/MessageList.vue';
 import StartPrompts from '@components/chat/StartPrompts.vue';
 import { useAppSettings } from '@composables/useAppSettings';
+import { useCloud } from '@composables/useCloud';
+import { chatErrorMessageForReadiness } from '@utils/providerSetNotify';
+import { getSetActivationReadiness } from '@utils/providerSetValidation';
 import type { LlmProviderName } from '@composables/useDesktop.types';
 import {
   ATTACHMENT_ACCEPT,
@@ -287,7 +308,11 @@ import { addMemoryItem } from '@services/aiSidecar';
 import type { QInput, QMenu } from 'quasar';
 import { REASONING_EFFORT_OPTIONS, supportsReasoning } from '@utils/reasoningSupport';
 import { hasSetModelChoice, supportsReasoningForSet } from '@utils/providerSetModels';
-import { hasModelChoice } from '@utils/modelCatalog';
+import {
+  computeAnchorScrollTop,
+  computeSpacerHeight,
+  shouldPromoteAnchorToSticky,
+} from '@composables/chatScroll';
 
 const props = defineProps<{
   messages: ChatMessage[];
@@ -330,6 +355,7 @@ const emit = defineEmits<{
 
 const COMPOSER_MAX_LENGTH = 32_000;
 const { t } = useI18n();
+const router = useRouter();
 
 const layoutMode = computed(() => props.layout ?? 'chat');
 
@@ -357,14 +383,60 @@ const canIndexAttachments = computed(
   () => Boolean(props.workspaceDataDir) && hasAttachments.value,
 );
 
-const { activeSet } = useAppSettings();
+const { activeSet, effectiveActiveSet, effectiveActiveSetId } = useAppSettings();
+const { providerReadiness, init: initCloud, refreshQuota } = useCloud();
+
+const enrollModalOpen = ref(false);
+
+const showEngineBanner = computed(
+  () => !props.settingsLocked && effectiveActiveSetId.value == null,
+);
+
+const activeSetReadinessIssue = computed(() => {
+  if (!activeSet.value || effectiveActiveSetId.value != null) return null;
+  const check = getSetActivationReadiness(activeSet.value, {
+    cloud: providerReadiness.value,
+  });
+  return check.ok ? null : check.reason;
+});
+
+const engineBannerNeedsEnroll = computed(
+  () => activeSetReadinessIssue.value === 'cloud_not_enrolled',
+);
+
+const engineBannerMessage = computed(() => {
+  const issue = activeSetReadinessIssue.value;
+  if (issue) {
+    return chatErrorMessageForReadiness(issue);
+  }
+  return t('chat.engineBanner.chooseEngine');
+});
+
+const engineBannerActionLabel = computed(() =>
+  engineBannerNeedsEnroll.value
+    ? t('settings.engine.linkDevice')
+    : t('chat.engineBanner.openSettings'),
+);
+
+function onEngineBannerAction(): void {
+  if (engineBannerNeedsEnroll.value) {
+    enrollModalOpen.value = true;
+    return;
+  }
+  void router.push({ name: 'settings_models' });
+}
+
+async function onCloudEnrolled(): Promise<void> {
+  await refreshQuota();
+  enrollModalOpen.value = false;
+}
 
 const showModelControl = computed(() => {
   const provider = props.reasoningProvider;
   const model = props.reasoningModel;
   if (!provider || !model) return false;
-  if (activeSet.value) {
-    return hasSetModelChoice(activeSet.value) || supportsReasoningForSet(activeSet.value, model);
+  if (effectiveActiveSet.value) {
+    return hasSetModelChoice(effectiveActiveSet.value) || supportsReasoningForSet(effectiveActiveSet.value, model);
   }
   return hasModelChoice(provider) || supportsReasoning(provider, model);
 });
@@ -427,14 +499,23 @@ const messageListRef = ref<InstanceType<typeof MessageList> | null>(null);
 const scrollTarget = ref<HTMLElement | null>(null);
 const isPinned = ref(true);
 const userDetached = ref(false);
+const scrollMode = ref<'sticky' | 'anchor'>('sticky');
+const spacerHeight = ref(0);
+const anchorUserIndex = ref(-1);
 let scrollRaf: number | null = null;
 let scrollListenersTarget: HTMLElement | null = null;
 let lastTouchY: number | null = null;
+let resizeObserver: ResizeObserver | null = null;
+let observedResizeTarget: HTMLElement | null = null;
 
 const { arrivedState } = useScroll(scrollTarget, { offset: { bottom: 80 } });
 
 const showScrollDown = computed(
-  () => !arrivedState.bottom && props.messages.length > 0,
+  () =>
+    userDetached.value ||
+    (!isPinned.value &&
+      scrollMode.value !== 'anchor' &&
+      props.messages.length > 0),
 );
 
 const canSend = computed(
@@ -469,6 +550,24 @@ defineExpose({ setDraft });
 function bindScrollTarget(): void {
   scrollTarget.value = messageListRef.value?.getScrollTarget() ?? null;
   bindScrollListeners();
+  setupResizeObserver();
+}
+
+function setupResizeObserver(): void {
+  const target = scrollTarget.value;
+  if (target === observedResizeTarget) return;
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  observedResizeTarget = null;
+  if (!target) return;
+  observedResizeTarget = target;
+  resizeObserver = new ResizeObserver(() => {
+    if (scrollMode.value === 'anchor' && !userDetached.value) {
+      spacerHeight.value = computeSpacerHeight(target.clientHeight);
+      void scrollToAnchorStable();
+    }
+  });
+  resizeObserver.observe(target);
 }
 
 function cancelScheduledScroll(): void {
@@ -516,6 +615,133 @@ function unbindScrollListeners(): void {
   scrollListenersTarget.removeEventListener('touchmove', onUserTouchMove);
   scrollListenersTarget = null;
   lastTouchY = null;
+}
+
+function maybePromoteToSticky(): void {
+  if (userDetached.value || scrollMode.value !== 'anchor') return;
+  const target = messageListRef.value?.getScrollTarget();
+  if (!target) return;
+  if (
+    !shouldPromoteAnchorToSticky({
+      contentEnd: target.scrollHeight - spacerHeight.value,
+      scrollTop: target.scrollTop,
+      clientHeight: target.clientHeight,
+    })
+  ) {
+    return;
+  }
+  spacerHeight.value = 0;
+  scrollMode.value = 'sticky';
+  isPinned.value = true;
+  // Attendre que le DOM retire le spacer avant de coller au bas (évite un saut).
+  void nextTick(() => {
+    if (isPinned.value && scrollMode.value === 'sticky') {
+      scheduleScrollToBottom();
+    }
+  });
+}
+
+function scrollToAnchor(): boolean {
+  const idx = anchorUserIndex.value;
+  if (idx < 0) return false;
+  const list = messageListRef.value;
+  if (!list) return false;
+  const message = props.messages[idx];
+  if (!message || message.role !== 'user') return false;
+
+  const size = list.getItemSize(message);
+  if (size <= 0) {
+    // Tailles pas encore mesurées : on amène l'item en vue puis on retente.
+    list.scrollToItem(idx, { align: 'start' });
+    return false;
+  }
+
+  const top = computeAnchorScrollTop(list.getItemOffset(idx), size);
+  list.scrollToPosition(top);
+  return true;
+}
+
+/** Réessaie l'ancrage jusqu'à ce que les tailles virtualisées soient prêtes. */
+async function scrollToAnchorStable(): Promise<void> {
+  if (scrollMode.value !== 'anchor') return;
+  await nextTick();
+  const deadline = performance.now() + SCROLL_STABLE_TIMEOUT_MS;
+  let attempts = 0;
+
+  return new Promise<void>((resolve) => {
+    const run = (): void => {
+      if (scrollMode.value !== 'anchor' || !isPinned.value) {
+        resolve();
+        return;
+      }
+
+      const anchored = scrollToAnchor();
+      attempts += 1;
+
+      if (
+        anchored ||
+        attempts >= SCROLL_STABLE_MAX_ATTEMPTS ||
+        performance.now() >= deadline
+      ) {
+        resolve();
+        return;
+      }
+
+      requestAnimationFrame(run);
+    };
+
+    requestAnimationFrame(run);
+  });
+}
+
+function tryResolveAnchor(): boolean {
+  const idx = props.messages.map((m) => m.role).lastIndexOf('user');
+  if (idx < 0) return false;
+  const target = messageListRef.value?.getScrollTarget();
+  if (!target || target.clientHeight === 0) return false;
+  anchorUserIndex.value = idx;
+  spacerHeight.value = computeSpacerHeight(target.clientHeight);
+  return true;
+}
+
+async function enterAnchorMode(): Promise<void> {
+  userDetached.value = false;
+  isPinned.value = true;
+  scrollMode.value = 'anchor';
+  // Évite qu'un watch (messages.length) ancre sur l'ancien index pendant le nextTick.
+  anchorUserIndex.value = -1;
+
+  await nextTick();
+
+  const deadline = performance.now() + SCROLL_STABLE_TIMEOUT_MS;
+  let attempts = 0;
+
+  return new Promise<void>((resolve) => {
+    const run = (): void => {
+      if (scrollMode.value !== 'anchor') {
+        resolve();
+        return;
+      }
+
+      if (tryResolveAnchor()) {
+        void scrollToAnchorStable().then(resolve);
+        return;
+      }
+
+      attempts += 1;
+      if (
+        attempts >= SCROLL_STABLE_MAX_ATTEMPTS ||
+        performance.now() >= deadline
+      ) {
+        resolve();
+        return;
+      }
+
+      requestAnimationFrame(run);
+    };
+
+    requestAnimationFrame(run);
+  });
 }
 
 function scrollToBottom(smooth = false): void {
@@ -592,6 +818,8 @@ function scheduleScrollToBottom(): void {
 function handleScrollDownClick(): void {
   userDetached.value = false;
   isPinned.value = true;
+  scrollMode.value = 'sticky';
+  spacerHeight.value = 0;
   void scrollToBottomStable(true);
 }
 
@@ -609,10 +837,8 @@ function handleSubmit(): void {
   draft.value = '';
   clearAttachments();
   indexAttachmentsInMemory.value = false;
-  // L'utilisateur vient d'envoyer : on force le rappel en bas.
-  userDetached.value = false;
-  isPinned.value = true;
-  void scrollToBottomStable();
+  // L'ancrage Gemini démarre quand `streaming` passe à true (messages déjà
+  // poussés). Évite d'ancrer si send échoue avant le push (cloud/init/modèle).
 }
 
 async function indexReadyAttachments(ready: ChatAttachment[]): Promise<void> {
@@ -678,6 +904,9 @@ function onDrop(event: DragEvent): void {
 watch(
   () => arrivedState.bottom,
   (bottom) => {
+    if (scrollMode.value === 'anchor' && !userDetached.value) {
+      return;
+    }
     if (userDetached.value) {
       if (bottom) {
         userDetached.value = false;
@@ -694,9 +923,31 @@ watch(
   () => props.messages.length,
   () => {
     bindScrollTarget();
-    if (isPinned.value) {
-      void scrollToBottomStable();
+    if (scrollMode.value === 'anchor') {
+      if (anchorUserIndex.value < 0) {
+        const idx = props.messages.map((m) => m.role).lastIndexOf('user');
+        if (idx >= 0) {
+          anchorUserIndex.value = idx;
+          const target = messageListRef.value?.getScrollTarget();
+          if (target && target.clientHeight > 0) {
+            spacerHeight.value = computeSpacerHeight(target.clientHeight);
+          }
+          void scrollToAnchorStable();
+        }
+      } else {
+        void scrollToAnchorStable();
+      }
+      return;
     }
+
+    if (!isPinned.value) return;
+
+    // Nouveau tour (assistant streaming) : le watch `streaming` va entrer en
+    // mode ancre. Ne pas scroller en bas juste avant, ça provoque un saut.
+    const last = props.messages[props.messages.length - 1];
+    if (last?.role === 'assistant' && last.streaming) return;
+
+    void scrollToBottomStable();
   },
 );
 
@@ -705,8 +956,25 @@ watch(
   () => {
     userDetached.value = false;
     isPinned.value = true;
+    scrollMode.value = 'sticky';
+    spacerHeight.value = 0;
+    anchorUserIndex.value = -1;
     bindScrollTarget();
     void scrollToBottomStable();
+  },
+);
+
+// Réponse courte : on conserve le spacer (comportement Gemini, évite un saut).
+// Réponse longue : déjà passée en sticky via maybePromoteToSticky pendant le stream.
+// Le spacer est retiré au prochain send / FAB / changement de session.
+
+watch(
+  () => props.streaming,
+  (streaming, wasStreaming) => {
+    if (streaming && !wasStreaming) {
+      // Messages user+assistant déjà poussés avant ce flag (useChatStream).
+      void enterAnchorMode();
+    }
   },
 );
 
@@ -717,11 +985,16 @@ watch(
     return [last.content, last.thinking, last.parts?.length, last._contentRev] as const;
   },
   () => {
-    if (isPinned.value) scheduleScrollToBottom();
+    if (scrollMode.value === 'anchor' && !userDetached.value) {
+      maybePromoteToSticky();
+    } else if (isPinned.value) {
+      scheduleScrollToBottom();
+    }
   },
 );
 
 onMounted(() => {
+  void initCloud();
   bindScrollTarget();
   void scrollToBottomStable();
 });
@@ -729,6 +1002,9 @@ onMounted(() => {
 onUnmounted(() => {
   cancelScheduledScroll();
   unbindScrollListeners();
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  observedResizeTarget = null;
   messageListRef.value = null;
   scrollTarget.value = null;
 });
@@ -890,6 +1166,42 @@ onUnmounted(() => {
   margin: 0 auto;
   padding: 0.6rem 1.25rem 0.5rem;
   background: var(--wp-surface);
+}
+
+.chat-view__engine-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-md);
+  background: var(--wp-surface-2);
+}
+
+.chat-view__engine-banner-text {
+  margin: 0;
+  font-size: var(--wp-fs-xs);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-text-muted);
+}
+
+.chat-view__engine-banner-action {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  border: 1px solid var(--wp-accent);
+  border-radius: var(--wp-r-md);
+  background: var(--wp-accent-soft);
+  color: var(--wp-accent-strong, var(--wp-accent));
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--wp-accent);
+    color: var(--wp-canard);
+  }
 }
 
 .chat-view__memory-index {

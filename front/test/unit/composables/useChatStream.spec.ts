@@ -883,6 +883,49 @@ describe('useChatStream — feedbacks', () => {
     unmount();
   });
 
+  it('seed filePath dès tool_call_start pour write_pptx', async () => {
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sseResponse([
+        {
+          event: 'tool_call_start',
+          data: {
+            tool_call_id: 'tc_pptx',
+            tool_name: 'write_pptx',
+            arguments: {
+              path: 'decks/pitch.pptx',
+              slides: [{ layout: 'title', title: 'Hello' }],
+            },
+          },
+        },
+        {
+          event: 'confirmation_request',
+          data: {
+            confirmation_id: 'cf_pptx',
+            tool_call_id: 'tc_pptx',
+            tool_name: 'write_pptx',
+            action: 'create',
+            proposed_path: 'decks/pitch.pptx',
+            human_summary: 'Je vais créer la présentation PowerPoint pitch.pptx',
+            headline: 'Je vais Créer : pitch.pptx',
+          },
+        },
+        { event: 'done', data: { content: '' } },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('fais un pptx');
+
+    const assistant = lastAssistant(api.messages.value);
+    const tool = assistant?.toolCalls?.[0];
+    expect(tool?.name).toBe('write_pptx');
+    expect(tool?.filePath).toBe('decks/pitch.pptx');
+    expect(tool?.status).toBe('awaiting_confirmation');
+    expect(assistant?.pendingConfirmation?.toolName).toBe('write_pptx');
+    expect(assistant?.pendingConfirmation?.proposedPath).toBe('decks/pitch.pptx');
+    unmount();
+  });
+
   it('retry renvoie le dernier message et déduplique la paire user+assistant', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock

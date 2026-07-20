@@ -138,6 +138,10 @@ def test_preview_pptx(tmp_path: Path) -> None:
     assert data["type"] == "pptx"
     assert "Titre" in data["html"]
     assert "Contenu slide" in data["html"]
+    # div (pas section) : DOMPurify profil html conserve les divs pour le panneau front
+    assert 'class="wp-pptx-slide"' in data["html"]
+    assert "<div class=\"wp-pptx-slide\">" in data["html"]
+    assert "<section" not in data["html"]
 
 
 def test_preview_pptx_empty_deck(tmp_path: Path) -> None:
@@ -163,6 +167,26 @@ def test_preview_pptx_empty_deck(tmp_path: Path) -> None:
     assert data["type"] == "pptx"
     assert "Slide 1" in data["html"]
     assert "<p>" not in data["html"]
+
+
+def test_preview_pptx_corrupt_file_is_graceful(tmp_path: Path) -> None:
+    path = tmp_path / "broken.pptx"
+    path.write_bytes(b"not-a-real-pptx")
+
+    with TestClient(mainmod.app) as client:
+        resp = client.get(
+            "/documents/preview",
+            params={
+                "path": "broken.pptx",
+                "workspace_data_dir": str(tmp_path),
+                "project_path": str(tmp_path),
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["type"] == "pptx"
+    assert "Preview unavailable" in data["html"]
 
 
 def test_preview_pptx_truncates_slides(tmp_path: Path) -> None:

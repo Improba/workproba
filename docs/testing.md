@@ -27,7 +27,8 @@ Framework: **pytest** + `pytest-asyncio`. Offline tests are deterministic (no LL
 - `tests/test_plugin_personas.py`, `test_personas_estimate_cost.py`: personas plugin
 - `tests/test_plugin_projet.py`, `test_plugin_projet_http.py`: project plugin
 - `tests/test_plugin_browser.py`, `test_plugin_cloud.py`: browser (experimental) and cloud plugin (Mode A MVP: join, connectors, sync; browser: 38 tests — tools, HTTP, audit, bbox, piloting pause, screenshot limits, history sanitization)
-- `tests/test_documents_preview.py`, `test_preview_change.py`: document preview
+- `tests/test_documents_preview.py`, `test_preview_change.py`: document preview (Office HTML, including PPTX)
+- `tests/test_office_tools.py`: Office writers (`write_docx`, `write_xlsx`, `write_pptx`, `write_pdf`), `MAX_PPTX_SLIDES`, themes/layouts
 - `tests/test_attachments.py`, `test_reprocess_attachment.py`: attachments
 - `tests/test_audit.py`, `test_audit_export.py`: audit log
 - `tests/test_versions.py`: file versions
@@ -104,8 +105,13 @@ yarn test:e2e                  # Playwright (smoke)
 
 ### Notable unit specs
 
-- `ConfirmationCard.spec.ts`: effect-oriented headline, protection labels, approve/deny.
-- `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection, `work_*` correlation (`streamCorrelation`), edit/regenerate, retry after failed regenerate, `loadMessages` retry reset.
+- `ConfirmationCard.spec.ts`: effect-oriented headline, protection labels, approve/deny, `write_pptx` preview button.
+- `PreviewChangeDialog.pptx.spec.ts`, `ToolCallCard.pptx.spec.ts`, `fileWriteTools.spec.ts`: PPTX preview and write tool guards.
+- `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection, `work_*` correlation (`streamCorrelation`), edit/regenerate, retry after failed regenerate, `loadMessages` retry reset, `write_pptx` tool_call_start seeding.
+- `chatScroll.spec.ts`: scroll anchor peek and sticky promote helpers.
+- `EngineOnboardingWizard.spec.ts`: first-run engine and cloud setup flow.
+- `CloudLoginModal.spec.ts`, `EnrollCloudModal.spec.ts`: cloud login and enroll modals.
+- `cloudDesktopAuth.spec.ts`, `cloudWebUrls.spec.ts`: `POST /devices/login` client and cloud web URL helpers.
 - `MessageList.spec.ts`: `aria-live` during streaming, sr-only completion announcement, scroll API.
 - `Message.spec.ts`: role labels, edit/regenerate actions, copy.
 - `MessageTextPart.spec.ts`: markdown sanitization, incremental streaming blocks.

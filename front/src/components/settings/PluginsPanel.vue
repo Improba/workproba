@@ -2,7 +2,7 @@
   <div class="plugins-panel">
     <header class="plugins-panel__header">
       <h2 class="plugins-panel__title">{{ panelTitle }}</h2>
-      <p class="plugins-panel__subtitle">{{ t('settings.plugins.subtitle') }}</p>
+      <p class="plugins-panel__subtitle">{{ panelSubtitle }}</p>
     </header>
 
     <section v-if="loading" class="plugins-panel__empty">
@@ -27,7 +27,7 @@
 
     <ul v-else class="plugins-panel__list" role="list">
       <li
-        v-for="plugin in plugins"
+        v-for="plugin in visiblePlugins"
         :key="plugin.manifest.id"
         class="plugins-panel__card"
         :class="{ 'plugins-panel__card--upcoming': isUpcomingPlugin(plugin) }"
@@ -64,6 +64,22 @@
             :aria-label="toggleAria(plugin)"
             @update:model-value="(v: boolean) => onToggle(plugin, v)"
           />
+          <div v-else-if="isManagedByCapability(plugin)" class="plugins-panel__managed">
+            <span class="plugins-panel__locked">
+              {{ managedByCapabilityLabel(plugin) }}
+            </span>
+            <span class="plugins-panel__locked">
+              {{ plugin.enabledScoped ? t('settings.plugins.statusActive') : t('settings.plugins.statusInactive') }}
+            </span>
+            <button
+              v-if="capabilityForPlugin(plugin)"
+              type="button"
+              class="plugins-panel__open-cap"
+              @click="openPluginInCapabilities(plugin)"
+            >
+              {{ t('settings.plugins.openInCapabilities') }}
+            </button>
+          </div>
           <span v-else-if="settingsLocked" class="plugins-panel__locked">
             {{ plugin.enabledScoped ? t('settings.plugins.statusActive') : t('settings.plugins.statusInactive') }}
           </span>
@@ -116,8 +132,11 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+import { getCapabilityForPlugin } from '@capabilities/capabilityCatalog';
+import type { CapabilityDefinition } from '@capabilities/capabilityCatalog';
 import { useAppSettings } from '@composables/useAppSettings';
 import { pickProjectFolder, isDesktopApp } from '@composables/useDesktop';
+import { useShellSurfaces } from '@composables/useShellSurfaces';
 import {
   isUpcomingPluginId,
   BROWSER_PLUGIN_ID,
@@ -130,6 +149,7 @@ import type { PluginInfo, PluginSource } from '@composables/useDesktop.types';
 
 const { t, te } = useI18n();
 const { settingsMode, settingsLocked } = useAppSettings();
+const { openCapabilities } = useShellSurfaces();
 const {
   plugins,
   loading,
@@ -154,6 +174,47 @@ const panelTitle = computed(() =>
     ? t('settings.plugins.titleAdvanced')
     : t('settings.plugins.title'),
 );
+
+const panelSubtitle = computed(() =>
+  showAdvanced.value
+    ? t('settings.plugins.subtitleAdvanced')
+    : t('settings.plugins.subtitle'),
+);
+
+const visiblePlugins = computed(() => {
+  if (showAdvanced.value) {
+    return plugins.value;
+  }
+  return plugins.value.filter((plugin) => plugin.manifest.id !== CLOUD_PLUGIN_ID);
+});
+
+function capabilityForPlugin(plugin: PluginInfo): CapabilityDefinition | undefined {
+  return getCapabilityForPlugin(plugin.manifest.id);
+}
+
+function capabilityTitle(plugin: PluginInfo): string {
+  const capability = capabilityForPlugin(plugin);
+  if (!capability) return pluginLabel(plugin);
+  return te(capability.titleKey) ? t(capability.titleKey) : capability.titleKey;
+}
+
+function managedByCapabilityLabel(plugin: PluginInfo): string {
+  return t('settings.plugins.managedByCapability', {
+    name: capabilityTitle(plugin),
+  });
+}
+
+function isManagedByCapability(plugin: PluginInfo): boolean {
+  if (plugin.source === 'builtin') return true;
+  return showAdvanced.value && plugin.manifest.id === CLOUD_PLUGIN_ID;
+}
+
+function openPluginInCapabilities(plugin: PluginInfo): void {
+  const capability = capabilityForPlugin(plugin);
+  if (capability) {
+    openCapabilities(capability.id);
+  }
+}
 
 function isUpcomingPlugin(plugin: PluginInfo): boolean {
   return isUpcomingPluginId(plugin.manifest.id);
@@ -192,7 +253,9 @@ function sourceLabel(source: PluginSource): string {
 
 function canToggle(plugin: PluginInfo): boolean {
   if (settingsLocked.value) return false;
-  return true;
+  if (isUpcomingPlugin(plugin)) return false;
+  if (plugin.source === 'builtin') return false;
+  return plugin.source === 'local';
 }
 
 function toggleAria(plugin: PluginInfo): string {
@@ -218,27 +281,6 @@ async function onToggle(plugin: PluginInfo, enabled: boolean): Promise<void> {
   try {
     if (enabled) {
       await activatePlugin(plugin.manifest.id);
-      if (plugin.manifest.id === PERSONAS_PLUGIN_ID) {
-        Notify.create({
-          message: t('settings.plugins.personasActivated'),
-          color: 'positive',
-          timeout: 2500,
-        });
-      } else if (plugin.manifest.id === BROWSER_PLUGIN_ID) {
-        Notify.create({
-          message: t('settings.plugins.browserActivated'),
-          caption: t('settings.plugins.browserOnboarding'),
-          color: 'positive',
-          multiLine: true,
-          timeout: 10000,
-        });
-      } else if (plugin.manifest.id === CLOUD_PLUGIN_ID) {
-        Notify.create({
-          message: t('settings.plugins.cloudActivated'),
-          color: 'positive',
-          timeout: 2500,
-        });
-      }
     } else {
       await deactivatePlugin(plugin.manifest.id);
     }
@@ -450,6 +492,29 @@ onMounted(() => {
 .plugins-panel__locked {
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-faint);
+}
+
+.plugins-panel__managed {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.plugins-panel__open-cap {
+  padding: var(--wp-space-1) var(--wp-space-2);
+  border: none;
+  border-radius: var(--wp-r-sm);
+  background: transparent;
+  color: var(--wp-accent);
+  font-size: var(--wp-fs-xs);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+
+  &:hover {
+    color: var(--wp-text);
+  }
 }
 
 .plugins-panel__perms {

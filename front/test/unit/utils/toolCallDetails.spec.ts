@@ -67,6 +67,21 @@ describe('buildToolCallDetails', () => {
     expect(d.location).toContain('assets');
   });
 
+  it('décrit la présentation créée pour write_pptx', () => {
+    const d = buildToolCallDetails(
+      tc({
+        name: 'write_pptx',
+        args: { path: 'decks/pitch.pptx' },
+        filePath: 'decks/pitch.pptx',
+        status: 'success',
+        result: { metadata: { path: 'decks/pitch.pptx', format: 'pptx' } },
+      }),
+    );
+    expect(d.target).toContain('pitch.pptx');
+    expect(d.location).toContain('decks');
+    expect(d.outcome).toBe('Document enregistré');
+  });
+
   it('indique une création annulée après refus de confirmation', () => {
     const d = buildToolCallDetails(
       tc({

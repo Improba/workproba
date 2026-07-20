@@ -76,26 +76,46 @@ describe('ConfirmationCard', () => {
     wrapper.unmount();
   });
 
-  it('affiche le bouton preview quand les conditions sont remplies', () => {
+  it('affiche le bouton preview pour write_pptx et passe les props au dialog', () => {
     const wrapper = mount(ConfirmationCard, {
       props: {
         confirmation: baseConfirmation({
-          toolName: 'write_docx',
-          headline: 'Je vais Créer : note.docx',
+          toolName: 'write_pptx',
+          proposedPath: 'pitch.pptx',
+          headline: 'Je vais Créer : pitch.pptx',
         }),
         workspaceDataDir: '/data',
         projectPath: '/project',
-        toolArgs: { path: 'note.docx', paragraphs: ['Hello'] },
+        toolArgs: {
+          path: 'pitch.pptx',
+          slides: [{ layout: 'title', title: 'Hello' }],
+        },
       },
       global: {
         stubs: {
-          PreviewChangeDialog: true,
+          PreviewChangeDialog: {
+            name: 'PreviewChangeDialog',
+            props: [
+              'open',
+              'workspaceDataDir',
+              'projectPath',
+              'filePath',
+              'toolName',
+              'toolArgs',
+            ],
+            template: '<div data-testid="preview-stub" />',
+          },
           Lucide: true,
         },
       },
     });
 
     expect(wrapper.find('.confirmation-card__btn--preview').exists()).toBe(true);
+    const dialog = wrapper.findComponent({ name: 'PreviewChangeDialog' });
+    expect(dialog.exists()).toBe(true);
+    expect(dialog.props('toolName')).toBe('write_pptx');
+    expect(dialog.props('filePath')).toBe('pitch.pptx');
+    expect(dialog.props('toolArgs')).toMatchObject({ path: 'pitch.pptx' });
     wrapper.unmount();
   });
 });

@@ -1,11 +1,19 @@
 import { mount, flushPromises } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import MessageTextPart, {
   defaultCodeHtml,
   sanitizeMarkdownHtml,
 } from '@components/chat/MessageTextPart.vue';
+import * as markdownRender from '@utils/markdownRender';
 
 describe('MessageTextPart', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(markdownRender, 'preloadHighlighter').mockResolvedValue(undefined);
+    vi.spyOn(markdownRender, 'highlightCodeBlocks').mockResolvedValue(undefined);
+    vi.spyOn(markdownRender, 'bindCopyButtons').mockImplementation(() => undefined);
+  });
+
   it('supprime les liens javascript: du HTML rendu', async () => {
     const wrapper = mount(MessageTextPart, {
       props: {
@@ -64,6 +72,97 @@ describe('MessageTextPart', () => {
 
     const blocks = wrapper.findAll('.chat-message__md-block');
     expect(blocks.length).toBeGreaterThanOrEqual(2);
+    wrapper.unmount();
+  });
+
+  it('rend KaTeX dans les blocs stables pendant le streaming', async () => {
+    const fullSpy = vi.spyOn(markdownRender, 'renderMarkdownFull');
+    const plainSpy = vi.spyOn(markdownRender, 'renderMarkdownPlain');
+
+    const wrapper = mount(MessageTextPart, {
+      props: {
+        content: '$$x = 1$$\n\nSuite',
+        streaming: true,
+      },
+    });
+    await flushPromises();
+
+    expect(fullSpy).toHaveBeenCalled();
+    const stableBlock = wrapper.find('[data-block-key="0"]');
+    expect(stableBlock.exists()).toBe(true);
+    expect(stableBlock.html()).toContain('katex');
+
+    const tail = wrapper.find('.chat-message__md-block--tail');
+    expect(tail.exists()).toBe(true);
+    expect(plainSpy).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('enrichit les blocs stables avec highlight après rendu', async () => {
+    const highlightSpy = vi.spyOn(markdownRender, 'highlightCodeBlocks');
+    const content = '```js\nconst x = 1\n```\n\nSuite';
+
+    const wrapper = mount(MessageTextPart, {
+      props: {
+        content,
+        streaming: true,
+      },
+    });
+    await flushPromises();
+
+    const stableBlocks = wrapper.findAll('[data-block-key]');
+    expect(stableBlocks.length).toBe(1);
+    expect(highlightSpy).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('utilise le rendu plain pour la queue ouverte', async () => {
+    const plainSpy = vi.spyOn(markdownRender, 'renderMarkdownPlain');
+    const content = '$$x = 1$$\n\n```js\nconst x = 1\n';
+
+    const wrapper = mount(MessageTextPart, {
+      props: {
+        content,
+        streaming: true,
+      },
+    });
+    await flushPromises();
+
+    const tail = wrapper.find('.chat-message__md-block--tail');
+    expect(tail.exists()).toBe(true);
+    expect(tail.html()).not.toContain('katex');
+
+    const tailCalls = plainSpy.mock.calls.map(([source]) => source);
+    expect(tailCalls.some((source) => source.includes('```js'))).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('conserve les blocs stables à la fin du streaming sans basculer sur finalHtml', async () => {
+    const content = 'Premier\n\nDeuxième';
+
+    const wrapper = mount(MessageTextPart, {
+      props: {
+        content,
+        streaming: true,
+      },
+    });
+    await flushPromises();
+
+    expect(wrapper.findAll('[data-block-key]').length).toBeGreaterThanOrEqual(1);
+
+    await wrapper.setProps({ streaming: false });
+    await flushPromises();
+
+    const stableBlocks = wrapper.findAll('[data-block-key]');
+    expect(stableBlocks.length).toBeGreaterThanOrEqual(2);
+    expect(wrapper.find('.chat-message__md-block--tail').exists()).toBe(false);
+
+    const markdownRoot = wrapper.find('.chat-message__markdown');
+    const directChildren = markdownRoot.element.children;
+    expect(directChildren.length).toBeGreaterThanOrEqual(2);
+    for (const child of directChildren) {
+      expect(child.classList.contains('chat-message__md-block')).toBe(true);
+    }
     wrapper.unmount();
   });
 });

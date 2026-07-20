@@ -1,12 +1,14 @@
 <template>
   <div class="plugins-settings">
-    <SettingsSubnav active="plugins" />
+    <div class="plugins-settings__inner">
+      <SettingsSubnav active="plugins" />
 
-    <header class="plugins-settings__header">
-      <h1 class="plugins-settings__title">{{ pageTitle }}</h1>
-    </header>
+      <header class="plugins-settings__header">
+        <h1 class="plugins-settings__title">{{ pageTitle }}</h1>
+      </header>
 
-    <PluginsPanel />
+      <PluginsPanel />
+    </div>
   </div>
 </template>
 
@@ -29,18 +31,24 @@ const pageTitle = computed(() =>
 
 <style scoped lang="scss">
 .plugins-settings {
-  display: flex;
-  flex-direction: column;
   height: 100%;
   min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--wp-bg);
+  font-family: var(--wp-font-ui);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.plugins-settings__inner {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 880px;
   margin: 0 auto;
   padding: 1rem 24px 1.25rem;
   box-sizing: border-box;
-  background: var(--wp-bg);
-  font-family: var(--wp-font-ui);
-  overflow-y: auto;
 }
 
 .plugins-settings__header {

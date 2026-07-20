@@ -1,32 +1,34 @@
 <template>
   <div class="models-settings" :class="{ 'models-settings--locked': settingsLocked }">
-    <SettingsSubnav active="models" />
+    <div class="models-settings__inner">
+      <SettingsSubnav active="models" />
 
-    <header class="models-settings__header">
-      <div>
-        <h1 class="models-settings__title">{{ pageTitle }}</h1>
-        <p class="models-settings__subtitle">
-          {{ pageSubtitle }}
-        </p>
-      </div>
-    </header>
+      <header class="models-settings__header">
+        <div>
+          <h1 class="models-settings__title">{{ pageTitle }}</h1>
+          <p class="models-settings__subtitle">
+            {{ pageSubtitle }}
+          </p>
+        </div>
+      </header>
 
-    <section v-if="loading" class="models-settings__empty">{{ t('common.loading') }}</section>
+      <section v-if="loading" class="models-settings__empty">{{ t('common.loading') }}</section>
 
-    <template v-else>
-      <LanguageControl />
-      <DensityControl />
+      <template v-else>
+        <LanguageControl />
+        <DensityControl />
 
-      <LockedModelSetup v-if="settingsLocked" />
+        <LockedModelSetup v-if="settingsLocked" />
 
-      <fieldset v-else class="models-settings__body">
-        <AdvancedModelSetup
-          v-if="settingsMode === 'advanced'"
-          @switch-to-guided="onSwitchToGuided"
-        />
-        <GuidedModelSetup v-else @switch-to-advanced="onSwitchToAdvanced" />
-      </fieldset>
-    </template>
+        <fieldset v-else class="models-settings__body">
+          <AdvancedModelSetup
+            v-if="settingsMode === 'advanced'"
+            @switch-to-guided="onSwitchToGuided"
+          />
+          <GuidedModelSetup v-else @switch-to-advanced="onSwitchToAdvanced" />
+        </fieldset>
+      </template>
+    </div>
   </div>
 </template>
 
@@ -98,18 +100,24 @@ onMounted(async () => {
 
 <style scoped lang="scss">
 .models-settings {
-  display: flex;
-  flex-direction: column;
   height: 100%;
   min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--wp-bg);
+  font-family: var(--wp-font-ui);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.models-settings__inner {
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 880px;
   margin: 0 auto;
   padding: 1rem 24px 1.25rem;
   box-sizing: border-box;
-  background: var(--wp-bg);
-  font-family: var(--wp-font-ui);
-  overflow-y: auto;
 }
 
 .models-settings__header {

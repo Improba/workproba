@@ -21,9 +21,12 @@ vi.mock('@composables/useSpace', () => ({
 
 vi.mock('@composables/useAppSettings', () => ({
   useAppSettings: () => ({
-    onboardingDone: ref(true),
+    onboardingDone: ref(false),
     loaded: ref(true),
     setOnboardingDone: vi.fn(),
+    settingsLocked: ref(false),
+    activeChatRouting: ref(null),
+    effectiveActiveSet: ref(null),
   }),
 }));
 
@@ -68,6 +71,7 @@ describe('pages smoke tests', () => {
         stubs: {
           OpenSpaceButton: { template: '<button class="open-space" />' },
           ChatView: true,
+          EngineOnboardingWizard: { template: '<div class="engine-wizard-stub" />' },
           Lucide: true,
           'q-dialog': { template: '<div><slot /></div>' },
         },
@@ -78,6 +82,7 @@ describe('pages smoke tests', () => {
 
     expect(wrapper.text()).toContain('Bienvenue sur Workproba');
     expect(wrapper.find('.open-space').exists()).toBe(true);
+    expect(wrapper.find('.engine-wizard-stub').exists()).toBe(true);
   });
 
   it('ErrorNotFound affiche le contenu 404', () => {

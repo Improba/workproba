@@ -32,6 +32,12 @@ import {
   toChatLlmConfigFromSet,
   toEmbeddingLlmConfigFromSet,
 } from '@utils/providerSets';
+import { useCloud } from '@composables/useCloud';
+import {
+  getSetActivationReadiness,
+  type ProviderSetActivationContext,
+} from '@utils/providerSetValidation';
+import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
 
 /** Payload de config LLM attendu par le sidecar (snake_case, cf. app/schemas.py). */
 export interface LlmConfigPayload {
@@ -82,10 +88,7 @@ function ensureSetsLoaded(value: AppSettings): AppSettings {
     return {
       ...value,
       sets: normalizedSets,
-      activeSetId:
-        value.activeSetId ??
-        normalizedSets.find((s) => s.isDefault)?.id ??
-        normalizedSets[0]?.id,
+      activeSetId: value.activeSetId ?? null,
     };
   }
   const migrated = migrateLegacyProvidersToSets(
@@ -105,6 +108,18 @@ const sets = computed(() => resolveSets(settings.value.sets));
 
 const activeSet = computed<ProviderSet | null>(() =>
   resolveActiveSet(sets.value, settings.value.activeSetId),
+);
+
+const effectiveActiveSet = computed<ProviderSet | null>(() => {
+  const set = activeSet.value;
+  if (!set) return null;
+  const { providerReadiness } = useCloud();
+  const readiness = getSetActivationReadiness(set, { cloud: providerReadiness.value });
+  return readiness.ok ? set : null;
+});
+
+const effectiveActiveSetId = computed<string | null>(
+  () => effectiveActiveSet.value?.id ?? null,
 );
 
 const activeChatProvider = computed<LlmProviderEntry | null>(() => {
@@ -186,7 +201,7 @@ const localeLocked = computed<boolean>(
 );
 
 const isLocalChatProvider = computed(() => {
-  const set = activeSet.value;
+  const set = effectiveActiveSet.value;
   if (set) return isLocalLlmProvider({ provider: set.chat.provider } as LlmProviderEntry);
   return isLocalLlmProvider(activeChatProvider.value);
 });
@@ -210,9 +225,9 @@ function reasoningFromSetChat(
   return clampReasoningEffortForSet(set, model, reasoning);
 }
 
-/** Provider/modèle chat effectifs (set actif ou legacy). */
+/** Provider/modèle chat effectifs (set prêt ou legacy). */
 const activeChatRouting = computed<ActiveChatRouting | null>(() => {
-  const set = activeSet.value;
+  const set = effectiveActiveSet.value;
   if (set) {
     const chat = set.chat;
     return {
@@ -278,7 +293,7 @@ export function buildActiveProviderSet(
   sessionModel?: string | null,
   sessionReasoning?: ReasoningEffort | null,
 ): ProviderSet | null {
-  const base = activeSet.value;
+  const base = effectiveActiveSet.value;
   if (!base) return null;
   return applySessionOverridesToSet(base, sessionModel, sessionReasoning);
 }
@@ -288,7 +303,7 @@ export function buildActiveLlmConfigs(): {
   chat: LlmConfigPayload | null;
   embedding: LlmConfigPayload | null;
 } {
-  const set = activeSet.value;
+  const set = effectiveActiveSet.value;
   if (set) {
     return {
       chat: toChatLlmConfigFromSet(set),
@@ -367,6 +382,8 @@ export interface UseAppSettingsReturn {
   providers: typeof providers;
   sets: typeof sets;
   activeSet: typeof activeSet;
+  effectiveActiveSet: typeof effectiveActiveSet;
+  effectiveActiveSetId: typeof effectiveActiveSetId;
   activeChatRouting: typeof activeChatRouting;
   activeChatProvider: typeof activeChatProvider;
   activeEmbeddingProvider: typeof activeEmbeddingProvider;
@@ -389,7 +406,7 @@ export interface UseAppSettingsReturn {
   isLocalChatProvider: typeof isLocalChatProvider;
   load: () => Promise<AppSettings>;
   save: (next: AppSettings) => Promise<AppSettings>;
-  setActiveSet: (id: string) => Promise<AppSettings>;
+  setActiveSet: (id: string, ctx?: ProviderSetActivationContext) => Promise<AppSettings>;
   createSet: (set: ProviderSet) => Promise<AppSettings>;
   updateSet: (set: ProviderSet) => Promise<AppSettings>;
   deleteSet: (id: string) => Promise<AppSettings>;
@@ -459,10 +476,18 @@ export function useAppSettings(): UseAppSettingsReturn {
     }
   }
 
-  async function setActiveSet(id: string): Promise<AppSettings> {
+  async function setActiveSet(
+    id: string,
+    ctx?: ProviderSetActivationContext,
+  ): Promise<AppSettings> {
     const currentSets = resolveSets(settings.value.sets);
-    if (!currentSets.some((s) => s.id === id)) {
+    const target = currentSets.find((s) => s.id === id);
+    if (!target) {
       throw new Error(t('settings.advancedSetNotFound'));
+    }
+    const activation = getSetActivationReadiness(target, ctx);
+    if (!activation.ok) {
+      throw new ProviderSetNotReadyError(activation.reason, false);
     }
     return save({ ...settings.value, activeSetId: id });
   }
@@ -493,7 +518,12 @@ export function useAppSettings(): UseAppSettingsReturn {
     const nextSets = currentSets.filter((s) => s.id !== id);
     let activeSetId = settings.value.activeSetId ?? null;
     if (activeSetId === id) {
-      activeSetId = nextSets.find((s) => s.isDefault)?.id ?? nextSets[0]?.id ?? null;
+      const { providerReadiness } = useCloud();
+      const ctx = { cloud: providerReadiness.value };
+      const readyFallback = nextSets.find(
+        (set) => getSetActivationReadiness(set, ctx).ok,
+      );
+      activeSetId = readyFallback?.id ?? null;
     }
     return save({ ...settings.value, sets: nextSets, activeSetId });
   }
@@ -561,6 +591,8 @@ export function useAppSettings(): UseAppSettingsReturn {
     providers,
     sets,
     activeSet,
+    effectiveActiveSet,
+    effectiveActiveSetId,
     activeChatRouting,
     activeChatProvider,
     activeEmbeddingProvider,

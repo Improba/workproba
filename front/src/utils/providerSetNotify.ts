@@ -12,6 +12,8 @@ function readinessMessage(reason: ProviderSetReadinessIssue): string {
   switch (reason) {
     case 'missing_api_key':
       return t('errors.apiKeyMissing');
+    case 'missing_base_url':
+      return t('errors.baseUrlMissing');
     case 'cloud_not_enrolled':
       return t('errors.cloudNotEnrolled');
     case 'not_subscribed':

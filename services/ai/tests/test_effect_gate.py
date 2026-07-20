@@ -105,6 +105,7 @@ def _ctx(deps: ToolDeps, tool_call_id: str = "tc1") -> RunContext[ToolDeps]:
     [
         ("write_docx", {"path": "a.docx"}, "create"),
         ("write_xlsx", {"path": "a.xlsx"}, "create"),
+        ("write_pptx", {"path": "a.pptx"}, "create"),
         ("write_pdf", {"path": "a.pdf"}, "create"),
         ("generate_document", {"name": "note.md"}, "create"),
         (
@@ -614,7 +615,10 @@ async def test_search_kb_does_not_call_request_effect(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("tool_name", ["write_docx", "write_xlsx", "write_pdf", "generate_document"])
+@pytest.mark.parametrize(
+    "tool_name",
+    ["write_docx", "write_xlsx", "write_pptx", "write_pdf", "generate_document"],
+)
 async def test_write_tools_call_request_effect(
     tmp_path: Path,
     tool_name: str,
@@ -629,6 +633,12 @@ async def test_write_tools_call_request_effect(
         await tool.function(ctx, path="out.docx", title="T", paragraphs=["Hi"])
     elif tool_name == "write_xlsx":
         await tool.function(ctx, path="out.xlsx", sheets=[{"name": "S", "rows": [["a"]]}])
+    elif tool_name == "write_pptx":
+        await tool.function(
+            ctx,
+            path="out.pptx",
+            slides=[{"layout": "title", "title": "T"}],
+        )
     elif tool_name == "write_pdf":
         await tool.function(ctx, path="out.pdf", title="T", sections=[{"body": "Hi"}])
     else:

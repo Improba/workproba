@@ -212,11 +212,9 @@ export function resolveActiveSet(
   sets: ProviderSet[],
   activeSetId: string | null | undefined,
 ): ProviderSet | null {
-  if (!sets.length) return null;
-  const match = activeSetId ? sets.find((s) => s.id === activeSetId) : null;
-  if (match) return cloneProviderSet(match);
-  const defaultSet = sets.find((s) => s.isDefault) ?? sets[0];
-  return defaultSet ? cloneProviderSet(defaultSet) : null;
+  if (!sets.length || activeSetId == null) return null;
+  const match = sets.find((s) => s.id === activeSetId);
+  return match ? cloneProviderSet(match) : null;
 }
 
 function chatReasoningToEffort(

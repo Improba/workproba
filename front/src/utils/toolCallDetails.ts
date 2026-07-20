@@ -192,7 +192,11 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
       }
       break;
     }
-    case 'generate_document': {
+    case 'generate_document':
+    case 'write_docx':
+    case 'write_xlsx':
+    case 'write_pptx':
+    case 'write_pdf': {
       const name = formatFilePath(
         asString(args.name) || asString(args.path) || toolCall.filePath || '',
       );
@@ -201,6 +205,8 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
         : t('toolCalls.createDocumentGeneric');
       if (toolCall.filePath) {
         location = t('toolCalls.inFolder', { path: dirname(toolCall.filePath) });
+      } else if (name) {
+        location = t('toolCalls.inFolder', { path: dirname(name) });
       }
       if (result && typeof result === 'object') {
         const r = result as Record<string, unknown>;
@@ -219,7 +225,7 @@ export function buildToolCallDetails(toolCall: ChatToolCall): ToolCallDetails {
 
   if (
     !outcome &&
-    ['write_docx', 'write_xlsx', 'write_pdf', 'publish_artifact'].includes(toolCall.name) &&
+    ['write_docx', 'write_xlsx', 'write_pptx', 'write_pdf', 'publish_artifact'].includes(toolCall.name) &&
     isWriteApprovalCancelled(result, toolCall.status)
   ) {
     outcome = t('toolCalls.creationCancelled');

@@ -1,6 +1,6 @@
 # Workproba architecture
 
-> **Last updated:** 18/07/2026 (V2.2 PR 1–3 + Improba Cloud LLM)
+> **Last updated:** 20/07/2026 (V2.2 PR 1–3 + Improba Cloud LLM + PPTX + desktop cloud auth UX)
 
 ## Overview
 
@@ -22,7 +22,8 @@ Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./wor
 | LLM | OpenAIChatModel (OpenAI-compat) + AnthropicModel | Local Ollama, Mistral cloud, vLLM, OpenAI, Anthropic |
 | RAG embeddings | LiteLLM (`aembedding`) | Ollama, Mistral, OpenAI… |
 | RAG | SQLite + sqlite-vec (`memory.db`) | Embeddings + vector search per project; explicit user/project memories |
-| Extraction | pdfplumber, python-docx, openpyxl, python-pptx | Digital PDF/Office (OCR out of initial scope) |
+| Extraction | pdfplumber, python-docx, openpyxl, python-pptx | Digital PDF/Office read (OCR out of initial scope) |
+| Office writers | python-docx, openpyxl, python-pptx, reportlab | Native generation via `write_docx` / `write_xlsx` / `write_pptx` / `write_pdf` |
 
 ## Diagram
 
@@ -57,7 +58,7 @@ Before executing a sensitive tool, the agent classifies the intended **effect** 
 
 | Effect type | Typical tools | User-facing example |
 |---|---|---|
-| `create` / `modify` | `write_docx`, `write_pdf`, `generate_document` | "I will modify: Rapport.docx" |
+| `create` / `modify` | `write_docx`, `write_xlsx`, `write_pptx`, `write_pdf`, `generate_document` | "I will modify: Rapport.docx" |
 | `publish` | `publish_artifact` | "I will publish: memo.pdf in Project X" |
 | `network_access` | `web_search`, `browser_*` | "I will access the network: …" |
 | `code_execute` | `run_code` | "I will execute code" |
@@ -93,9 +94,9 @@ Implementation: `app/agent/work_events.py`. Labels are localized (`work.capabili
 The main layout (`WorkprobaLayout.vue`) organizes the screen:
 
 ```
-WorkprobaTitleBar          ← Capabilities hub button, engine chip, panel toggles
+WorkprobaTitleBar          ← WorkprobaBrand, Capabilities hub, engine chip, panel toggles
 ├── WorkspaceSidebar (left, responsive rail mode)
-├── central zone (router-view: chat, settings, onboarding, crossed-regards view)
+├── central zone (router-view: Home/EngineOnboardingWizard, chat, settings, crossed-regards view)
 ├── RightPanel (right, Ctrl+B): Files · Preview · active capability tabs only
 ├── SideChatPanel (Ctrl+Shift+L): Regards métier opinion/discussion
 └── CapabilitiesDrawer (non-modal, Escape to close): discover / activate capabilities
@@ -109,12 +110,25 @@ WorkprobaTitleBar          ← Capabilities hub button, engine chip, panel toggl
 
 **Capabilities** (`useCapabilities.ts`, `useShellSurfaces.ts`): product catalog maps capabilities to plugin activation (Tauri) and shell navigation (right panel tab, side chat). `activateAndOpen()` activates plugins then opens the documented home surface.
 
+## Office writers
+
+Fixed agent tools generate native Office and PDF files in the project folder (Human Approval Gate before write). Tools are registered in `services/ai/app/agent/tools.py`.
+
+| Tool | Implementation | Role |
+|---|---|---|
+| `write_docx` | `app/documents/writer.py` | Word documents |
+| `write_xlsx` | `app/documents/writer.py` | Excel workbooks |
+| `write_pdf` | `app/documents/writer.py` | PDF reports |
+| `write_pptx` | `app/documents/pptx_builder.py` | PowerPoint 16:9 decks |
+
+**PPTX** (`pptx_builder.py`): native 16:9 generation via `python-pptx`. Layouts: `title`, `section`, `bullets`, `two_column`, `kpi_row`, `quote`, `closing`. Themes: `improba` (default), `light`, `dark`. Hard cap: `MAX_PPTX_SLIDES = 60`.
+
 ## Attachments and document preview
 
 - **Attachments**: stored in `{workspace_data_dir}/attachments/{session_id}/{attachment_id}/`. Reprocess OCR/vision via `POST /agent/reprocess-attachment`.
-- **HTML/text preview**: sidecar `GET /documents/preview` (content rendered in the webview).
+- **HTML preview**: sidecar `GET /documents/preview` renders Office files (including `.pptx`) and text/markdown as HTML in the webview.
 - **Image preview**: Tauri `convertFileSrc` with `protocol-asset` feature (`tauri.conf.json` → `assetProtocol`).
-- **Diff before write**: `POST /documents/preview-change`.
+- **Preview before write**: `POST /documents/preview-change` builds proposed bytes via Office writers (`write_docx`, `write_xlsx`, `write_pdf`, `write_pptx`), not text-only diffs. The front shows an HTML preview before approval. No pixel-perfect binary diff (T-V2-14 partially addressed: HTML preview for Office; binary diff still out of scope).
 
 ## Plugins and capabilities
 
@@ -123,6 +137,24 @@ Four builtin plugins; guided UX presents them as **activatable capabilities** (R
 **File versions** (T-V2-15): snapshots live under `{space}/versions/`; the sidecar exposes `GET /versions`, `POST /versions/restore`, and optional `POST /versions/purge` (keep last N, default 20, and/or drop entries older than X days). The right-panel **Versions** tab offers restore and manual cleanup.
 
 **Remote plugins** (T-V3-CP-3 scaffold): typed **`RemoteCapabilityGateway`** in the sidecar (`capability:remote`) delegates identity to remote capabilities with payload minimization, timeouts, and audit; local stub rejects unless explicitly allowed.
+
+## Improba Cloud desktop auth UX
+
+First-run and cloud setup surfaces (also reachable from Settings → AI Models):
+
+| Component | Role |
+|---|---|
+| `EngineOnboardingWizard.vue` | First-run flow: engine choice → cloud login / register (opens cloud web) / Mistral API key / manual OpenAI-compat / cloud follow-up |
+| `CloudLoginModal.vue` + `cloudDesktopAuth.ts` | Username/password → `POST {control_plane}/devices/login` → User JWT |
+| `EnrollCloudModal.vue` / `EnrollCloudJoinForm.vue` | `join_token` → DeviceBearer (also CloudPanel, model settings) |
+| `ManualOpenAiCompatForm.vue` | Base URL + API key + model for OpenAI-compatible providers |
+| `cloudWebUrls.ts` | `VITE_CLOUD_WEB_URL` (default `http://localhost:8482`); helpers `cloudAuthLoginUrl`, `cloudAuthRegisterUrl`; TODO deep-link `workproba://enroll` |
+
+**Login vs enroll:** `POST /devices/login` returns a **User JWT** (account auth for register/login flows). `POST /devices/join` with a `join_token` returns a **DeviceBearer** (`wp_dev_*`) used by the `workproba-cloud` provider set and managed connectors.
+
+## Branding
+
+`WorkprobaBrand.vue` and assets under `front/src/assets/brand/` (mark, logo light/dark) replace the former Quasar logo in the shell title bar and onboarding.
 
 ## Active modules
 
@@ -230,6 +262,9 @@ settings.
   stays at the bottom; wheel/touch-up detaches until they return or tap the
   scroll-down FAB. `scrollToBottomStable()` retries until `scrollHeight`
   stabilizes (virtual scroller layout).
+- **Scroll helpers** (`front/src/composables/chatScroll.ts`): anchor peek and
+  sticky promote utilities shared by `ChatView` and `MessageList` for stable
+  scroll targeting inside nested `q-scroll-area` + `DynamicScroller`.
 - **Expansion state** (`useToolCallExpansion.ts`): tool-call and reasoning
   card expand/collapse survives `DynamicScroller` item recycling via module-level
   maps + `expansionEpoch` in scroller `size-dependencies`.
@@ -278,20 +313,36 @@ are not replayed on resend).
   `aria-expanded`, `aria-label`, and `role="alert"` where appropriate.
 - Streaming cursor respects `prefers-reduced-motion`.
 
-### Key front files (chat)
+### Key front files (chat, brand, onboarding)
 
 ```
 front/src/
+├── assets/brand/                  # mark + logo (light/dark SVG)
 ├── components/chat/
-│   ├── ChatView.vue          # composer, scroll pinning, drag-drop
-│   ├── MessageList.vue       # virtual scroller, a11y live region
-│   ├── Message.vue           # interleaved parts, edit/regenerate actions
-│   ├── MessageTextPart.vue   # markdown (incremental + final)
-│   ├── ThinkingCard.vue      # reasoning block
-│   ├── ToolCallCard.vue      # tool call human/tech views
-│   ├── ConfirmationCard.vue  # human approval gate UI
-│   └── PlanCard.vue          # multi-step plan approval
-├── composables/useChatStream.ts   # SSE, send, edit, regenerate, retry
-└── utils/markdownRender.ts        # shared markdown pipeline
-    markdownStreaming.ts           # block split for streaming
+│   ├── ChatView.vue               # composer, scroll pinning, drag-drop
+│   ├── MessageList.vue            # virtual scroller, a11y live region
+│   ├── Message.vue                # interleaved parts, edit/regenerate actions
+│   ├── MessageTextPart.vue        # markdown (incremental + final)
+│   ├── ThinkingCard.vue           # reasoning block
+│   ├── ToolCallCard.vue           # tool call human/tech views
+│   ├── ConfirmationCard.vue       # human approval gate UI
+│   └── PlanCard.vue               # multi-step plan approval
+├── components/onboarding/
+│   └── EngineOnboardingWizard.vue # first-run engine + cloud setup
+├── components/cloud/
+│   ├── CloudLoginModal.vue        # username/password → User JWT
+│   └── EnrollCloudModal.vue       # join_token → DeviceBearer
+├── components/workproba/
+│   └── WorkprobaBrand.vue         # shell brand mark/logo
+├── composables/
+│   ├── useChatStream.ts           # SSE, send, edit, regenerate, retry
+│   └── chatScroll.ts              # scroll anchor / sticky helpers
+├── services/cloudDesktopAuth.ts   # POST /devices/login client
+└── utils/
+    ├── cloudWebUrls.ts            # VITE_CLOUD_WEB_URL helpers
+    ├── markdownRender.ts          # shared markdown pipeline
+    └── markdownStreaming.ts       # block split for streaming
+
+services/ai/app/documents/
+└── pptx_builder.py                # native PPTX generation (write_pptx)
 ```

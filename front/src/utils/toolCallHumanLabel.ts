@@ -15,6 +15,8 @@ export function fallbackHumanLabel(
       return t('toolCalls.writeDocx');
     case 'write_xlsx':
       return t('toolCalls.writeXlsx');
+    case 'write_pptx':
+      return t('toolCalls.writePptx');
     case 'write_pdf':
       return t('toolCalls.writePdf');
     case 'publish_artifact':

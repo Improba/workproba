@@ -1,6 +1,6 @@
 # Capacités activables
 
-> **Last updated:** 18/07/2026  
+> **Last updated:** 20/07/2026  
 > **Audience:** end users (mode guidé)
 
 ## What are capabilities?
@@ -14,7 +14,9 @@ You do not need to know about technical plugins or extensions to use them in gui
 | **Business perspectives** (Regards métier) | Expert-style opinions, discussions, cross-perspectives (same LLM engine as chat) | Side panel and central area |
 | **Projects and deliverables** | Publish documents from your space into a local project library | Right panel, Project tab |
 | **Web navigation** | Browse pages from Workproba with guided agent help | Right panel, Browser tab |
-| **Improba Cloud** | Join org (`join_token`), managed connectors (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), shared projects, enterprise regards, **org LLM** (DeviceBearer, no personal API key) | CloudPanel under Projects |
+| **Improba Cloud** | Join org (`join_token`), managed connectors (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), shared projects, enterprise regards, **org LLM** (DeviceBearer, no personal API key) | CloudPanel under Projects; enroll via `EnrollCloudModal` or first-run `EngineOnboardingWizard` |
+
+**Cloud setup:** account login (`POST /devices/login`, User JWT) is separate from device enroll (`POST /devices/join`, DeviceBearer). Both are available from the onboarding wizard and Settings → AI Models.
 | **Mount sync** (advanced) | Technical NAS bridge via `ProjectSyncPort` ; deprecated product path, **blocked when enrolled** | Under Projects (advanced mode only) |
 
 ## Projects and sources of truth

@@ -5,9 +5,12 @@
     <div class="guided-setup__cards" role="radiogroup" :aria-label="t('settings.engine.chooseEngine')">
       <article
         v-for="card in guidedCards"
-        :key="card.set.id"
+        :key="card.id"
         class="guided-card"
-        :class="{ 'guided-card--selected': activeSetId === card.set.id }"
+        :class="{
+          'guided-card--selected': isCardActive(card),
+          'guided-card--muted': card.muted,
+        }"
       >
         <div class="guided-card__head">
           <span
@@ -27,17 +30,15 @@
         <button
           type="button"
           class="guided-card__use"
-          :class="{ 'guided-card__use--active': activeSetId === card.set.id }"
-          @click="onUseEngine(card.set.id)"
+          :class="{ 'guided-card__use--active': isCardActive(card) }"
+          @click="onUseEngine(card)"
         >
-          {{
-            activeSetId === card.set.id
-              ? t('settings.engine.activeEngine')
-              : t('settings.engine.useThisEngine')
-          }}
+          {{ cardCtaLabel(card) }}
         </button>
       </article>
     </div>
+
+    <EnrollCloudModal v-model="enrollModalOpen" @enrolled="onCloudEnrolled" />
 
     <p v-if="cloudQuotaHint" class="guided-setup__cloud-hint">
       {{ cloudQuotaHint }}
@@ -50,8 +51,9 @@
       {{ cloudReadinessHint }}
     </p>
 
-    <div v-if="selectedBuiltinId === 'mistral-default'" class="guided-setup__fields">
+    <div v-if="showMistralFields" class="guided-setup__fields">
       <q-input
+        ref="accessKeyInputRef"
         v-model="accessKey"
         :label="t('settings.engine.accessKey')"
         outlined
@@ -111,6 +113,11 @@
       </div>
     </div>
 
+    <div v-if="manualFormOpen" class="guided-setup__fields guided-setup__fields--manual">
+      <h3 class="guided-setup__manual-title">{{ t('settings.engine.manualTitle') }}</h3>
+      <ManualOpenAiCompatForm @activated="onManualActivated" />
+    </div>
+
     <div class="guided-setup__actions">
       <button
         type="button"
@@ -144,15 +151,19 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
+import type { QInput } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
+import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
+import ManualOpenAiCompatForm from '@components/settings/ManualOpenAiCompatForm.vue';
 import { useAppSettings, testSet } from '@composables/useAppSettings';
 import { useCloud } from '@composables/useCloud';
 import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import type { ProviderSet } from '@composables/useDesktop.types';
 import { fetchOllamaModels } from '@services/ollamaModels';
+import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
 import { chatErrorMessageForReadiness } from '@utils/providerSetNotify';
 import { validateProviderSetChatReady } from '@utils/providerSetValidation';
 import {
@@ -164,6 +175,19 @@ import {
   localizedSetName,
   WORKPROBA_CLOUD_BUILTIN_SET,
 } from '@utils/providerSets';
+
+const MANUAL_CARD_ID = 'manual-openai-compat';
+
+interface GuidedCardView {
+  id: string;
+  set: ProviderSet | null;
+  displayName: string;
+  description: string;
+  displayBadges: string[];
+  badgeToneClass: string;
+  capabilities: string[];
+  muted: boolean;
+}
 
 const emit = defineEmits<{
   'switch-to-advanced': [];
@@ -189,42 +213,75 @@ const testing = ref(false);
 const refreshingOllama = ref(false);
 const ollamaModels = ref<string[]>([]);
 const testResults = ref<Array<{ ok: boolean; label: string }>>([]);
+const enrollModalOpen = ref(false);
+const manualFormOpen = ref(false);
+const mistralKeyRequired = ref(false);
+const accessKeyInputRef = ref<InstanceType<typeof QInput> | null>(null);
 
 const activeSetId = computed(() => settings.value.activeSetId ?? activeSet.value?.id ?? null);
 
-const guidedCards = computed(() => {
+const guidedCards = computed<GuidedCardView[]>(() => {
   const builtins = sets.value.filter((s) => s.isBuiltin);
-  const cards = builtins.length ? builtins : sets.value;
-  return cards.map((set) => {
-    const description = localizedSetDescription(set, t);
-    const displayBadges =
-      set.id === 'workproba-cloud'
-        ? [t('settings.badgeCloud'), t('settings.badgeRecommended')]
-        : set.id === 'mistral-default'
-          ? [t('settings.badgeRecommended')]
-          : set.id === 'ollama-local'
-            ? [t('settings.badgeLocal')]
-            : set.badges;
-    const badgeToneClass =
-      set.id === 'workproba-cloud'
-        ? 'guided-card__badge--cloud'
-        : set.id === 'mistral-default'
-          ? 'guided-card__badge--recommended'
-          : set.id === 'ollama-local'
-            ? 'guided-card__badge--local'
-            : 'guided-card__badge--cloud';
-    return {
-      set,
-      displayName: localizedSetName(set, t),
-      description,
-      displayBadges,
-      badgeToneClass,
-      capabilities: capabilityLabels(set, 'guided', t),
-    };
-  });
+  const orderedIds = ['workproba-cloud', 'mistral-default', 'ollama-local'] as const;
+  const builtinCards = orderedIds
+    .map((id) => builtins.find((set) => set.id === id))
+    .filter((set): set is ProviderSet => Boolean(set))
+    .map((set) => toBuiltinCard(set));
+
+  const cloudAndMistral = builtinCards.filter(
+    (card) => card.id === 'workproba-cloud' || card.id === 'mistral-default',
+  );
+  const ollamaCard = builtinCards.find((card) => card.id === 'ollama-local');
+
+  return [
+    ...cloudAndMistral,
+    {
+      id: MANUAL_CARD_ID,
+      set: null,
+      displayName: t('settings.engine.manualName'),
+      description: t('settings.engine.manualDescription'),
+      displayBadges: [t('settings.engine.manualBadge')],
+      badgeToneClass: 'guided-card__badge--manual',
+      capabilities: [],
+      muted: false,
+    },
+    ...(ollamaCard ? [ollamaCard] : []),
+  ];
 });
 
+function toBuiltinCard(set: ProviderSet): GuidedCardView {
+  const description = localizedSetDescription(set, t);
+  const displayBadges =
+    set.id === 'workproba-cloud'
+      ? [t('settings.badgeCloud'), t('settings.badgeRecommended')]
+      : set.id === 'ollama-local'
+        ? [t('settings.badgeLocal')]
+        : [t('settings.mistralApiKey')];
+  const badgeToneClass =
+    set.id === 'workproba-cloud'
+      ? 'guided-card__badge--cloud'
+      : set.id === 'ollama-local'
+        ? 'guided-card__badge--local'
+        : 'guided-card__badge--recommended';
+  return {
+    id: set.id,
+    set,
+    displayName: localizedSetName(set, t),
+    description,
+    displayBadges,
+    badgeToneClass,
+    capabilities: capabilityLabels(set, 'guided', t),
+    muted: set.id === 'ollama-local',
+  };
+}
+
 const selectedBuiltinId = computed(() => activeSet.value?.id ?? null);
+
+const showMistralFields = computed(
+  () =>
+    selectedBuiltinId.value === 'mistral-default'
+    || mistralKeyRequired.value,
+);
 
 const cloudQuotaHint = computed(() => {
   if (selectedBuiltinId.value !== WORKPROBA_CLOUD_BUILTIN_SET.id) return '';
@@ -247,6 +304,26 @@ const cloudReadinessHint = computed(() => {
   return chatErrorMessageForReadiness(check.reason);
 });
 
+function isCardActive(card: GuidedCardView): boolean {
+  if (card.id === MANUAL_CARD_ID) return manualFormOpen.value;
+  return activeSetId.value === card.id;
+}
+
+function cardCtaLabel(card: GuidedCardView): string {
+  if (card.id === WORKPROBA_CLOUD_BUILTIN_SET.id && !isEnrolled.value) {
+    return t('settings.engine.linkDevice');
+  }
+  if (card.id === MANUAL_CARD_ID) {
+    return manualFormOpen.value
+      ? t('settings.engine.manualConfigure')
+      : t('settings.engine.manualOpen');
+  }
+  if (activeSetId.value === card.id) {
+    return t('settings.engine.activeEngine');
+  }
+  return t('settings.engine.useThisEngine');
+}
+
 function hydrateFromActiveSet(set: ProviderSet | null): void {
   if (!set) return;
   accessKey.value = set.chat.apiKey ?? '';
@@ -258,16 +335,78 @@ async function persistSet(next: ProviderSet): Promise<void> {
   await updateSet(next);
 }
 
-async function onUseEngine(id: string): Promise<void> {
+function notifyActivationError(err: unknown, cardId?: string): void {
+  if (err instanceof ProviderSetNotReadyError) {
+    Notify.create({
+      message: chatErrorMessageForReadiness(err.reason),
+      color: 'warning',
+    });
+    if (err.reason === 'missing_api_key' && cardId === 'mistral-default') {
+      mistralKeyRequired.value = true;
+      void nextTick(() => accessKeyInputRef.value?.focus());
+    }
+    return;
+  }
+  Notify.create({
+    message: err instanceof Error ? err.message : t('settings.saveFailed'),
+    color: 'negative',
+  });
+}
+
+async function activateSet(id: string): Promise<void> {
   testResults.value = [];
   try {
-    await setActiveSet(id);
+    await setActiveSet(id, { cloud: providerReadiness.value });
   } catch (err) {
-    Notify.create({
-      message: err instanceof Error ? err.message : t('settings.saveFailed'),
-      color: 'negative',
-    });
+    notifyActivationError(err, id);
   }
+}
+
+async function onUseEngine(card: GuidedCardView): Promise<void> {
+  if (card.id === MANUAL_CARD_ID) {
+    manualFormOpen.value = true;
+    return;
+  }
+
+  if (card.id === WORKPROBA_CLOUD_BUILTIN_SET.id && !isEnrolled.value) {
+    enrollModalOpen.value = true;
+    return;
+  }
+
+  if (card.id === 'mistral-default') {
+    const mistralSet = card.set ?? sets.value.find((s) => s.id === 'mistral-default') ?? null;
+    const key = accessKey.value.trim() || mistralSet?.chat.apiKey?.trim() || '';
+    if (!key) {
+      mistralKeyRequired.value = true;
+      Notify.create({
+        message: t('errors.apiKeyMissing'),
+        color: 'warning',
+      });
+      await nextTick();
+      accessKeyInputRef.value?.focus();
+      return;
+    }
+    if (mistralSet && key !== (mistralSet.chat.apiKey ?? '')) {
+      try {
+        await persistSet(applyAccessKeyToSet(mistralSet, key));
+      } catch (err) {
+        notifyActivationError(err, card.id);
+        return;
+      }
+    }
+  }
+
+  await activateSet(card.id);
+}
+
+async function onCloudEnrolled(): Promise<void> {
+  await refreshQuota();
+  await activateSet(WORKPROBA_CLOUD_BUILTIN_SET.id);
+}
+
+function onManualActivated(): void {
+  manualFormOpen.value = false;
+  mistralKeyRequired.value = false;
 }
 
 async function onAccessKeyChange(): Promise<void> {
@@ -276,11 +415,9 @@ async function onAccessKeyChange(): Promise<void> {
   if (!current || current.id !== 'mistral-default') return;
   try {
     await persistSet(applyAccessKeyToSet(current, accessKey.value));
+    mistralKeyRequired.value = false;
   } catch (err) {
-    Notify.create({
-      message: err instanceof Error ? err.message : t('settings.saveFailed'),
-      color: 'negative',
-    });
+    notifyActivationError(err, 'mistral-default');
   }
 }
 
@@ -291,10 +428,7 @@ async function onOllamaChange(): Promise<void> {
   try {
     await persistSet(applyOllamaOverrides(current, ollamaUrl.value, ollamaModel.value));
   } catch (err) {
-    Notify.create({
-      message: err instanceof Error ? err.message : t('settings.saveFailed'),
-      color: 'negative',
-    });
+    notifyActivationError(err, 'ollama-local');
   }
 }
 
@@ -373,6 +507,9 @@ watch(activeSet, (set) => {
   if (set?.id === WORKPROBA_CLOUD_BUILTIN_SET.id) {
     void refreshQuota();
   }
+  if (set?.id !== 'mistral-default') {
+    mistralKeyRequired.value = false;
+  }
 });
 </script>
 
@@ -412,6 +549,11 @@ watch(activeSet, (set) => {
   box-shadow: 0 0 0 3px var(--wp-accent-soft);
 }
 
+.guided-card--muted {
+  opacity: 0.88;
+  background: var(--wp-surface-2);
+}
+
 .guided-card__head {
   display: flex;
   flex-wrap: wrap;
@@ -438,6 +580,11 @@ watch(activeSet, (set) => {
 }
 
 .guided-card__badge--cloud {
+  background: var(--wp-surface-2);
+  color: var(--wp-text-muted);
+}
+
+.guided-card__badge--manual {
   background: var(--wp-surface-2);
   color: var(--wp-text-muted);
 }
@@ -502,6 +649,20 @@ watch(activeSet, (set) => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.guided-setup__fields--manual {
+  padding: 14px;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-md);
+  background: var(--wp-surface);
+}
+
+.guided-setup__manual-title {
+  margin: 0;
+  font-size: var(--wp-fs-sm);
+  font-weight: 700;
+  color: var(--wp-text);
 }
 
 .guided-setup__row {

@@ -14,8 +14,6 @@
     </div>
 
     <template v-else>
-      <PersonasConfidentialityHint class="personas-side-chat__privacy" />
-
       <header class="personas-side-chat__toolbar">
         <div class="personas-side-chat__modes" role="tablist">
           <button
@@ -184,7 +182,6 @@ import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
 import PersonasOpinionCard from '@components/personas/PersonasOpinionCard.vue';
 import PersonasPicker from '@components/personas/PersonasPicker.vue';
-import PersonasConfidentialityHint from '@components/personas/PersonasConfidentialityHint.vue';
 import MessageTextPart from '@components/chat/MessageTextPart.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
 import { PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
@@ -627,11 +624,6 @@ defineExpose({ close: () => emit('close') });
   font-size: var(--wp-fs-sm);
   color: var(--wp-text-muted);
   text-align: center;
-}
-
-.personas-side-chat__privacy {
-  flex: none;
-  padding: var(--wp-space-2) var(--wp-space-3) 0;
 }
 
 .personas-side-chat__toolbar {

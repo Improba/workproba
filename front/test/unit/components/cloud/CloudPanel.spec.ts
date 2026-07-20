@@ -127,7 +127,7 @@ vi.mock('quasar', () => ({
 
 function mountPanel() {
   return shallowMount(CloudPanel, {
-    global: { stubs: { Lucide: true } },
+    global: { stubs: { Lucide: true, EnrollCloudJoinForm: false } },
   });
 }
 

@@ -55,6 +55,7 @@ import { createIncidentId } from '@utils/errorReport';
 import { contextWindowForSet } from '@utils/providerSetModels';
 import { contextWindowFor } from '@utils/modelCatalog';
 import { t } from '@utils/i18nT';
+import { extractProposedPath, isFileWriteTool } from '@utils/fileWriteTools';
 import {
   deriveThinkingSubject,
   deriveThinkingSubjectDone,
@@ -758,13 +759,18 @@ export function applyStreamEvent(
   switch (event.type) {
     case 'tool_call_start': {
       const startSummary = event.data.humanSummary?.trim() ?? '';
+      const args = event.data.args ?? {};
+      const fromArgs =
+        isFileWriteTool(event.data.name || '')
+          ? extractProposedPath(args)
+          : null;
       const toolCall: ChatToolCall = {
         id: event.data.id || createMessageId(),
         name: event.data.name || 'tool',
         status: 'running',
-        args: event.data.args ?? {},
+        args,
         startedAt: Date.now(),
-        filePath: event.data.filePath,
+        filePath: event.data.filePath || fromArgs || undefined,
         humanSummary: startSummary || undefined,
       };
       assistant.toolCalls = [...(assistant.toolCalls ?? []), toolCall];
@@ -781,6 +787,9 @@ export function applyStreamEvent(
       const tool = assistant.toolCalls?.find((t) => t.id === toolId);
       if (tool) {
         tool.status = 'awaiting_confirmation';
+        if (!tool.filePath && event.data.proposedPath) {
+          tool.filePath = event.data.proposedPath;
+        }
       }
       const confirmation: ChatConfirmation = {
         confirmationId: event.data.confirmationId,

@@ -1,7 +1,7 @@
 # Workproba Desktop (application locale)
 
 > **Status:** Product decision: desktop pivot  
-> **Last updated:** 17/07/2026  
+> **Last updated:** 20/07/2026  
 > **Terminology:** user-facing **space** (FR: **espace**) = one local folder you work in
 
 ## Decision
@@ -148,7 +148,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, builtin plugins (Regards métier), attachments, document preview, audit, Human Approval Gate, Work Event Bus |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
-| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`) : join via `join_token` (ou bearer existant), managed connectors (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), relay via `invoke_managed_connector`, CloudPanel, sync published artefacts |
+| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`): desktop login (`POST /devices/login`), join via `join_token` (or existing bearer), first-run onboarding (`EngineOnboardingWizard`), managed connectors (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), relay via `invoke_managed_connector`, CloudPanel, sync published artefacts |
 
 ### Phase D: validation
 
@@ -163,7 +163,9 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 **Livré (MVP Mode A, 20/07/2026)** :
 
-- Join device (`POST /devices/join` via `join_token` ; `device_code` → `join_token_required` ; coller un bearer déjà émis possible)
+- Desktop cloud login (`CloudLoginModal` → `POST /devices/login` → User JWT)
+- First-run onboarding (`EngineOnboardingWizard`: engine choice, cloud login/register, Mistral key, manual OpenAI-compat)
+- Join device (`POST /devices/join` via `join_token`; `device_code` → `join_token_required`; pasting an existing bearer still works)
 - Connecteurs managés builtins : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel côté cloud, allowlist org) via `GET /connectors`, `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client
 - Desktop : `RemoteCapabilityGateway`, outil agent `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`
 - CloudPanel (join, connecteurs, regards, projets), sync artefacts publiés, org LLM (DeviceBearer)
@@ -187,7 +189,7 @@ Monorepo `workproba-cloud/` (NestJS + Quasar admin). Plugin desktop `workproba.c
 - **V1→V2 storage migration** (T-V2-15b): legacy `.workproba/` under client folders not yet migrated to canonical `app_data/spaces/`.
 - **Durable (Temporal/Inngest)**: deferred. Current agent loop is synchronous (one SSE turn). No long workflow resume/persistence on crash.
 - **Configurable approval policy**: effect gate is always on for mapped sensitive tools; a global "auto-approve" setting is not implemented yet.
-- **Office diff before write**: `preview_change` works for text/markdown; binary Office diff not yet available (T-V2-14).
+- **Office preview before write**: `POST /documents/preview-change` builds proposed Office bytes (docx/xlsx/pdf/pptx) and shows HTML preview before approval. Pixel-perfect binary diff is not available (T-V2-14 partially addressed).
 
 ### Quality / integration
 

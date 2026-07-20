@@ -34,9 +34,9 @@ The main layout is `front/src/layouts/WorkprobaLayout.vue`. Root element: `.wp-s
 
 | Region | Component | Role |
 |--------|-----------|------|
-| **Title bar** | `WorkprobaTitleBar.vue` | Tauri drag region; brand, workspace name, user profile; sidecar status chip (opens settings dialog); toggles for side chat, right panel, sidebar; keyboard shortcuts (`?`); theme toggle |
+| **Title bar** | `WorkprobaTitleBar.vue` | Tauri drag region; `WorkprobaBrand` (mark + logo), workspace name, user profile; sidecar status chip (opens settings dialog); toggles for side chat, right panel, sidebar; keyboard shortcuts (`?`); theme toggle |
 | **Left sidebar** | `WorkspaceSidebar.vue` | **Tree model**: recent workspaces as expandable nodes, conversations nested under each workspace. Footer: settings, memory, profile. Collapsible to **56px icon rail** (never fully hidden) |
-| **Center** | `<router-view />` in `.wp-center` | Home (onboarding, recent sessions), chat (`ChatView`), settings pages. Chat body uses `--wp-font-chat` |
+| **Center** | `<router-view />` in `.wp-center` | Home (`EngineOnboardingWizard` on first run), chat (`ChatView`), settings pages. Chat body uses `--wp-font-chat` |
 | **Right panel** | `RightPanel.vue` | Collapsible (`Ctrl/Cmd+B`), state per session. **Tabs**: Files (`FileExplorer`), Preview (`DocumentPreview`), Personas (if plugin active), dynamic plugin tabs |
 | **Side chat** | `SideChatPanel.vue` | Optional panel (`Ctrl/Cmd+Shift+L`) for plugin side conversations (e.g. Personas). Width 320–420px (default 380px) |
 
@@ -60,6 +60,10 @@ Handled in `WorkprobaLayout.vue`:
 | `?` | Toggle keyboard shortcuts help |
 
 See also [architecture.md](./architecture.md) for data flow and plugin integration.
+
+## Brand assets
+
+`WorkprobaBrand.vue` renders the product mark and logo from `front/src/assets/brand/` (SVG mark plus light/dark logo variants). It replaces the former Quasar logo in the title bar and onboarding surfaces. Use the component rather than inlining SVG paths in feature code.
 
 ## Workproba Tokens (`--wp-*`)
 

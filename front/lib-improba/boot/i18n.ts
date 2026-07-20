@@ -1,6 +1,12 @@
 import { createI18n, type I18n } from 'vue-i18n';
 import { App, getCurrentInstance } from 'vue';
-import messages from 'src/i18n';
+import appMessages from 'src/i18n';
+import improbaTranslations from '@lib-improba/i18n';
+import { mergeDeep } from '@lib-improba/utils/general.utils';
+
+// Merge outside src/i18n so unplugin-vue-i18n can precompile static locale files.
+const messages = mergeDeep(improbaTranslations, appMessages) as typeof improbaTranslations &
+  typeof appMessages;
 
 export type MessageLanguages = keyof typeof messages;
 export type MessageSchema = (typeof messages)['en-US'];

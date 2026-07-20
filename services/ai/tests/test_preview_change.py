@@ -177,6 +177,144 @@ def test_preview_change_xlsx_with_tool_args(tmp_path: Path) -> None:
     assert "Nouveau" in data["diff_html"]
 
 
+def test_preview_change_pptx_with_tool_args(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+
+    with TestClient(mainmod.app) as client:
+        resp = client.post(
+            "/documents/preview-change",
+            json={
+                "workspace_data_dir": str(ws_data),
+                "project_path": str(project),
+                "file_path": "pitch.pptx",
+                "tool_name": "write_pptx",
+                "tool_args": {
+                    "theme": "improba",
+                    "slides": [
+                        {
+                            "layout": "title",
+                            "title": "Nouveau pitch",
+                            "subtitle": "Vision",
+                        },
+                        {
+                            "layout": "bullets",
+                            "title": "Plan",
+                            "bullets": ["Étape 1", "Étape 2"],
+                        },
+                    ],
+                },
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["is_binary"] is False
+    assert data["is_new"] is True
+    assert "wp-diff-add" in data["diff_html"]
+    assert "Nouveau pitch" in data["diff_html"]
+    assert "Étape 1" in data["diff_html"]
+
+
+def test_preview_change_pptx_modify_existing(tmp_path: Path) -> None:
+    from app.documents.writer import build_pptx_bytes
+
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+    (project / "pitch.pptx").write_bytes(
+        build_pptx_bytes(
+            slides=[{"layout": "title", "title": "Ancien titre", "subtitle": "v1"}]
+        )
+    )
+
+    with TestClient(mainmod.app) as client:
+        resp = client.post(
+            "/documents/preview-change",
+            json={
+                "workspace_data_dir": str(ws_data),
+                "project_path": str(project),
+                "file_path": "pitch.pptx",
+                "tool_name": "write_pptx",
+                "tool_args": {
+                    "slides": [
+                        {
+                            "layout": "title",
+                            "title": "Nouveau titre",
+                            "subtitle": "v2",
+                        }
+                    ],
+                },
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["is_new"] is False
+    assert data["is_binary"] is False
+    assert "Ancien titre" in data["diff_html"]
+    assert "Nouveau titre" in data["diff_html"]
+
+
+def test_preview_change_pptx_corrupt_existing_is_graceful(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+    (project / "broken.pptx").write_bytes(b"not-a-real-pptx")
+
+    with TestClient(mainmod.app) as client:
+        resp = client.post(
+            "/documents/preview-change",
+            json={
+                "workspace_data_dir": str(ws_data),
+                "project_path": str(project),
+                "file_path": "broken.pptx",
+                "tool_name": "write_pptx",
+                "tool_args": {
+                    "slides": [{"layout": "title", "title": "OK"}],
+                },
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    # Ancien illisible: on montre quand même le contenu proposé
+    assert data["is_binary"] is False
+    assert "OK" in data["diff_html"]
+    assert "wp-diff-add" in data["diff_html"]
+
+
+def test_preview_change_pptx_invalid_theme_is_graceful(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+
+    with TestClient(mainmod.app) as client:
+        resp = client.post(
+            "/documents/preview-change",
+            json={
+                "workspace_data_dir": str(ws_data),
+                "project_path": str(project),
+                "file_path": "pitch.pptx",
+                "tool_name": "write_pptx",
+                "tool_args": {
+                    "theme": "neon",
+                    "slides": [{"layout": "title", "title": "X"}],
+                },
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["is_binary"] is True
+    assert data["message"]
+
+
 def test_preview_change_rejects_traversal(tmp_path: Path) -> None:
     project = tmp_path / "project"
     project.mkdir()

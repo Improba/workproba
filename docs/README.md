@@ -25,8 +25,8 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 
 ## Technical architecture
 
-- **[architecture.md](./architecture.md)**: Overview, stack, UI shell, chat, LLM models, human approval gate, work events
-- **[provider-sets-reasoning.md](./provider-sets-reasoning.md)**: Provider set catalog, reasoning effort clamping (Mistral none/high), front/back alignment
+- **[architecture.md](./architecture.md)**: Overview, stack, UI shell, Office writers (PPTX), chat, LLM models, human approval gate, work events, Improba Cloud desktop auth UX
+- **[provider-sets-reasoning.md](./provider-sets-reasoning.md)**: Provider set catalog, reasoning effort clamping (Mistral none/high), front/back alignment, cloud login vs device enroll
 - **[stack.md](./stack.md)**: Component versions, ports, environment variables, dev commands
 - **[workspace-storage.md](./workspace-storage.md)**: Per-space storage and global user data (Space UX, `{app_data}/spaces/`, migration from legacy `workspaces/`)
 - **[capacites.md](./capacites.md)**: Activatable capabilities hub (guided mode, FR/EN UI)
@@ -42,8 +42,13 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 
 ## Design & UI
 
-- **[design.md](./design.md)**: Workproba design system (`--wp-*` tokens, typography, density)
+- **[design.md](./design.md)**: Workproba design system (`--wp-*` tokens, typography, density, `WorkprobaBrand` assets)
 - **[anubis-ui.md](./anubis-ui.md)**: Anubis palette, light / warm charcoal themes, `anubis.config.json`
+
+## Desktop onboarding & cloud auth
+
+- **[architecture.md § Improba Cloud desktop auth UX](./architecture.md#improba-cloud-desktop-auth-ux)**: `EngineOnboardingWizard`, `CloudLoginModal`, `EnrollCloudModal`, `cloudWebUrls`
+- **[architecture.md § Office writers](./architecture.md#office-writers)**: `write_pptx`, layouts, themes, `MAX_PPTX_SLIDES`
 
 ## Tests
 
