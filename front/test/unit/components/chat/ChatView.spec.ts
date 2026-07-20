@@ -20,7 +20,7 @@ describe('ChatView accessibilité', () => {
       global: {
         stubs: {
           Lucide: true,
-          ChatModelControl: true,
+          ChatModelMenuContent: true,
           MessageList: false,
         },
       },

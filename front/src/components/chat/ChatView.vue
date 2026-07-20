@@ -99,113 +99,123 @@
         <button
           type="button"
           class="chat-view__attach"
-          :aria-label="t('chat.attachFileAria', { current: attachments.length, max: MAX_ATTACHMENTS })"
-          :title="t('chat.addMenuTitle')"
+          :class="{ 'chat-view__attach--reasoning': showReasoningBadge }"
+          :aria-label="attachAriaLabel"
+          :title="attachTitle"
           aria-haspopup="menu"
         >
           <Lucide name="plus" size="18" color="wp-text" />
+          <span
+            v-if="showReasoningBadge"
+            class="chat-view__attach-badge"
+            aria-hidden="true"
+          >
+            <Lucide name="brain" size="10" color="accent" />
+          </span>
           <q-menu
+            ref="addMenuRef"
             anchor="bottom left"
             self="top left"
             :offset="[0, 8]"
+            :close-on-click="false"
             class="chat-view__add-menu"
             transition-show="jump-down"
             transition-hide="jump-up"
           >
-            <div class="chat-view__add-head">{{ t('chat.addMenuTitle') }}</div>
-            <q-list dense>
-              <q-item
-                clickable
-                class="chat-view__add-item"
-                @click="openFilePicker"
-              >
-                <q-item-section avatar class="chat-view__add-icon">
-                  <Lucide name="paperclip" size="16" color="wp-text" />
-                </q-item-section>
-                <q-item-section>
-                  <q-item-label class="chat-view__add-item-label">
-                    {{ t('chat.attachFile') }}
-                  </q-item-label>
-                  <q-item-label caption class="chat-view__add-item-hint">
-                    {{ t('chat.attachFileHint') }}
-                  </q-item-label>
-                </q-item-section>
-              </q-item>
-            </q-list>
-          </q-menu>
-        </button>
+            <div class="chat-view__add-menu-scroll">
+              <div class="chat-view__add-head">{{ t('chat.attachFile') }}</div>
+              <q-list dense>
+                <q-item
+                  clickable
+                  class="chat-view__add-item"
+                  @click="onAttachClick"
+                >
+                  <q-item-section avatar class="chat-view__add-icon">
+                    <Lucide name="paperclip" size="16" color="wp-text" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label class="chat-view__add-item-label">
+                      {{ t('chat.attachFile') }}
+                    </q-item-label>
+                    <q-item-label caption class="chat-view__add-item-hint">
+                      {{ t('chat.attachFileHint') }}
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
+              </q-list>
 
-        <button
-          v-if="personasEnabled"
-          type="button"
-          class="chat-view__regards"
-          :aria-label="t('regards.chipAria')"
-          :title="t('regards.chip')"
-          aria-haspopup="menu"
-        >
-          <Lucide name="users" size="14" color="wp-gold" />
-          <span class="chat-view__regards-label">{{ t('regards.chip') }}</span>
-          <q-menu
-            anchor="bottom left"
-            self="top left"
-            :offset="[0, 8]"
-            class="chat-view__regards-menu"
-            transition-show="jump-down"
-            transition-hide="jump-up"
-          >
-            <q-list dense>
-              <q-item
-                clickable
-                class="chat-view__regards-item"
-                @click="emit('personas-open')"
-              >
-                <q-item-section avatar class="chat-view__regards-icon">
-                  <Lucide name="message-circle-question" size="16" color="wp-gold" />
-                </q-item-section>
-                <q-item-section>
-                  <q-item-label class="chat-view__regards-item-label">
-                    {{ t('regards.ask') }}
-                  </q-item-label>
-                  <q-item-label caption class="chat-view__regards-item-hint">
-                    {{ t('regards.askHint') }}
-                  </q-item-label>
-                </q-item-section>
-              </q-item>
-              <q-item
-                clickable
-                class="chat-view__regards-item"
-                @click="emit('personas-meeting')"
-              >
-                <q-item-section avatar class="chat-view__regards-icon">
-                  <Lucide name="presentation" size="16" color="wp-gold" />
-                </q-item-section>
-                <q-item-section>
-                  <q-item-label class="chat-view__regards-item-label">
-                    {{ t('regards.cross') }}
-                  </q-item-label>
-                  <q-item-label caption class="chat-view__regards-item-hint">
-                    {{ t('regards.crossHint') }}
-                  </q-item-label>
-                </q-item-section>
-              </q-item>
-              <q-item
-                clickable
-                class="chat-view__regards-item"
-                @click="emit('personas-discuss')"
-              >
-                <q-item-section avatar class="chat-view__regards-icon">
-                  <Lucide name="messages-square" size="16" color="wp-gold" />
-                </q-item-section>
-                <q-item-section>
-                  <q-item-label class="chat-view__regards-item-label">
-                    {{ t('regards.discuss') }}
-                  </q-item-label>
-                  <q-item-label caption class="chat-view__regards-item-hint">
-                    {{ t('regards.discussHint') }}
-                  </q-item-label>
-                </q-item-section>
-              </q-item>
-            </q-list>
+              <template v-if="personasEnabled">
+                <q-separator class="chat-view__add-sep" />
+                <div class="chat-view__add-head">{{ t('chat.addMenuPersonas') }}</div>
+                <q-list dense>
+                  <q-item
+                    clickable
+                    class="chat-view__add-item"
+                    @click="onPersonasOpen"
+                  >
+                    <q-item-section avatar class="chat-view__add-icon">
+                      <Lucide name="message-circle-question" size="16" color="wp-gold" />
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label class="chat-view__add-item-label">
+                        {{ t('regards.ask') }}
+                      </q-item-label>
+                      <q-item-label caption class="chat-view__add-item-hint">
+                        {{ t('regards.askHint') }}
+                      </q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item
+                    clickable
+                    class="chat-view__add-item"
+                    @click="onPersonasMeeting"
+                  >
+                    <q-item-section avatar class="chat-view__add-icon">
+                      <Lucide name="presentation" size="16" color="wp-gold" />
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label class="chat-view__add-item-label">
+                        {{ t('regards.cross') }}
+                      </q-item-label>
+                      <q-item-label caption class="chat-view__add-item-hint">
+                        {{ t('regards.crossHint') }}
+                      </q-item-label>
+                    </q-item-section>
+                  </q-item>
+                  <q-item
+                    clickable
+                    class="chat-view__add-item"
+                    @click="onPersonasDiscuss"
+                  >
+                    <q-item-section avatar class="chat-view__add-icon">
+                      <Lucide name="messages-square" size="16" color="wp-gold" />
+                    </q-item-section>
+                    <q-item-section>
+                      <q-item-label class="chat-view__add-item-label">
+                        {{ t('regards.discuss') }}
+                      </q-item-label>
+                      <q-item-label caption class="chat-view__add-item-hint">
+                        {{ t('regards.discussHint') }}
+                      </q-item-label>
+                    </q-item-section>
+                  </q-item>
+                </q-list>
+              </template>
+
+              <template v-if="showModelControl">
+                <q-separator class="chat-view__add-sep" />
+                <ChatModelMenuContent
+                  :model-value="reasoningEffort ?? 'none'"
+                  :provider="reasoningProvider"
+                  :model="reasoningModel"
+                  :provider-set="activeSet"
+                  @update:model-value="
+                    (value) => emit('update:reasoningEffort', value)
+                  "
+                  @update:model="(value) => emit('update:reasoningModel', value)"
+                />
+              </template>
+            </div>
           </q-menu>
         </button>
 
@@ -227,17 +237,6 @@
         </div>
 
         <div class="chat-view__composer-actions">
-          <ChatModelControl
-            v-if="showModelControl"
-            :model-value="reasoningEffort ?? 'none'"
-            :provider="reasoningProvider"
-            :model="reasoningModel"
-            :provider-set="activeSet"
-            @update:model-value="
-              (value) => emit('update:reasoningEffort', value)
-            "
-            @update:model="(value) => emit('update:reasoningModel', value)"
-          />
           <button
             v-if="streaming"
             type="button"
@@ -272,7 +271,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useScroll } from '@vueuse/core';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import ChatModelControl from '@components/chat/ChatModelControl.vue';
+import ChatModelMenuContent from '@components/chat/ChatModelMenuContent.vue';
 import ChatComposerAttachments from '@components/chat/ChatComposerAttachments.vue';
 import MessageList from '@components/chat/MessageList.vue';
 import StartPrompts from '@components/chat/StartPrompts.vue';
@@ -285,9 +284,9 @@ import {
 } from '@composables/useChatAttachments';
 import type { ChatAttachment, ChatMessage, ReasoningEffort } from '#types';
 import { addMemoryItem } from '@services/aiSidecar';
-import type { QInput } from 'quasar';
+import type { QInput, QMenu } from 'quasar';
+import { REASONING_EFFORT_OPTIONS, supportsReasoning } from '@utils/reasoningSupport';
 import { hasSetModelChoice, supportsReasoningForSet } from '@utils/providerSetModels';
-import { supportsReasoning } from '@utils/reasoningSupport';
 import { hasModelChoice } from '@utils/modelCatalog';
 
 const props = defineProps<{
@@ -350,6 +349,7 @@ const {
 } = useChatAttachments();
 
 const fileInputRef = ref<HTMLInputElement | null>(null);
+const addMenuRef = ref<QMenu | null>(null);
 const dragCounter = ref(0);
 const indexAttachmentsInMemory = ref(false);
 
@@ -368,6 +368,58 @@ const showModelControl = computed(() => {
   }
   return hasModelChoice(provider) || supportsReasoning(provider, model);
 });
+
+const showReasoningBadge = computed(
+  () =>
+    showModelControl.value &&
+    props.reasoningEffort != null &&
+    props.reasoningEffort !== 'none',
+);
+
+const reasoningBadgeTitle = computed(() => {
+  const match = REASONING_EFFORT_OPTIONS.find(
+    (opt) => opt.value === props.reasoningEffort,
+  );
+  return match
+    ? `${t('chat.modelControlReasoning')}: ${match.label}`
+    : t('chat.modelControlReasoning');
+});
+
+const attachTitle = computed(() =>
+  showReasoningBadge.value
+    ? `${t('chat.addMenuTitle')} · ${reasoningBadgeTitle.value}`
+    : t('chat.addMenuTitle'),
+);
+
+const attachAriaLabel = computed(() =>
+  showReasoningBadge.value
+    ? `${t('chat.attachFileAria', { current: attachments.length, max: MAX_ATTACHMENTS })} · ${reasoningBadgeTitle.value}`
+    : t('chat.attachFileAria', { current: attachments.length, max: MAX_ATTACHMENTS }),
+);
+
+function closeAddMenu(): void {
+  addMenuRef.value?.hide?.();
+}
+
+function onAttachClick(): void {
+  openFilePicker();
+  closeAddMenu();
+}
+
+function onPersonasOpen(): void {
+  emit('personas-open');
+  closeAddMenu();
+}
+
+function onPersonasMeeting(): void {
+  emit('personas-meeting');
+  closeAddMenu();
+}
+
+function onPersonasDiscuss(): void {
+  emit('personas-discuss');
+  closeAddMenu();
+}
 
 const draft = ref('');
 const composerInputRef = ref<QInput | null>(null);
@@ -854,9 +906,7 @@ onUnmounted(() => {
   }
 }
 
-/* Pilule : [+] [champ texte] à gauche, [modèle] [send] à droite.
-   Le + (menu d'actions) reste à gauche du champ dans les deux modes.
-   Déplié (brouillon/pieces jointes) : la barre d'actions passe dessous. */
+/* Pilule : [+] [champ texte] à gauche, [send] à droite. */
 .chat-view__composer-form {
   display: flex;
   align-items: center;
@@ -916,7 +966,7 @@ onUnmounted(() => {
 
 .chat-view__composer--expanded .chat-view__composer-actions {
   width: 100%;
-  justify-content: space-between;
+  justify-content: flex-end;
   padding-top: 4px;
 }
 
@@ -933,6 +983,7 @@ onUnmounted(() => {
 }
 
 .chat-view__attach {
+  position: relative;
   flex: 0 0 auto;
   width: 2rem;
   height: 2rem;
@@ -961,7 +1012,26 @@ onUnmounted(() => {
   }
 }
 
-/* Menu « + » : pièces jointes uniquement (V2.2). Regards = chip dédié. */
+.chat-view__attach--reasoning {
+  border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border));
+}
+
+.chat-view__attach-badge {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--wp-surface);
+  border: 1px solid var(--wp-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+/* Menu « + » : pièces jointes, Regards et modèle/raisonnement. */
 .chat-view__add-menu {
   min-width: 240px;
   border-radius: var(--wp-r-md);
@@ -969,6 +1039,11 @@ onUnmounted(() => {
   border: 1px solid var(--wp-border);
   box-shadow: var(--wp-shadow-2);
   padding: 4px;
+}
+
+.chat-view__add-menu-scroll {
+  max-height: min(70vh, 420px);
+  overflow-y: auto;
 }
 
 .chat-view__add-head {
@@ -982,80 +1057,6 @@ onUnmounted(() => {
 
 .chat-view__add-sep {
   margin: 4px 0;
-}
-
-.chat-view__regards {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  height: 2rem;
-  padding: 0 0.55rem;
-  border: 1px solid color-mix(in srgb, var(--wp-accent) 35%, var(--wp-border));
-  border-radius: var(--wp-r-pill);
-  background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-surface-3));
-  color: var(--wp-text);
-  cursor: pointer;
-  font-size: 0.75rem;
-  font-weight: 600;
-  transition:
-    background var(--wp-dur) var(--wp-ease),
-    border-color var(--wp-dur) var(--wp-ease),
-    transform var(--wp-dur) var(--wp-ease);
-
-  &:hover {
-    background: color-mix(in srgb, var(--wp-accent) 14%, var(--wp-surface-2));
-    border-color: var(--wp-accent);
-    transform: translateY(-1px);
-  }
-
-  &:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--wp-accent) 25%, transparent);
-  }
-}
-
-.chat-view__regards-label {
-  white-space: nowrap;
-}
-
-.chat-view__regards-menu {
-  min-width: 240px;
-  border-radius: var(--wp-r-md);
-  background: var(--wp-surface);
-  border: 1px solid var(--wp-border);
-  box-shadow: var(--wp-shadow-2);
-  padding: 4px;
-}
-
-.chat-view__regards-item {
-  min-height: 40px;
-  padding: 6px 8px;
-  border-radius: var(--wp-r-sm);
-  color: var(--wp-text);
-
-  &:hover {
-    background: var(--wp-surface-2);
-  }
-}
-
-.chat-view__regards-icon {
-  min-width: 28px;
-  padding-right: 4px;
-  justify-content: center;
-}
-
-.chat-view__regards-item-label {
-  font-size: var(--wp-fs-sm);
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.chat-view__regards-item-hint {
-  font-size: 0.72rem;
-  color: var(--wp-text-faint);
-  line-height: 1.25;
-  margin-top: 2px;
 }
 
 .chat-view__add-item {

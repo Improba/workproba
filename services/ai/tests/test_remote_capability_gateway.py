@@ -148,7 +148,7 @@ async def test_http_gateway_mock_transport(tmp_path: Path) -> None:
         assert request.url.path == "/connectors/demo.cap/invoke"
         body = __import__("json").loads(request.content.decode("utf-8"))
         assert "conversations" not in body["payload"]
-        assert body["identity"]["subject_id"] == "user-42"
+        assert "identity" not in body
         return httpx.Response(200, json={"ok": True, "remote": True})
 
     transport = httpx.MockTransport(handler)

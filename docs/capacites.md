@@ -14,7 +14,7 @@ You do not need to know about technical plugins or extensions to use them in gui
 | **Business perspectives** (Regards métier) | Expert-style opinions, discussions, cross-perspectives (same LLM engine as chat) | Side panel and central area |
 | **Projects and deliverables** | Publish documents from your space into a local project library | Right panel, Project tab |
 | **Web navigation** | Browse pages from Workproba with guided agent help | Right panel, Browser tab |
-| **Improba Cloud** | Join org, managed connectors (`echo`, `ihora.shaped` stub), shared projects, enterprise regards, **org LLM** (DeviceBearer, no personal API key) | CloudPanel under Projects |
+| **Improba Cloud** | Join org (`join_token`), managed connectors (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), shared projects, enterprise regards, **org LLM** (DeviceBearer, no personal API key) | CloudPanel under Projects |
 | **Mount sync** (advanced) | Technical NAS bridge via `ProjectSyncPort` ; deprecated product path, **blocked when enrolled** | Under Projects (advanced mode only) |
 
 ## Projects and sources of truth
@@ -26,7 +26,7 @@ You do not need to know about technical plugins or extensions to use them in gui
 | **Local copy (shared)** | Disposable cache on the workstation (opened on demand) | A second source of truth |
 | **Mount sync** | Technical NAS bridge (`ProjectSyncPort`) ; advanced only, **blocked when enrolled** | A shared project ; deprecated as a guided product path |
 
-Solo projects stay **local SoT** (on the machine). Shared projects and **managed connectors** require cloud enrollment (join org, `device_id`). Once enrolled, mirror push/pull is refused ; use publish and republish instead. Managed connectors use Improba Cloud Mode A (`invoke_managed_connector`, builtins `echo` and `ihora.shaped` stub). Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
+Solo projects stay **local SoT** (on the machine). Shared projects and **managed connectors** require cloud enrollment (join org via `join_token` ; DeviceBearer stored locally). Once enrolled, mirror push/pull is refused ; use publish and republish instead. Managed connectors use Improba Cloud Mode A (`invoke_managed_connector`, builtins `echo`, `ihora.shaped` stub, and `ihora` HTTP when allowed by org allowlist ; invoke does not send `device_id`, `subject_id` or `org_id` from the client). Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ## How to activate
 

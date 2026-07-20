@@ -122,10 +122,10 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 
 ## Improba Cloud (Mode A)
 
-Standard path for managed connectors (MVP livré 17/07/2026). Plugin `workproba.cloud` :
+Standard path for managed connectors (MVP livré 20/07/2026). Plugin `workproba.cloud` :
 
-- **`CloudControlPlaneClient`** : join device, catalogs, regards (`/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`)
-- **`RemoteCapabilityGateway`** + tool **`invoke_managed_connector`** : relay to `echo` and `ihora.shaped` (stub) via `POST /connectors/{id}/invoke` ; sidecar `GET /plugins/cloud/connectors` ; Human Approval Gate (`external_send`)
+- **`CloudControlPlaneClient`** : join device via `join_token` (ou bearer existant ; `device_code` → `join_token_required`), catalogs, regards (`/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`)
+- **`RemoteCapabilityGateway`** + tool **`invoke_managed_connector`** : relay to `echo`, `ihora.shaped` (stub) and `ihora` (HTTP, allowlist org) via `POST /connectors/{id}/invoke` (payload only ; no client `subject_id` / `org_id`) ; sidecar `GET /plugins/cloud/connectors` ; Human Approval Gate (`external_send`)
 - **`ManagedRegardsPort`** for enterprise regards
 - **`ProjectSyncPort`** mount sync = technical NAS only, deprecated product path, **rejected when enrolled**
 - Shared project SoT = cloud (list/publish/open/republish via API + S3, local = disposable cache)

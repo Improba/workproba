@@ -204,14 +204,10 @@ class HttpRemoteCapabilityGateway(LocalRemoteCapabilityGateway):
         payload: JsonDict,
         identity_delegation: IdentityDelegation,
     ) -> JsonDict:
-        body = {
-            "payload": payload,
-            "identity": {
-                "subject_id": identity_delegation.subject_id,
-                "org_id": identity_delegation.org_id,
-                "scopes": sorted(identity_delegation.scopes),
-            },
-        }
+        body: JsonDict = {"payload": payload}
+        scopes = sorted(identity_delegation.scopes)
+        if scopes:
+            body["identity"] = {"scopes": scopes}
         client = self._http_client
         owns_client = client is None
         if client is None:

@@ -796,9 +796,9 @@ export default {
     supportEmailTitle: 'Contact support',
     supportEmailHint: 'Adresse utilisée pour le bouton « Contacter le support » des rapports d\'erreur.',
     supportEmailLabel: 'E-mail du support',
-    supportEmailPlaceholder: 'support@exemple.com',
+    supportEmailPlaceholder: "support{'@'}exemple.com",
     supportEmailSaved: 'Adresse support enregistrée.',
-    supportEmailInvalid: 'Saisissez une adresse e-mail valide (ex. support@exemple.com).',
+    supportEmailInvalid: "Saisissez une adresse e-mail valide (ex. support{'@'}exemple.com).",
     supportEmailSaveFailed: 'Impossible d\'enregistrer l\'adresse support.',
   },
   audit: {

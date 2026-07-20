@@ -80,7 +80,7 @@ class CloudControlPlaneClient:
         device_code: str | None = None,
         org_id: str | None = None,
     ) -> JsonDict:
-        """Enrôlement stub : bearer direct ou device code (polling simulé)."""
+        """Enrôlement : bearer direct (admin) ou join_token via join_with_token."""
         if bearer_token:
             tokens = self.save_tokens(
                 {
@@ -92,46 +92,7 @@ class CloudControlPlaneClient:
             return {"authenticated": True, "method": "bearer", "org_id": tokens.get("org_id")}
 
         if device_code:
-            client = await self._client()
-            try:
-                response = await client.post(
-                    "/devices/token",
-                    json={"device_code": device_code, "org_id": org_id},
-                )
-                if response.status_code == 200:
-                    payload = response.json()
-                    if isinstance(payload, dict) and payload.get("access_token"):
-                        tokens = self.save_tokens(
-                            {
-                                "access_token": str(payload["access_token"]),
-                                "refresh_token": payload.get("refresh_token"),
-                                "token_type": payload.get("token_type", "bearer"),
-                                "org_id": payload.get("org_id") or org_id,
-                            }
-                        )
-                        return {
-                            "authenticated": True,
-                            "method": "device_code",
-                            "org_id": tokens.get("org_id"),
-                        }
-            finally:
-                if self._http_client is None:
-                    await client.aclose()
-
-            # Stub local : mémorise le device code en attente de validation admin.
-            tokens = self.save_tokens(
-                {
-                    "device_code": device_code,
-                    "device_pending": True,
-                    "org_id": org_id,
-                }
-            )
-            return {
-                "authenticated": False,
-                "method": "device_code",
-                "pending": True,
-                "org_id": tokens.get("org_id"),
-            }
+            raise ValueError("join_token_required")
 
         raise ValueError("cloud_auth_required")
 
@@ -357,22 +318,19 @@ class CloudControlPlaneClient:
             response.raise_for_status()
 
     async def fetch_regards_catalog(self, *, org_id: str | None = None) -> JsonDict:
-        params: JsonDict = {}
-        if org_id:
-            params["org"] = org_id
-        return await self._get_json("/catalogs/regards", params=params or None)
+        """org_id ignoré : l'org est dérivée du DeviceBearer côté cloud."""
+        _ = org_id
+        return await self._get_json("/catalogs/regards")
 
     async def fetch_capabilities(self, *, org_id: str | None = None) -> JsonDict:
-        params: JsonDict = {}
-        if org_id:
-            params["org"] = org_id
-        return await self._get_json("/catalogs/capabilities", params=params or None)
+        """org_id ignoré : l'org est dérivée du DeviceBearer côté cloud."""
+        _ = org_id
+        return await self._get_json("/catalogs/capabilities")
 
     async def fetch_policies(self, *, org_id: str | None = None) -> JsonDict:
-        params: JsonDict = {}
-        if org_id:
-            params["org"] = org_id
-        return await self._get_json("/policies", params=params or None)
+        """org_id ignoré : l'org est dérivée du DeviceBearer côté cloud."""
+        _ = org_id
+        return await self._get_json("/policies")
 
     async def list_connectors(self, *, org_id: str | None = None) -> JsonDict:
         """GET /connectors — connecteurs managés autorisés pour le device."""
@@ -400,26 +358,21 @@ class CloudControlPlaneClient:
         connector_id: str,
         *,
         payload: JsonDict | None = None,
-        subject_id: str,
+        subject_id: str | None = None,
         org_id: str | None = None,
         scopes: list[str] | None = None,
     ) -> JsonDict:
         """POST /connectors/{id}/invoke — relai transport Mode A."""
-        body: JsonDict = {
-            "payload": payload or {},
-            "identity": {
-                "subject_id": subject_id,
-                "org_id": org_id,
-                "scopes": scopes or [],
-            },
-        }
+        _ = subject_id, org_id  # identity locale uniquement ; cloud dérive du DeviceBearer
+        body: JsonDict = {"payload": payload or {}}
+        if scopes:
+            body["identity"] = {"scopes": scopes}
         return await self._post_json(f"/connectors/{connector_id}/invoke", json_body=body)
 
     async def fetch_active_preset(self, *, device_id: str | None = None) -> JsonDict:
-        params: JsonDict = {}
-        if device_id:
-            params["device"] = device_id
-        return await self._get_json("/presets/active", params=params or None)
+        """device_id ignoré : le device est dérivé du DeviceBearer côté cloud."""
+        _ = device_id
+        return await self._get_json("/presets/active")
 
     async def pull_and_install_regards(
         self,

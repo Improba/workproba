@@ -42,7 +42,7 @@ async def test_http_gateway_posts_connectors_echo(tmp_path: Path) -> None:
         assert request.headers.get("Authorization") == "Bearer tok-device"
         body = json.loads(request.content.decode("utf-8"))
         assert body["payload"] == {"ping": True}
-        assert body["identity"]["subject_id"] == "dev-1"
+        assert "identity" not in body
         return httpx.Response(
             200,
             json={
@@ -84,6 +84,9 @@ async def test_control_plane_client_invoke_connector(tmp_path: Path) -> None:
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/connectors/ihora.shaped/invoke":
+            body = json.loads(request.content.decode("utf-8"))
+            assert "subject_id" not in body.get("identity", {})
+            assert "org_id" not in body.get("identity", {})
             return httpx.Response(
                 200,
                 json={

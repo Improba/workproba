@@ -150,13 +150,13 @@ Join org, managed connectors, artefact sync, enterprise regards. Agent tools (if
 | Method | Route | Secret | Role |
 |---|---|---|---|
 | GET | `/plugins/cloud/connectors` | yes | List managed connectors from control plane |
-| POST | `/plugins/cloud/enroll` | yes | Join device with invitation token |
+| POST | `/plugins/cloud/enroll` | yes | Join device with `join_token` (`device_code` → `join_token_required`) or paste existing bearer |
 | POST | `/plugins/cloud/sync-regards` | yes | Pull and install managed regards catalog |
 | GET/POST | `/plugins/cloud/artefacts` | yes | Shared project list/publish/open/republish |
 | POST | `/plugins/cloud/sync` | yes | Mount sync push (blocked when enrolled) |
 | POST | `/plugins/cloud/pull` | yes | Mount sync pull (blocked when enrolled) |
 
-Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins `echo`, `ihora.shaped` stub). See [architecture-cloud.md](../../../workproba-improba/roadmaps/architecture-cloud.md).
+Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins `echo`, `ihora.shaped` stub, `ihora` HTTP when org allowlist permits ; payload only, identity derived server-side). See [architecture-cloud.md](../../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ### Improba Cloud LLM (`device_bearer`)
 

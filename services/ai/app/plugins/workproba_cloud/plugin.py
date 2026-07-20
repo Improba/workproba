@@ -334,9 +334,11 @@ def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
         org_id = tokens.get("org_id")
         org_id_str = org_id.strip() if isinstance(org_id, str) else None
         device_id = tokens.get("device_id")
-        if not isinstance(device_id, str) or not device_id.strip():
-            raise ModelRetry(t(locale, "cloud.connectors_require_device"))
-        subject = device_id.strip()
+        subject = (
+            device_id.strip()
+            if isinstance(device_id, str) and device_id.strip()
+            else "local"
+        )
 
         try:
             try:

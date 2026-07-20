@@ -68,18 +68,33 @@ async def test_authenticate_bearer_persists_tokens(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_authenticate_device_code_raises_join_token_required(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.example.test",
+        plugin_data_dir=cloud_dir,
+    )
+    with pytest.raises(ValueError, match="join_token_required"):
+        await client.authenticate(device_code="pending-code", org_id="org-42")
+
+
+@pytest.mark.asyncio
 async def test_fetch_endpoints_with_mock_transport(tmp_path: Path) -> None:
     cloud_dir, _, _ = _layout(tmp_path)
     bundle = _sample_bundle_dict()
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.path == "/catalogs/regards":
+            assert "org" not in request.url.params
             return httpx.Response(200, json={"bundles": [bundle]})
         if request.url.path == "/catalogs/capabilities":
+            assert "org" not in request.url.params
             return httpx.Response(200, json={"capabilities": ["workproba.personas"]})
         if request.url.path == "/policies":
+            assert "org" not in request.url.params
             return httpx.Response(200, json={"project_sync": True})
         if request.url.path == "/presets/active":
+            assert "device" not in request.url.params
             return httpx.Response(200, json={"preset_id": "enterprise"})
         return httpx.Response(404)
 

@@ -3218,7 +3218,7 @@ async def cloud_enroll_endpoint(
     request: Request,
     payload: CloudEnrollRequest,
 ) -> CloudEnrollResponse:
-    """Enrôle le poste auprès du plan de contrôle cloud (bearer ou device code stub)."""
+    """Enrôle le poste auprès du plan de contrôle cloud (join token ou bearer admin)."""
     settings: Settings = request.app.state.settings
     require_internal_secret(request, settings)
     locale = normalize_locale(payload.locale)

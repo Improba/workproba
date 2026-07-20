@@ -115,7 +115,7 @@ Workproba metadata lives in the **application folder**, not in the client folder
 | AI core | Python / FastAPI | Agent loop, extraction, RAG, fixed tool implementations |
 | Local data | `{app_data}/spaces/{id}/.workproba/` | Sessions, versions, memory |
 | Cloud legacy (archived) | `legacy/` | Former NestJS stack |
-| Improba Cloud (Mode A MVP) | `workproba-cloud/` | Auth device, managed connectors, transport relay |
+| Improba Cloud (Mode A MVP) | `workproba-cloud/` | Auth user + DeviceBearer side-car, managed connectors, transport relay |
 
 ## Security and trust (UX)
 
@@ -148,7 +148,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, builtin plugins (Regards métier), attachments, document preview, audit, Human Approval Gate, Work Event Bus |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
-| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`) : join device, managed connectors (`echo`, `ihora.shaped` stub), relay via `invoke_managed_connector`, CloudPanel, sync published artefacts |
+| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`) : join via `join_token` (ou bearer existant), managed connectors (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), relay via `invoke_managed_connector`, CloudPanel, sync published artefacts |
 
 ### Phase D: validation
 
@@ -161,14 +161,14 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 ### Product (phase F)
 
-**Livré (MVP Mode A, 17/07/2026)** :
+**Livré (MVP Mode A, 20/07/2026)** :
 
-- Join device (`POST /devices/join`), `device_id` requis, allowlist fail-closed
-- Connecteurs managés builtins : `echo`, `ihora.shaped` (stub) via `GET /connectors`, `POST /connectors/:id/invoke`
+- Join device (`POST /devices/join` via `join_token` ; `device_code` → `join_token_required` ; coller un bearer déjà émis possible)
+- Connecteurs managés builtins : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel côté cloud, allowlist org) via `GET /connectors`, `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client
 - Desktop : `RemoteCapabilityGateway`, outil agent `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`
-- CloudPanel (join, connecteurs, regards, projets), sync artefacts publiés
+- CloudPanel (join, connecteurs, regards, projets), sync artefacts publiés, org LLM (DeviceBearer)
 
-**Ouvert** : SSO org, IHora HTTP réel, vault secrets persistant, Mode B deploy, smoke E2E HTTP.
+**Ouvert** : SSO Microsoft, vault secrets persistant (cloud encore en mémoire), Mode B deploy, smoke E2E HTTP, presets connecteurs complets.
 
 Monorepo `workproba-cloud/` (NestJS + Quasar admin). Plugin desktop `workproba.cloud` via `CloudControlPlaneClient` et `RemoteCapabilityGateway`. Agent loop stays on desktop. Pas de réactivation de `legacy/api/` (`agent-gateway`). Spec : [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
