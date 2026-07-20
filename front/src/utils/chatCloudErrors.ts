@@ -10,6 +10,7 @@ export const NON_RETRYABLE_CLOUD_LLM_CODES = new Set([
   'unsupported_model',
   'bad_request',
   'bearer_token_required',
+  'invalid_user_jwt',
   'invalid_device_token',
   'device_organization_required',
   'org_id_required',

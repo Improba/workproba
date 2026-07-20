@@ -150,7 +150,8 @@ Join org, managed connectors, artefact sync, enterprise regards. Agent tools (if
 | Method | Route | Secret | Role |
 |---|---|---|---|
 | GET | `/plugins/cloud/connectors` | yes | List managed connectors from control plane |
-| POST | `/plugins/cloud/enroll` | yes | Join device with `join_token` (`device_code` → `join_token_required`) or paste existing bearer |
+| POST | `/plugins/cloud/enroll` | yes | Join with `join_token`, or bearer: User JWT is exchanged via control-plane `POST /devices/desktop-bearer` into durable `wp_dev_*` (opaque/`wp_dev_*` stored as-is) |
+| GET | `/plugins/cloud/status` | yes | Status + silent migration of a still-valid User JWT to `wp_dev_*` (`ensure_durable_device_bearer`) |
 | POST | `/plugins/cloud/sync-regards` | yes | Pull and install managed regards catalog |
 | GET/POST | `/plugins/cloud/artefacts` | yes | Shared project list/publish/open/republish |
 | POST | `/plugins/cloud/sync` | yes | Mount sync push (blocked when enrolled) |
@@ -160,7 +161,7 @@ Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins
 
 ### Improba Cloud LLM (`device_bearer`)
 
-Builtin set `workproba-cloud` (`auth_mode: device_bearer`). The sidecar resolves the DeviceBearer from `{app_data}/plugins/workproba.cloud/` via `cloud_plugin_data_dir` and calls `{control_plane}/llm/v1` (chat, embeddings, OCR). Quota: `GET /llm/v1/quota` (bearer only; no `device_id` in client body).
+Builtin set `workproba-cloud` (`auth_mode: device_bearer`). The sidecar resolves the DeviceBearer (`wp_dev_*`) from `{app_data}/plugins/workproba.cloud/` via `cloud_plugin_data_dir` and calls `{control_plane}/llm/v1` (chat, embeddings, OCR). Login must not leave a User JWT on disk: enroll/status exchange it for `wp_dev_*`. Cloud LLM auth errors include `invalid_user_jwt` / `invalid_device_token` (mapped, non-retryable). Quota: `GET /llm/v1/quota` (bearer only; no `device_id` in client body).
 
 Routes that honor `provider_set` + `cloud_plugin_data_dir`: `/agent/turn`, `/llm/sets/test`, `/util/title`, `/util/summarize`, `/memory/promote-session`, personas SSE (`/plugins/personas/ask|meeting|discuss`). Details: [docs/provider-sets-reasoning.md](../../docs/provider-sets-reasoning.md).
 

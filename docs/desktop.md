@@ -163,7 +163,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 **Livré (MVP Mode A, 20/07/2026)** :
 
-- Desktop cloud login (`CloudLoginModal` → `POST /devices/login` → User JWT)
+- Desktop cloud login (`CloudLoginModal` → `POST /devices/login` → sidecar exchange → DeviceBearer `wp_dev_*`)
 - First-run onboarding (`EngineOnboardingWizard`: engine choice, cloud login/register, Mistral key, manual OpenAI-compat)
 - Join device (`POST /devices/join` via `join_token`; `device_code` → `join_token_required`; pasting an existing bearer still works)
 - Connecteurs managés builtins : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel côté cloud, allowlist org) via `GET /connectors`, `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client

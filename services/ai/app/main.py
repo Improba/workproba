@@ -34,7 +34,11 @@ from app.capabilities import Capabilities, detect_capabilities
 from app.config import Settings, get_settings
 from app.local_client import LocalProjectClient
 from app.llm.config import build_model, build_model_settings, resolve_llm_config
-from app.llm.cloud_errors import cloud_llm_error_message, parse_cloud_llm_error_code
+from app.llm.cloud_errors import (
+    cloud_llm_error_message,
+    is_known_cloud_llm_code,
+    parse_cloud_llm_error_code,
+)
 from app.llm.fallback import FallbackableProviderError
 from app.llm.provider import resolve_litellm_model
 from app.llm.provider_sets import (
@@ -2838,9 +2842,30 @@ async def cloud_status_endpoint(
     _ = normalize_locale(locale)
 
     from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
 
     cloud_dir = _resolve_plugin_data_dir(plugin_data_dir)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    ok = True
+    if cloud_storage.is_enrolled(cloud_dir) and base_url:
+        try:
+            client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+            ok = await client.ensure_durable_device_bearer()
+        except Exception:
+            ok = False
+            logger.exception(
+                "ensure_durable_device_bearer failed during cloud status (plugin_data_dir=%s)",
+                cloud_dir,
+            )
+
     result = cloud_storage.status(cloud_dir)
+    if not ok:
+        stored_token = cloud_storage.get_access_token(cloud_dir)
+        if isinstance(stored_token, str) and CloudControlPlaneClient._looks_like_user_jwt(
+            stored_token
+        ):
+            result["enrolled"] = False
+            result["has_token"] = False
     return CloudStatusResponse(**result)
 
 
@@ -3268,8 +3293,12 @@ async def cloud_enroll_endpoint(
             raise ValueError("join_token_required")
         else:
             raise ValueError("cloud_auth_required")
+    except PermissionError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail="control_plane_unreachable") from exc
     _ = locale
     return CloudEnrollResponse(
         authenticated=bool(result.get("authenticated")),
@@ -3357,6 +3386,24 @@ async def cloud_list_connectors_endpoint(
     try:
         payload = await client.list_connectors()
     except PermissionError as exc:
+        detail = str(exc).strip()
+        if detail in (
+            "invalid_user_jwt",
+            "invalid_device_token",
+            "cloud_not_enrolled",
+            "bearer_token_required",
+        ):
+            raise HTTPException(status_code=401, detail=detail) from exc
+        if detail in (
+            "not_subscribed",
+            "device_organization_required",
+            "quota_exceeded",
+            "org_id_required",
+        ):
+            status = 429 if detail == "quota_exceeded" else 403
+            raise HTTPException(status_code=status, detail=detail) from exc
+        if is_known_cloud_llm_code(detail):
+            raise HTTPException(status_code=403, detail=detail) from exc
         raise HTTPException(
             status_code=403,
             detail=t(loc, "cloud.connectors_auth_failed"),
@@ -3416,7 +3463,12 @@ async def cloud_llm_quota_endpoint(
         payload = await client.get_llm_quota()
     except PermissionError as exc:
         detail = str(exc).strip()
-        if detail in ("invalid_device_token", "cloud_not_enrolled", "bearer_token_required"):
+        if detail in (
+            "invalid_user_jwt",
+            "invalid_device_token",
+            "cloud_not_enrolled",
+            "bearer_token_required",
+        ):
             raise HTTPException(status_code=401, detail=detail) from exc
         if detail in (
             "not_subscribed",

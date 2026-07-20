@@ -37,6 +37,15 @@
             {{ t('errors.reportOpenAction') }}
           </button>
           <button
+            v-if="streamErrorReconnectCta"
+            type="button"
+            class="chat-page__retry"
+            @click="onStreamErrorReconnect"
+          >
+            <Lucide name="log-in" size="xs" color="primary" />
+            {{ t('errors.cloudReconnect') }}
+          </button>
+          <button
             v-if="streamError.retryable"
             type="button"
             class="chat-page__retry"
@@ -48,6 +57,13 @@
         </div>
       </div>
     </header>
+
+    <CloudLoginModal
+      v-model="cloudLoginModalOpen"
+      @open-invitation="onOpenCloudInvitation"
+      @enrolled="onCloudReconnected"
+    />
+    <EnrollCloudModal v-model="enrollCloudModalOpen" @enrolled="onCloudEnrolled" />
 
     <section class="chat-page__body">
       <PersonasMeetingView
@@ -109,6 +125,8 @@ import { Notify } from 'quasar';
 import { useDebounceFn } from '@vueuse/core';
 import { toSidecarLocale } from '@boot/i18n';
 import ChatView from '@components/chat/ChatView.vue';
+import CloudLoginModal from '@components/cloud/CloudLoginModal.vue';
+import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
 import PersonasMeetingView from '@components/personas/PersonasMeetingView.vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useChatActivity } from '@composables/useChatActivity';
@@ -146,8 +164,9 @@ import {
 } from '@utils/providerSetModels';
 import { effectiveReasoningEffortFromSet } from '@utils/providerSets';
 import { defaultReasoningEffort, supportsReasoning } from '@utils/reasoningSupport';
-import type { ChatMessage, PersonasOpinionCard, ReasoningEffort } from '#types';
+import type { ChatErrorCode, ChatMessage, PersonasOpinionCard, ReasoningEffort } from '#types';
 import { CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
+import { useCloud } from '@composables/useCloud';
 import { usePersonasNavigation } from '@composables/usePersonasNavigation';
 import {
   toolResultToOpinionCard,
@@ -250,6 +269,16 @@ const uiMode = computed(() =>
 );
 
 const { openFromChatError } = useErrorReport();
+const { disconnect, refreshQuota } = useCloud();
+
+const cloudLoginModalOpen = ref(false);
+const enrollCloudModalOpen = ref(false);
+
+const CLOUD_ENROLL_ERROR_CODES = new Set<ChatErrorCode>([
+  'invalid_device_token',
+  'bearer_token_required',
+  'cloud_not_enrolled',
+]);
 
 const {
   messages,
@@ -287,6 +316,40 @@ const {
   },
   browserPilotagePaused: pilotagePaused,
 });
+
+const streamErrorReconnectCta = computed<'login' | 'enroll' | null>(() => {
+  const code = streamError.value?.code;
+  if (!code) return null;
+  if (code === 'invalid_user_jwt') return 'login';
+  if (CLOUD_ENROLL_ERROR_CODES.has(code)) return 'enroll';
+  return null;
+});
+
+async function onStreamErrorReconnect(): Promise<void> {
+  const cta = streamErrorReconnectCta.value;
+  if (!cta) return;
+  if (cta === 'login') {
+    await disconnect();
+    cloudLoginModalOpen.value = true;
+    return;
+  }
+  enrollCloudModalOpen.value = true;
+}
+
+function onOpenCloudInvitation(): void {
+  cloudLoginModalOpen.value = false;
+  enrollCloudModalOpen.value = true;
+}
+
+async function onCloudReconnected(): Promise<void> {
+  await refreshQuota();
+  cloudLoginModalOpen.value = false;
+}
+
+async function onCloudEnrolled(): Promise<void> {
+  await refreshQuota();
+  enrollCloudModalOpen.value = false;
+}
 
 function openStreamErrorReport(): void {
   if (!streamError.value) return;

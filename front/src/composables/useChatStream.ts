@@ -595,6 +595,8 @@ function localizeAgentError(code: string, fallback: string): string {
       return t('errors.cloudUnsupportedModel');
     case 'bad_request':
       return t('errors.cloudBadRequest');
+    case 'invalid_user_jwt':
+      return t('errors.cloudSessionExpired');
     case 'bearer_token_required':
     case 'invalid_device_token':
     case 'device_organization_required':
@@ -620,6 +622,7 @@ const NON_RETRYABLE_AGENT_CODES = new Set([
   'cloud_unreachable',
   'unsupported_model',
   'bad_request',
+  'invalid_user_jwt',
   'bearer_token_required',
   'invalid_device_token',
   'device_organization_required',

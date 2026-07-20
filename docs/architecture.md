@@ -145,12 +145,12 @@ First-run and cloud setup surfaces (also reachable from Settings → AI Models):
 | Component | Role |
 |---|---|
 | `EngineOnboardingWizard.vue` | First-run flow: engine choice → cloud login / register (opens cloud web) / Mistral API key / manual OpenAI-compat / cloud follow-up |
-| `CloudLoginModal.vue` + `cloudDesktopAuth.ts` | Username/password → `POST {control_plane}/devices/login` → User JWT |
+| `CloudLoginModal.vue` + `cloudDesktopAuth.ts` | Username/password → `POST {control_plane}/devices/login` → User JWT → sidecar exchange → DeviceBearer |
 | `EnrollCloudModal.vue` / `EnrollCloudJoinForm.vue` | `join_token` → DeviceBearer (also CloudPanel, model settings) |
 | `ManualOpenAiCompatForm.vue` | Base URL + API key + model for OpenAI-compatible providers |
 | `cloudWebUrls.ts` | `VITE_CLOUD_WEB_URL` (default `http://localhost:8482`); helpers `cloudAuthLoginUrl`, `cloudAuthRegisterUrl`; TODO deep-link `workproba://enroll` |
 
-**Login vs enroll:** `POST /devices/login` returns a **User JWT** (account auth for register/login flows). `POST /devices/join` with a `join_token` returns a **DeviceBearer** (`wp_dev_*`) used by the `workproba-cloud` provider set and managed connectors.
+**Login vs enroll:** `POST /devices/login` returns a short-lived **User JWT**. The desktop sidecar immediately exchanges it via `POST /devices/desktop-bearer` and persists a durable **DeviceBearer** (`wp_dev_*`) in `{app_data}/plugins/workproba.cloud/`. `POST /devices/join` with a `join_token` returns a DeviceBearer directly. Chat, quota and connectors always use `wp_dev_*` (never a stored User JWT), so sleep/wake does not require re-login. Legacy configs that still hold a User JWT are migrated on `GET /plugins/cloud/status` when the JWT is still valid; if already expired, the UI asks for one reconnect then stores `wp_dev_*`.
 
 ## Branding
 

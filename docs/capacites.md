@@ -16,7 +16,7 @@ You do not need to know about technical plugins or extensions to use them in gui
 | **Web navigation** | Browse pages from Workproba with guided agent help | Right panel, Browser tab |
 | **Improba Cloud** | Join org (`join_token`), managed connectors (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), shared projects, enterprise regards, **org LLM** (DeviceBearer, no personal API key) | CloudPanel under Projects; enroll via `EnrollCloudModal` or first-run `EngineOnboardingWizard` |
 
-**Cloud setup:** account login (`POST /devices/login`, User JWT) is separate from device enroll (`POST /devices/join`, DeviceBearer). Both are available from the onboarding wizard and Settings → AI Models.
+**Cloud setup:** account login (`POST /devices/login` → User JWT, exchanged by the sidecar into a durable DeviceBearer `wp_dev_*`) and device enroll (`POST /devices/join` → DeviceBearer) both leave a `wp_dev_*` on disk. Both are available from the onboarding wizard and Settings → AI Models.
 | **Mount sync** (advanced) | Technical NAS bridge via `ProjectSyncPort` ; deprecated product path, **blocked when enrolled** | Under Projects (advanced mode only) |
 
 ## Projects and sources of truth

@@ -124,8 +124,8 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 
 Standard path for managed connectors (MVP livré 20/07/2026). Plugin `workproba.cloud` :
 
-- **Desktop auth UX**: `CloudLoginModal` + `cloudDesktopAuth.ts` (`POST /devices/login` → User JWT); `EnrollCloudModal` / `EnrollCloudJoinForm` (`join_token` → DeviceBearer). First-run: `EngineOnboardingWizard`. Cloud web links: `cloudWebUrls.ts` (`VITE_CLOUD_WEB_URL`).
-- **`CloudControlPlaneClient`** : join device via `join_token` (ou bearer existant ; `device_code` → `join_token_required`), catalogs, regards (`/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`)
+- **Desktop auth UX**: `CloudLoginModal` + `cloudDesktopAuth.ts` (`POST /devices/login` → User JWT → exchange `POST /devices/desktop-bearer` → DeviceBearer `wp_dev_*`); `EnrollCloudModal` / `EnrollCloudJoinForm` (`join_token` → DeviceBearer). First-run: `EngineOnboardingWizard`. Cloud web links: `cloudWebUrls.ts` (`VITE_CLOUD_WEB_URL`).
+- **`CloudControlPlaneClient`** : join via `join_token`, or login bearer JWT exchanged to durable `wp_dev_*` (`ensure_durable_device_bearer` on status) ; catalogs, regards (`/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`)
 - **`RemoteCapabilityGateway`** + tool **`invoke_managed_connector`** : relay to `echo`, `ihora.shaped` (stub) and `ihora` (HTTP, allowlist org) via `POST /connectors/{id}/invoke` (payload only ; no client `subject_id` / `org_id`) ; sidecar `GET /plugins/cloud/connectors` ; Human Approval Gate (`external_send`)
 - **`ManagedRegardsPort`** for enterprise regards
 - **`ProjectSyncPort`** mount sync = technical NAS only, deprecated product path, **rejected when enrolled**

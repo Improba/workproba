@@ -112,6 +112,32 @@ def test_cloud_enroll_org_id_only_requires_join_token(tmp_path: Path) -> None:
         assert resp.json()["detail"] == "join_token_required"
 
 
+def test_cloud_enroll_network_unreachable_returns_502(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cloud_dir, _, _, _ = _layout(tmp_path)
+
+    async def fake_authenticate(self, **_kwargs):  # noqa: ANN001
+        raise httpx.ConnectError("connection refused")
+
+    monkeypatch.setattr(CloudControlPlaneClient, "authenticate", fake_authenticate)
+
+    with TestClient(mainmod.app) as client:
+        resp = client.post(
+            "/plugins/cloud/enroll",
+            json={
+                "plugin_data_dir": str(cloud_dir),
+                "base_url": "https://cloud.example.test",
+                "bearer_token": "wp_dev_unused",
+            },
+            headers=INTERNAL_HEADERS,
+        )
+
+    assert resp.status_code == 502
+    assert resp.json()["detail"] == "control_plane_unreachable"
+
+
 def test_cloud_config_and_status(tmp_path: Path) -> None:
     cloud_dir, _, mount, _ = _layout(tmp_path)
     cloud_storage.save_config(cloud_dir, {"mount_path": str(mount)})
@@ -179,6 +205,41 @@ def test_cloud_http_endpoints(tmp_path: Path) -> None:
         )
         assert sync_resp.status_code == 200
         assert "contrat.docx" in sync_resp.json()["synced"]
+
+
+def test_cloud_status_reports_not_enrolled_when_jwt_exchange_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cloud_dir, _, _, _ = _layout(tmp_path)
+    user_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+    config_path = cloud_dir / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {"access_token": user_jwt, "token_type": "bearer"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    async def fake_ensure(self) -> bool:
+        return False
+
+    monkeypatch.setattr(CloudControlPlaneClient, "ensure_durable_device_bearer", fake_ensure)
+
+    with TestClient(mainmod.app) as client:
+        status_resp = client.get(
+            "/plugins/cloud/status",
+            params={"plugin_data_dir": str(cloud_dir)},
+            headers=INTERNAL_HEADERS,
+        )
+
+    assert status_resp.status_code == 200
+    body = status_resp.json()
+    assert body["enrolled"] is False
+    assert body["has_token"] is False
 
 
 def test_cloud_sync_http_forbidden_without_project_sync(

@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import httpx
 import pytest
-from openai import PermissionDeniedError, RateLimitError
+from openai import AuthenticationError, PermissionDeniedError, RateLimitError
+from pydantic_ai.exceptions import ModelHTTPError
 
 from app.llm.cloud_errors import (
     cloud_llm_error_message,
@@ -61,6 +62,54 @@ def test_cloud_codes_are_non_retryable() -> None:
         body={"message": "quota_exceeded"},
     )
     assert is_fallbackable(exc) == (False, "")
+
+
+def test_parse_invalid_user_jwt_from_authentication_error() -> None:
+    exc = AuthenticationError(
+        "invalid_user_jwt",
+        response=httpx.Response(
+            401,
+            request=_httpx_request(),
+            json={"statusCode": 401, "message": "invalid_user_jwt"},
+        ),
+        body={"message": "invalid_user_jwt"},
+    )
+    assert parse_cloud_llm_error_code(exc) == "invalid_user_jwt"
+
+
+def test_invalid_user_jwt_is_non_retryable_and_not_fallbackable() -> None:
+    assert is_non_retryable_cloud_llm_code("invalid_user_jwt")
+    exc = AuthenticationError(
+        "invalid_user_jwt",
+        response=httpx.Response(
+            401,
+            request=_httpx_request(),
+            json={"message": "invalid_user_jwt"},
+        ),
+        body={"message": "invalid_user_jwt"},
+    )
+    assert is_fallbackable(exc) == (False, "")
+
+
+def test_parse_invalid_user_jwt_from_model_http_error_cause() -> None:
+    auth_exc = AuthenticationError(
+        "invalid_user_jwt",
+        response=httpx.Response(
+            401,
+            request=_httpx_request(),
+            json={"message": "invalid_user_jwt"},
+        ),
+        body={"message": "invalid_user_jwt"},
+    )
+    exc = ModelHTTPError(401, "mistral-large", body="Unauthorized")
+    exc.__cause__ = auth_exc
+    assert parse_cloud_llm_error_code(exc) == "invalid_user_jwt"
+
+
+def test_invalid_user_jwt_message_localized() -> None:
+    message = cloud_llm_error_message("invalid_user_jwt", "fr")
+    assert "session" in message.lower()
+    assert "reconnect" in message.lower()
 
 
 def test_cloud_llm_error_message_localized() -> None:

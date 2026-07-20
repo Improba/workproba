@@ -246,6 +246,8 @@ Readiness issue codes surfaced to the user:
 | `quota_exceeded` | Monthly token or request cap reached |
 | `cloud_unreachable` | Control plane unreachable |
 | `org_id_required` | Enrolled but org context missing |
+| `invalid_device_token` | DeviceBearer revoked or unknown |
+| `invalid_user_jwt` | User JWT expired/invalid (legacy or mid-login); non-retryable; CTA reconnect |
 
 After a successful cloud chat turn, the front calls `refreshQuota()` to update the quota chip.
 
@@ -253,12 +255,12 @@ Implementation: `useChatStream.ts`, `usePersonas.ts`, `useCloud.ts`.
 
 ### Cloud auth entry points (desktop)
 
-| Flow | Endpoint / surface | Token | Entry points |
+| Flow | Endpoint / surface | Token persisted locally | Entry points |
 |---|---|---|---|
-| Account login | `POST {control_plane}/devices/login` (username/password) | User JWT | `CloudLoginModal`, `EngineOnboardingWizard`, Settings |
-| Device enroll | `POST {control_plane}/devices/join` (`join_token`) | DeviceBearer (`wp_dev_*`) | `EnrollCloudModal`, `EnrollCloudJoinForm`, CloudPanel, model settings |
+| Account login | `POST /devices/login` then sidecar `POST /devices/desktop-bearer` | DeviceBearer (`wp_dev_*`) | `CloudLoginModal`, `EngineOnboardingWizard`, Settings |
+| Device enroll | `POST /devices/join` (`join_token`) | DeviceBearer (`wp_dev_*`) | `EnrollCloudModal`, `EnrollCloudJoinForm`, CloudPanel, model settings |
 
-`device_bearer` provider sets require a DeviceBearer from enroll, not a User JWT alone. `cloudDesktopAuth.ts` handles login; `cloudWebUrls.ts` builds cloud web login/register URLs (`VITE_CLOUD_WEB_URL`, default `http://localhost:8482`).
+`device_bearer` provider sets require a durable DeviceBearer on disk. Login still obtains a User JWT for account auth, but the sidecar exchanges it before storage (`CloudControlPlaneClient.exchange_user_jwt_for_device_bearer` / `ensure_durable_device_bearer` on status). `cloudDesktopAuth.ts` handles login; `cloudWebUrls.ts` builds cloud web login/register URLs (`VITE_CLOUD_WEB_URL`, default `http://localhost:8482`).
 
 ## Known limitations / residual risks
 

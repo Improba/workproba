@@ -19,6 +19,7 @@ KNOWN_CLOUD_LLM_CODES = frozenset(
         "unsupported_model",
         "bad_request",
         "bearer_token_required",
+        "invalid_user_jwt",
         "invalid_device_token",
         "device_organization_required",
         "org_id_required",

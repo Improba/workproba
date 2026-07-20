@@ -22,7 +22,7 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 - **Spaces**: sidebar, right panel (files, preview, active capabilities), side chat for Regards
 - **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write; native PPTX generation (`write_pptx`)
 - **Branding**: `WorkprobaBrand` mark and logo assets in the shell
-- **Improba Cloud desktop auth**: first-run onboarding (`EngineOnboardingWizard`), cloud login (`POST /devices/login`), device enroll (`join_token` → DeviceBearer)
+- **Improba Cloud desktop auth**: first-run onboarding (`EngineOnboardingWizard`), cloud login (`POST /devices/login` → exchange to durable DeviceBearer `wp_dev_*`), device enroll (`join_token` → DeviceBearer)
 
 ## License
 

@@ -198,6 +198,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "invalid_device_token": (
                     "Session cloud expirée. Reconnectez ce poste ou choisissez un autre moteur."
                 ),
+                "invalid_user_jwt": (
+                    "Votre session Improba Cloud a expiré. Reconnectez-vous pour relancer la "
+                    "génération."
+                ),
                 "device_organization_required": (
                     "Ce poste cloud n'est pas rattaché à une organisation."
                 ),
@@ -736,6 +740,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 ),
                 "invalid_device_token": (
                     "Cloud session expired. Reconnect this device or choose another engine."
+                ),
+                "invalid_user_jwt": (
+                    "Your Improba Cloud session has expired. Sign in again to continue generating."
                 ),
                 "device_organization_required": (
                     "This cloud device is not linked to an organization."

@@ -678,6 +678,9 @@ export default {
       'Could not reach cloud AI. Check your connection or choose another engine.',
     cloudUnsupportedModel: 'This model is not supported by cloud AI.',
     cloudBadRequest: 'Invalid cloud AI request.',
+    cloudSessionExpired:
+      'Your Improba Cloud session has expired. Sign in again to continue generating.',
+    cloudReconnect: 'Sign in again',
     cloudAuthRequired:
       'Cloud session missing or expired. Reconnect this device or choose another engine.',
     providerUnavailable: 'The AI provider is unavailable. Please try again later.',

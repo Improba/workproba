@@ -102,6 +102,7 @@ export function useCloud(): UseCloudReturn {
     }
     if (
       err === 'cloud_not_enrolled'
+      || err === 'invalid_user_jwt'
       || err === 'invalid_device_token'
       || err === 'bearer_token_required'
       || err === 'device_organization_required'

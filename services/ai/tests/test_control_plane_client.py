@@ -68,6 +68,432 @@ async def test_authenticate_bearer_persists_tokens(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_authenticate_user_jwt_exchanges_for_device_bearer(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    user_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+    exchange_calls: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/desktop-bearer":
+            auth = request.headers.get("authorization", "")
+            exchange_calls.append(auth)
+            assert auth == f"Bearer {user_jwt}"
+            return httpx.Response(
+                200,
+                json={
+                    "accessToken": "wp_dev_from_jwt",
+                    "orgId": "org-jwt",
+                    "deviceId": "dev_browser_1_1",
+                },
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        result = await client.authenticate(bearer_token=user_jwt)
+
+    assert result["authenticated"] is True
+    assert result["org_id"] == "org-jwt"
+    assert len(exchange_calls) == 1
+    tokens = client.load_tokens()
+    assert tokens["access_token"] == "wp_dev_from_jwt"
+    assert tokens["org_id"] == "org-jwt"
+    assert tokens["device_id"] == "dev_browser_1_1"
+
+
+@pytest.mark.asyncio
+async def test_authenticate_wp_dev_skips_exchange(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"unexpected request: {request.url.path}")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        result = await client.authenticate(
+            bearer_token="wp_dev_existing",
+            org_id="org-42",
+        )
+
+    assert result["authenticated"] is True
+    tokens = client.load_tokens()
+    assert tokens["access_token"] == "wp_dev_existing"
+    assert tokens["org_id"] == "org-42"
+
+
+@pytest.mark.asyncio
+async def test_authenticate_wp_dev_preserves_org_id_when_none(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    config_path = cloud_dir / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {
+                    "access_token": "wp_dev_old",
+                    "org_id": "org-prod",
+                    "token_type": "bearer",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"unexpected request: {request.url.path}")
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        result = await client.authenticate(
+            bearer_token="wp_dev_existing",
+            org_id=None,
+        )
+
+    assert result["authenticated"] is True
+    tokens = client.load_tokens()
+    assert tokens["access_token"] == "wp_dev_existing"
+    assert tokens["org_id"] == "org-prod"
+
+
+def test_looks_like_user_jwt_rejects_fake_three_part_token() -> None:
+    assert CloudControlPlaneClient._looks_like_user_jwt("a.b.c") is False
+
+
+def test_looks_like_user_jwt_accepts_real_three_part_token() -> None:
+    user_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+    assert CloudControlPlaneClient._looks_like_user_jwt(user_jwt) is True
+
+
+@pytest.mark.asyncio
+async def test_ensure_durable_device_bearer_opaque_permission_error(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    config_path = cloud_dir / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {"access_token": "opaque-admin-token", "token_type": "bearer"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/llm/v1/quota":
+            return httpx.Response(403, json={"message": "forbidden"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        durable = await client.ensure_durable_device_bearer()
+
+    assert durable is False
+
+
+@pytest.mark.asyncio
+async def test_ensure_durable_device_bearer_opaque_quota_ok(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    config_path = cloud_dir / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {"access_token": "opaque-admin-token", "token_type": "bearer"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/llm/v1/quota":
+            return httpx.Response(200, json={"remaining": 100})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        durable = await client.ensure_durable_device_bearer()
+
+    assert durable is True
+
+
+@pytest.mark.asyncio
+async def test_ensure_durable_device_bearer_migrates_stored_jwt(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    user_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+    config_path = cloud_dir / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {"access_token": user_jwt, "token_type": "bearer"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/desktop-bearer":
+            return httpx.Response(
+                200,
+                json={
+                    "accessToken": "wp_dev_migrated",
+                    "orgId": "org-migrated",
+                    "deviceId": "dev_browser_2_1",
+                },
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        migrated = await client.ensure_durable_device_bearer()
+
+    assert migrated is True
+    tokens = client.load_tokens()
+    assert tokens["access_token"] == "wp_dev_migrated"
+    assert tokens["org_id"] == "org-migrated"
+    assert tokens["device_id"] == "dev_browser_2_1"
+
+
+@pytest.mark.asyncio
+async def test_exchange_user_jwt_missing_access_token_raises(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    user_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+    existing_token = "wp_dev_existing"
+    config_path = cloud_dir / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {"access_token": existing_token, "token_type": "bearer"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/desktop-bearer":
+            return httpx.Response(200, json={"orgId": "org-1", "deviceId": "dev-1"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        with pytest.raises(ValueError, match="desktop_bearer_missing"):
+            await client.exchange_user_jwt_for_device_bearer(user_jwt)
+
+    tokens = client.load_tokens()
+    assert tokens["access_token"] == existing_token
+
+
+@pytest.mark.asyncio
+async def test_exchange_user_jwt_non_wp_dev_access_token_raises(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    user_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/desktop-bearer":
+            return httpx.Response(
+                200,
+                json={
+                    "accessToken": "not_a_device_bearer",
+                    "orgId": "org-1",
+                    "deviceId": "dev-1",
+                },
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        with pytest.raises(ValueError, match="desktop_bearer_missing"):
+            await client.exchange_user_jwt_for_device_bearer(user_jwt)
+
+    assert client.load_tokens() == {}
+
+
+@pytest.mark.asyncio
+async def test_exchange_user_jwt_sends_numeric_org_header(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    user_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+    config_path = cloud_dir / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {"access_token": user_jwt, "org_id": "42", "token_type": "bearer"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    seen_headers: list[dict[str, str]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/desktop-bearer":
+            seen_headers.append(dict(request.headers))
+            return httpx.Response(
+                200,
+                json={
+                    "accessToken": "wp_dev_with_org_header",
+                    "orgId": "42",
+                    "deviceId": "dev-42",
+                },
+            )
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        await client.exchange_user_jwt_for_device_bearer(user_jwt)
+
+    assert len(seen_headers) == 1
+    assert seen_headers[0].get("x-organization-id") == "42"
+
+
+@pytest.mark.asyncio
+async def test_ensure_durable_device_bearer_permission_error_keeps_jwt(tmp_path: Path) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    user_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+    config_path = cloud_dir / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {"access_token": user_jwt, "token_type": "bearer"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/desktop-bearer":
+            return httpx.Response(403, json={"message": "forbidden"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        migrated = await client.ensure_durable_device_bearer()
+
+    assert migrated is False
+    tokens = client.load_tokens()
+    assert tokens["access_token"] == user_jwt
+
+
+@pytest.mark.asyncio
+async def test_ensure_durable_device_bearer_false_when_exchange_returns_non_wp_dev(
+    tmp_path: Path,
+) -> None:
+    cloud_dir, _, _ = _layout(tmp_path)
+    user_jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig"
+    config_path = cloud_dir / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {"access_token": user_jwt, "token_type": "bearer"},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/devices/desktop-bearer":
+            return httpx.Response(200, json={"accessToken": "bad_token"})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        migrated = await client.ensure_durable_device_bearer()
+
+    assert migrated is False
+    assert client.load_tokens()["access_token"] == user_jwt
+
+
+@pytest.mark.asyncio
 async def test_authenticate_device_code_raises_join_token_required(tmp_path: Path) -> None:
     cloud_dir, _, _ = _layout(tmp_path)
     client = CloudControlPlaneClient(

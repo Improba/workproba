@@ -380,7 +380,9 @@ function isTechnicalError(message: string): boolean {
 
 function mapConnectorError(raw: string): string | null {
   const trimmed = raw.trim();
-  if (trimmed === 'invalid_device_token') return t('cloud.connectors.authFailed');
+  if (trimmed === 'invalid_user_jwt' || trimmed === 'invalid_device_token') {
+    return t('cloud.connectors.authFailed');
+  }
   if (trimmed.startsWith('connectors_unavailable:')) return t('cloud.connectors.loadFailed');
   return null;
 }
@@ -403,7 +405,9 @@ const displayConnectorsError = computed(() => {
   const raw = connectorsError.value;
   if (!raw) return null;
   const trimmed = raw.trim();
-  if (trimmed === 'invalid_device_token') return t('cloud.connectors.authFailed');
+  if (trimmed === 'invalid_user_jwt' || trimmed === 'invalid_device_token') {
+    return t('cloud.connectors.authFailed');
+  }
   if (
     trimmed.includes('code d\'invitation')
     || trimmed.toLowerCase().includes('invitation code')

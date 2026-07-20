@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +15,21 @@ from app.plugins.ports.managed_regards import ManagedRegardsPort, SignedBundle
 JsonDict = dict[str, Any]
 
 DEFAULT_TIMEOUT = 30.0
+DEVICE_TOKEN_PREFIX = "wp_dev_"
+
+
+def _merge_token_fields(
+    *,
+    access_token: str,
+    org_id: str | None = None,
+    device_id: str | None = None,
+) -> JsonDict:
+    out: JsonDict = {"access_token": access_token, "token_type": "bearer"}
+    if isinstance(org_id, str) and org_id.strip():
+        out["org_id"] = org_id.strip()
+    if isinstance(device_id, str) and device_id.strip():
+        out["device_id"] = device_id.strip()
+    return out
 
 
 class CloudControlPlaneClient:
@@ -82,12 +99,27 @@ class CloudControlPlaneClient:
     ) -> JsonDict:
         """Enrôlement : bearer direct (admin) ou join_token via join_with_token."""
         if bearer_token:
-            tokens = self.save_tokens(
-                {
-                    "access_token": bearer_token,
-                    "token_type": "bearer",
-                    "org_id": org_id,
+            token = bearer_token.strip()
+            if token.startswith(DEVICE_TOKEN_PREFIX):
+                tokens = self.save_tokens(
+                    _merge_token_fields(access_token=token, org_id=org_id)
+                )
+                return {
+                    "authenticated": True,
+                    "method": "bearer",
+                    "org_id": tokens.get("org_id"),
                 }
+
+            if self._looks_like_user_jwt(token):
+                tokens = await self.exchange_user_jwt_for_device_bearer(token)
+                return {
+                    "authenticated": True,
+                    "method": "bearer",
+                    "org_id": tokens.get("org_id"),
+                }
+
+            tokens = self.save_tokens(
+                _merge_token_fields(access_token=token, org_id=org_id)
             )
             return {"authenticated": True, "method": "bearer", "org_id": tokens.get("org_id")}
 
@@ -95,6 +127,97 @@ class CloudControlPlaneClient:
             raise ValueError("join_token_required")
 
         raise ValueError("cloud_auth_required")
+
+    @staticmethod
+    def _looks_like_user_jwt(token: str) -> bool:
+        if token.startswith(DEVICE_TOKEN_PREFIX):
+            return False
+        parts = token.split(".")
+        if len(parts) != 3:
+            return False
+        header_b64 = parts[0]
+        padding = (-len(header_b64)) % 4
+        if padding:
+            header_b64 += "=" * padding
+        try:
+            header = json.loads(base64.urlsafe_b64decode(header_b64))
+        except (ValueError, json.JSONDecodeError, TypeError):
+            return False
+        return isinstance(header, dict) and "alg" in header
+
+    async def exchange_user_jwt_for_device_bearer(self, user_jwt: str) -> JsonDict:
+        """Échange un User JWT contre un jeton poste durable (POST /devices/desktop-bearer)."""
+        headers: dict[str, str] = {"Authorization": f"Bearer {user_jwt.strip()}"}
+        stored_org_id = self.load_tokens().get("org_id")
+        if (
+            isinstance(stored_org_id, str)
+            and stored_org_id.strip()
+            and re.fullmatch(r"\d+", stored_org_id.strip())
+        ):
+            headers["X-Organization-Id"] = stored_org_id.strip()
+
+        client = await self._client()
+        owns_client = self._http_client is None
+        try:
+            response = await client.post(
+                "/devices/desktop-bearer",
+                headers=headers,
+            )
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                self._reraise_http_error(exc)
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("invalid_control_plane_response")
+        finally:
+            if owns_client:
+                await client.aclose()
+
+        access_token = payload.get("accessToken")
+        org_id = payload.get("orgId")
+        device_id = payload.get("deviceId")
+        if (
+            not isinstance(access_token, str)
+            or not access_token.strip()
+            or not access_token.strip().startswith(DEVICE_TOKEN_PREFIX)
+        ):
+            raise ValueError("desktop_bearer_missing")
+
+        tokens: JsonDict = {
+            "access_token": access_token.strip(),
+            "token_type": "bearer",
+        }
+        if isinstance(org_id, str) and org_id.strip():
+            tokens["org_id"] = org_id.strip()
+        if isinstance(device_id, str) and device_id.strip():
+            tokens["device_id"] = device_id.strip()
+        self.save_tokens(tokens)
+        return tokens
+
+    async def ensure_durable_device_bearer(self) -> bool:
+        token = self.load_tokens().get("access_token")
+        if not isinstance(token, str) or not token.strip():
+            return False
+        token = token.strip()
+        if token.startswith(DEVICE_TOKEN_PREFIX):
+            return True
+        if self._looks_like_user_jwt(token):
+            try:
+                tokens = await self.exchange_user_jwt_for_device_bearer(token)
+                access = tokens.get("access_token")
+                return isinstance(access, str) and access.startswith(DEVICE_TOKEN_PREFIX)
+            except (PermissionError, ValueError, httpx.HTTPError, httpx.RequestError):
+                return False
+        # Bearer opaque (admin) : valider auprès du cloud, pas de True aveugle
+        try:
+            await self.get_llm_quota()
+            return True
+        except PermissionError:
+            return False
+        except (httpx.HTTPError, ValueError):
+            # Panne réseau : fail-open pour ne pas déconnecter à tort
+            return True
 
     @staticmethod
     def _auth_error_detail(response: httpx.Response) -> str:

@@ -677,6 +677,9 @@ export default {
       'Impossible de joindre le cloud IA. Vérifiez votre connexion ou choisissez un autre moteur.',
     cloudUnsupportedModel: 'Ce modèle n\'est pas pris en charge par le cloud IA.',
     cloudBadRequest: 'Requête cloud IA invalide.',
+    cloudSessionExpired:
+      'Votre session Improba Cloud a expiré. Reconnectez-vous pour relancer la génération.',
+    cloudReconnect: 'Se reconnecter',
     cloudAuthRequired:
       'Session cloud expirée ou absente. Reconnectez ce poste ou choisissez un autre moteur.',
     providerUnavailable: 'Le fournisseur IA est indisponible. Réessayez plus tard.',
