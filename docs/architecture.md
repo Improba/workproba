@@ -132,7 +132,7 @@ Fixed agent tools generate native Office and PDF files in the project folder (Hu
 
 ## Plugins and capabilities
 
-Four builtin plugins; guided UX presents them as **activatable capabilities** (Regards métier, Bibliothèque et livrables, **Workproba Cloud**, Navigation web). Org services (`ihora`, …) appear as **managed capabilities** nested under Workproba Cloud in the Capabilities hub (API still uses `connectors`). Technical plugin details in advanced Settings → Extensions. See [plugins.md](./plugins.md), [capacites.md](./capacites.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
+Four builtin plugins; guided UX presents them as **activatable capabilities**. Order in the Capabilities hub: **Workproba Cloud** first (with a **collapsible** sub-capabilities zone: Project management, managed services such as Ihora), then Regards métier, then Navigation web. Org services from the control plane still use the API name `connectors`. Technical plugin details in advanced Settings → Extensions. See [plugins.md](./plugins.md), [capacites.md](./capacites.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
 **File versions** (T-V2-15): snapshots live under `{space}/versions/`; the sidecar exposes `GET /versions`, `POST /versions/restore`, and optional `POST /versions/purge` (keep last N, default 20, and/or drop entries older than X days). The right-panel **Versions** tab offers restore and manual cleanup.
 

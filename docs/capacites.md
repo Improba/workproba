@@ -46,11 +46,13 @@ Managed capabilities use Improba Cloud Mode A: the agent calls `invoke_managed_c
 ## How to activate
 
 1. Click **Capabilities** in the title bar.
-2. Pick a capability card (e.g. **Workproba Cloud**).
-3. Use **Enable and open** (or **Configure** if enrollment is still needed) to jump to its home surface.
-4. After enrollment, managed capabilities authorized by your org appear **nested under Workproba Cloud** (e.g. Ihora). Open one to jump to the Cloud panel. They are controlled by the organization (no local disable toggle).
+2. **Workproba Cloud** appears first. Enable / configure it to enroll your organization.
+3. Open **Sub-capabilities** (collapsible) under Cloud: **Project management**, then any org-managed items (e.g. **Ihora**). Compact cards; scroll when the list is long.
+4. Other top-level cards: Regards métier, Navigation web.
 
-To turn a **local** capability off, open the hub again and use **Disable** on an active card. Disabling Workproba Cloud hides nested managed capabilities until Cloud is active and enrolled again.
+Managed items are controlled by the organization (no local disable toggle). Disabling Workproba Cloud also turns off nested Project management (parent cascade).
+
+To turn a top-level local capability off, use **Disable** on its card.
 
 ## What is not a capability?
 

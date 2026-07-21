@@ -168,7 +168,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 - Join device (`POST /devices/join` via `join_token`; `device_code` → `join_token_required`; pasting an existing bearer still works)
 - Capacités managées (API `connectors`) : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel, allowlist org) via `GET /connectors`, `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client
 - Desktop : `RemoteCapabilityGateway`, outil agent `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`
-- **Hub Capacités (21/07)** : capacité top-level **Workproba Cloud** ; enfants managés (ex. Ihora) ; stubs masqués en guidé
+- **Hub Capacités (21/07)** : **Workproba Cloud** en premier ; zone **Sous-capacités** dépliante (Gestion de projet + managées type Ihora, cartes compactes) ; stubs masqués en guidé
 - CloudPanel (join, capacités managées, regards, projets), sync artefacts publiés, org LLM (DeviceBearer)
 - Secrets org connecteurs : persistés PostgreSQL + AES-GCM ; UI admin org allowlist/secrets
 

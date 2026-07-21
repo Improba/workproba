@@ -17,7 +17,7 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 - **Agent chat**: SSE streaming, model and reasoning per conversation, attachments, composite "+" menu
 - **Human approval**: effect-oriented confirmation before file writes, publishing, network access, or code execution
 - **Scoped memory**: global user memories + project memories, local RAG, agent `remember` tool
-- **Activatable capabilities**: Regards métier, document library & deliverables, web navigation, **Workproba Cloud** (enroll org, artefact sync, org LLM). Org services such as **Ihora** appear as **managed capabilities** nested under Workproba Cloud (not separate desktop connectors). Technical API: `echo` / `ihora.shaped` / `ihora` via Improba Cloud Mode A. Integrated plugins; not a third-party extension marketplace in V2.
+- **Activatable capabilities**: **Workproba Cloud** first (collapsible sub-capabilities: **Project management**, managed services such as **Ihora**), Regards métier, web navigation. Technical API: `echo` / `ihora.shaped` / `ihora` via Improba Cloud Mode A. Integrated plugins; not a third-party extension marketplace in V2.
 - **Personas / Regards métier**: professional perspectives, simulated meetings, discussions (Improba builtin set)
 - **Spaces**: sidebar, right panel (files, preview, active capabilities), side chat for Regards
 - **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write; native PPTX generation (`write_pptx`)

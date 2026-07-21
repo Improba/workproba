@@ -122,9 +122,9 @@ Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins
 
 ## Improba Cloud / Workproba Cloud (Mode A)
 
-**Product model (21/07/2026):** on the desktop there is **one** connector capability — **Workproba Cloud** (`workproba.cloud`, catalog id `workproba_cloud`). Org services listed by the control plane (`echo`, `ihora.shaped`, `ihora`, …) appear in the Capabilities hub as **managed capabilities** nested under Workproba Cloud (not as separate top-level connectors). Guided mode hides technical stubs (`echo`, `ihora.shaped`).
+**Product model (21/07/2026):** on the desktop there is **one** connector capability — **Workproba Cloud** (`workproba.cloud`, catalog id `workproba_cloud`), listed **first** in the Capabilities hub. **Project management** (`projects` / `workproba.projet`) and org services from the control plane (`echo`, `ihora.shaped`, `ihora`, …) appear in a **collapsible** sub-capabilities zone under Cloud (compact cards). Guided mode hides technical stubs (`echo`, `ihora.shaped`).
 
-Standard path for managed capabilities (MVP livré 20/07/2026 ; hub hierarchy 21/07/2026). Plugin `workproba.cloud` :
+Standard path for managed capabilities (MVP livré 20/07/2026 ; hub hierarchy + dépliant 21/07/2026). Plugin `workproba.cloud` :
 
 - **Desktop auth UX**: `CloudLoginModal` + `cloudDesktopAuth.ts` (`POST /devices/login` → User JWT → exchange `POST /devices/desktop-bearer` → DeviceBearer `wp_dev_*`); `EnrollCloudModal` / `EnrollCloudJoinForm` (`join_token` → DeviceBearer). First-run: `EngineOnboardingWizard`. Cloud web links: `cloudWebUrls.ts` (`VITE_CLOUD_WEB_URL`).
 - **`CloudControlPlaneClient`** : join via `join_token`, or login bearer JWT exchanged to durable `wp_dev_*` (`ensure_durable_device_bearer` on status) ; catalogs, regards (`/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`)
