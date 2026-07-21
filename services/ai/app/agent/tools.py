@@ -78,6 +78,8 @@ class ToolContext:
     prepared_session_candidates: tuple[dict, ...] | None = None
     prepared_tagged_memories: tuple[dict, ...] | None = None
     ui_mode: str = "guided"
+    # Snapshot allowlist du tour (après refresh cache) ; None = fetch à l'invoke.
+    managed_allowed_connector_ids: frozenset[str] | None = None
 
 
 @dataclass

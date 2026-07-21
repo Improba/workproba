@@ -100,6 +100,7 @@ class AgentLoop:
         model_settings: dict[str, Any] | None = None,
         project_root: Path | None = None,
         limits: Limits = DEFAULT_LIMITS,
+        managed_allowed_connector_ids: frozenset[str] | None = None,
     ) -> None:
         self._agent = agent
         self._project_client = project_client
@@ -108,6 +109,7 @@ class AgentLoop:
         self._model_settings = model_settings or {}
         self._project_root = project_root
         self._limits = limits
+        self._managed_allowed_connector_ids = managed_allowed_connector_ids
 
     async def run_turn(
         self,
@@ -359,6 +361,7 @@ class AgentLoop:
             prepared_session_candidates=prepared_session_candidates,
             prepared_tagged_memories=prepared_tagged_memories,
             ui_mode=request.ui_mode,
+            managed_allowed_connector_ids=self._managed_allowed_connector_ids,
         )
         deps = ToolDeps(
             context=context,

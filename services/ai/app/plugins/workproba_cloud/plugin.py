@@ -242,19 +242,24 @@ def _connector_cache_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
     return cached
 
 
-async def refresh_known_managed_connectors_cache(cloud_dir: Path) -> None:
-    """Best-effort refresh du cache connecteurs/tools avant construction de l'agent."""
+async def refresh_known_managed_connectors_cache(cloud_dir: Path) -> frozenset[str]:
+    """Best-effort refresh du cache connecteurs/tools. Retourne les ids allowlistés."""
     base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
     if not base_url or not is_cloud_enrolled(cloud_dir):
-        return
+        return frozenset()
     try:
         client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
         payload = await client.list_connectors()
     except Exception:
-        return
+        known = cloud_storage.get_known_managed_connectors(cloud_dir)
+        return frozenset(
+            str(entry.get("id"))
+            for entry in known
+            if isinstance(entry.get("id"), str) and str(entry.get("id")).strip()
+        )
     raw = payload.get("connectors") if isinstance(payload, dict) else None
     if not isinstance(raw, list):
-        return
+        return frozenset()
     connectors: list[dict[str, Any]] = []
     for entry in raw:
         if not isinstance(entry, dict):
@@ -263,6 +268,7 @@ async def refresh_known_managed_connectors_cache(cloud_dir: Path) -> None:
         if cached is not None:
             connectors.append(cached)
     cloud_storage.save_known_managed_connectors(cloud_dir, connectors)
+    return frozenset(str(entry["id"]) for entry in connectors)
 
 
 def make_managed_tool_shim(
@@ -391,41 +397,19 @@ def register_cloud_tools(
         if not base_url or not is_cloud_enrolled(cloud_dir):
             return ""
 
-        # Lecture seule : le cache disque est alimenté par GET /plugins/cloud/connectors (Hub).
-        connectors: list[dict[str, str]] = []
-        try:
-            client = CloudControlPlaneClient(
-                base_url=base_url,
-                plugin_data_dir=cloud_dir,
-            )
-            payload = await client.list_connectors()
-            raw = payload.get("connectors") if isinstance(payload, dict) else None
-            if isinstance(raw, list):
-                for entry in raw:
-                    if not isinstance(entry, dict) or not entry.get("id"):
-                        continue
-                    connector_id = str(entry.get("id"))
-                    connectors.append(
-                        {
-                            "id": connector_id,
-                            "name": str(entry.get("name") or connector_id),
-                        }
-                    )
-        except Exception:
-            connectors = cloud_storage.get_known_managed_connectors(cloud_dir)
-
-        if not connectors:
-            connectors = cloud_storage.get_known_managed_connectors(cloud_dir)
+        # Snapshot du tour (cache disque) : même source que l'enregistrement des tools.
+        connectors = cloud_storage.get_known_managed_connectors(cloud_dir)
         if not connectors:
             return t(locale, "tools.managed_connectors_empty")
 
         items = [
             (
-                entry["id"],
-                entry["name"],
-                cloud_storage.is_managed_connector_enabled(cloud_dir, entry["id"]),
+                str(entry["id"]),
+                str(entry.get("name") or entry["id"]),
+                cloud_storage.is_managed_connector_enabled(cloud_dir, str(entry["id"])),
             )
             for entry in connectors
+            if isinstance(entry.get("id"), str) and str(entry.get("id")).strip()
         ]
         return build_managed_connectors_agent_prompt(locale, items)
 
@@ -738,12 +722,14 @@ async def invoke_managed_connector_impl(
     )
 
     try:
-        try:
-            allowed = await client.fetch_allowed_connector_ids()
-        except PermissionError as exc:
-            raise ModelRetry(t(locale, "cloud.connectors_auth_failed")) from exc
-        except Exception as exc:  # noqa: BLE001
-            raise ModelRetry(t(locale, "cloud.connectors_load_failed")) from exc
+        allowed = deps.context.managed_allowed_connector_ids
+        if allowed is None:
+            try:
+                allowed = await client.fetch_allowed_connector_ids()
+            except PermissionError as exc:
+                raise ModelRetry(t(locale, "cloud.connectors_auth_failed")) from exc
+            except Exception as exc:  # noqa: BLE001
+                raise ModelRetry(t(locale, "cloud.connectors_load_failed")) from exc
 
         if connector_id not in allowed:
             raise ModelRetry(f"connector_not_allowed:{connector_id}")
@@ -778,6 +764,7 @@ async def invoke_managed_connector_impl(
                 {
                     "connector_id": summary_connector_id,
                     "tool_name": gate_tool_name,
+                    "action": action or "",
                 },
                 locale=locale,
             )
@@ -786,6 +773,7 @@ async def invoke_managed_connector_impl(
                 {
                     "connector_id": summary_connector_id,
                     "tool_name": gate_tool_name,
+                    "action": action or "",
                 },
                 permissions_network=deps.context.permissions_network,
             )

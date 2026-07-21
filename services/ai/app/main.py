@@ -603,6 +603,7 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                             resolve_plugin_data_dir,
                         )
 
+                        managed_allowed: frozenset[str] | None = None
                         if is_plugin_active(
                             PLUGIN_WORKPROBA_CLOUD, payload.active_plugins
                         ):
@@ -614,8 +615,10 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                                 PLUGIN_WORKPROBA_CLOUD, plugin_dir
                             )
                             if cloud_plugin_dir is not None:
-                                await refresh_known_managed_connectors_cache(
-                                    cloud_plugin_dir
+                                managed_allowed = (
+                                    await refresh_known_managed_connectors_cache(
+                                        cloud_plugin_dir
+                                    )
                                 )
                         agent = build_agent(
                             model,
@@ -633,6 +636,7 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                             model_settings=build_model_settings(config, payload.provider_set),
                             project_root=project_root,
                             limits=limits,
+                            managed_allowed_connector_ids=managed_allowed,
                         )
                         try:
                             async for event in agent_loop.run_turn(
