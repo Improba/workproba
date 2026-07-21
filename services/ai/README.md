@@ -145,11 +145,11 @@ Full documentation: [docs/web-search.md](../../docs/web-search.md).
 
 ### Cloud plugin (`workproba.cloud`) — Mode A MVP
 
-Join org, managed connectors, artefact sync, enterprise regards. Agent tools (if active): `enroll_to_cloud`, `sync_managed_regards`, `sync_to_cloud`, **`invoke_managed_connector`** (Human Approval Gate `external_send`).
+Join org, managed capabilities (API connectors), artefact sync, enterprise regards. Agent tools (if active): `enroll_to_cloud`, `sync_managed_regards`, `sync_to_cloud`, **`invoke_managed_connector`** (Human Approval Gate `external_send`). Product UI: Workproba Cloud capability + nested managed capabilities (e.g. Ihora).
 
 | Method | Route | Secret | Role |
 |---|---|---|---|
-| GET | `/plugins/cloud/connectors` | yes | List managed connectors from control plane |
+| GET | `/plugins/cloud/connectors` | yes | List managed capabilities from control plane |
 | POST | `/plugins/cloud/enroll` | yes | Join with `join_token`, or bearer: User JWT is exchanged via control-plane `POST /devices/desktop-bearer` into durable `wp_dev_*` (opaque/`wp_dev_*` stored as-is) |
 | GET | `/plugins/cloud/status` | yes | Status + silent migration of a still-valid User JWT to `wp_dev_*` (`ensure_durable_device_bearer`) |
 | POST | `/plugins/cloud/sync-regards` | yes | Pull and install managed regards catalog |
@@ -157,7 +157,7 @@ Join org, managed connectors, artefact sync, enterprise regards. Agent tools (if
 | POST | `/plugins/cloud/sync` | yes | Mount sync push (blocked when enrolled) |
 | POST | `/plugins/cloud/pull` | yes | Mount sync pull (blocked when enrolled) |
 
-Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins `echo`, `ihora.shaped` stub, `ihora` HTTP when org allowlist permits ; payload only, identity derived server-side). See [architecture-cloud.md](../../../workproba-improba/roadmaps/architecture-cloud.md).
+Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins `echo`, `ihora.shaped` stub, `ihora` HTTP when org allowlist permits ; payload only, identity derived server-side). Desktop Capabilities hub shows these as managed capabilities under Workproba Cloud. See [architecture-cloud.md](../../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ### Improba Cloud LLM (`device_bearer`)
 

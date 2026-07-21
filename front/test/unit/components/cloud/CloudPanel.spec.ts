@@ -127,7 +127,14 @@ vi.mock('quasar', () => ({
 
 function mountPanel() {
   return shallowMount(CloudPanel, {
-    global: { stubs: { Lucide: true, EnrollCloudJoinForm: false } },
+    global: {
+      stubs: {
+        Lucide: true,
+        EnrollCloudJoinForm: false,
+        CloudLoginModal: true,
+        EnrollCloudModal: true,
+      },
+    },
   });
 }
 
@@ -199,17 +206,33 @@ describe('CloudPanel', () => {
     expect(wrapper.find('.cloud-panel__projects').exists()).toBe(false);
   });
 
-  it('affiche le formulaire join en mode guidé non enrollé', async () => {
+  it('affiche la connexion principale en mode guidé non enrollé', async () => {
     const wrapper = mountPanel();
     await flushPromises();
 
-    expect(wrapper.text()).toContain('cloud.joinTitle');
-    expect(wrapper.text()).toContain('cloud.join');
-    expect(wrapper.find('#cloud-join-token').exists()).toBe(true);
+    expect(wrapper.text()).toContain('cloud.loginTitle');
+    expect(wrapper.text()).toContain('cloud.loginSubmit');
+    expect(wrapper.text()).toContain('cloud.haveInvitationCode');
+    expect(wrapper.find('#cloud-join-token').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('cloud.bearerToken');
     expect(wrapper.text()).not.toContain('cloud.advancedOptions');
     expect(wrapper.text()).not.toContain('cloud.connectedBadge');
     expect(wrapper.text()).not.toContain('cloud.experimental');
+  });
+
+  it('affiche le formulaire join après clic invitation', async () => {
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    const invitationBtn = wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('cloud.haveInvitationCode'));
+    await invitationBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('cloud.joinTitle');
+    expect(wrapper.text()).toContain('cloud.joinSubmit');
+    expect(wrapper.find('#cloud-join-token').exists()).toBe(true);
   });
 
   it('affiche connecté à org quand enrollé en mode guidé', async () => {
@@ -346,7 +369,7 @@ describe('CloudPanel', () => {
     await wrapper.find('.cloud-panel__link-btn--danger').trigger('click');
     await flushPromises();
 
-    expect(wrapper.text()).toContain('cloud.joinTitle');
+    expect(wrapper.text()).toContain('cloud.loginTitle');
     expect(wrapper.text()).not.toContain('cloud.hideLocalOptions');
     expect(wrapper.text()).not.toContain('cloud.localOptions');
   });
@@ -365,6 +388,12 @@ describe('CloudPanel', () => {
     const wrapper = mountPanel();
     await flushPromises();
     listProjetProjects.mockClear();
+
+    const invitationBtn = wrapper
+      .findAll('button')
+      .find((btn) => btn.text().includes('cloud.haveInvitationCode'));
+    await invitationBtn!.trigger('click');
+    await flushPromises();
 
     await wrapper.find('#cloud-join-token').setValue('invite-1');
     await wrapper.find('form').trigger('submit');

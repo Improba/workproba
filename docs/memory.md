@@ -2,7 +2,7 @@
 
 > **Last updated:** 18/07/2026
 
-Workproba provides **scoped local memory** for the desktop agent. Data stays on the user's machine (SQLite, JSON session files). No cloud memory service is required (conversations and RAG stay on the desktop; Improba Cloud handles auth, secrets, and managed connectors separately).
+Workproba provides **scoped local memory** for the desktop agent. Data stays on the user's machine (SQLite, JSON session files). No cloud memory service is required (conversations and RAG stay on the desktop; Workproba Cloud / Improba Cloud handles auth, secrets, and managed capabilities separately).
 
 The system combines **three complementary layers**:
 

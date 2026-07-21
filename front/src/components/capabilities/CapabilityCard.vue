@@ -1,25 +1,28 @@
 <template>
   <article
     class="wp-cap-card"
-    :class="{ 'wp-cap-card--nested': nested }"
+    :class="{
+      'wp-cap-card--nested': nested,
+      'wp-cap-card--compact': compact,
+    }"
     :data-capability-id="view.definition.id"
     :aria-busy="busy || undefined"
   >
     <header class="wp-cap-card__head">
       <span class="wp-cap-card__icon" aria-hidden="true">
-        <Lucide :name="view.definition.icon" size="18" color="accent" />
+        <Lucide :name="view.definition.icon" :size="compact ? '16' : '18'" color="accent" />
       </span>
       <div class="wp-cap-card__titles">
-        <h3 class="wp-cap-card__title">{{ t(view.definition.titleKey) }}</h3>
+        <h3 class="wp-cap-card__title" :title="tooltip">{{ title }}</h3>
         <CapabilityStatusBadge :state="view.state" />
       </div>
     </header>
 
-    <p class="wp-cap-card__description">{{ t(view.definition.descriptionKey) }}</p>
+    <p v-if="description && !compact" class="wp-cap-card__description">{{ description }}</p>
 
-    <p class="wp-cap-card__home">
+    <p v-if="!compact" class="wp-cap-card__home">
       <Lucide name="home" size="13" color="text-faint" />
-      <span>{{ t(view.definition.homeKey) }}</span>
+      <span>{{ homeLabel }}</span>
     </p>
 
     <footer class="wp-cap-card__actions">
@@ -63,11 +66,15 @@ import CapabilityStatusBadge from './CapabilityStatusBadge.vue';
 import type { CapabilityId } from '@capabilities/capabilityCatalog';
 import type { CapabilityView } from '@composables/useCapabilities';
 
-const props = defineProps<{
-  view: CapabilityView;
-  nested?: boolean;
-  busy?: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    view: CapabilityView;
+    nested?: boolean;
+    compact?: boolean;
+    busy?: boolean;
+  }>(),
+  { nested: false, compact: false, busy: false },
+);
 
 const { busy } = toRefs(props);
 
@@ -79,8 +86,37 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 
+const isManaged = computed(() => props.view.definition.source === 'managed');
+
+const title = computed(() => {
+  if (props.view.definition.resolvedTitle?.trim()) {
+    return props.view.definition.resolvedTitle;
+  }
+  if (props.view.definition.titleKey) {
+    return t(props.view.definition.titleKey);
+  }
+  return props.view.definition.managedConnectorId ?? props.view.definition.id;
+});
+
+const description = computed(() => {
+  if (props.view.definition.resolvedDescription?.trim()) {
+    return props.view.definition.resolvedDescription;
+  }
+  if (props.view.definition.source === 'managed') {
+    return t('capabilities.managed.description');
+  }
+  if (!props.view.definition.descriptionKey) return '';
+  return t(props.view.definition.descriptionKey);
+});
+
+const homeLabel = computed(() => {
+  if (!props.view.definition.homeKey) return '';
+  return t(props.view.definition.homeKey);
+});
+
 const primaryAction = computed(() => {
   const { state } = props.view;
+  const short = props.compact;
   switch (state.kind) {
     case 'active':
       return {
@@ -91,7 +127,9 @@ const primaryAction = computed(() => {
     case 'available':
       return {
         kind: 'activate',
-        label: t('capabilities.actions.activateAndOpen'),
+        label: short
+          ? t('capabilities.actions.activate')
+          : t('capabilities.actions.activateAndOpen'),
         disabled: false,
       };
     case 'needs_setup':
@@ -109,11 +147,18 @@ const primaryAction = computed(() => {
   }
 });
 
+const tooltip = computed(() => {
+  if (!props.compact) return undefined;
+  return description.value || undefined;
+});
+
 const showOpenAction = computed(
   () => props.view.state.kind === 'needs_setup',
 );
 
-const showDeactivate = computed(() => props.view.state.kind === 'active');
+const showDeactivate = computed(
+  () => props.view.state.kind === 'active' && !isManaged.value,
+);
 
 function onPrimaryAction(): void {
   if (!primaryAction.value) return;
@@ -142,8 +187,41 @@ function onDeactivate(): void {
 }
 
 .wp-cap-card--nested {
-  margin-left: var(--wp-space-4);
-  border-style: dashed;
+  margin-left: 0;
+  border-style: solid;
+  box-shadow: none;
+}
+
+.wp-cap-card--compact {
+  gap: var(--wp-space-2);
+  padding: var(--wp-space-3);
+
+  .wp-cap-card__icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .wp-cap-card__title {
+    font-size: var(--wp-fs-sm);
+  }
+
+  .wp-cap-card__titles {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--wp-space-2);
+  }
+
+  .wp-cap-card__cta,
+  .wp-cap-card__secondary {
+    min-height: 28px;
+    font-size: var(--wp-fs-xs);
+  }
+}
+
+.wp-cap-card--focus {
+  outline: 2px solid var(--wp-accent);
+  outline-offset: 2px;
 }
 
 .wp-cap-card__head {

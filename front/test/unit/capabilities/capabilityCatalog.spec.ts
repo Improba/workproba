@@ -1,17 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import {
   CAPABILITY_CATALOG,
+  GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS,
+  buildManagedCapabilityDefinition,
   getCapabilityDefinition,
   getCapabilityForPlugin,
   getNestedCapabilities,
   getTopLevelCapabilities,
+  isManagedCapabilityId,
+  managedCapabilityId,
 } from '@capabilities/capabilityCatalog';
-import { CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID } from '@composables/usePlugins';
+import { CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID, PROJET_PLUGIN_ID } from '@composables/usePlugins';
 
 describe('capabilityCatalog', () => {
-  it('définit les quatre capacités attendues', () => {
+  it('place Workproba Cloud en premier et nest la gestion de projet', () => {
     const ids = CAPABILITY_CATALOG.map((cap) => cap.id);
-    expect(ids).toEqual(['regards', 'projects', 'web_navigation', 'project_sync']);
+    expect(ids).toEqual(['workproba_cloud', 'projects', 'regards', 'web_navigation']);
   });
 
   it('chaque capacité a un titre, une icône et un domicile', () => {
@@ -25,24 +29,38 @@ describe('capabilityCatalog', () => {
     }
   });
 
-  it('expose les capacités de premier niveau et imbriquées', () => {
+  it('expose le top-level et les enfants sous Workproba Cloud', () => {
     expect(getTopLevelCapabilities().map((cap) => cap.id)).toEqual([
+      'workproba_cloud',
       'regards',
-      'projects',
       'web_navigation',
     ]);
-    expect(getNestedCapabilities('projects').map((cap) => cap.id)).toEqual(['project_sync']);
-    expect(getCapabilityDefinition('regards')?.primarySurface.type).toBe('side_chat');
-    expect(getCapabilityDefinition('projects')?.primarySurface.tabKey).toBe(
-      'workproba.projet:right_panel',
-    );
-    expect(getCapabilityDefinition('project_sync')?.primarySurface.type).toBe('nested');
-    expect(getCapabilityDefinition('project_sync')?.pluginIds).toEqual(['workproba.cloud']);
+    expect(getNestedCapabilities('workproba_cloud').map((cap) => cap.id)).toEqual(['projects']);
+    expect(getCapabilityDefinition('projects')?.parentId).toBe('workproba_cloud');
+    expect(getCapabilityDefinition('workproba_cloud')?.pluginIds).toEqual([CLOUD_PLUGIN_ID]);
+    expect(getCapabilityDefinition('projects')?.pluginIds).toEqual([PROJET_PLUGIN_ID]);
   });
 
   it('résout la capacité à partir d\'un pluginId', () => {
     expect(getCapabilityForPlugin(PERSONAS_PLUGIN_ID)?.id).toBe('regards');
-    expect(getCapabilityForPlugin(CLOUD_PLUGIN_ID)?.id).toBe('project_sync');
+    expect(getCapabilityForPlugin(CLOUD_PLUGIN_ID)?.id).toBe('workproba_cloud');
+    expect(getCapabilityForPlugin(PROJET_PLUGIN_ID)?.id).toBe('projects');
     expect(getCapabilityForPlugin('unknown.plugin')).toBeUndefined();
+  });
+
+  it('construit des capacités managées sous Workproba Cloud', () => {
+    const managed = buildManagedCapabilityDefinition({
+      connectorId: 'ihora',
+      name: 'IHora',
+      description: 'Absences et temps',
+    });
+    expect(managed.id).toBe('managed:ihora');
+    expect(isManagedCapabilityId(managed.id)).toBe(true);
+    expect(managedCapabilityId('ihora')).toBe('managed:ihora');
+    expect(managed.parentId).toBe('workproba_cloud');
+    expect(managed.source).toBe('managed');
+    expect(managed.resolvedTitle).toBe('IHora');
+    expect(GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS).toContain('echo');
+    expect(GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS).toContain('ihora.shaped');
   });
 });

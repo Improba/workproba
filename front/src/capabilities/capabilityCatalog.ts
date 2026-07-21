@@ -5,11 +5,17 @@ import {
   PROJET_PLUGIN_ID,
 } from '@composables/usePlugins';
 
-export type CapabilityId =
+export type LocalCapabilityId =
   | 'regards'
   | 'projects'
   | 'web_navigation'
-  | 'project_sync';
+  | 'workproba_cloud';
+
+export type ManagedCapabilityId = `managed:${string}`;
+
+export type CapabilityId = LocalCapabilityId | ManagedCapabilityId;
+
+export type CapabilitySource = 'local' | 'managed';
 
 export type CapabilityStateKind =
   | 'active'
@@ -45,10 +51,17 @@ export interface CapabilityDefinition {
   icon: string;
   pluginIds: string[];
   primarySurface: PrimarySurface;
-  /** Capacité parente (ex. synchronisation sous projets). */
+  /** Capacité parente (ex. sous Workproba Cloud). */
   parentId?: CapabilityId;
   /** Affichée comme « bientôt disponible » en mode guidé. */
   comingSoonInGuided?: boolean;
+  /** Origine produit : locale (plugin) ou managée (via Workproba Cloud). */
+  source?: CapabilitySource;
+  /** Id connecteur cloud quand `source === 'managed'`. */
+  managedConnectorId?: string;
+  /** Titre / description résolus (API), sans clé i18n. */
+  resolvedTitle?: string;
+  resolvedDescription?: string;
 }
 
 export interface CapabilityState {
@@ -56,7 +69,45 @@ export interface CapabilityState {
   managedByOrganization?: boolean;
 }
 
+/** Connecteurs techniques masqués en mode guidé dans le hub Capacités. */
+export const GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS: readonly string[] = [
+  'echo',
+  'ihora.shaped',
+];
+
+/**
+ * Ordre produit : Workproba Cloud en premier (seul connecteur bureau),
+ * puis capacités locales. La gestion de projet (`projects`) est une
+ * sous-capacité de Workproba Cloud.
+ */
 export const CAPABILITY_CATALOG: readonly CapabilityDefinition[] = [
+  {
+    id: 'workproba_cloud',
+    titleKey: 'capabilities.workprobaCloud.title',
+    descriptionKey: 'capabilities.workprobaCloud.description',
+    homeKey: 'capabilities.workprobaCloud.home',
+    icon: 'cloud',
+    pluginIds: [CLOUD_PLUGIN_ID],
+    primarySurface: {
+      type: 'right_panel',
+      tabKey: `${CLOUD_PLUGIN_ID}:right_panel`,
+    },
+    source: 'local',
+  },
+  {
+    id: 'projects',
+    titleKey: 'capabilities.projects.title',
+    descriptionKey: 'capabilities.projects.description',
+    homeKey: 'capabilities.projects.home',
+    icon: 'folder-kanban',
+    pluginIds: [PROJET_PLUGIN_ID],
+    parentId: 'workproba_cloud',
+    primarySurface: {
+      type: 'right_panel',
+      tabKey: `${PROJET_PLUGIN_ID}:right_panel`,
+    },
+    source: 'local',
+  },
   {
     id: 'regards',
     titleKey: 'capabilities.regards.title',
@@ -68,18 +119,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityDefinition[] = [
       type: 'side_chat',
       pluginId: PERSONAS_PLUGIN_ID,
     },
-  },
-  {
-    id: 'projects',
-    titleKey: 'capabilities.projects.title',
-    descriptionKey: 'capabilities.projects.description',
-    homeKey: 'capabilities.projects.home',
-    icon: 'folder-kanban',
-    pluginIds: [PROJET_PLUGIN_ID],
-    primarySurface: {
-      type: 'right_panel',
-      tabKey: `${PROJET_PLUGIN_ID}:right_panel`,
-    },
+    source: 'local',
   },
   {
     id: 'web_navigation',
@@ -92,28 +132,34 @@ export const CAPABILITY_CATALOG: readonly CapabilityDefinition[] = [
       type: 'right_panel',
       tabKey: `${BROWSER_PLUGIN_ID}:right_panel`,
     },
-  },
-  {
-    id: 'project_sync',
-    titleKey: 'capabilities.projectSync.title',
-    descriptionKey: 'capabilities.projectSync.description',
-    homeKey: 'capabilities.projectSync.home',
-    icon: 'cloud',
-    pluginIds: [CLOUD_PLUGIN_ID],
-    parentId: 'projects',
-    primarySurface: {
-      type: 'nested',
-      parentCapabilityId: 'projects',
-      tabKey: `${CLOUD_PLUGIN_ID}:right_panel`,
-    },
+    source: 'local',
   },
 ] as const;
 
-export function getCapabilityDefinition(id: CapabilityId): CapabilityDefinition | undefined {
+export function isManagedCapabilityId(id: CapabilityId): boolean {
+  return typeof id === 'string' && id.startsWith('managed:');
+}
+
+export function managedCapabilityId(connectorId: string): ManagedCapabilityId {
+  return `managed:${connectorId}`;
+}
+
+export function connectorIdFromManagedCapability(
+  id: ManagedCapabilityId,
+): string {
+  return id.slice('managed:'.length);
+}
+
+export function getCapabilityDefinition(
+  id: CapabilityId,
+): CapabilityDefinition | undefined {
+  if (isManagedCapabilityId(id)) return undefined;
   return CAPABILITY_CATALOG.find((cap) => cap.id === id);
 }
 
-export function getCapabilityForPlugin(pluginId: string): CapabilityDefinition | undefined {
+export function getCapabilityForPlugin(
+  pluginId: string,
+): CapabilityDefinition | undefined {
   return CAPABILITY_CATALOG.find((cap) => cap.pluginIds.includes(pluginId));
 }
 
@@ -121,6 +167,35 @@ export function getTopLevelCapabilities(): CapabilityDefinition[] {
   return CAPABILITY_CATALOG.filter((cap) => !cap.parentId);
 }
 
-export function getNestedCapabilities(parentId: CapabilityId): CapabilityDefinition[] {
+export function getNestedCapabilities(
+  parentId: CapabilityId,
+): CapabilityDefinition[] {
   return CAPABILITY_CATALOG.filter((cap) => cap.parentId === parentId);
+}
+
+export function buildManagedCapabilityDefinition(input: {
+  connectorId: string;
+  name: string;
+  description?: string;
+}): CapabilityDefinition {
+  const id = managedCapabilityId(input.connectorId);
+  const title = input.name.trim() || input.connectorId;
+  return {
+    id,
+    titleKey: 'capabilities.managed.title',
+    descriptionKey: 'capabilities.managed.description',
+    homeKey: 'capabilities.managed.home',
+    icon: 'puzzle',
+    pluginIds: [CLOUD_PLUGIN_ID],
+    parentId: 'workproba_cloud',
+    source: 'managed',
+    managedConnectorId: input.connectorId,
+    resolvedTitle: title,
+    resolvedDescription: input.description?.trim() || undefined,
+    primarySurface: {
+      type: 'nested',
+      parentCapabilityId: 'workproba_cloud',
+      tabKey: `${CLOUD_PLUGIN_ID}:right_panel`,
+    },
+  };
 }

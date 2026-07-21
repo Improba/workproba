@@ -1,11 +1,17 @@
 import { computed, type ComputedRef } from 'vue';
 import {
   CAPABILITY_CATALOG,
+  GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS,
+  buildManagedCapabilityDefinition,
+  connectorIdFromManagedCapability,
   getCapabilityDefinition,
   getNestedCapabilities,
+  isManagedCapabilityId,
+  managedCapabilityId,
   type CapabilityDefinition,
   type CapabilityId,
   type CapabilityState,
+  type ManagedCapabilityId,
 } from '@capabilities/capabilityCatalog';
 import {
   BROWSER_PLUGIN_ID,
@@ -15,6 +21,7 @@ import {
 } from './usePlugins';
 import { useAppSettings } from './useAppSettings';
 import { useShellSurfaces } from './useShellSurfaces';
+import { useCloud } from './useCloud';
 
 export interface CapabilityView {
   definition: CapabilityDefinition;
@@ -63,7 +70,7 @@ function collectRequiredPluginIds(definition: CapabilityDefinition): string[] {
   return ids;
 }
 
-function computeCapabilityState(
+function computeLocalCapabilityState(
   definition: CapabilityDefinition,
   pluginIdsInstalled: Set<string>,
   activePluginIds: Set<string>,
@@ -73,6 +80,7 @@ function computeCapabilityState(
   permissionsNetwork: boolean,
   permissionsProjectSync: boolean,
   permissionsNetworkImprobaCloud: boolean,
+  cloudEnrolled: boolean,
 ): CapabilityState {
   const guided = isGuidedMode(settingsLocked, settingsMode);
   const requiredPluginIds = collectRequiredPluginIds(definition);
@@ -110,6 +118,9 @@ function computeCapabilityState(
   }
 
   if (capabilityPluginsActive && dependenciesActive) {
+    if (definition.id === 'workproba_cloud' && !cloudEnrolled) {
+      return { kind: 'needs_setup' };
+    }
     return { kind: 'active' };
   }
 
@@ -122,11 +133,24 @@ export interface UseCapabilitiesReturn {
   activateAndOpen: (id: CapabilityId) => Promise<void>;
   open: (id: CapabilityId) => void;
   deactivate: (id: CapabilityId) => Promise<void>;
+  refreshManaged: () => Promise<void>;
 }
 
 export function useCapabilities(): UseCapabilitiesReturn {
   const { plugins, activePluginIds, activatePlugin, deactivatePlugin } = usePlugins();
-  const { settings, settingsLocked, settingsMode, permissionsNetwork, permissionsProjectSync, permissionsNetworkImprobaCloud } = useAppSettings();
+  const {
+    settings,
+    settingsLocked,
+    settingsMode,
+    permissionsNetwork,
+    permissionsProjectSync,
+    permissionsNetworkImprobaCloud,
+  } = useAppSettings();
+  const {
+    isEnrolled,
+    connectors,
+    init: initCloud,
+  } = useCloud();
 
   const {
     openRightPanel,
@@ -138,11 +162,14 @@ export function useCapabilities(): UseCapabilitiesReturn {
     () => new Set(plugins.value.map((p) => p.manifest.id)),
   );
   const activeIds = computed(() => new Set(activePluginIds.value));
+  const guided = computed(() =>
+    isGuidedMode(settingsLocked.value, settingsMode.value),
+  );
 
-  function buildView(definition: CapabilityDefinition): CapabilityView {
+  function buildLocalView(definition: CapabilityDefinition): CapabilityView {
     return {
       definition,
-      state: computeCapabilityState(
+      state: computeLocalCapabilityState(
         definition,
         pluginIdsInstalled.value,
         activeIds.value,
@@ -152,17 +179,50 @@ export function useCapabilities(): UseCapabilitiesReturn {
         permissionsNetwork.value,
         permissionsProjectSync.value,
         permissionsNetworkImprobaCloud.value,
+        isEnrolled.value,
       ),
     };
   }
 
-  const capabilities = computed(() =>
-    CAPABILITY_CATALOG.map((definition) => buildView(definition)),
-  );
+  function buildManagedViews(): CapabilityView[] {
+    const cloudActive = activeIds.value.has(CLOUD_PLUGIN_ID);
+    if (!cloudActive || !isEnrolled.value) {
+      return [];
+    }
+
+    const hidden = new Set(
+      guided.value ? GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS : [],
+    );
+
+    return connectors.value
+      .filter((connector) => !hidden.has(connector.id))
+      .map((connector) => {
+        const definition = buildManagedCapabilityDefinition({
+          connectorId: connector.id,
+          name: connector.name,
+          description: connector.description,
+        });
+        return {
+          definition,
+          state: {
+            kind: 'active' as const,
+            managedByOrganization: true,
+          },
+        };
+      });
+  }
+
+  const capabilities = computed(() => [
+    ...CAPABILITY_CATALOG.map((definition) => buildLocalView(definition)),
+    ...buildManagedViews(),
+  ]);
 
   function getById(id: CapabilityId): CapabilityView | undefined {
+    if (isManagedCapabilityId(id)) {
+      return buildManagedViews().find((view) => view.definition.id === id);
+    }
     const definition = getCapabilityDefinition(id);
-    return definition ? buildView(definition) : undefined;
+    return definition ? buildLocalView(definition) : undefined;
   }
 
   function openSurface(definition: CapabilityDefinition): void {
@@ -209,6 +269,15 @@ export function useCapabilities(): UseCapabilitiesReturn {
     if (view.state.kind === 'blocked' || view.state.kind === 'unavailable') return;
     if (view.state.kind === 'coming_soon') return;
 
+    if (isManagedCapabilityId(id)) {
+      if (!activeIds.value.has(CLOUD_PLUGIN_ID)) {
+        await activatePlugin(CLOUD_PLUGIN_ID);
+      }
+      closeCapabilities();
+      openSurface(view.definition);
+      return;
+    }
+
     const pluginIdsToActivate = [...view.definition.pluginIds];
     if (view.definition.parentId) {
       const parent = getCapabilityDefinition(view.definition.parentId);
@@ -232,12 +301,19 @@ export function useCapabilities(): UseCapabilitiesReturn {
   }
 
   async function deactivate(id: CapabilityId): Promise<void> {
+    if (isManagedCapabilityId(id)) {
+      // Capacités managées : pilotées par l'org, pas de toggle local.
+      return;
+    }
+
     const definition = getCapabilityDefinition(id);
     if (!definition) return;
 
     for (const nested of getNestedCapabilities(id)) {
       await deactivate(nested.id);
     }
+    // Les vues managées sous Workproba Cloud sont dérivées de connectors + enroll :
+    // elles disparaissent d'elles-mêmes une fois le plugin cloud désactivé.
 
     for (const pluginId of definition.pluginIds) {
       if (activeIds.value.has(pluginId)) {
@@ -246,15 +322,33 @@ export function useCapabilities(): UseCapabilitiesReturn {
     }
   }
 
+  async function refreshManaged(): Promise<void> {
+    // initCloud() rafraîchit déjà status + connectors si enrollé.
+    await initCloud();
+  }
+
   return {
     capabilities,
     getById,
     activateAndOpen,
     open,
     deactivate,
+    refreshManaged,
   };
 }
 
 export function getNestedCapabilityViews(parentId: CapabilityId): CapabilityDefinition[] {
   return getNestedCapabilities(parentId);
+}
+
+export function findManagedCapabilityId(
+  connectorId: string,
+): ManagedCapabilityId {
+  return managedCapabilityId(connectorId);
+}
+
+export function parseManagedConnectorId(
+  id: ManagedCapabilityId,
+): string {
+  return connectorIdFromManagedCapability(id);
 }

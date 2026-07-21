@@ -154,6 +154,6 @@ describe('PluginsPanel', () => {
       .findAll('button')
       .find((btn) => btn.text() === 'settings.plugins.openInCapabilities');
     await openButton!.trigger('click');
-    expect(openCapabilities).toHaveBeenCalledWith('project_sync');
+    expect(openCapabilities).toHaveBeenCalledWith('workproba_cloud');
   });
 });

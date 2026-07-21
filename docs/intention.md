@@ -16,7 +16,7 @@ Imp calls **fixed, controlled tools** to transform documents. Workproba V2 **doe
 
 ## Product decision
 
-**Tauri 2 desktop application** working on local folders, connected to Improba Cloud for managed connectors (standard path). See [desktop.md](./desktop.md) and [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
+**Tauri 2 desktop application** working on local folders, connected to Workproba Cloud for managed capabilities (standard path). See [desktop.md](./desktop.md) and [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ## Product goals
 

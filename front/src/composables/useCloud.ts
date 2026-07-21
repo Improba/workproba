@@ -54,6 +54,7 @@ export interface UseCloudReturn {
   providerReadiness: ComputedRef<CloudProviderReadiness | null>;
   /** Cloud enrolled — « projet partagé » product vocabulary (not mount-only). */
   isActive: ComputedRef<boolean>;
+  /** Session cloud user établie (flag technique `enrolled` côté API). */
   isEnrolled: ComputedRef<boolean>;
   /** Technical sync available: mount folder and/or cloud enrolled. */
   canSync: ComputedRef<boolean>;

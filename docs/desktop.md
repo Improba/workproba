@@ -6,7 +6,7 @@
 
 ## Decision
 
-Workproba becomes a **desktop application** (Claude Cowork style) working on local folders, connected to **Improba Cloud** for managed connectors (standard path). Multi-platform:
+Workproba becomes a **desktop application** (Claude Cowork style) working on local folders, connected to **Workproba Cloud** (Improba Cloud Mode A) for managed capabilities (standard path). Multi-platform:
 
 | OS | Target formats |
 |---|---|
@@ -115,7 +115,7 @@ Workproba metadata lives in the **application folder**, not in the client folder
 | AI core | Python / FastAPI | Agent loop, extraction, RAG, fixed tool implementations |
 | Local data | `{app_data}/spaces/{id}/.workproba/` | Sessions, versions, memory |
 | Cloud legacy (archived) | `legacy/` | Former NestJS stack |
-| Improba Cloud (Mode A MVP) | `workproba-cloud/` | Auth user + DeviceBearer side-car, managed connectors, transport relay |
+| Improba Cloud (Mode A MVP) | `workproba-cloud/` | Auth user + DeviceBearer side-car, managed capabilities (API connectors), transport relay |
 
 ## Security and trust (UX)
 
@@ -148,7 +148,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, builtin plugins (Regards métier), attachments, document preview, audit, Human Approval Gate, Work Event Bus |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
-| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`): desktop login (`POST /devices/login`), join via `join_token` (or existing bearer), first-run onboarding (`EngineOnboardingWizard`), managed connectors (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), relay via `invoke_managed_connector`, CloudPanel, sync published artefacts |
+| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`): desktop login (`POST /devices/login`), join via `join_token` (or existing bearer), first-run onboarding (`EngineOnboardingWizard`), managed capabilities under **Workproba Cloud** (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), relay via `invoke_managed_connector`, CloudPanel, sync published artefacts, Capabilities hub hierarchy (21/07) |
 
 ### Phase D: validation
 
@@ -166,11 +166,13 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 - Desktop cloud login (`CloudLoginModal` → `POST /devices/login` → sidecar exchange → DeviceBearer `wp_dev_*`)
 - First-run onboarding (`EngineOnboardingWizard`: engine choice, cloud login/register, Mistral key, manual OpenAI-compat)
 - Join device (`POST /devices/join` via `join_token`; `device_code` → `join_token_required`; pasting an existing bearer still works)
-- Connecteurs managés builtins : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel côté cloud, allowlist org) via `GET /connectors`, `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client
+- Capacités managées (API `connectors`) : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel, allowlist org) via `GET /connectors`, `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client
 - Desktop : `RemoteCapabilityGateway`, outil agent `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`
-- CloudPanel (join, connecteurs, regards, projets), sync artefacts publiés, org LLM (DeviceBearer)
+- **Hub Capacités (21/07)** : capacité top-level **Workproba Cloud** ; enfants managés (ex. Ihora) ; stubs masqués en guidé
+- CloudPanel (join, capacités managées, regards, projets), sync artefacts publiés, org LLM (DeviceBearer)
+- Secrets org connecteurs : persistés PostgreSQL + AES-GCM ; UI admin org allowlist/secrets
 
-**Ouvert** : SSO Microsoft, vault secrets persistant (cloud encore en mémoire), Mode B deploy, smoke E2E HTTP, presets connecteurs complets.
+**Ouvert** : SSO Microsoft, Mode B deploy, smoke E2E HTTP, presets connecteurs complets.
 
 Monorepo `workproba-cloud/` (NestJS + Quasar admin). Plugin desktop `workproba.cloud` via `CloudControlPlaneClient` et `RemoteCapabilityGateway`. Agent loop stays on desktop. Pas de réactivation de `legacy/api/` (`agent-gateway`). Spec : [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 

@@ -13,10 +13,34 @@
     </p>
 
     <template v-else>
-      <!-- Join (guidé / verrouillé, non enrollé) -->
+      <!-- Connexion principale (guidé / verrouillé, non connecté) -->
       <section
         v-if="isFinalFace && !status?.enrolled"
         class="cloud-panel__section"
+      >
+        <h3 class="cloud-panel__section-title">{{ t('cloud.loginTitle') }}</h3>
+        <p class="cloud-panel__hint">{{ t('cloud.loginHint') }}</p>
+        <button
+          type="button"
+          class="cloud-panel__save-btn"
+          :disabled="loading"
+          @click="cloudLoginModalOpen = true"
+        >
+          {{ t('cloud.loginSubmit') }}
+        </button>
+        <button
+          type="button"
+          class="cloud-panel__link-btn"
+          @click="showJoinSection = !showJoinSection"
+        >
+          {{ t('cloud.haveInvitationCode') }}
+        </button>
+      </section>
+
+      <!-- Invitation org (secondaire) -->
+      <section
+        v-if="isFinalFace && !status?.enrolled && showJoinSection"
+        class="cloud-panel__section cloud-panel__section--secondary"
       >
         <h3 class="cloud-panel__section-title">{{ t('cloud.joinTitle') }}</h3>
         <p class="cloud-panel__hint">{{ t('cloud.joinHint') }}</p>
@@ -26,17 +50,21 @@
           :show-url-field="showCloudUrlField"
           :disabled="loading"
           :submitting="joining"
+          :submit-label="t('cloud.joinSubmit')"
           @submit="onJoin"
         />
       </section>
 
-      <!-- Connexion (guidé et avancé) -->
+      <!-- Connecté -->
       <section v-if="status?.enrolled" class="cloud-panel__section">
         <h3 class="cloud-panel__section-title">
           {{ t('cloud.connectedTo', { org: connectedOrgLabel }) }}
         </h3>
         <p class="cloud-panel__sync-meta">
           {{ t('cloud.syncMeta', { count: status?.synced_count ?? 0, lastSync: lastSyncLabel }) }}
+        </p>
+        <p v-if="deviceInfoLabel" class="cloud-panel__device-meta">
+          {{ deviceInfoLabel }}
         </p>
         <p v-if="cloudQuotaLabel" class="cloud-panel__quota-meta">
           {{ cloudQuotaLabel }}
@@ -266,6 +294,13 @@
         </ul>
       </section>
     </template>
+
+    <CloudLoginModal
+      v-model="cloudLoginModalOpen"
+      @enrolled="onCloudLoggedIn"
+      @open-invitation="onOpenCloudInvitation"
+    />
+    <EnrollCloudModal v-model="enrollCloudModalOpen" @enrolled="onCloudLoggedIn" />
   </div>
 </template>
 
@@ -281,6 +316,8 @@ import { resolveUiMode, listProjetProjects, type ProjetProject } from '@services
 import { usePersonas } from '@composables/usePersonas';
 import ManagedConnectorsSection from '@components/cloud/ManagedConnectorsSection.vue';
 import EnrollCloudJoinForm from '@components/cloud/EnrollCloudJoinForm.vue';
+import CloudLoginModal from '@components/cloud/CloudLoginModal.vue';
+import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
 
 const { t } = useI18n();
 const emit = defineEmits<{
@@ -321,6 +358,9 @@ const savingEnroll = ref(false);
 const joining = ref(false);
 const disconnecting = ref(false);
 const showLocalOptions = ref(false);
+const showJoinSection = ref(false);
+const cloudLoginModalOpen = ref(false);
+const enrollCloudModalOpen = ref(false);
 const projects = ref<ProjetProject[]>([]);
 const projectsLoadError = ref<string | null>(null);
 
@@ -342,6 +382,25 @@ const showCloudUrlField = computed(
 const connectedOrgLabel = computed(
   () => status.value?.org_label ?? status.value?.org_id ?? t('cloud.unknownOrg'),
 );
+
+const deviceInfoLabel = computed(() => {
+  const id = status.value?.device_id?.trim();
+  if (!id || !status.value?.enrolled) return '';
+  return t('cloud.deviceInfo', { id });
+});
+
+function onOpenCloudInvitation(): void {
+  cloudLoginModalOpen.value = false;
+  showJoinSection.value = true;
+  enrollCloudModalOpen.value = true;
+}
+
+async function onCloudLoggedIn(): Promise<void> {
+  showJoinSection.value = false;
+  joinTokenDraft.value = '';
+  await refreshStatus();
+  await refreshProjects();
+}
 
 const cloudQuotaLabel = computed(() => {
   if (!status.value?.enrolled) return '';
@@ -825,6 +884,12 @@ defineExpose({
   margin: 0;
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-muted);
+}
+
+.cloud-panel__device-meta {
+  margin: 0;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
 }
 
 .cloud-panel__quota-meta {

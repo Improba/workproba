@@ -67,7 +67,8 @@ export default {
     guestName: 'Guest',
     guestOrg: 'Sign in',
     cloudAccount: 'Cloud account',
-    localMode: 'Local mode',
+    localMode: 'Not connected',
+    connectPrompt: 'Sign in to Improba Cloud',
     conversationCreateFailed: 'Could not create conversation',
     conversationOpenFailed: 'Could not open conversation (space unavailable).',
     fileTreeLabel: 'Space file tree',
@@ -197,8 +198,9 @@ export default {
       home: 'Regards side panel',
     },
     projects: {
-      title: 'Document library and deliverables',
-      description: 'Organize documents published on this computer. Connect to the cloud for a shared project with your organization.',
+      title: 'Project management',
+      description:
+        'Local library and shared projects via Workproba Cloud: publish and organize your organization’s deliverables.',
       home: 'Right panel, Library tab',
     },
     webNavigation: {
@@ -206,11 +208,20 @@ export default {
       description: 'Browse the web from Workproba for guided research and interactions.',
       home: 'Right panel, Browser tab',
     },
-    projectSync: {
-      title: 'Synchronization',
+    workprobaCloud: {
+      title: 'Workproba Cloud',
       description:
-        'Connect Workproba to Improba Cloud to sync projects and use your organization\'s managed connectors.',
-      home: 'Under Projects',
+        'Connect this computer to your organization. Sub-capabilities (project management, Ihora, …) live here.',
+      home: 'Right panel, Workproba Cloud tab',
+    },
+    managed: {
+      title: 'Managed capability',
+      description: 'Capability exposed by your organization via Workproba Cloud.',
+      home: 'Via Workproba Cloud',
+    },
+    nested: {
+      toggle: 'Sub-capabilities',
+      region: 'Sub-capabilities ({count})',
     },
     status: {
       active: 'Active',
@@ -223,6 +234,7 @@ export default {
     },
     actions: {
       open: 'Open',
+      activate: 'Enable',
       activateAndOpen: 'Enable and open',
       deactivate: 'Disable',
       configure: 'Configure',
@@ -273,11 +285,11 @@ export default {
       apiKeyLead: 'Your credentials stay on this machine.',
       mistralLead: 'Direct Mistral access key.',
       manualLead: 'URL, key and model for an OpenAI-compatible server.',
-      cloudFollowupTitle: 'Link this device',
+      cloudFollowupTitle: 'Connect your account',
       cloudFollowupLoginLead:
-        'Sign in in your browser, then paste the invitation code to link this device.',
+        'Sign in in your browser, then paste the invitation code to join your organization.',
       cloudFollowupRegisterLead:
-        'Create your account in your browser, then paste the invitation code to link this device.',
+        'Create your account in your browser, then paste the invitation code to join your organization.',
       reopenLogin: 'Reopen sign-in page',
       reopenRegister: 'Reopen registration page',
       pasteInvitation: 'Paste invitation code',
@@ -531,7 +543,7 @@ export default {
       ollamaDescription: 'Everything on your machine. No data sent out.',
       cloudDescription:
         'Through your Improba Cloud organization. Managed conversation, vision and document reading.',
-      linkDevice: 'Link this device',
+      linkDevice: 'Sign in to Improba Cloud',
       manualName: 'Manual (OpenAI-compatible)',
       manualTitle: 'Manual setup',
       manualDescription: 'OpenAI-compatible server (URL, key and model).',
@@ -545,7 +557,7 @@ export default {
       manualOpen: 'Configure',
       manualConfigure: 'Setup open',
       manualModelRequired: 'Enter a model name.',
-      notEnrolled: 'Not enrolled',
+      notEnrolled: 'Not connected',
     },
     test: {
       chatOk: 'Chat: OK',
@@ -667,7 +679,7 @@ export default {
     baseUrlMissing:
       'API URL missing for this engine. Open Settings → AI Models and enter the URL.',
     cloudNotEnrolled:
-      'Enroll this device with Improba Cloud (Cloud panel) or choose another AI engine.',
+      'Sign in to Improba Cloud (Cloud panel) or choose another AI engine.',
     cloudNotSubscribed:
       'Cloud AI subscription is not active. Contact your administrator or choose another engine.',
     cloudQuotaExceeded:
@@ -682,7 +694,7 @@ export default {
       'Your Improba Cloud session has expired. Sign in again to continue generating.',
     cloudReconnect: 'Sign in again',
     cloudAuthRequired:
-      'Cloud session missing or expired. Reconnect this device or choose another engine.',
+      'Cloud session missing or expired. Sign in again or choose another engine.',
     providerUnavailable: 'The AI provider is unavailable. Please try again later.',
     reportTitle: 'Error report',
     reportSubtitle: 'Copy this report or contact support for help.',
@@ -708,7 +720,7 @@ export default {
     listProjects: 'I listed projects',
     syncToCloud: 'I synced documents to the cloud',
     syncFromCloud: 'I pulled documents from the cloud',
-    enrollToCloud: 'I connected this computer to the cloud',
+    enrollToCloud: 'I signed in to Improba Cloud',
     syncManagedRegards: 'I synced organization regards',
     invokeManagedConnector: 'I called an Improba Cloud connector',
     invokeManagedConnectorNamed: 'I called connector {name}',
@@ -954,6 +966,8 @@ export default {
     join: 'Join',
     joining: 'Connecting…',
     joinSuccess: 'Connected to the cloud.',
+    joinSubmit: 'Join organization',
+    deviceInfo: 'Workstation (info): {id}',
     joinFailed: 'Could not connect. Check the invitation code.',
     connectedTo: 'Connected to {org}',
     quotaSummary: '{tokens} tokens · {requests} requests remaining this month',
@@ -996,12 +1010,12 @@ export default {
     republishFailed: 'Could not republish to the cloud.',
     baseUrlRequired: 'Enter the cloud URL to join.',
     connectors: {
-      title: 'Connectors',
-      hint: 'Your organization\'s services, called by the agent.',
-      empty: 'No connectors available for your organization.',
-      loadFailed: 'Could not load connectors.',
-      authFailed: 'Invalid or expired cloud token. Reconnect this workstation with an invitation code.',
-      requireDevice: 'Connectors require an organization connection (invitation code), not a technical token alone.',
+      title: 'Managed capabilities',
+      hint: 'Your organization\'s capabilities, exposed via Workproba Cloud and called by the agent.',
+      empty: 'No managed capabilities available for your organization.',
+      loadFailed: 'Could not load managed capabilities.',
+      authFailed: 'Invalid or expired cloud session. Sign in again or use an invitation code.',
+      requireDevice: 'Managed capabilities require an organization connection (invitation code), not a technical token alone.',
       refresh: 'Refresh',
       managed: 'Managed',
     },
@@ -1255,6 +1269,9 @@ export default {
     addEmpty: 'Content cannot be empty.',
     citationAria: 'Memory citation: {snippet}',
     citationTooltip: 'Source: {source} — {snippet}',
+    citationsLabel: 'Memories used',
+    citationsToggle: '{count} memory used | {count} memories used',
+    citationsHint: 'Memory consulted to generate this reply (not suggestions).',
     highlightFailed: 'Memory not found in panel.',
   },
   webSearch: {

@@ -21,26 +21,29 @@
 
     <div class="wp-cap-drawer__list">
       <template v-for="view in topLevelViews" :key="view.definition.id">
-        <CapabilityCard
-          :view="view"
-          :busy="busyCapabilityId === view.definition.id"
-          :class="{ 'wp-cap-drawer__focus': focusCapabilityId === view.definition.id }"
-          @activate-and-open="onActivateAndOpen"
-          @open="onOpen"
-          @deactivate="onDeactivate"
-        />
-
         <div
-          v-if="nestedViews(view.definition.id).length"
-          class="wp-cap-drawer__nested"
+          class="wp-cap-drawer__group"
+          :class="{ 'wp-cap-drawer__group--with-nested': nestedViews(view.definition.id).length }"
         >
           <CapabilityCard
-            v-for="nested in nestedViews(view.definition.id)"
-            :key="nested.definition.id"
-            :view="nested"
-            nested
-            :busy="busyCapabilityId === nested.definition.id"
-            :class="{ 'wp-cap-drawer__focus': focusCapabilityId === nested.definition.id }"
+            :view="view"
+            :busy="busyCapabilityId === view.definition.id"
+            :class="{
+              'wp-cap-card--focus': focusCapabilityId === view.definition.id,
+              'wp-cap-card--group-parent': nestedViews(view.definition.id).length,
+            }"
+            @activate-and-open="onActivateAndOpen"
+            @open="onOpen"
+            @deactivate="onDeactivate"
+          />
+
+          <CapabilityNestedGroup
+            v-if="nestedViews(view.definition.id).length"
+            :parent-id="view.definition.id"
+            :views="nestedViews(view.definition.id)"
+            :busy-capability-id="busyCapabilityId"
+            :focus-capability-id="focusCapabilityId"
+            :initially-expanded="view.definition.id === 'workproba_cloud'"
             @activate-and-open="onActivateAndOpen"
             @open="onOpen"
             @deactivate="onDeactivate"
@@ -57,8 +60,8 @@ import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import CapabilityCard from './CapabilityCard.vue';
+import CapabilityNestedGroup from './CapabilityNestedGroup.vue';
 import {
-  getNestedCapabilities,
   getTopLevelCapabilities,
   type CapabilityId,
 } from '@capabilities/capabilityCatalog';
@@ -66,9 +69,28 @@ import { useCapabilities } from '@composables/useCapabilities';
 import { useShellSurfaces } from '@composables/useShellSurfaces';
 
 const { t } = useI18n();
-const { capabilities, activateAndOpen, open: openCapability, deactivate } = useCapabilities();
+const {
+  capabilities,
+  activateAndOpen,
+  open: openCapability,
+  deactivate,
+  refreshManaged,
+} = useCapabilities();
 const { capabilitiesOpen, focusCapabilityId, closeCapabilities } = useShellSurfaces();
 const busyCapabilityId = ref<CapabilityId | null>(null);
+const refreshingManaged = ref(false);
+
+watch(capabilitiesOpen, async (open) => {
+  if (!open || refreshingManaged.value) return;
+  refreshingManaged.value = true;
+  try {
+    await refreshManaged();
+  } catch {
+    // Best-effort : le hub reste utilisable sans connecteurs.
+  } finally {
+    refreshingManaged.value = false;
+  }
+});
 
 watch(focusCapabilityId, async (id) => {
   if (!id || !capabilitiesOpen.value) return;
@@ -83,9 +105,23 @@ const topLevelViews = computed(() => {
   return capabilities.value.filter((view) => topIds.has(view.definition.id));
 });
 
+const nestedByParent = computed(() => {
+  const map = new Map<CapabilityId, typeof capabilities.value>();
+  for (const view of capabilities.value) {
+    const parentId = view.definition.parentId;
+    if (!parentId) continue;
+    const list = map.get(parentId);
+    if (list) {
+      list.push(view);
+    } else {
+      map.set(parentId, [view]);
+    }
+  }
+  return map;
+});
+
 function nestedViews(parentId: CapabilityId) {
-  const nestedIds = new Set(getNestedCapabilities(parentId).map((cap) => cap.id));
-  return capabilities.value.filter((view) => nestedIds.has(view.definition.id));
+  return nestedByParent.value.get(parentId) ?? [];
 }
 
 async function onActivateAndOpen(id: CapabilityId): Promise<void> {
@@ -197,14 +233,17 @@ async function onDeactivate(id: CapabilityId): Promise<void> {
   gap: var(--wp-space-3);
 }
 
-.wp-cap-drawer__nested {
+.wp-cap-drawer__group {
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-2);
+  gap: 0;
+  min-width: 0;
 }
 
-.wp-cap-drawer__focus {
-  outline: 2px solid var(--wp-accent);
-  outline-offset: 2px;
+.wp-cap-drawer__group--with-nested {
+  :deep(.wp-cap-card--group-parent) {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+  }
 }
 </style>

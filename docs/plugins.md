@@ -120,13 +120,15 @@ Internal project management and artifact publishing. Disabled by default; discov
 
 Main endpoints: `/plugins/projet/projects`, `/plugins/projet/publish`, `/plugins/projet/artefacts`.
 
-## Improba Cloud (Mode A)
+## Improba Cloud / Workproba Cloud (Mode A)
 
-Standard path for managed connectors (MVP livré 20/07/2026). Plugin `workproba.cloud` :
+**Product model (21/07/2026):** on the desktop there is **one** connector capability — **Workproba Cloud** (`workproba.cloud`, catalog id `workproba_cloud`). Org services listed by the control plane (`echo`, `ihora.shaped`, `ihora`, …) appear in the Capabilities hub as **managed capabilities** nested under Workproba Cloud (not as separate top-level connectors). Guided mode hides technical stubs (`echo`, `ihora.shaped`).
+
+Standard path for managed capabilities (MVP livré 20/07/2026 ; hub hierarchy 21/07/2026). Plugin `workproba.cloud` :
 
 - **Desktop auth UX**: `CloudLoginModal` + `cloudDesktopAuth.ts` (`POST /devices/login` → User JWT → exchange `POST /devices/desktop-bearer` → DeviceBearer `wp_dev_*`); `EnrollCloudModal` / `EnrollCloudJoinForm` (`join_token` → DeviceBearer). First-run: `EngineOnboardingWizard`. Cloud web links: `cloudWebUrls.ts` (`VITE_CLOUD_WEB_URL`).
 - **`CloudControlPlaneClient`** : join via `join_token`, or login bearer JWT exchanged to durable `wp_dev_*` (`ensure_durable_device_bearer` on status) ; catalogs, regards (`/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`)
-- **`RemoteCapabilityGateway`** + tool **`invoke_managed_connector`** : relay to `echo`, `ihora.shaped` (stub) and `ihora` (HTTP, allowlist org) via `POST /connectors/{id}/invoke` (payload only ; no client `subject_id` / `org_id`) ; sidecar `GET /plugins/cloud/connectors` ; Human Approval Gate (`external_send`)
+- **`RemoteCapabilityGateway`** + tool **`invoke_managed_connector`** : relay to org-allowed services (`echo`, `ihora.shaped` stub, `ihora` HTTP) via `POST /connectors/{id}/invoke` (payload only ; no client `subject_id` / `org_id`) ; sidecar `GET /plugins/cloud/connectors` ; Human Approval Gate (`external_send`). Product UI: managed capabilities under Workproba Cloud.
 - **`ManagedRegardsPort`** for enterprise regards
 - **`ProjectSyncPort`** mount sync = technical NAS only, deprecated product path, **rejected when enrolled**
 - Shared project SoT = cloud (list/publish/open/republish via API + S3, local = disposable cache)

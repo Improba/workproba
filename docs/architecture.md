@@ -132,7 +132,7 @@ Fixed agent tools generate native Office and PDF files in the project folder (Hu
 
 ## Plugins and capabilities
 
-Four builtin plugins; guided UX presents them as **activatable capabilities** (Regards métier, Projets et livrables, Navigation web, Synchronisation). Technical plugin details in advanced Settings → Extensions. See [plugins.md](./plugins.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
+Four builtin plugins; guided UX presents them as **activatable capabilities** (Regards métier, Bibliothèque et livrables, **Workproba Cloud**, Navigation web). Org services (`ihora`, …) appear as **managed capabilities** nested under Workproba Cloud in the Capabilities hub (API still uses `connectors`). Technical plugin details in advanced Settings → Extensions. See [plugins.md](./plugins.md), [capacites.md](./capacites.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
 **File versions** (T-V2-15): snapshots live under `{space}/versions/`; the sidecar exposes `GET /versions`, `POST /versions/restore`, and optional `POST /versions/purge` (keep last N, default 20, and/or drop entries older than X days). The right-panel **Versions** tab offers restore and manual cleanup.
 
@@ -140,17 +140,25 @@ Four builtin plugins; guided UX presents them as **activatable capabilities** (R
 
 ## Improba Cloud desktop auth UX
 
+Product vocabulary: the user **connects** their Improba Cloud account. A workstation (`poste`) may exist as control-plane metadata for admins, but it is not a product concept for sign-in (no primary « link this device » CTA).
+
+**Primary path:** login user → User JWT → sidecar `POST /devices/desktop-bearer` → durable **DeviceBearer** (`wp_dev_*`) stored locally. The DeviceBearer is a **technical session token** (user session on this desktop), not a separate « device linking » product step. Chat, quota and connectors always use `wp_dev_*`.
+
+**Secondary path:** org invitation via `join_token` (`POST /devices/join`) → DeviceBearer. Used when joining an org without an existing account flow, or from advanced/invitation surfaces (`EnrollCloudModal`, CloudPanel secondary section). Not the main connection CTA in chat, settings banners or sidebar.
+
 First-run and cloud setup surfaces (also reachable from Settings → AI Models):
 
 | Component | Role |
 |---|---|
-| `EngineOnboardingWizard.vue` | First-run flow: engine choice → cloud login / register (opens cloud web) / Mistral API key / manual OpenAI-compat / cloud follow-up |
-| `CloudLoginModal.vue` + `cloudDesktopAuth.ts` | Username/password → `POST {control_plane}/devices/login` → User JWT → sidecar exchange → DeviceBearer |
-| `EnrollCloudModal.vue` / `EnrollCloudJoinForm.vue` | `join_token` → DeviceBearer (also CloudPanel, model settings) |
+| `EngineOnboardingWizard.vue` | First-run flow: engine choice → **cloud login** / register (opens cloud web) / Mistral API key / manual OpenAI-compat / invitation follow-up |
+| `CloudLoginModal.vue` + `cloudDesktopAuth.ts` | **Primary** connection: username/password → `POST {control_plane}/devices/login` → User JWT → sidecar exchange → DeviceBearer |
+| `EnrollCloudModal.vue` / `EnrollCloudJoinForm.vue` | **Secondary** invitation: `join_token` → DeviceBearer |
 | `ManualOpenAiCompatForm.vue` | Base URL + API key + model for OpenAI-compatible providers |
 | `cloudWebUrls.ts` | `VITE_CLOUD_WEB_URL` (default `http://localhost:8482`); helpers `cloudAuthLoginUrl`, `cloudAuthRegisterUrl`; TODO deep-link `workproba://enroll` |
 
-**Login vs enroll:** `POST /devices/login` returns a short-lived **User JWT**. The desktop sidecar immediately exchanges it via `POST /devices/desktop-bearer` and persists a durable **DeviceBearer** (`wp_dev_*`) in `{app_data}/plugins/workproba.cloud/`. `POST /devices/join` with a `join_token` returns a DeviceBearer directly. Chat, quota and connectors always use `wp_dev_*` (never a stored User JWT), so sleep/wake does not require re-login. Legacy configs that still hold a User JWT are migrated on `GET /plugins/cloud/status` when the JWT is still valid; if already expired, the UI asks for one reconnect then stores `wp_dev_*`.
+**Session persistence:** `POST /devices/login` returns a short-lived **User JWT**. The desktop sidecar immediately exchanges it via `POST /devices/desktop-bearer` and persists `wp_dev_*` in `{app_data}/plugins/workproba.cloud/`. `POST /devices/join` with a `join_token` returns a DeviceBearer directly. The User JWT is not stored for LLM calls, so sleep/wake does not require re-login. Legacy configs that still hold a User JWT are migrated on `GET /plugins/cloud/status` when the JWT is still valid; if already expired, the UI asks for reconnect then stores `wp_dev_*`.
+
+**UI fail-closed:** when the active provider set uses `device_bearer` and no cloud session exists, banners and chat block with user-centric copy (« connect to Improba Cloud »), opening `CloudLoginModal` first.
 
 ## Branding
 

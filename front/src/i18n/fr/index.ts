@@ -67,7 +67,8 @@ export default {
     guestName: 'Invité',
     guestOrg: 'Se connecter',
     cloudAccount: 'Compte Cloud',
-    localMode: 'Mode local',
+    localMode: 'Non connecté',
+    connectPrompt: 'Se connecter à Improba Cloud',
     conversationCreateFailed: 'Conversation impossible à créer',
     conversationOpenFailed: 'Conversation impossible à ouvrir (espace injoignable).',
     fileTreeLabel: 'Arborescence des fichiers de l\'espace',
@@ -197,8 +198,9 @@ export default {
       home: 'Panneau latéral Regards',
     },
     projects: {
-      title: 'Bibliothèque et livrables',
-      description: 'Organisez les documents publiés sur ce poste. Connectez-vous au cloud pour un projet partagé avec votre organisation.',
+      title: 'Gestion de projet',
+      description:
+        'Bibliothèque locale et projets partagés via Workproba Cloud : publiez et organisez les livrables de votre organisation.',
       home: 'Panneau droit, onglet Bibliothèque',
     },
     webNavigation: {
@@ -206,11 +208,20 @@ export default {
       description: 'Parcourez le web depuis Workproba pour des recherches et interactions guidées.',
       home: 'Panneau droit, onglet Navigateur',
     },
-    projectSync: {
-      title: 'Synchronisation',
+    workprobaCloud: {
+      title: 'Workproba Cloud',
       description:
-        'Reliez Workproba à Improba Cloud pour synchroniser les projets et utiliser les connecteurs de votre organisation.',
-      home: 'Sous-section de Projets',
+        'Connectez ce poste à votre organisation. Les sous-capacités (gestion de projet, Ihora, …) s’activent ici.',
+      home: 'Panneau droit, onglet Workproba Cloud',
+    },
+    managed: {
+      title: 'Capacité managée',
+      description: 'Capacité exposée par votre organisation via Workproba Cloud.',
+      home: 'Via Workproba Cloud',
+    },
+    nested: {
+      toggle: 'Sous-capacités',
+      region: 'Sous-capacités ({count})',
     },
     status: {
       active: 'Active',
@@ -223,6 +234,7 @@ export default {
     },
     actions: {
       open: 'Ouvrir',
+      activate: 'Activer',
       activateAndOpen: 'Activer et ouvrir',
       deactivate: 'Désactiver',
       configure: 'Configurer',
@@ -273,11 +285,11 @@ export default {
       apiKeyLead: 'Vos identifiants restent sur ce poste.',
       mistralLead: 'Clé d\'accès Mistral directe.',
       manualLead: 'URL, clé et modèle d\'un serveur compatible OpenAI.',
-      cloudFollowupTitle: 'Liez ce poste',
+      cloudFollowupTitle: 'Connectez votre compte',
       cloudFollowupLoginLead:
-        'Connectez-vous dans votre navigateur, puis collez le code d\'invitation pour lier ce poste.',
+        'Connectez-vous dans votre navigateur, puis collez le code d\'invitation pour rejoindre votre organisation.',
       cloudFollowupRegisterLead:
-        'Créez votre compte dans votre navigateur, puis collez le code d\'invitation pour lier ce poste.',
+        'Créez votre compte dans votre navigateur, puis collez le code d\'invitation pour rejoindre votre organisation.',
       reopenLogin: 'Rouvrir la connexion',
       reopenRegister: 'Rouvrir l\'inscription',
       pasteInvitation: 'Coller le code d\'invitation',
@@ -530,7 +542,7 @@ export default {
       ollamaDescription: 'Tout sur votre machine. Aucune donnée transmise.',
       cloudDescription:
         'Via votre organisation Improba Cloud. Conversation, vision et lecture de documents gérées.',
-      linkDevice: 'Lier ce poste',
+      linkDevice: 'Se connecter à Improba Cloud',
       manualName: 'Manuel (OpenAI-compatible)',
       manualTitle: 'Configuration manuelle',
       manualDescription: 'Serveur OpenAI-compatible (URL, clé et modèle).',
@@ -544,7 +556,7 @@ export default {
       manualOpen: 'Configurer',
       manualConfigure: 'Configuration ouverte',
       manualModelRequired: 'Indiquez le nom du modèle.',
-      notEnrolled: 'Non enrollé',
+      notEnrolled: 'Non connecté',
     },
     test: {
       chatOk: 'Conversation : OK',
@@ -666,7 +678,7 @@ export default {
     baseUrlMissing:
       'URL de l\'API manquante pour ce moteur. Ouvrez Réglages → Modèles IA et renseignez l\'URL.',
     cloudNotEnrolled:
-      'Connectez ce poste à Improba Cloud (panneau Cloud) ou choisissez un autre moteur IA.',
+      'Connectez-vous à Improba Cloud (panneau Cloud) ou choisissez un autre moteur IA.',
     cloudNotSubscribed:
       'L\'abonnement cloud IA n\'est pas actif. Contactez votre administrateur ou choisissez un autre moteur.',
     cloudQuotaExceeded:
@@ -681,7 +693,7 @@ export default {
       'Votre session Improba Cloud a expiré. Reconnectez-vous pour relancer la génération.',
     cloudReconnect: 'Se reconnecter',
     cloudAuthRequired:
-      'Session cloud expirée ou absente. Reconnectez ce poste ou choisissez un autre moteur.',
+      'Session cloud expirée ou absente. Reconnectez-vous ou choisissez un autre moteur.',
     providerUnavailable: 'Le fournisseur IA est indisponible. Réessayez plus tard.',
     reportTitle: 'Rapport d\'erreur',
     reportSubtitle: 'Copiez ce rapport ou contactez le support pour obtenir de l\'aide.',
@@ -707,7 +719,7 @@ export default {
     listProjects: 'J\'ai listé les projets',
     syncToCloud: 'J\'ai synchronisé des documents vers le cloud',
     syncFromCloud: 'J\'ai récupéré des documents depuis le cloud',
-    enrollToCloud: 'J\'ai connecté ce poste au cloud',
+    enrollToCloud: 'Je me suis connecté à Improba Cloud',
     syncManagedRegards: 'J\'ai synchronisé les regards de l\'organisation',
     invokeManagedConnector: 'J\'ai appelé un connecteur Improba Cloud',
     invokeManagedConnectorNamed: 'J\'ai appelé le connecteur {name}',
@@ -953,6 +965,8 @@ export default {
     join: 'Rejoindre',
     joining: 'Connexion…',
     joinSuccess: 'Connecté au cloud.',
+    joinSubmit: 'Rejoindre l\'organisation',
+    deviceInfo: 'Poste (info) : {id}',
     joinFailed: 'Connexion impossible. Vérifiez le code d\'invitation.',
     connectedTo: 'Connecté à {org}',
     quotaSummary: '{tokens} tokens · {requests} requêtes restantes ce mois',
@@ -995,14 +1009,14 @@ export default {
     republishFailed: 'Republication vers le cloud impossible.',
     baseUrlRequired: 'Indiquez l\'URL du cloud pour rejoindre.',
     connectors: {
-      title: 'Connecteurs',
-      hint: 'Services de votre organisation, appelés par l\'agent.',
-      empty: 'Aucun connecteur disponible pour votre organisation.',
-      loadFailed: 'Impossible de charger les connecteurs.',
-      authFailed: 'Jeton cloud invalide ou expiré. Reconnectez ce poste via un code d\'invitation.',
-      requireDevice: 'Les connecteurs nécessitent une connexion organisation (code d\'invitation), pas un jeton technique seul.',
+      title: 'Capacités managées',
+      hint: 'Capacités de votre organisation, exposées via Workproba Cloud et appelées par l\'agent.',
+      empty: 'Aucune capacité managée disponible pour votre organisation.',
+      loadFailed: 'Impossible de charger les capacités managées.',
+      authFailed: 'Session cloud invalide ou expirée. Reconnectez-vous ou utilisez un code d\'invitation.',
+      requireDevice: 'Les capacités managées nécessitent une connexion organisation (code d\'invitation), pas un jeton technique seul.',
       refresh: 'Actualiser',
-      managed: 'Géré',
+      managed: 'Gérée',
     },
   },
   regards: {
@@ -1254,6 +1268,9 @@ export default {
     addEmpty: 'Le contenu ne peut pas être vide.',
     citationAria: 'Citation mémoire : {snippet}',
     citationTooltip: 'Source : {source} — {snippet}',
+    citationsLabel: 'Souvenirs utilisés',
+    citationsToggle: '{count} souvenir utilisé | {count} souvenirs utilisés',
+    citationsHint: 'Mémoire consultée pour générer cette réponse (pas des suggestions).',
     highlightFailed: 'Souvenir introuvable dans le panneau.',
   },
   webSearch: {

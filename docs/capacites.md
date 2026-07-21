@@ -1,6 +1,6 @@
 # Capacités activables
 
-> **Last updated:** 20/07/2026  
+> **Last updated:** 21/07/2026  
 > **Audience:** end users (mode guidé)
 
 ## What are capabilities?
@@ -9,15 +9,26 @@
 
 You do not need to know about technical plugins or extensions to use them in guided mode.
 
+### Local capabilities
+
 | Capability | What it adds | Where it lives after activation |
 |---|---|---|
-| **Business perspectives** (Regards métier) | Expert-style opinions, discussions, cross-perspectives (same LLM engine as chat) | Side panel and central area |
-| **Projects and deliverables** | Publish documents from your space into a local project library | Right panel, Project tab |
+| **Workproba Cloud** | Connect this computer to your organization (login / invitation), org LLM, gateway for sub-capabilities | Right panel, Workproba Cloud tab |
+| **Business perspectives** (Regards métier) | Expert-style opinions, discussions, cross-perspectives | Side panel and central area |
 | **Web navigation** | Browse pages from Workproba with guided agent help | Right panel, Browser tab |
-| **Improba Cloud** | Join org (`join_token`), managed connectors (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), shared projects, enterprise regards, **org LLM** (DeviceBearer, no personal API key) | CloudPanel under Projects; enroll via `EnrollCloudModal` or first-run `EngineOnboardingWizard` |
+
+### Sub-capabilities (under Workproba Cloud, collapsible)
+
+| Sub-capability | Role |
+|---|---|
+| **Project management** (`projects`) | Local library + shared projects via Cloud |
+| **Managed** (e.g. **Ihora**) | Org-authorized services from `GET /connectors` |
+
+The Capabilities hub lists **Workproba Cloud first**. Nested items open in a **collapsible** zone (compact cards, scrollable when many). Guided mode hides technical stubs (`echo`, `ihora.shaped`).
 
 **Cloud setup:** account login (`POST /devices/login` → User JWT, exchanged by the sidecar into a durable DeviceBearer `wp_dev_*`) and device enroll (`POST /devices/join` → DeviceBearer) both leave a `wp_dev_*` on disk. Both are available from the onboarding wizard and Settings → AI Models.
-| **Mount sync** (advanced) | Technical NAS bridge via `ProjectSyncPort` ; deprecated product path, **blocked when enrolled** | Under Projects (advanced mode only) |
+
+| **Mount sync** (advanced) | Technical NAS bridge via `ProjectSyncPort` ; deprecated product path, **blocked when enrolled** | Advanced mode only ; not a Capabilities card |
 
 ## Projects and sources of truth
 
@@ -28,23 +39,27 @@ You do not need to know about technical plugins or extensions to use them in gui
 | **Local copy (shared)** | Disposable cache on the workstation (opened on demand) | A second source of truth |
 | **Mount sync** | Technical NAS bridge (`ProjectSyncPort`) ; advanced only, **blocked when enrolled** | A shared project ; deprecated as a guided product path |
 
-Solo projects stay **local SoT** (on the machine). Shared projects and **managed connectors** require cloud enrollment (join org via `join_token` ; DeviceBearer stored locally). Once enrolled, mirror push/pull is refused ; use publish and republish instead. Managed connectors use Improba Cloud Mode A (`invoke_managed_connector`, builtins `echo`, `ihora.shaped` stub, and `ihora` HTTP when allowed by org allowlist ; invoke does not send `device_id`, `subject_id` or `org_id` from the client). Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
+Solo projects stay **local SoT** (on the machine). Shared projects and **managed capabilities** require cloud enrollment (join org via `join_token` ; DeviceBearer stored locally). Once enrolled, mirror push/pull is refused ; use publish and republish instead.
+
+Managed capabilities use Improba Cloud Mode A: the agent calls `invoke_managed_connector` (Human Approval Gate `external_send`) ; the cloud relays to org-allowed services (`echo`, `ihora.shaped` stub, `ihora` HTTP). The desktop does not send `device_id`, `subject_id` or `org_id` in the invoke body. Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ## How to activate
 
 1. Click **Capabilities** in the title bar.
-2. Pick a capability card.
-3. Use **Enable and open** to activate it and jump to its home surface.
+2. Pick a capability card (e.g. **Workproba Cloud**).
+3. Use **Enable and open** (or **Configure** if enrollment is still needed) to jump to its home surface.
+4. After enrollment, managed capabilities authorized by your org appear **nested under Workproba Cloud** (e.g. Ihora). Open one to jump to the Cloud panel. They are controlled by the organization (no local disable toggle).
 
-To turn a capability off, open the hub again and use **Disable** on an active card.
+To turn a **local** capability off, open the hub again and use **Disable** on an active card. Disabling Workproba Cloud hides nested managed capabilities until Cloud is active and enrolled again.
 
 ## What is not a capability?
 
 - **Web search** when the Imp looks up facts on the public web: automatic when your engine and network policy allow it. Sources appear as links under assistant messages.
 - **Memory**, **conversations**, and **file tools**: always available in your **space** (local folder).
+- A second desktop « connector » for Ihora or other org services: those are **managed capabilities** under Workproba Cloud, not separate Capabilities cards at the top level.
 
 ## Advanced mode
 
-In **Settings → Extensions**, administrators can see technical plugin details, permissions, and local plugin installation (developer builds only).
+In **Settings → Extensions**, administrators can see technical plugin details, permissions, and local plugin installation (developer builds only). Technical stubs (`echo`, `ihora.shaped`) can appear as managed capabilities under Workproba Cloud.
 
 See also: [plugins.md](./plugins.md) (honest technical status), [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md) (product spec).
