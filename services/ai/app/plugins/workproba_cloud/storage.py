@@ -26,11 +26,29 @@ def load_config(plugin_data_dir: Path) -> dict[str, Any]:
 
 
 def save_config(plugin_data_dir: Path, config: dict[str, Any]) -> dict[str, Any]:
+    import os
+    import tempfile
+
     plugin_data_dir.mkdir(parents=True, exist_ok=True)
     existing = load_config(plugin_data_dir)
     existing.update(config)
-    with _config_path(plugin_data_dir).open("w", encoding="utf-8") as handle:
-        json.dump(existing, handle, ensure_ascii=False, indent=2)
+    target = _config_path(plugin_data_dir)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=".config.",
+        suffix=".json.tmp",
+        dir=str(plugin_data_dir),
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(existing, handle, ensure_ascii=False, indent=2)
+            handle.write("\n")
+        os.replace(tmp_name, target)
+    except Exception:
+        try:
+            os.unlink(tmp_name)
+        except OSError:
+            pass
+        raise
     return existing
 
 
@@ -118,6 +136,49 @@ def is_managed_connector_enabled(plugin_data_dir: Path, connector_id: str) -> bo
     if not cid:
         return False
     return cid not in get_disabled_managed_connectors(plugin_data_dir)
+
+
+def get_known_managed_connectors(plugin_data_dir: Path) -> list[dict[str, str]]:
+    """Derniers connecteurs org connus (cache disque pour le prompt agent)."""
+    raw = load_config(plugin_data_dir).get("known_managed_connectors")
+    if not isinstance(raw, list):
+        return []
+    connectors: list[dict[str, str]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        cid = entry.get("id")
+        if not isinstance(cid, str) or not cid.strip():
+            continue
+        name = entry.get("name")
+        if not isinstance(name, str) or not name.strip():
+            name = cid.strip()
+        connectors.append({"id": cid.strip(), "name": name.strip()})
+    return connectors
+
+
+def save_known_managed_connectors(
+    plugin_data_dir: Path,
+    connectors: list[dict[str, Any]],
+) -> None:
+    """Met à jour le cache disque id/name des connecteurs managés."""
+    normalized: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for entry in connectors:
+        if not isinstance(entry, dict):
+            continue
+        cid = entry.get("id")
+        if not isinstance(cid, str) or not cid.strip():
+            continue
+        cid = cid.strip()
+        if cid in seen:
+            continue
+        seen.add(cid)
+        name = entry.get("name")
+        if not isinstance(name, str) or not name.strip():
+            name = cid
+        normalized.append({"id": cid, "name": name.strip()})
+    save_config(plugin_data_dir, {"known_managed_connectors": normalized})
 
 
 def set_managed_connector_enabled(

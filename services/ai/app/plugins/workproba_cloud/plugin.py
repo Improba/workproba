@@ -29,6 +29,36 @@ from app.plugins.workproba_cloud.sync_service import (
 )
 
 
+def build_managed_connectors_agent_prompt(
+    locale: str,
+    items: list[tuple[str, str, bool]],
+) -> str:
+    """Fragment advisory : connecteurs org et activation locale."""
+    if not items:
+        return ""
+    lines = [t(locale, "tools.managed_connectors_header")]
+    for connector_id, name, enabled_local in items:
+        if enabled_local:
+            lines.append(
+                t(
+                    locale,
+                    "tools.managed_connectors_enabled",
+                    id=connector_id,
+                    name=name,
+                )
+            )
+        else:
+            lines.append(
+                t(
+                    locale,
+                    "tools.managed_connectors_disabled",
+                    id=connector_id,
+                    name=name,
+                )
+            )
+    return "\n".join(lines)
+
+
 def _cloud_data_dir(ctx: RunContext[ToolDeps]) -> Path:
     data_dir = resolve_plugin_data_dir(
         PLUGIN_WORKPROBA_CLOUD,
@@ -40,6 +70,56 @@ def _cloud_data_dir(ctx: RunContext[ToolDeps]) -> Path:
 
 
 def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
+    @agent.system_prompt
+    async def managed_connectors_prompt(ctx: RunContext[ToolDeps]) -> str:
+        locale = ctx.deps.context.locale
+        try:
+            cloud_dir = _cloud_data_dir(ctx)
+        except ModelRetry:
+            return ""
+
+        base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+        if not base_url or not is_cloud_enrolled(cloud_dir):
+            return ""
+
+        # Lecture seule : le cache disque est alimenté par GET /plugins/cloud/connectors (Hub).
+        connectors: list[dict[str, str]] = []
+        try:
+            client = CloudControlPlaneClient(
+                base_url=base_url,
+                plugin_data_dir=cloud_dir,
+            )
+            payload = await client.list_connectors()
+            raw = payload.get("connectors") if isinstance(payload, dict) else None
+            if isinstance(raw, list):
+                for entry in raw:
+                    if not isinstance(entry, dict) or not entry.get("id"):
+                        continue
+                    connector_id = str(entry.get("id"))
+                    connectors.append(
+                        {
+                            "id": connector_id,
+                            "name": str(entry.get("name") or connector_id),
+                        }
+                    )
+        except Exception:
+            connectors = cloud_storage.get_known_managed_connectors(cloud_dir)
+
+        if not connectors:
+            connectors = cloud_storage.get_known_managed_connectors(cloud_dir)
+        if not connectors:
+            return t(locale, "tools.managed_connectors_empty")
+
+        items = [
+            (
+                entry["id"],
+                entry["name"],
+                cloud_storage.is_managed_connector_enabled(cloud_dir, entry["id"]),
+            )
+            for entry in connectors
+        ]
+        return build_managed_connectors_agent_prompt(locale, items)
+
     @agent.tool
     async def sync_to_cloud(ctx: RunContext[ToolDeps], project_id: str) -> dict[str, Any]:
         """Push local published artefacts to the configured cloud mount folder.
@@ -270,9 +350,10 @@ def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
         payload_json: str = "{}",
     ) -> dict[str, Any]:
         """Invoke a managed Improba Cloud connector (Mode A transport relay).
+        Only call connectors that are locally activated in the Capabilities hub.
 
         Args:
-            connector_id: Managed connector id (e.g. echo, ihora.shaped).
+            connector_id: Managed connector id (e.g. ihora, echo, ihora.shaped).
             payload_json: JSON object string passed as connector payload.
         """
         import json
@@ -296,34 +377,11 @@ def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
         except ValueError as exc:
             raise ModelRetry(str(exc)) from exc
 
-        gate = deps.confirmation_gate
-        if gate is not None:
-            human_summary = build_human_summary(
-                "invoke_managed_connector",
-                {"connector_id": connector_id},
-                locale=locale,
+        # Ordre : local → auth → allowlist → gate humaine → re-check local (TOCTOU) → invoke.
+        if not cloud_storage.is_managed_connector_enabled(cloud_dir, connector_id):
+            raise ModelRetry(
+                t(locale, "cloud.connector_disabled_locally", connector_id=connector_id)
             )
-            proposal = classify_effect(
-                "invoke_managed_connector",
-                {"connector_id": connector_id},
-                permissions_network=deps.context.permissions_network,
-            )
-            if proposal is None:
-                raise ModelRetry("Effet non classifiable pour invoke_managed_connector")
-            proposal = proposal.model_copy(update={"human_summary": human_summary})
-            proposal = proposal.model_copy(
-                update={
-                    "headline": effect_headline(proposal, locale),
-                    "protection_labels": protection_labels(proposal, locale),
-                }
-            )
-            outcome = await gate.request_effect(
-                tool_call_id=ctx.tool_call_id or "",
-                proposal=proposal,
-                audit_app_data_dir=deps.context.workspace_data_dir,
-                audit_enabled=deps.context.audit_enabled,
-            )
-            raise_unless_approved(outcome, locale)
 
         client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
         tokens = client.load_tokens()
@@ -351,8 +409,39 @@ def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
             if connector_id not in allowed:
                 raise ModelRetry(f"connector_not_allowed:{connector_id}")
 
+            gate = deps.confirmation_gate
+            if gate is not None:
+                human_summary = build_human_summary(
+                    "invoke_managed_connector",
+                    {"connector_id": connector_id},
+                    locale=locale,
+                )
+                proposal = classify_effect(
+                    "invoke_managed_connector",
+                    {"connector_id": connector_id},
+                    permissions_network=deps.context.permissions_network,
+                )
+                if proposal is None:
+                    raise ModelRetry("Effet non classifiable pour invoke_managed_connector")
+                proposal = proposal.model_copy(update={"human_summary": human_summary})
+                proposal = proposal.model_copy(
+                    update={
+                        "headline": effect_headline(proposal, locale),
+                        "protection_labels": protection_labels(proposal, locale),
+                    }
+                )
+                outcome = await gate.request_effect(
+                    tool_call_id=ctx.tool_call_id or "",
+                    proposal=proposal,
+                    audit_app_data_dir=deps.context.workspace_data_dir,
+                    audit_enabled=deps.context.audit_enabled,
+                )
+                raise_unless_approved(outcome, locale)
+
             if not cloud_storage.is_managed_connector_enabled(cloud_dir, connector_id):
-                raise ModelRetry(f"connector_disabled_locally:{connector_id}")
+                raise ModelRetry(
+                    t(locale, "cloud.connector_disabled_locally", connector_id=connector_id)
+                )
 
             plugins_root = cloud_dir.parent
             gateway = open_remote_capability_gateway(

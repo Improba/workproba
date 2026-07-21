@@ -3439,6 +3439,11 @@ async def cloud_list_connectors_endpoint(
                     ),
                 )
             )
+    if items:
+        cloud_storage.save_known_managed_connectors(
+            cloud_dir,
+            [{"id": item.id, "name": item.name} for item in items],
+        )
     return CloudConnectorsResponse(connectors=items, enrolled=True)
 
 

@@ -171,7 +171,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "provider_unavailable": "Le fournisseur IA est indisponible.",
             "cloud_llm": {
                 "cloud_not_enrolled": (
-                    "Connectez ce poste à Improba Cloud ou choisissez un autre moteur IA."
+                    "Connectez-vous à Improba Cloud ou choisissez un autre moteur IA."
                 ),
                 "not_subscribed": (
                     "L'abonnement cloud IA n'est pas actif. Contactez votre administrateur "
@@ -193,10 +193,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "unsupported_model": "Ce modèle n'est pas pris en charge par le cloud IA.",
                 "bad_request": "Requête cloud IA invalide.",
                 "bearer_token_required": (
-                    "Jeton cloud manquant. Reconnectez ce poste ou choisissez un autre moteur."
+                    "Jeton cloud manquant. Reconnectez-vous ou choisissez un autre moteur."
                 ),
                 "invalid_device_token": (
-                    "Session cloud expirée. Reconnectez ce poste ou choisissez un autre moteur."
+                    "Session cloud expirée. Reconnectez-vous ou choisissez un autre moteur."
                 ),
                 "invalid_user_jwt": (
                     "Votre session Improba Cloud a expiré. Reconnectez-vous pour relancer la "
@@ -206,7 +206,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                     "Ce poste cloud n'est pas rattaché à une organisation."
                 ),
                 "org_id_required": (
-                    "Organisation cloud manquante. Reconnectez ce poste ou contactez "
+                    "Organisation cloud manquante. Reconnectez-vous ou contactez "
                     "votre administrateur."
                 ),
                 "cloud_unreachable": (
@@ -380,6 +380,17 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "La confirmation a expiré sans réponse. N'insiste pas pour répéter "
                 "la même écriture. Informe l'utilisateur et propose une alternative."
             ),
+            "managed_connectors_header": "Connecteurs managés Improba Cloud (état local) :",
+            "managed_connectors_enabled": (
+                "{id} ({name}) : activé localement ; utilisable via invoke_managed_connector"
+            ),
+            "managed_connectors_disabled": (
+                "{id} ({name}) : désactivé localement ; ne pas invoquer ; "
+                "demander d'activer dans Capacités"
+            ),
+            "managed_connectors_empty": (
+                "Aucun connecteur managé connu pour cette organisation."
+            ),
         },
         "plan": {
             "title": "Plan proposé",
@@ -470,11 +481,15 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "connectors_load_failed": "Impossible de charger les connecteurs managés.",
             "quota_load_failed": "Impossible de charger le quota cloud IA.",
             "connectors_auth_failed": (
-                "Jeton cloud invalide ou expiré. Reconnectez ce poste via un code d'invitation."
+                "Jeton cloud invalide ou expiré. Reconnectez-vous ou utilisez un code d'invitation."
             ),
             "connectors_require_device": (
                 "Les connecteurs nécessitent une connexion organisation "
                 "(code d'invitation), pas un jeton technique seul."
+            ),
+            "connector_disabled_locally": (
+                "Le connecteur managé {connector_id} est désactivé sur ce poste. "
+                "Activez-le dans Capacités."
             ),
         },
         "preset": {
@@ -715,7 +730,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "provider_unavailable": "The AI provider is unavailable.",
             "cloud_llm": {
                 "cloud_not_enrolled": (
-                    "Enroll this device with Improba Cloud or choose another AI engine."
+                    "Sign in to Improba Cloud or choose another AI engine."
                 ),
                 "not_subscribed": (
                     "Cloud AI subscription is not active. Contact your administrator "
@@ -736,10 +751,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "unsupported_model": "This model is not supported by cloud AI.",
                 "bad_request": "Invalid cloud AI request.",
                 "bearer_token_required": (
-                    "Cloud token missing. Reconnect this device or choose another engine."
+                    "Cloud token missing. Sign in again or choose another engine."
                 ),
                 "invalid_device_token": (
-                    "Cloud session expired. Reconnect this device or choose another engine."
+                    "Cloud session expired. Sign in again or choose another engine."
                 ),
                 "invalid_user_jwt": (
                     "Your Improba Cloud session has expired. Sign in again to continue generating."
@@ -748,7 +763,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                     "This cloud device is not linked to an organization."
                 ),
                 "org_id_required": (
-                    "Cloud organization missing. Reconnect this device or contact your administrator."
+                    "Cloud organization missing. Sign in again or contact your administrator."
                 ),
                 "cloud_unreachable": (
                     "Improba Cloud is unreachable. Check your connection or choose another engine."
@@ -910,6 +925,17 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "The confirmation expired without a response. Do not insist on "
                 "repeating the same write. Inform the user and suggest an alternative."
             ),
+            "managed_connectors_header": "Improba Cloud managed connectors (local state):",
+            "managed_connectors_enabled": (
+                "{id} ({name}): enabled locally; callable via invoke_managed_connector"
+            ),
+            "managed_connectors_disabled": (
+                "{id} ({name}): disabled locally; do not invoke; "
+                "ask the user to enable it in Capabilities"
+            ),
+            "managed_connectors_empty": (
+                "No managed connectors known for this organization."
+            ),
         },
         "plan": {
             "title": "Proposed plan",
@@ -1004,6 +1030,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "connectors_require_device": (
                 "Connectors require an organization connection (invitation code), "
                 "not a technical token alone."
+            ),
+            "connector_disabled_locally": (
+                "Managed connector {connector_id} is disabled on this workstation. "
+                "Enable it in Capabilities."
             ),
         },
         "preset": {

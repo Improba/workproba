@@ -52,6 +52,8 @@ Managed capabilities use Improba Cloud Mode A: the agent calls `invoke_managed_c
 
 Managed items remain listed when the org allowlists them; local disable blocks agent invoke on this workstation. Disabling Workproba Cloud also turns off nested Project management (parent cascade).
 
+The agent system prompt reflects each managed connector's local enabled or disabled state. `invoke_managed_connector` refuses locally disabled connectors before human confirmation.
+
 ## What is not a capability?
 
 - **Web search** when the Imp looks up facts on the public web: automatic when your engine and network policy allow it. Sources appear as links under assistant messages.
