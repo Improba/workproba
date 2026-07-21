@@ -28,6 +28,7 @@ from app.agent.plan import PlanGate
 from app.documents.writer import (
     build_docx_bytes,
     build_pdf_bytes,
+    build_pdf_bytes_from_slides,
     build_pptx_bytes,
     build_xlsx_bytes,
     require_path_extension,
@@ -76,6 +77,7 @@ class ToolContext:
     session_item_embeddings: dict[str, tuple[float, ...]] | None = None
     prepared_session_candidates: tuple[dict, ...] | None = None
     prepared_tagged_memories: tuple[dict, ...] | None = None
+    ui_mode: str = "guided"
 
 
 @dataclass
@@ -354,6 +356,7 @@ def build_agent(
     sandbox_available: bool = True,
     locale: str = DEFAULT_LOCALE,
     active_plugins: list[str] | None = None,
+    plugin_data_dir: Path | None = None,
 ) -> Agent[ToolDeps, str]:
     """Construit l'agent Pydantic AI avec ses outils métier."""
     agent: Agent[ToolDeps, str] = Agent(
@@ -1021,25 +1024,47 @@ def build_agent(
         path: str,
         slides: list[dict[str, Any]] | None = None,
         theme: str = "improba",
+        fidelity: str = "editable",
     ) -> dict[str, Any]:
         """Create a native PowerPoint (.pptx) presentation in the workspace.
 
         Use this whenever the user asks for a .pptx / PowerPoint / présentation
         éditable. Never write Word or markdown under a .pptx name.
 
-        Each slide is a dict with:
-        - layout: title | section | bullets | two_column | kpi_row | quote | closing
-        - title, subtitle, bullets, left, right, left_title, right_title,
-          metrics (list of {label, value}), quote, attribution
+        Each slide is a dict with either:
+        - grammar (hero | split | comparison | sequence | dashboard | diagram | editorial)
+          + hierarchy {primary, secondary[], tertiary[]} + visual {type, items[]}
+        - or legacy layout (title | section | bullets | two_column | kpi_row | quote | closing)
+          + title, subtitle, bullets, left, right, metrics, quote, etc.
 
         Args:
             path: Relative path ending with .pptx.
-            slides: Structured slide definitions (choose layouts from the catalog).
+            slides: Structured slide definitions.
             theme: Visual theme: improba (default), light, or dark.
+            fidelity: editable (native shapes) or visual (HTML screenshot, repli éditable sans Chromium).
         """
+        fidelity_key = (fidelity or "editable").strip().lower()
+        metadata: dict[str, Any] = {
+            "format": "pptx",
+            "theme": theme or "improba",
+            "fidelity": fidelity_key,
+        }
         try:
             require_path_extension(path, ".pptx")
-            content = build_pptx_bytes(slides=slides, theme=theme)
+            if fidelity_key == "visual":
+                from app.documents.pptx_svg import build_pptx_visual_bytes
+
+                content, render_meta = build_pptx_visual_bytes(slides, theme=theme)
+                metadata.update(render_meta)
+            else:
+                from app.documents.pptx_builder import build_pptx_editable_bytes
+                from app.documents.slides_critique import critique_and_fix
+
+                critique = critique_and_fix(slides, theme=theme)
+                content, _ = build_pptx_editable_bytes(
+                    slides=critique.slides, theme=theme, skip_critique=True
+                )
+                metadata["critique_issues"] = len(critique.issues)
         except ValueError as exc:
             raise ModelRetry(str(exc)) from exc
         except Exception as exc:  # noqa: BLE001
@@ -1053,7 +1078,7 @@ def build_agent(
                 ".presentationml.presentation"
             ),
             content=content,
-            metadata={"format": "pptx", "theme": theme or "improba"},
+            metadata=metadata,
         )
 
     @agent.tool
@@ -1062,17 +1087,33 @@ def build_agent(
         path: str,
         title: str = "",
         sections: list[dict[str, Any]] | None = None,
+        slides: list[dict[str, Any]] | None = None,
+        theme: str = "improba",
     ) -> dict[str, Any]:
-        """Create a native PDF file in the workspace (ReportLab).
+        """Create a native PDF file in the workspace.
+
+        Use ``sections`` for a simple ReportLab document, or ``slides`` for a
+        deck PDF (Chromium HTML render when available, else ReportLab fallback).
 
         Args:
             path: Relative path for the .pdf file (must end with .pdf).
-            title: Optional document title.
+            title: Optional document title (sections mode).
             sections: Sections with optional `heading` and `body` text.
+            slides: Optional semantic slides (same schema as write_pptx).
+            theme: Theme for slides PDF rendering (improba, light, dark).
         """
         try:
             require_path_extension(path, ".pdf")
-            content = build_pdf_bytes(title=title or None, sections=sections)
+            if slides is not None:
+                content = build_pdf_bytes_from_slides(slides=slides, theme=theme)
+                metadata: dict[str, Any] = {
+                    "format": "pdf",
+                    "source": "slides",
+                    "theme": theme or "improba",
+                }
+            else:
+                content = build_pdf_bytes(title=title or None, sections=sections)
+                metadata = {"format": "pdf", "source": "sections"}
         except ValueError as exc:
             raise ModelRetry(str(exc)) from exc
         except RuntimeError as exc:
@@ -1085,12 +1126,17 @@ def build_agent(
             name=path,
             mime_type="application/pdf",
             content=content,
-            metadata={"format": "pdf"},
+            metadata=metadata,
         )
 
     from app.plugins.registry import register_plugin_tools
 
-    register_plugin_tools(agent, active_plugins=active_plugins)
+    register_plugin_tools(
+        agent,
+        active_plugins=active_plugins,
+        plugin_data_dir=plugin_data_dir,
+        ui_mode=ui_mode,
+    )
 
     return agent
 

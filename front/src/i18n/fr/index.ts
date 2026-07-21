@@ -723,6 +723,7 @@ export default {
     syncManagedRegards: 'J\'ai synchronisé les regards de l\'organisation',
     invokeManagedConnector: 'J\'ai appelé un connecteur Improba Cloud',
     invokeManagedConnectorNamed: 'J\'ai appelé le connecteur {name}',
+    managedConnectorTool: '{connector} · {tool}',
     searchKb: 'J\'ai cherché dans la mémoire',
     listFiles: 'J\'ai listé les fichiers',
     runCode: 'J\'ai exécuté un calcul',

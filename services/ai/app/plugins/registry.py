@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic_ai import Agent
 
@@ -150,6 +150,8 @@ def register_plugin_tools(
     agent: Agent[Any, str],
     *,
     active_plugins: list[str] | None,
+    plugin_data_dir: Path | None = None,
+    ui_mode: Literal["guided", "advanced", "locked"] = "guided",
 ) -> None:
     """Ajoute les outils agent des plugins actifs."""
     if is_plugin_active(PLUGIN_WORKPROBA_PROJET, active_plugins):
@@ -167,7 +169,11 @@ def register_plugin_tools(
     if is_plugin_active(PLUGIN_WORKPROBA_CLOUD, active_plugins):
         from app.plugins.workproba_cloud.plugin import register_cloud_tools
 
-        register_cloud_tools(agent)
+        register_cloud_tools(
+            agent,
+            plugin_data_dir=plugin_data_dir,
+            ui_mode=ui_mode,
+        )
 
 
 __all__ = [

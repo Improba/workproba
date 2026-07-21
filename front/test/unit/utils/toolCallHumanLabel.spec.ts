@@ -15,12 +15,16 @@ describe('fallbackHumanLabel', () => {
     expect(fallbackHumanLabel('list_projects')).toBe("J'ai listé les projets");
     expect(fallbackHumanLabel('sync_to_cloud')).toBe("J'ai synchronisé des documents vers le cloud");
     expect(fallbackHumanLabel('sync_from_cloud')).toBe("J'ai récupéré des documents depuis le cloud");
-    expect(fallbackHumanLabel('enroll_to_cloud')).toBe("J'ai connecté ce poste au cloud");
+    expect(fallbackHumanLabel('enroll_to_cloud')).toBe('Je me suis connecté à Improba Cloud');
     expect(fallbackHumanLabel('sync_managed_regards')).toBe("J'ai synchronisé les regards de l'organisation");
     expect(fallbackHumanLabel('invoke_managed_connector')).toBe("J'ai appelé un connecteur Improba Cloud");
     expect(
       fallbackHumanLabel('invoke_managed_connector', { connector_id: 'echo' }),
     ).toBe("J'ai appelé le connecteur echo");
+    expect(fallbackHumanLabel('managed__ihora__list_absences')).toBe('ihora · list absences');
+    expect(fallbackHumanLabel('managed__ihora.shaped__get_timesheet')).toBe(
+      'ihora.shaped · get timesheet',
+    );
     expect(fallbackHumanLabel('search_kb')).toBe("J'ai cherché dans la mémoire");
     expect(fallbackHumanLabel('web_search')).toBe('Recherche sur le web');
     expect(fallbackHumanLabel('list_files')).toBe("J'ai listé les fichiers");

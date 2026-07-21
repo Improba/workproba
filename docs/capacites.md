@@ -41,7 +41,7 @@ The Capabilities hub lists **Workproba Cloud first**. Nested items live in a **c
 
 Solo projects stay **local SoT** (on the machine). Shared projects and **managed capabilities** require cloud enrollment (join org via `join_token` ; DeviceBearer stored locally). Once enrolled, mirror push/pull is refused ; use publish and republish instead.
 
-Managed capabilities use Improba Cloud Mode A: the agent calls `invoke_managed_connector` (Human Approval Gate `external_send`) ; the cloud relays to org-allowed services (`echo`, `ihora.shaped` stub, `ihora` HTTP). The desktop does not send `device_id`, `subject_id` or `org_id` in the invoke body. Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
+Managed capabilities use Improba Cloud Mode A. Each org-allowed connector exposes a `tools[]` catalog from the control plane (name, action, description, effect, visibility, input_schema). When a managed capability is **enabled on this computer**, the chat registers one agent tool per entry: `managed_{connector_id}_{tool_name}` (connector dots become underscores). The generic `invoke_managed_connector` remains a fallback. Validation of `action` and payload is **authoritative on the cloud** at invoke time. Human Approval Gate: `external_send`. The desktop does not send `device_id`, `subject_id` or `org_id` in the invoke body. Guided mode hides tools with `visibility: advanced`. Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ## How to activate
 

@@ -597,12 +597,33 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                             )
 
                         model = build_model(config)
+                        from app.plugins.registry import (
+                            PLUGIN_WORKPROBA_CLOUD,
+                            is_plugin_active,
+                            resolve_plugin_data_dir,
+                        )
+
+                        if is_plugin_active(
+                            PLUGIN_WORKPROBA_CLOUD, payload.active_plugins
+                        ):
+                            from app.plugins.workproba_cloud.plugin import (
+                                refresh_known_managed_connectors_cache,
+                            )
+
+                            cloud_plugin_dir = resolve_plugin_data_dir(
+                                PLUGIN_WORKPROBA_CLOUD, plugin_dir
+                            )
+                            if cloud_plugin_dir is not None:
+                                await refresh_known_managed_connectors_cache(
+                                    cloud_plugin_dir
+                                )
                         agent = build_agent(
                             model,
                             ui_mode=payload.ui_mode,
                             sandbox_available=caps.sandbox_available,
                             locale=payload.locale,
                             active_plugins=payload.active_plugins,
+                            plugin_data_dir=plugin_dir,
                         )
                         agent_loop = AgentLoop(
                             agent=agent,
@@ -2652,6 +2673,7 @@ class CloudConnectorItem(BaseModel):
     runtime: str = "managed"
     description: str = ""
     enabled: bool = True
+    tools: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class CloudConnectorsResponse(BaseModel):
@@ -3428,6 +3450,12 @@ async def cloud_list_connectors_endpoint(
             if not isinstance(entry, dict) or not entry.get("id"):
                 continue
             connector_id = str(entry.get("id"))
+            tools_raw = entry.get("tools")
+            tools: list[dict[str, Any]] = []
+            if isinstance(tools_raw, list):
+                for tool_entry in tools_raw:
+                    if isinstance(tool_entry, dict):
+                        tools.append(dict(tool_entry))
             items.append(
                 CloudConnectorItem(
                     id=connector_id,
@@ -3437,12 +3465,20 @@ async def cloud_list_connectors_endpoint(
                     enabled=cloud_storage.is_managed_connector_enabled(
                         cloud_dir, connector_id
                     ),
+                    tools=tools,
                 )
             )
     if items:
         cloud_storage.save_known_managed_connectors(
             cloud_dir,
-            [{"id": item.id, "name": item.name} for item in items],
+            [
+                {
+                    "id": item.id,
+                    "name": item.name,
+                    "tools": item.tools,
+                }
+                for item in items
+            ],
         )
     return CloudConnectorsResponse(connectors=items, enrolled=True)
 

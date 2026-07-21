@@ -261,8 +261,10 @@ def classify_effect(
             ),
         )
 
-    if tool_name == "invoke_managed_connector":
-        connector_id = str(args.get("connector_id") or "")
+    if tool_name == "invoke_managed_connector" or tool_name.startswith("managed_"):
+        from app.plugins.workproba_cloud.plugin import managed_connector_id_for_tool
+
+        connector_id = str(args.get("connector_id") or managed_connector_id_for_tool(tool_name))
         return EffectProposal(
             effect="external_send",
             tool_name=tool_name,

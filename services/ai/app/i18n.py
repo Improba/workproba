@@ -155,6 +155,11 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "cannot": "Je n'ai pas pu appeler le connecteur {connector_id}",
                 "done": "J'ai appelé le connecteur managé {connector_id}",
             },
+            "managed_connector_tool": {
+                "will": "Je vais appeler {tool_label} sur {connector_id}",
+                "cannot": "Je n'ai pas pu appeler {tool_label} sur {connector_id}",
+                "done": "J'ai appelé {tool_label} sur {connector_id}",
+            },
         },
         "loop": {
             "internal_error": (
@@ -382,7 +387,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
             ),
             "managed_connectors_header": "Connecteurs managés Improba Cloud (état local) :",
             "managed_connectors_enabled": (
-                "{id} ({name}) : activé localement ; utilisable via invoke_managed_connector"
+                "{id} ({name}) : activé localement ; utiliser les outils managed_*"
             ),
             "managed_connectors_disabled": (
                 "{id} ({name}) : désactivé localement ; ne pas invoquer ; "
@@ -490,6 +495,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "connector_disabled_locally": (
                 "Le connecteur managé {connector_id} est désactivé sur ce poste. "
                 "Activez-le dans Capacités."
+            ),
+            "connector_advanced_only": (
+                "Le connecteur {connector_id} n'est disponible qu'en mode avancé."
             ),
         },
         "preset": {
@@ -716,6 +724,11 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "cannot": "I could not call the connector {connector_id}",
                 "done": "I called the managed connector {connector_id}",
             },
+            "managed_connector_tool": {
+                "will": "I will call {tool_label} on {connector_id}",
+                "cannot": "I could not call {tool_label} on {connector_id}",
+                "done": "I called {tool_label} on {connector_id}",
+            },
         },
         "loop": {
             "internal_error": "An internal error occurred. Please try again.",
@@ -927,7 +940,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
             ),
             "managed_connectors_header": "Improba Cloud managed connectors (local state):",
             "managed_connectors_enabled": (
-                "{id} ({name}): enabled locally; callable via invoke_managed_connector"
+                "{id} ({name}): enabled locally; use the managed_* tools"
             ),
             "managed_connectors_disabled": (
                 "{id} ({name}): disabled locally; do not invoke; "
@@ -1034,6 +1047,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "connector_disabled_locally": (
                 "Managed connector {connector_id} is disabled on this workstation. "
                 "Enable it in Capabilities."
+            ),
+            "connector_advanced_only": (
+                "Connector {connector_id} is only available in advanced mode."
             ),
         },
         "preset": {

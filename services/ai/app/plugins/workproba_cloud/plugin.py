@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import copy
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, RunContext, Tool
 from pydantic_ai.exceptions import ModelRetry
 
 from app.agent.confirmation import raise_unless_approved
@@ -27,6 +28,205 @@ from app.plugins.workproba_cloud.sync_service import (
     is_mount_configured,
     pull_project_artefacts_from_cloud,
 )
+
+UiMode = Literal["guided", "advanced", "locked"]
+
+_BUILTIN_ADVANCED_ONLY_CONNECTORS = frozenset({"echo", "ihora.shaped"})
+
+
+def managed_tool_name(connector_id: str, tool_name: str) -> str:
+    return f"managed__{connector_id}__{tool_name}"
+
+
+def parse_managed_tool_name(tool_name: str) -> tuple[str, str] | None:
+    if not tool_name.startswith("managed__"):
+        return None
+    rest = tool_name[len("managed__") :]
+    cid, sep, name = rest.partition("__")
+    if not sep or not cid or not name:
+        return None
+    return cid, name
+
+
+def managed_connector_id_for_tool(tool_name: str) -> str:
+    parsed = parse_managed_tool_name(tool_name)
+    return parsed[0] if parsed else ""
+
+
+def managed_tool_label(tool_name: str) -> str:
+    parsed = parse_managed_tool_name(tool_name)
+    if parsed is None:
+        return tool_name
+    return parsed[1].replace("_", " ")
+
+
+def _tool_visibility(tool_def: dict[str, Any]) -> str:
+    visibility = tool_def.get("visibility")
+    if isinstance(visibility, str) and visibility.strip():
+        return visibility.strip()
+    return "guided"
+
+
+def should_register_managed_tool(tool_def: dict[str, Any], ui_mode: UiMode) -> bool:
+    return not (ui_mode == "guided" and _tool_visibility(tool_def) == "advanced")
+
+
+def normalize_tool_input_schema(schema: Any) -> dict[str, Any]:
+    if not isinstance(schema, dict):
+        return {"type": "object", "properties": {}, "additionalProperties": False}
+    normalized = copy.deepcopy(schema)
+    normalized.setdefault("type", "object")
+    normalized.setdefault("properties", {})
+    if normalized.get("additionalProperties") is not True:
+        normalized["additionalProperties"] = False
+    return normalized
+
+
+def _guided_generic_invoke_allowed(cloud_dir: Path, connector_id: str) -> bool:
+    tools: list[dict[str, Any]] | None = None
+    for connector in cloud_storage.get_known_managed_connectors(cloud_dir):
+        if str(connector.get("id") or "") == connector_id:
+            raw_tools = connector.get("tools")
+            if isinstance(raw_tools, list):
+                tools = [entry for entry in raw_tools if isinstance(entry, dict)]
+            else:
+                tools = []
+            break
+    if tools is None:
+        return connector_id not in _BUILTIN_ADVANCED_ONLY_CONNECTORS
+    if not tools:
+        return connector_id not in _BUILTIN_ADVANCED_ONLY_CONNECTORS
+    return any(_tool_visibility(tool_def) != "advanced" for tool_def in tools)
+
+
+def _connector_cache_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
+    connector_id = entry.get("id")
+    if not isinstance(connector_id, str) or not connector_id.strip():
+        return None
+    cached: dict[str, Any] = {
+        "id": connector_id.strip(),
+        "name": str(entry.get("name") or connector_id).strip(),
+    }
+    tools_raw = entry.get("tools")
+    if isinstance(tools_raw, list):
+        tools: list[dict[str, Any]] = []
+        for tool_entry in tools_raw:
+            if not isinstance(tool_entry, dict):
+                continue
+            name = tool_entry.get("name")
+            action = tool_entry.get("action")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            if not isinstance(action, str) or not action.strip():
+                continue
+            tool_cached: dict[str, Any] = {
+                "name": name.strip(),
+                "action": action.strip(),
+            }
+            description = tool_entry.get("description")
+            if isinstance(description, str):
+                tool_cached["description"] = description
+            effect = tool_entry.get("effect")
+            if isinstance(effect, str):
+                tool_cached["effect"] = effect
+            visibility = tool_entry.get("visibility")
+            if isinstance(visibility, str):
+                tool_cached["visibility"] = visibility
+            input_schema = tool_entry.get("input_schema")
+            if isinstance(input_schema, dict):
+                tool_cached["input_schema"] = input_schema
+            tools.append(tool_cached)
+        if tools:
+            cached["tools"] = tools
+    return cached
+
+
+async def refresh_known_managed_connectors_cache(cloud_dir: Path) -> None:
+    """Best-effort refresh du cache connecteurs/tools avant construction de l'agent."""
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not base_url or not is_cloud_enrolled(cloud_dir):
+        return
+    try:
+        client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+        payload = await client.list_connectors()
+    except Exception:
+        return
+    raw = payload.get("connectors") if isinstance(payload, dict) else None
+    if not isinstance(raw, list):
+        return
+    connectors: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        cached = _connector_cache_entry(entry)
+        if cached is not None:
+            connectors.append(cached)
+    if connectors:
+        cloud_storage.save_known_managed_connectors(cloud_dir, connectors)
+
+
+def make_managed_tool_shim(
+    connector_id: str,
+    tool_def: dict[str, Any],
+    *,
+    gate_tool_name: str,
+):
+    action = str(tool_def["action"])
+
+    async def _shim(ctx: RunContext[ToolDeps], **kwargs: Any) -> dict[str, Any]:
+        payload: dict[str, Any] = {"action": action}
+        for key, value in kwargs.items():
+            if value is not None:
+                payload[key] = value
+        return await invoke_managed_connector_impl(
+            ctx,
+            connector_id=connector_id,
+            payload=payload,
+            gate_tool_name=gate_tool_name,
+        )
+
+    return _shim
+
+
+def register_managed_connector_tools(
+    agent: Agent[ToolDeps, str],
+    cloud_dir: Path,
+    *,
+    ui_mode: UiMode,
+) -> None:
+    for connector in cloud_storage.get_known_managed_connectors(cloud_dir):
+        connector_id = str(connector.get("id") or "")
+        if not connector_id or not cloud_storage.is_managed_connector_enabled(
+            cloud_dir, connector_id
+        ):
+            continue
+        tools = connector.get("tools")
+        if not isinstance(tools, list):
+            continue
+        for tool_def in tools:
+            if not isinstance(tool_def, dict):
+                continue
+            if not should_register_managed_tool(tool_def, ui_mode):
+                continue
+            tool_name_value = tool_def.get("name")
+            if not isinstance(tool_name_value, str) or not tool_name_value.strip():
+                continue
+            tool_name = managed_tool_name(connector_id, tool_name_value.strip())
+            description = str(tool_def.get("description") or tool_name_value).strip()
+            json_schema = normalize_tool_input_schema(tool_def.get("input_schema"))
+            shim = make_managed_tool_shim(
+                connector_id,
+                tool_def,
+                gate_tool_name=tool_name,
+            )
+            tool = Tool.from_schema(
+                shim,
+                name=tool_name,
+                description=description,
+                json_schema=json_schema,
+                takes_ctx=True,
+            )
+            agent._function_toolset.add_tool(tool)
 
 
 def build_managed_connectors_agent_prompt(
@@ -69,7 +269,16 @@ def _cloud_data_dir(ctx: RunContext[ToolDeps]) -> Path:
     return data_dir
 
 
-def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
+def register_cloud_tools(
+    agent: Agent[ToolDeps, str],
+    *,
+    plugin_data_dir: Path | None = None,
+    ui_mode: UiMode = "guided",
+) -> None:
+    cloud_dir = resolve_plugin_data_dir(PLUGIN_WORKPROBA_CLOUD, plugin_data_dir)
+    if cloud_dir is not None:
+        register_managed_connector_tools(agent, cloud_dir, ui_mode=ui_mode)
+
     @agent.system_prompt
     async def managed_connectors_prompt(ctx: RunContext[ToolDeps]) -> str:
         locale = ctx.deps.context.locale
@@ -350,7 +559,7 @@ def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
         payload_json: str = "{}",
     ) -> dict[str, Any]:
         """Invoke a managed Improba Cloud connector (Mode A transport relay).
-        Only call connectors that are locally activated in the Capabilities hub.
+        Prefer the dedicated managed_* tools when available. This generic tool is a fallback.
 
         Args:
             connector_id: Managed connector id (e.g. ihora, echo, ihora.shaped).
@@ -359,15 +568,6 @@ def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
         import json
 
         locale = ctx.deps.context.locale
-        deps = ctx.deps
-        cloud_dir = _cloud_data_dir(ctx)
-        base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
-        if not base_url:
-            raise ModelRetry(t(locale, "cloud.not_configured"))
-
-        if not deps.context.permissions_network:
-            raise ModelRetry(t(locale, "errors.network_locked"))
-
         try:
             payload = json.loads(payload_json) if payload_json.strip() else {}
             if not isinstance(payload, dict):
@@ -377,102 +577,149 @@ def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
         except ValueError as exc:
             raise ModelRetry(str(exc)) from exc
 
-        # Ordre : local → auth → allowlist → gate humaine → re-check local (TOCTOU) → invoke.
+        return await invoke_managed_connector_impl(
+            ctx,
+            connector_id=connector_id,
+            payload=payload,
+            gate_tool_name="invoke_managed_connector",
+            human_connector_id=connector_id,
+            locale=locale,
+        )
+
+
+async def invoke_managed_connector_impl(
+    ctx: RunContext[ToolDeps],
+    *,
+    connector_id: str,
+    payload: dict[str, Any],
+    gate_tool_name: str,
+    human_connector_id: str | None = None,
+    locale: str | None = None,
+) -> dict[str, Any]:
+    locale = locale or ctx.deps.context.locale
+    deps = ctx.deps
+    cloud_dir = _cloud_data_dir(ctx)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not base_url:
+        raise ModelRetry(t(locale, "cloud.not_configured"))
+
+    if not deps.context.permissions_network:
+        raise ModelRetry(t(locale, "errors.network_locked"))
+
+    # Ordre : local → auth → allowlist → gate humaine → re-check local (TOCTOU) → invoke.
+    if not cloud_storage.is_managed_connector_enabled(cloud_dir, connector_id):
+        raise ModelRetry(
+            t(locale, "cloud.connector_disabled_locally", connector_id=connector_id)
+        )
+
+    ui_mode = getattr(deps.context, "ui_mode", "guided")
+    if ui_mode == "guided" and not _guided_generic_invoke_allowed(cloud_dir, connector_id):
+        raise ModelRetry(
+            t(locale, "cloud.connector_advanced_only", connector_id=connector_id)
+        )
+
+    client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+    tokens = client.load_tokens()
+    access_token = tokens.get("access_token")
+    if not isinstance(access_token, str) or not access_token.strip():
+        raise ModelRetry(t(locale, "cloud.not_authenticated"))
+
+    org_id = tokens.get("org_id")
+    org_id_str = org_id.strip() if isinstance(org_id, str) else None
+    device_id = tokens.get("device_id")
+    subject = (
+        device_id.strip()
+        if isinstance(device_id, str) and device_id.strip()
+        else "local"
+    )
+
+    try:
+        try:
+            allowed = await client.fetch_allowed_connector_ids()
+        except PermissionError as exc:
+            raise ModelRetry(t(locale, "cloud.connectors_auth_failed")) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise ModelRetry(t(locale, "cloud.connectors_load_failed")) from exc
+
+        if connector_id not in allowed:
+            raise ModelRetry(f"connector_not_allowed:{connector_id}")
+
+        gate = deps.confirmation_gate
+        if gate is not None:
+            summary_connector_id = human_connector_id or connector_id
+            human_summary = build_human_summary(
+                gate_tool_name,
+                {
+                    "connector_id": summary_connector_id,
+                    "tool_name": gate_tool_name,
+                },
+                locale=locale,
+            )
+            proposal = classify_effect(
+                gate_tool_name,
+                {
+                    "connector_id": summary_connector_id,
+                    "tool_name": gate_tool_name,
+                },
+                permissions_network=deps.context.permissions_network,
+            )
+            if proposal is None:
+                raise ModelRetry(f"Effet non classifiable pour {gate_tool_name}")
+            proposal = proposal.model_copy(update={"human_summary": human_summary})
+            proposal = proposal.model_copy(
+                update={
+                    "headline": effect_headline(proposal, locale),
+                    "protection_labels": protection_labels(proposal, locale),
+                }
+            )
+            outcome = await gate.request_effect(
+                tool_call_id=ctx.tool_call_id or "",
+                proposal=proposal,
+                audit_app_data_dir=deps.context.workspace_data_dir,
+                audit_enabled=deps.context.audit_enabled,
+            )
+            raise_unless_approved(outcome, locale)
+
         if not cloud_storage.is_managed_connector_enabled(cloud_dir, connector_id):
             raise ModelRetry(
                 t(locale, "cloud.connector_disabled_locally", connector_id=connector_id)
             )
 
-        client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
-        tokens = client.load_tokens()
-        access_token = tokens.get("access_token")
-        if not isinstance(access_token, str) or not access_token.strip():
-            raise ModelRetry(t(locale, "cloud.not_authenticated"))
-
-        org_id = tokens.get("org_id")
-        org_id_str = org_id.strip() if isinstance(org_id, str) else None
-        device_id = tokens.get("device_id")
-        subject = (
-            device_id.strip()
-            if isinstance(device_id, str) and device_id.strip()
-            else "local"
+        plugins_root = cloud_dir.parent
+        gateway = open_remote_capability_gateway(
+            caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
+            caller_permissions=frozenset(
+                [
+                    "capability:remote",
+                    "network:improba-cloud",
+                ]
+            ),
+            plugins_root=plugins_root,
+            base_url=base_url,
+            allowed_capability_ids=allowed,
         )
-
-        try:
-            try:
-                allowed = await client.fetch_allowed_connector_ids()
-            except PermissionError as exc:
-                raise ModelRetry(t(locale, "cloud.connectors_auth_failed")) from exc
-            except Exception as exc:  # noqa: BLE001
-                raise ModelRetry(t(locale, "cloud.connectors_load_failed")) from exc
-
-            if connector_id not in allowed:
-                raise ModelRetry(f"connector_not_allowed:{connector_id}")
-
-            gate = deps.confirmation_gate
-            if gate is not None:
-                human_summary = build_human_summary(
-                    "invoke_managed_connector",
-                    {"connector_id": connector_id},
-                    locale=locale,
-                )
-                proposal = classify_effect(
-                    "invoke_managed_connector",
-                    {"connector_id": connector_id},
-                    permissions_network=deps.context.permissions_network,
-                )
-                if proposal is None:
-                    raise ModelRetry("Effet non classifiable pour invoke_managed_connector")
-                proposal = proposal.model_copy(update={"human_summary": human_summary})
-                proposal = proposal.model_copy(
-                    update={
-                        "headline": effect_headline(proposal, locale),
-                        "protection_labels": protection_labels(proposal, locale),
-                    }
-                )
-                outcome = await gate.request_effect(
-                    tool_call_id=ctx.tool_call_id or "",
-                    proposal=proposal,
-                    audit_app_data_dir=deps.context.workspace_data_dir,
-                    audit_enabled=deps.context.audit_enabled,
-                )
-                raise_unless_approved(outcome, locale)
-
-            if not cloud_storage.is_managed_connector_enabled(cloud_dir, connector_id):
-                raise ModelRetry(
-                    t(locale, "cloud.connector_disabled_locally", connector_id=connector_id)
-                )
-
-            plugins_root = cloud_dir.parent
-            gateway = open_remote_capability_gateway(
-                caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
-                caller_permissions=frozenset(
-                    [
-                        "capability:remote",
-                        "network:improba-cloud",
-                    ]
-                ),
-                plugins_root=plugins_root,
-                base_url=base_url,
-                allowed_capability_ids=allowed,
-            )
-            identity = IdentityDelegation(
-                subject_id=subject,
-                org_id=org_id_str,
-                scopes=frozenset({"connectors:invoke"}),
-                access_token=access_token.strip(),
-            )
-            result = await gateway.invoke_remote(connector_id, payload, identity)
-        except ModelRetry:
-            raise
-        except PermissionError as exc:
-            raise ModelRetry(str(exc)) from exc
-        except Exception as exc:  # noqa: BLE001
-            raise ModelRetry(f"{type(exc).__name__}: {exc}") from exc
-
-        human_summary = build_human_summary(
-            "invoke_managed_connector",
-            {"connector_id": connector_id, "ok": bool(result.get("ok", True))},
-            locale=locale,
+        identity = IdentityDelegation(
+            subject_id=subject,
+            org_id=org_id_str,
+            scopes=frozenset({"connectors:invoke"}),
+            access_token=access_token.strip(),
         )
-        return {**result, "human_summary": human_summary}
+        result = await gateway.invoke_remote(connector_id, payload, identity)
+    except ModelRetry:
+        raise
+    except PermissionError as exc:
+        raise ModelRetry(str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise ModelRetry(f"{type(exc).__name__}: {exc}") from exc
+
+    summary_connector_id = human_connector_id or connector_id
+    human_summary = build_human_summary(
+        gate_tool_name,
+        {
+            "connector_id": summary_connector_id,
+            "tool_name": gate_tool_name,
+            "ok": bool(result.get("ok", True)),
+        },
+        locale=locale,
+    )
+    return {**result, "human_summary": human_summary}

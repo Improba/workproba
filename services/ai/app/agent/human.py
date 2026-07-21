@@ -261,6 +261,39 @@ def build_human_summary(
             return t(locale, "human.invoke_managed_connector.done", connector_id=connector_id)
         return t(locale, "human.invoke_managed_connector.will", connector_id=connector_id)
 
+    if tool_name.startswith("managed_"):
+        from app.plugins.workproba_cloud.plugin import (
+            managed_connector_id_for_tool,
+            managed_tool_label,
+        )
+
+        connector_id = str(
+            arguments.get("connector_id")
+            or result.get("connector_id")
+            or managed_connector_id_for_tool(tool_name)
+        )
+        tool_label = managed_tool_label(tool_name)
+        if is_result:
+            if is_error:
+                return t(
+                    locale,
+                    "human.managed_connector_tool.cannot",
+                    connector_id=connector_id,
+                    tool_label=tool_label,
+                )
+            return t(
+                locale,
+                "human.managed_connector_tool.done",
+                connector_id=connector_id,
+                tool_label=tool_label,
+            )
+        return t(
+            locale,
+            "human.managed_connector_tool.will",
+            connector_id=connector_id,
+            tool_label=tool_label,
+        )
+
     if tool_name == "list_projects":
         if is_result:
             if is_error:

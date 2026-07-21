@@ -2337,6 +2337,14 @@ export async function syncManagedRegards(opts: {
   }
 }
 
+export interface ManagedConnectorTool {
+  name: string;
+  action?: string;
+  description?: string;
+  effect?: string;
+  visibility?: 'guided' | 'advanced';
+}
+
 export interface ManagedConnector {
   id: string;
   name: string;
@@ -2344,6 +2352,7 @@ export interface ManagedConnector {
   description?: string;
   /** Activation locale sur ce poste (défaut true si absent). */
   enabled?: boolean;
+  tools?: ManagedConnectorTool[];
 }
 
 export interface ManagedConnectorsResult {

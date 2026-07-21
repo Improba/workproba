@@ -358,6 +358,7 @@ class AgentLoop:
             session_item_embeddings=session_item_embeddings,
             prepared_session_candidates=prepared_session_candidates,
             prepared_tagged_memories=prepared_tagged_memories,
+            ui_mode=request.ui_mode,
         )
         deps = ToolDeps(
             context=context,

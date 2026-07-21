@@ -138,12 +138,40 @@ def is_managed_connector_enabled(plugin_data_dir: Path, connector_id: str) -> bo
     return cid not in get_disabled_managed_connectors(plugin_data_dir)
 
 
-def get_known_managed_connectors(plugin_data_dir: Path) -> list[dict[str, str]]:
+def _normalize_managed_tool_entry(entry: Any) -> dict[str, Any] | None:
+    if not isinstance(entry, dict):
+        return None
+    name = entry.get("name")
+    if not isinstance(name, str) or not name.strip():
+        return None
+    action = entry.get("action")
+    if not isinstance(action, str) or not action.strip():
+        return None
+    normalized: dict[str, Any] = {
+        "name": name.strip(),
+        "action": action.strip(),
+    }
+    description = entry.get("description")
+    if isinstance(description, str) and description.strip():
+        normalized["description"] = description.strip()
+    effect = entry.get("effect")
+    if isinstance(effect, str) and effect.strip():
+        normalized["effect"] = effect.strip()
+    visibility = entry.get("visibility")
+    if isinstance(visibility, str) and visibility.strip():
+        normalized["visibility"] = visibility.strip()
+    input_schema = entry.get("input_schema")
+    if isinstance(input_schema, dict):
+        normalized["input_schema"] = input_schema
+    return normalized
+
+
+def get_known_managed_connectors(plugin_data_dir: Path) -> list[dict[str, Any]]:
     """Derniers connecteurs org connus (cache disque pour le prompt agent)."""
     raw = load_config(plugin_data_dir).get("known_managed_connectors")
     if not isinstance(raw, list):
         return []
-    connectors: list[dict[str, str]] = []
+    connectors: list[dict[str, Any]] = []
     for entry in raw:
         if not isinstance(entry, dict):
             continue
@@ -153,7 +181,17 @@ def get_known_managed_connectors(plugin_data_dir: Path) -> list[dict[str, str]]:
         name = entry.get("name")
         if not isinstance(name, str) or not name.strip():
             name = cid.strip()
-        connectors.append({"id": cid.strip(), "name": name.strip()})
+        connector: dict[str, Any] = {"id": cid.strip(), "name": name.strip()}
+        tools_raw = entry.get("tools")
+        if isinstance(tools_raw, list):
+            tools: list[dict[str, Any]] = []
+            for tool_entry in tools_raw:
+                normalized_tool = _normalize_managed_tool_entry(tool_entry)
+                if normalized_tool is not None:
+                    tools.append(normalized_tool)
+            if tools:
+                connector["tools"] = tools
+        connectors.append(connector)
     return connectors
 
 
@@ -161,8 +199,8 @@ def save_known_managed_connectors(
     plugin_data_dir: Path,
     connectors: list[dict[str, Any]],
 ) -> None:
-    """Met à jour le cache disque id/name des connecteurs managés."""
-    normalized: list[dict[str, str]] = []
+    """Met à jour le cache disque id/name/tools des connecteurs managés."""
+    normalized: list[dict[str, Any]] = []
     seen: set[str] = set()
     for entry in connectors:
         if not isinstance(entry, dict):
@@ -177,7 +215,17 @@ def save_known_managed_connectors(
         name = entry.get("name")
         if not isinstance(name, str) or not name.strip():
             name = cid
-        normalized.append({"id": cid, "name": name.strip()})
+        connector: dict[str, Any] = {"id": cid, "name": name.strip()}
+        tools_raw = entry.get("tools")
+        if isinstance(tools_raw, list):
+            tools: list[dict[str, Any]] = []
+            for tool_entry in tools_raw:
+                normalized_tool = _normalize_managed_tool_entry(tool_entry)
+                if normalized_tool is not None:
+                    tools.append(normalized_tool)
+            if tools:
+                connector["tools"] = tools
+        normalized.append(connector)
     save_config(plugin_data_dir, {"known_managed_connectors": normalized})
 
 

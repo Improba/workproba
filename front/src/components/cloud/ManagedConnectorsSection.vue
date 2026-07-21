@@ -29,6 +29,23 @@
             {{ connector.description }}
           </p>
         </div>
+
+        <ul
+          v-if="visibleTools(connector).length"
+          class="managed-connectors__tools"
+          role="list"
+        >
+          <li
+            v-for="tool in visibleTools(connector)"
+            :key="tool.name"
+            class="managed-connectors__tool"
+          >
+            <span class="managed-connectors__tool-name">{{ tool.name }}</span>
+            <p v-if="tool.description" class="managed-connectors__tool-description">
+              {{ tool.description }}
+            </p>
+          </li>
+        </ul>
       </li>
     </ul>
   </section>
@@ -36,19 +53,31 @@
 
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n';
-import type { ManagedConnector } from '@services/aiSidecar';
+import type { ManagedConnector, ManagedConnectorTool } from '@services/aiSidecar';
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     connectors: ManagedConnector[];
     loading: boolean;
     error: string | null;
     showIds?: boolean;
+    showAdvancedTools?: boolean;
   }>(),
-  { showIds: false },
+  { showIds: false, showAdvancedTools: false },
 );
 
 const { t } = useI18n();
+
+function visibleTools(connector: ManagedConnector): ManagedConnectorTool[] {
+  const tools = connector.tools;
+  if (!Array.isArray(tools) || !tools.length) {
+    return [];
+  }
+  if (props.showAdvancedTools) {
+    return tools;
+  }
+  return tools.filter((tool) => (tool.visibility ?? 'guided') !== 'advanced');
+}
 </script>
 
 <style scoped lang="scss">
@@ -97,6 +126,36 @@ const { t } = useI18n();
 
 .managed-connectors__description {
   margin: 4px 0 0;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-muted);
+}
+
+.managed-connectors__tools {
+  list-style: none;
+  margin: var(--wp-space-2) 0 0;
+  padding: 0 0 0 var(--wp-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-1);
+  border-left: 2px solid var(--wp-border);
+}
+
+.managed-connectors__tool {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.managed-connectors__tool-name {
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text);
+  font-weight: 500;
+  font-family: var(--wp-font-mono, monospace);
+}
+
+.managed-connectors__tool-description {
+  margin: 0;
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-muted);
 }

@@ -115,6 +115,7 @@ def _ctx(deps: ToolDeps, tool_call_id: str = "tc1") -> RunContext[ToolDeps]:
         ),
         ("sync_to_cloud", {"project_id": "p1"}, "external_send"),
         ("invoke_managed_connector", {"connector_id": "echo"}, "external_send"),
+        ("managed__ihora__list_absences", {"connector_id": "ihora"}, "external_send"),
         ("sync_from_cloud", {"project_id": "p1"}, "modify"),
         ("sync_managed_regards", {"org_id": "o1"}, "modify"),
         ("sync_managed_regards", {}, "modify"),

@@ -146,6 +146,7 @@
         :loading="connectorsLoading"
         :error="displayConnectorsError"
         :show-ids="isTechnicalFace"
+        :show-advanced-tools="isTechnicalFace"
       />
 
       <!-- Visage technique (admin / avancé) -->

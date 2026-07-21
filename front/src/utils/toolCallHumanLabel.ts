@@ -1,10 +1,35 @@
 import { t } from './i18nT';
 
+function formatManagedToolLabel(name: string): string {
+  if (name.startsWith('managed__')) {
+    const rest = name.slice('managed__'.length);
+    const sep = rest.indexOf('__');
+    if (sep > 0) {
+      const connector = rest.slice(0, sep);
+      const tool = rest.slice(sep + 2).replace(/_/g, ' ');
+      return t('toolCalls.managedConnectorTool', { connector, tool });
+    }
+  }
+
+  const legacyRest = name.slice('managed_'.length);
+  const legacyParts = legacyRest.split('_');
+  if (legacyParts.length <= 1) {
+    return legacyParts[0] ?? legacyRest;
+  }
+  const connector = legacyParts[0] ?? '';
+  const tool = legacyParts.slice(1).join(' ');
+  return t('toolCalls.managedConnectorTool', { connector, tool });
+}
+
 /** Libellé lisible par défaut quand le sidecar n'envoie pas de humanSummary. */
 export function fallbackHumanLabel(
   name: string,
   args?: Record<string, unknown>,
 ): string {
+  if (name.startsWith('managed_')) {
+    return formatManagedToolLabel(name);
+  }
+
   switch (name) {
     case 'read_documents':
     case 'read_document':
