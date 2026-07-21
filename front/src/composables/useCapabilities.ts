@@ -150,6 +150,7 @@ export function useCapabilities(): UseCapabilitiesReturn {
     isEnrolled,
     connectors,
     init: initCloud,
+    setManagedConnectorEnabled,
   } = useCloud();
 
   const {
@@ -202,10 +203,11 @@ export function useCapabilities(): UseCapabilitiesReturn {
           name: connector.name,
           description: connector.description,
         });
+        const locallyEnabled = connector.enabled !== false;
         return {
           definition,
           state: {
-            kind: 'active' as const,
+            kind: (locallyEnabled ? 'active' : 'available') as CapabilityState['kind'],
             managedByOrganization: true,
           },
         };
@@ -260,6 +262,10 @@ export function useCapabilities(): UseCapabilitiesReturn {
     if (!view || view.state.kind === 'blocked' || view.state.kind === 'unavailable') {
       return;
     }
+    // Capacités managées (ex. Ihora) : pas de domicile à ouvrir.
+    if (isManagedCapabilityId(id) || view.definition.source === 'managed') {
+      return;
+    }
     openSurface(view.definition);
   }
 
@@ -269,12 +275,15 @@ export function useCapabilities(): UseCapabilitiesReturn {
     if (view.state.kind === 'blocked' || view.state.kind === 'unavailable') return;
     if (view.state.kind === 'coming_soon') return;
 
-    if (isManagedCapabilityId(id)) {
-      if (!activeIds.value.has(CLOUD_PLUGIN_ID)) {
-        await activatePlugin(CLOUD_PLUGIN_ID);
+    if (isManagedCapabilityId(id) || view.definition.source === 'managed') {
+      const connectorId =
+        view.definition.managedConnectorId
+        ?? connectorIdFromManagedCapability(id as ManagedCapabilityId);
+      const ok = await setManagedConnectorEnabled(connectorId, true);
+      if (!ok) {
+        throw new Error('managed_capability_enable_failed');
       }
-      closeCapabilities();
-      openSurface(view.definition);
+      // Pas d'ouverture de panneau : activation locale uniquement.
       return;
     }
 
@@ -302,7 +311,11 @@ export function useCapabilities(): UseCapabilitiesReturn {
 
   async function deactivate(id: CapabilityId): Promise<void> {
     if (isManagedCapabilityId(id)) {
-      // Capacités managées : pilotées par l'org, pas de toggle local.
+      const connectorId = connectorIdFromManagedCapability(id);
+      const ok = await setManagedConnectorEnabled(connectorId, false);
+      if (!ok) {
+        throw new Error('managed_capability_disable_failed');
+      }
       return;
     }
 

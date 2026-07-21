@@ -351,6 +351,9 @@ def register_cloud_tools(agent: Agent[ToolDeps, str]) -> None:
             if connector_id not in allowed:
                 raise ModelRetry(f"connector_not_allowed:{connector_id}")
 
+            if not cloud_storage.is_managed_connector_enabled(cloud_dir, connector_id):
+                raise ModelRetry(f"connector_disabled_locally:{connector_id}")
+
             plugins_root = cloud_dir.parent
             gateway = open_remote_capability_gateway(
                 caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,

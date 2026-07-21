@@ -2574,6 +2574,7 @@ class CloudStatusResponse(BaseModel):
     has_token: bool = False
     org_id: str | None = None
     org_label: str | None = None
+    device_id: str | None = None
 
 
 class CloudConfigRequest(BaseModel):
@@ -2650,11 +2651,17 @@ class CloudConnectorItem(BaseModel):
     name: str
     runtime: str = "managed"
     description: str = ""
+    enabled: bool = True
 
 
 class CloudConnectorsResponse(BaseModel):
     connectors: list[CloudConnectorItem]
     enrolled: bool = False
+
+
+class CloudConnectorEnabledRequest(BaseModel):
+    plugin_data_dir: str
+    enabled: bool
 
 
 class CloudLlmQuotaResponse(BaseModel):
@@ -3420,15 +3427,91 @@ async def cloud_list_connectors_endpoint(
         for entry in raw:
             if not isinstance(entry, dict) or not entry.get("id"):
                 continue
+            connector_id = str(entry.get("id"))
             items.append(
                 CloudConnectorItem(
-                    id=str(entry.get("id")),
+                    id=connector_id,
                     name=str(entry.get("name") or entry.get("id")),
                     runtime=str(entry.get("runtime") or "managed"),
                     description=str(entry.get("description") or ""),
+                    enabled=cloud_storage.is_managed_connector_enabled(
+                        cloud_dir, connector_id
+                    ),
                 )
             )
     return CloudConnectorsResponse(connectors=items, enrolled=True)
+
+
+@app.put(
+    "/plugins/cloud/connectors/{connector_id}/enabled",
+    response_model=CloudConnectorItem,
+)
+async def cloud_set_connector_enabled_endpoint(
+    request: Request,
+    connector_id: str,
+    payload: CloudConnectorEnabledRequest,
+    locale: str = "fr",
+) -> CloudConnectorItem:
+    """Active ou désactive localement une capacité managée (pas d'ouverture UI)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    loc = normalize_locale(locale)
+
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.sync_service import is_cloud_enrolled
+
+    cloud_dir = _resolve_plugin_data_dir(payload.plugin_data_dir)
+    base_url = cloud_storage.get_control_plane_base_url(cloud_dir)
+    if not base_url or not is_cloud_enrolled(cloud_dir):
+        raise HTTPException(status_code=403, detail=t(loc, "cloud.not_authenticated"))
+
+    cid = (connector_id or "").strip()
+    if not cid:
+        raise HTTPException(status_code=400, detail="connector_id_required")
+
+    client = CloudControlPlaneClient(base_url=base_url, plugin_data_dir=cloud_dir)
+    try:
+        allowed = await client.fetch_allowed_connector_ids()
+    except PermissionError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail=t(loc, "cloud.connectors_auth_failed"),
+        ) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(
+            status_code=502,
+            detail=t(loc, "cloud.connectors_load_failed"),
+        ) from exc
+
+    if cid not in allowed:
+        raise HTTPException(status_code=404, detail=f"connector_not_allowed:{cid}")
+
+    enabled = cloud_storage.set_managed_connector_enabled(
+        cloud_dir, cid, enabled=bool(payload.enabled)
+    )
+
+    name = cid
+    description = ""
+    try:
+        catalog = await client.list_connectors()
+        raw_list = catalog.get("connectors") if isinstance(catalog, dict) else None
+        if isinstance(raw_list, list):
+            for entry in raw_list:
+                if isinstance(entry, dict) and str(entry.get("id")) == cid:
+                    name = str(entry.get("name") or cid)
+                    description = str(entry.get("description") or "")
+                    break
+    except Exception:  # noqa: BLE001
+        pass
+
+    return CloudConnectorItem(
+        id=cid,
+        name=name,
+        runtime="managed",
+        description=description,
+        enabled=enabled,
+    )
 
 
 @app.get("/plugins/cloud/llm-quota", response_model=CloudLlmQuotaResponse)

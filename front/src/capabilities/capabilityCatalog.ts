@@ -193,9 +193,9 @@ export function buildManagedCapabilityDefinition(input: {
     resolvedTitle: title,
     resolvedDescription: input.description?.trim() || undefined,
     primarySurface: {
+      // Pas de domicile UI : activation locale uniquement.
       type: 'nested',
       parentCapabilityId: 'workproba_cloud',
-      tabKey: `${CLOUD_PLUGIN_ID}:right_panel`,
     },
   };
 }

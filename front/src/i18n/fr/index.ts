@@ -216,8 +216,8 @@ export default {
     },
     managed: {
       title: 'Capacité managée',
-      description: 'Capacité exposée par votre organisation via Workproba Cloud.',
-      home: 'Via Workproba Cloud',
+      description: 'Service de votre organisation. Activez-le sur ce poste pour que l’agent puisse l’utiliser.',
+      home: 'Activation locale (pas de panneau dédié)',
     },
     nested: {
       toggle: 'Sous-capacités',

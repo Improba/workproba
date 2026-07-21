@@ -86,6 +86,16 @@ def get_org_label(plugin_data_dir: Path) -> str | None:
     return None
 
 
+def get_device_id(plugin_data_dir: Path) -> str | None:
+    tokens = load_config(plugin_data_dir).get("tokens")
+    if not isinstance(tokens, dict):
+        return None
+    raw = tokens.get("device_id")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
+
+
 def clear_enrollment(plugin_data_dir: Path) -> None:
     """Supprime jetons et identifiants cloud (déconnexion locale)."""
     config = load_config(plugin_data_dir)
@@ -93,6 +103,43 @@ def clear_enrollment(plugin_data_dir: Path) -> None:
     plugin_data_dir.mkdir(parents=True, exist_ok=True)
     with _config_path(plugin_data_dir).open("w", encoding="utf-8") as handle:
         json.dump(config, handle, ensure_ascii=False, indent=2)
+
+
+def get_disabled_managed_connectors(plugin_data_dir: Path) -> set[str]:
+    """Connecteurs org désactivés localement (toujours listés si allowlistés)."""
+    raw = load_config(plugin_data_dir).get("disabled_managed_connectors")
+    if not isinstance(raw, list):
+        return set()
+    return {str(item).strip() for item in raw if isinstance(item, str) and str(item).strip()}
+
+
+def is_managed_connector_enabled(plugin_data_dir: Path, connector_id: str) -> bool:
+    cid = (connector_id or "").strip()
+    if not cid:
+        return False
+    return cid not in get_disabled_managed_connectors(plugin_data_dir)
+
+
+def set_managed_connector_enabled(
+    plugin_data_dir: Path,
+    connector_id: str,
+    *,
+    enabled: bool,
+) -> bool:
+    """Active ou désactive localement un connecteur managé. Retourne l'état enabled."""
+    cid = (connector_id or "").strip()
+    if not cid:
+        raise ValueError("connector_id_required")
+    disabled = get_disabled_managed_connectors(plugin_data_dir)
+    if enabled:
+        disabled.discard(cid)
+    else:
+        disabled.add(cid)
+    save_config(
+        plugin_data_dir,
+        {"disabled_managed_connectors": sorted(disabled)},
+    )
+    return enabled
 
 
 def status(plugin_data_dir: Path) -> dict[str, Any]:
@@ -114,6 +161,7 @@ def status(plugin_data_dir: Path) -> dict[str, Any]:
         "has_token": get_access_token(plugin_data_dir) is not None,
         "org_id": get_org_id(plugin_data_dir),
         "org_label": get_org_label(plugin_data_dir),
+        "device_id": get_device_id(plugin_data_dir),
     }
 
 

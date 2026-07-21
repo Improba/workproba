@@ -43,6 +43,12 @@ const closeCapabilities = vi.fn();
 const isEnrolled = ref(false);
 const connectors = ref<ManagedConnector[]>([]);
 const initCloud = vi.fn(async () => undefined);
+const setManagedConnectorEnabled = vi.fn(async (connectorId: string, enabled: boolean) => {
+  connectors.value = connectors.value.map((c) =>
+    c.id === connectorId ? { ...c, enabled } : c,
+  );
+  return true;
+});
 
 vi.mock('@composables/usePlugins', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@composables/usePlugins')>();
@@ -81,6 +87,7 @@ vi.mock('@composables/useCloud', () => ({
     isEnrolled,
     connectors,
     init: initCloud,
+    setManagedConnectorEnabled,
   }),
 }));
 
@@ -137,6 +144,7 @@ describe('useCapabilities', () => {
     openSideChat.mockClear();
     closeCapabilities.mockClear();
     initCloud.mockClear();
+    setManagedConnectorEnabled.mockClear();
   });
 
   it('mappe active et available selon les plugins actifs', () => {
@@ -269,9 +277,9 @@ describe('useCapabilities', () => {
     activePluginIds.value = [CLOUD_PLUGIN_ID];
     isEnrolled.value = true;
     connectors.value = [
-      { id: 'echo', name: 'Echo', description: 'stub' },
-      { id: 'ihora', name: 'IHora', description: 'Absences' },
-      { id: 'ihora.shaped', name: 'IHora stub', description: 'stub' },
+      { id: 'echo', name: 'Echo', description: 'stub', enabled: true },
+      { id: 'ihora', name: 'IHora', description: 'Absences', enabled: true },
+      { id: 'ihora.shaped', name: 'IHora stub', description: 'stub', enabled: true },
     ];
 
     const { capabilities, getById } = useCapabilities();
@@ -284,14 +292,23 @@ describe('useCapabilities', () => {
     expect(getById('managed:ihora')?.state.managedByOrganization).toBe(true);
   });
 
+  it('capacité managée désactivée localement reste available', () => {
+    activePluginIds.value = [CLOUD_PLUGIN_ID];
+    isEnrolled.value = true;
+    connectors.value = [{ id: 'ihora', name: 'IHora', enabled: false }];
+
+    const { getById } = useCapabilities();
+    expect(getById('managed:ihora')?.state.kind).toBe('available');
+  });
+
   it('montre aussi echo en mode avancé', () => {
     settingsMode.value = 'advanced';
     settings.value.settingsMode = 'advanced';
     activePluginIds.value = [CLOUD_PLUGIN_ID];
     isEnrolled.value = true;
     connectors.value = [
-      { id: 'echo', name: 'Echo' },
-      { id: 'ihora', name: 'IHora' },
+      { id: 'echo', name: 'Echo', enabled: true },
+      { id: 'ihora', name: 'IHora', enabled: true },
     ];
 
     const { capabilities } = useCapabilities();
@@ -304,20 +321,46 @@ describe('useCapabilities', () => {
   it('n’expose pas de capacités managées si non enrollé', () => {
     activePluginIds.value = [CLOUD_PLUGIN_ID];
     isEnrolled.value = false;
-    connectors.value = [{ id: 'ihora', name: 'IHora' }];
+    connectors.value = [{ id: 'ihora', name: 'IHora', enabled: true }];
 
     const { capabilities } = useCapabilities();
     expect(capabilities.value.some((v) => v.definition.source === 'managed')).toBe(false);
   });
 
-  it('deactivate d’une capacité managée est un no-op', async () => {
+  it('activateAndOpen managée active sans ouvrir de panneau', async () => {
     activePluginIds.value = [CLOUD_PLUGIN_ID];
     isEnrolled.value = true;
-    connectors.value = [{ id: 'ihora', name: 'IHora' }];
+    connectors.value = [{ id: 'ihora', name: 'IHora', enabled: false }];
+
+    const { activateAndOpen } = useCapabilities();
+    await activateAndOpen('managed:ihora');
+
+    expect(setManagedConnectorEnabled).toHaveBeenCalledWith('ihora', true);
+    expect(closeCapabilities).not.toHaveBeenCalled();
+    expect(openRightPanel).not.toHaveBeenCalled();
+  });
+
+  it('deactivate d’une capacité managée désactive localement', async () => {
+    activePluginIds.value = [CLOUD_PLUGIN_ID];
+    isEnrolled.value = true;
+    connectors.value = [{ id: 'ihora', name: 'IHora', enabled: true }];
 
     const { deactivate } = useCapabilities();
     await deactivate('managed:ihora');
 
+    expect(setManagedConnectorEnabled).toHaveBeenCalledWith('ihora', false);
     expect(deactivatePlugin).not.toHaveBeenCalled();
+  });
+
+  it('open d’une capacité managée est un no-op', () => {
+    activePluginIds.value = [CLOUD_PLUGIN_ID];
+    isEnrolled.value = true;
+    connectors.value = [{ id: 'ihora', name: 'IHora', enabled: true }];
+
+    const { open } = useCapabilities();
+    open('managed:ihora');
+
+    expect(openRightPanel).not.toHaveBeenCalled();
+    expect(openSideChat).not.toHaveBeenCalled();
   });
 });

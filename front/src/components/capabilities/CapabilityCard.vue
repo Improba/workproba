@@ -20,7 +20,7 @@
 
     <p v-if="description && !compact" class="wp-cap-card__description">{{ description }}</p>
 
-    <p v-if="!compact" class="wp-cap-card__home">
+    <p v-if="showHome" class="wp-cap-card__home">
       <Lucide name="home" size="13" color="text-faint" />
       <span>{{ homeLabel }}</span>
     </p>
@@ -117,6 +117,20 @@ const homeLabel = computed(() => {
 const primaryAction = computed(() => {
   const { state } = props.view;
   const short = props.compact;
+  const managed = isManaged.value;
+
+  if (managed) {
+    // Pas d'ouverture : uniquement activer / (désactiver via secondary).
+    if (state.kind === 'available') {
+      return {
+        kind: 'activate',
+        label: t('capabilities.actions.activate'),
+        disabled: false,
+      };
+    }
+    return null;
+  }
+
   switch (state.kind) {
     case 'active':
       return {
@@ -153,11 +167,15 @@ const tooltip = computed(() => {
 });
 
 const showOpenAction = computed(
-  () => props.view.state.kind === 'needs_setup',
+  () => !isManaged.value && props.view.state.kind === 'needs_setup',
 );
 
 const showDeactivate = computed(
-  () => props.view.state.kind === 'active' && !isManaged.value,
+  () => props.view.state.kind === 'active',
+);
+
+const showHome = computed(
+  () => !props.compact && !isManaged.value,
 );
 
 function onPrimaryAction(): void {

@@ -21,10 +21,10 @@ You do not need to know about technical plugins or extensions to use them in gui
 
 | Sub-capability | Role |
 |---|---|
-| **Project management** (`projects`) | Local library + shared projects via Cloud |
-| **Managed** (e.g. **Ihora**) | Org-authorized services from `GET /connectors` |
+| **Project management** (`projects`) | Local library + shared projects via Cloud (can open Library) |
+| **Managed** (e.g. **Ihora**) | Org-authorized via allowlist. On this computer: **Activate** / **Disable** only — no panel to open. Settings later. |
 
-The Capabilities hub lists **Workproba Cloud first**. Nested items open in a **collapsible** zone (compact cards, scrollable when many). Guided mode hides technical stubs (`echo`, `ihora.shaped`).
+The Capabilities hub lists **Workproba Cloud first**. Nested items live in a **collapsible** zone (compact cards, scrollable when many). Guided mode hides technical stubs (`echo`, `ihora.shaped`). Managed capabilities do **not** open a surface: they are toggled on/off locally (agent cannot invoke a locally disabled connector).
 
 **Cloud setup:** account login (`POST /devices/login` → User JWT, exchanged by the sidecar into a durable DeviceBearer `wp_dev_*`) and device enroll (`POST /devices/join` → DeviceBearer) both leave a `wp_dev_*` on disk. Both are available from the onboarding wizard and Settings → AI Models.
 
@@ -47,12 +47,10 @@ Managed capabilities use Improba Cloud Mode A: the agent calls `invoke_managed_c
 
 1. Click **Capabilities** in the title bar.
 2. **Workproba Cloud** appears first. Enable / configure it to enroll your organization.
-3. Open **Sub-capabilities** (collapsible) under Cloud: **Project management**, then any org-managed items (e.g. **Ihora**). Compact cards; scroll when the list is long.
+3. Open **Sub-capabilities** (collapsible) under Cloud: **Project management** (opens Library), then any org-managed items (e.g. **Ihora**). For Ihora-like items: **Activate** or **Disable** only — no Open.
 4. Other top-level cards: Regards métier, Navigation web.
 
-Managed items are controlled by the organization (no local disable toggle). Disabling Workproba Cloud also turns off nested Project management (parent cascade).
-
-To turn a top-level local capability off, use **Disable** on its card.
+Managed items remain listed when the org allowlists them; local disable blocks agent invoke on this workstation. Disabling Workproba Cloud also turns off nested Project management (parent cascade).
 
 ## What is not a capability?
 

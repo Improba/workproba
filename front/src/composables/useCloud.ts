@@ -6,6 +6,7 @@ import {
   fetchCloudLlmQuota,
   fetchCloudStatus,
   listManagedConnectors,
+  setManagedConnectorEnabled,
   pullCloud,
   syncCloud,
   syncManagedRegards,
@@ -61,6 +62,10 @@ export interface UseCloudReturn {
   init: () => Promise<void>;
   refreshStatus: () => Promise<void>;
   refreshConnectors: () => Promise<void>;
+  setManagedConnectorEnabled: (
+    connectorId: string,
+    enabled: boolean,
+  ) => Promise<boolean>;
   refreshQuota: () => Promise<void>;
   configure: (mountPath: string) => Promise<boolean>;
   enroll: (opts: {
@@ -179,6 +184,26 @@ export function useCloud(): UseCloudReturn {
     } finally {
       connectorsLoading.value = false;
     }
+  }
+
+  async function setManagedConnectorEnabledLocal(
+    connectorId: string,
+    enabled: boolean,
+  ): Promise<boolean> {
+    if (!pluginDataDir || !status.value?.enrolled) return false;
+    const result = await setManagedConnectorEnabled(pluginDataDir, connectorId, enabled);
+    if (!result.ok) {
+      connectorsError.value = result.error;
+      return false;
+    }
+    const next = result.data;
+    connectors.value = connectors.value.map((c) =>
+      c.id === next.id ? { ...c, ...next, enabled: next.enabled !== false } : c,
+    );
+    if (!connectors.value.some((c) => c.id === next.id)) {
+      connectors.value = [...connectors.value, next];
+    }
+    return true;
   }
 
   async function init(): Promise<void> {
@@ -375,6 +400,7 @@ export function useCloud(): UseCloudReturn {
     init,
     refreshStatus,
     refreshConnectors,
+    setManagedConnectorEnabled: setManagedConnectorEnabledLocal,
     refreshQuota,
     configure,
     enroll,

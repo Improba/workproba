@@ -216,8 +216,8 @@ export default {
     },
     managed: {
       title: 'Managed capability',
-      description: 'Capability exposed by your organization via Workproba Cloud.',
-      home: 'Via Workproba Cloud',
+      description: 'Organization service. Enable it on this computer so the agent can use it.',
+      home: 'Local activation (no dedicated panel)',
     },
     nested: {
       toggle: 'Sub-capabilities',

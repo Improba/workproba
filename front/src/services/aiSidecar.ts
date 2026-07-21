@@ -1083,6 +1083,7 @@ export interface PreviewChangeResult {
   is_new: boolean;
   is_binary: boolean;
   diff_html: string;
+  preview_html?: string;
   message: string;
   old_size: number;
   new_size: number;
@@ -2196,6 +2197,7 @@ export interface CloudStatus {
   has_token: boolean;
   org_id?: string | null;
   org_label?: string | null;
+  device_id?: string | null;
 }
 
 export async function fetchCloudStatus(
@@ -2340,6 +2342,8 @@ export interface ManagedConnector {
   name: string;
   runtime?: string;
   description?: string;
+  /** Activation locale sur ce poste (défaut true si absent). */
+  enabled?: boolean;
 }
 
 export interface ManagedConnectorsResult {
@@ -2361,7 +2365,10 @@ export async function listManagedConnectors(
     return {
       ok: true,
       data: {
-        connectors: parsed.data.connectors ?? [],
+        connectors: (parsed.data.connectors ?? []).map((c) => ({
+          ...c,
+          enabled: c.enabled !== false,
+        })),
         enrolled: Boolean(parsed.data.enrolled),
       },
     };
@@ -2369,6 +2376,40 @@ export async function listManagedConnectors(
     return {
       ok: false,
       error: err instanceof Error ? err.message : 'cloud_connectors_failed',
+    };
+  }
+}
+
+export async function setManagedConnectorEnabled(
+  pluginDataDir: string,
+  connectorId: string,
+  enabled: boolean,
+): Promise<SidecarResult<ManagedConnector>> {
+  try {
+    const response = await fetch(
+      `${getAiSidecarUrl()}/plugins/cloud/connectors/${encodeURIComponent(connectorId)}/enabled`,
+      {
+        method: 'PUT',
+        headers: sidecarHeaders(),
+        body: JSON.stringify({
+          plugin_data_dir: pluginDataDir,
+          enabled,
+        }),
+      },
+    );
+    const parsed = await parseSidecarJson<ManagedConnector>(response);
+    if (!parsed.ok) return parsed;
+    return {
+      ok: true,
+      data: {
+        ...parsed.data,
+        enabled: parsed.data.enabled !== false,
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'cloud_connector_enable_failed',
     };
   }
 }
