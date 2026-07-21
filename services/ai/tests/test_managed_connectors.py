@@ -558,7 +558,7 @@ def test_cloud_list_connectors_enabled_flag(
         assert resp2.json()["connectors"][0]["enabled"] is False
 
         known = cloud_storage.get_known_managed_connectors(cloud_dir)
-        assert known == [{"id": "ihora", "name": "Ihora"}]
+        assert known == [{"id": "ihora", "name": "Ihora", "tools": []}]
 
 
 def test_cloud_put_connector_enabled(
@@ -683,6 +683,7 @@ async def test_invoke_managed_connector_not_auth_skips_gate(
     cloud_dir.mkdir(parents=True)
     plugins_root = cloud_dir.parent
     cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    _seed_ihora_connectors_cache(cloud_dir)
 
     deps = ToolDeps(
         context=ToolContext(
@@ -717,21 +718,71 @@ IHORA_TOOLS = [
     {
         "name": "list_absences",
         "action": "list_absences",
-        "description": "List absences",
+        "description": "Lister les absences d un collaborateur sur une periode",
+        "effect": "read",
         "visibility": "guided",
         "input_schema": {
             "type": "object",
             "properties": {
+                "employeeId": {"type": ["string", "number"]},
+                "email": {"type": "string"},
                 "from": {"type": "string"},
+                "to": {"type": "string"},
             },
+            "required": ["from", "to"],
+            "anyOf": [
+                {"required": ["employeeId"]},
+                {"required": ["email"]},
+            ],
+            "additionalProperties": False,
         },
     },
     {
         "name": "get_timesheet",
         "action": "get_timesheet",
-        "description": "Get timesheet",
+        "description": "Recuperer le timesheet d un collaborateur sur une periode",
+        "effect": "read",
+        "visibility": "guided",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "employeeId": {"type": ["string", "number"]},
+                "email": {"type": "string"},
+                "from": {"type": "string"},
+                "to": {"type": "string"},
+            },
+            "required": ["from", "to"],
+            "anyOf": [
+                {"required": ["employeeId"]},
+                {"required": ["email"]},
+            ],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "create_timesheet",
+        "action": "create_timesheet",
+        "description": "Creer une saisie de temps",
+        "effect": "write",
         "visibility": "advanced",
-        "input_schema": {"type": "object", "properties": {}},
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "employeeId": {"type": ["string", "number"]},
+                "email": {"type": "string"},
+                "date": {"type": "string"},
+                "hours": {"type": "number", "minimum": 0, "maximum": 24},
+                "project": {"type": "string"},
+                "projectId": {"type": ["string", "number"]},
+                "description": {"type": "string"},
+            },
+            "required": ["date", "hours"],
+            "anyOf": [
+                {"required": ["employeeId"]},
+                {"required": ["email"]},
+            ],
+            "additionalProperties": False,
+        },
     },
 ]
 
@@ -926,7 +977,8 @@ def test_build_agent_guided_hides_advanced_managed_tool(tmp_path: Path) -> None:
         ui_mode="guided",
     )
     assert "managed__ihora__list_absences" in agent._function_toolset.tools
-    assert "managed__ihora__get_timesheet" not in agent._function_toolset.tools
+    assert "managed__ihora__get_timesheet" in agent._function_toolset.tools
+    assert "managed__ihora__create_timesheet" not in agent._function_toolset.tools
 
 
 @pytest.mark.asyncio
@@ -1050,5 +1102,201 @@ def test_cloud_list_connectors_returns_tools(
         )
         assert resp.status_code == 200
         body = resp.json()
-        assert len(body["connectors"][0]["tools"]) == 2
+        assert len(body["connectors"][0]["tools"]) == 3
         assert body["connectors"][0]["tools"][0]["name"] == "list_absences"
+
+
+def test_build_agent_locked_hides_advanced_managed_tool(tmp_path: Path) -> None:
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.tools import build_agent
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    _seed_ihora_connectors_cache(cloud_dir)
+
+    agent = build_agent(
+        TestModel(),
+        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
+        plugin_data_dir=cloud_dir.parent,
+        ui_mode="locked",
+    )
+    assert "managed__ihora__list_absences" in agent._function_toolset.tools
+    assert "managed__ihora__create_timesheet" not in agent._function_toolset.tools
+
+
+@pytest.mark.asyncio
+async def test_invoke_managed_connector_guided_refuses_advanced_action(
+    tmp_path: Path,
+) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.exceptions import ModelRetry
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.limits import DEFAULT_LIMITS
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.sandbox.runner import SandboxRunner
+
+    from conftest import FakeProjectClient
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
+    _seed_ihora_connectors_cache(cloud_dir)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.test",
+        plugin_data_dir=cloud_dir,
+    )
+    client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugins_root,
+            locale="fr",
+            permissions_network=True,
+            ui_mode="guided",
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=None,
+    )
+    agent = build_agent(
+        TestModel(),
+        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
+        plugin_data_dir=plugins_root,
+        ui_mode="guided",
+    )
+    tool = agent._function_toolset.tools["invoke_managed_connector"]
+    ctx = RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id="tc-guided-create",
+    )
+
+    with pytest.raises(ModelRetry, match="mode avanc"):
+        await tool.function(
+            ctx,
+            connector_id="ihora",
+            payload_json='{"action":"create_timesheet","date":"2026-07-03","hours":8,"employeeId":1}',
+        )
+
+
+@pytest.mark.asyncio
+async def test_refresh_known_managed_connectors_cache_clears_tools(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.plugin import refresh_known_managed_connectors_cache
+    from app.plugins.workproba_cloud.sync_service import is_cloud_enrolled
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    _seed_ihora_connectors_cache(cloud_dir)
+    assert cloud_storage.get_known_managed_connectors(cloud_dir)[0]["tools"]
+
+    async def fake_list(self: CloudControlPlaneClient) -> dict:
+        return {"connectors": []}
+
+    monkeypatch.setattr(CloudControlPlaneClient, "list_connectors", fake_list)
+    monkeypatch.setattr(
+        "app.plugins.workproba_cloud.plugin.is_cloud_enrolled",
+        lambda _cloud_dir: True,
+    )
+
+    await refresh_known_managed_connectors_cache(cloud_dir)
+    assert cloud_storage.get_known_managed_connectors(cloud_dir) == []
+
+
+@pytest.mark.asyncio
+async def test_invoke_managed_connector_validates_payload_before_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.exceptions import ModelRetry
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.confirmation import ConfirmationGate
+    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.limits import DEFAULT_LIMITS
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.sandbox.runner import SandboxRunner
+
+    from conftest import FakeProjectClient
+
+    class ExplodingGate(ConfirmationGate):
+        async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
+            raise AssertionError("gate must not run on invalid payload")
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
+    _seed_ihora_connectors_cache(cloud_dir)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.test",
+        plugin_data_dir=cloud_dir,
+    )
+    client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
+
+    async def fake_allowed(self: CloudControlPlaneClient) -> set[str]:
+        return {"ihora"}
+
+    monkeypatch.setattr(CloudControlPlaneClient, "fetch_allowed_connector_ids", fake_allowed)
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugins_root,
+            locale="fr",
+            permissions_network=True,
+            ui_mode="advanced",
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=ExplodingGate(session_id="s1", turn_id="t1"),
+    )
+    agent = build_agent(
+        TestModel(),
+        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
+        plugin_data_dir=plugins_root,
+        ui_mode="advanced",
+    )
+    tool = agent._function_toolset.tools["invoke_managed_connector"]
+    ctx = RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id="tc-invalid-payload",
+    )
+
+    with pytest.raises(ModelRetry, match="Paramètres invalides"):
+        await tool.function(
+            ctx,
+            connector_id="ihora",
+            payload_json='{"action":"create_timesheet","date":"2026-07-03"}',
+        )

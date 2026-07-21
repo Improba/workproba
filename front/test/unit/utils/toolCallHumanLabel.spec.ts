@@ -25,6 +25,7 @@ describe('fallbackHumanLabel', () => {
     expect(fallbackHumanLabel('managed__ihora.shaped__get_timesheet')).toBe(
       'ihora.shaped · get timesheet',
     );
+    expect(fallbackHumanLabel('managed__malformed')).toBe('managed__malformed');
     expect(fallbackHumanLabel('search_kb')).toBe("J'ai cherché dans la mémoire");
     expect(fallbackHumanLabel('web_search')).toBe('Recherche sur le web');
     expect(fallbackHumanLabel('list_files')).toBe("J'ai listé les fichiers");

@@ -254,7 +254,12 @@ def build_human_summary(
         return t(locale, "human.sync_managed_regards.will")
 
     if tool_name == "invoke_managed_connector":
-        connector_id = str(arguments.get("connector_id") or result.get("connector_id") or "")
+        connector_id = str(
+            arguments.get("connector_id")
+            or result.get("connector_id")
+            or result.get("connectorId")
+            or ""
+        )
         if is_result:
             if is_error:
                 return t(locale, "human.invoke_managed_connector.cannot", connector_id=connector_id)
@@ -270,6 +275,7 @@ def build_human_summary(
         connector_id = str(
             arguments.get("connector_id")
             or result.get("connector_id")
+            or result.get("connectorId")
             or managed_connector_id_for_tool(tool_name)
         )
         tool_label = managed_tool_label(tool_name)

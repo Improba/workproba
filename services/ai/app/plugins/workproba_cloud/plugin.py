@@ -31,8 +31,6 @@ from app.plugins.workproba_cloud.sync_service import (
 
 UiMode = Literal["guided", "advanced", "locked"]
 
-_BUILTIN_ADVANCED_ONLY_CONNECTORS = frozenset({"echo", "ihora.shaped"})
-
 
 def managed_tool_name(connector_id: str, tool_name: str) -> str:
     return f"managed__{connector_id}__{tool_name}"
@@ -42,7 +40,7 @@ def parse_managed_tool_name(tool_name: str) -> tuple[str, str] | None:
     if not tool_name.startswith("managed__"):
         return None
     rest = tool_name[len("managed__") :]
-    cid, sep, name = rest.partition("__")
+    cid, sep, name = rest.rpartition("__")
     if not sep or not cid or not name:
         return None
     return cid, name
@@ -67,8 +65,14 @@ def _tool_visibility(tool_def: dict[str, Any]) -> str:
     return "guided"
 
 
+def _is_restricted_ui_mode(ui_mode: UiMode) -> bool:
+    return ui_mode in ("guided", "locked")
+
+
 def should_register_managed_tool(tool_def: dict[str, Any], ui_mode: UiMode) -> bool:
-    return not (ui_mode == "guided" and _tool_visibility(tool_def) == "advanced")
+    return not (
+        _is_restricted_ui_mode(ui_mode) and _tool_visibility(tool_def) == "advanced"
+    )
 
 
 def normalize_tool_input_schema(schema: Any) -> dict[str, Any]:
@@ -82,21 +86,119 @@ def normalize_tool_input_schema(schema: Any) -> dict[str, Any]:
     return normalized
 
 
-def _guided_generic_invoke_allowed(cloud_dir: Path, connector_id: str) -> bool:
-    tools: list[dict[str, Any]] | None = None
+def _connector_tools_from_cache(
+    cloud_dir: Path, connector_id: str
+) -> list[dict[str, Any]] | None:
     for connector in cloud_storage.get_known_managed_connectors(cloud_dir):
         if str(connector.get("id") or "") == connector_id:
             raw_tools = connector.get("tools")
             if isinstance(raw_tools, list):
-                tools = [entry for entry in raw_tools if isinstance(entry, dict)]
-            else:
-                tools = []
-            break
-    if tools is None:
-        return connector_id not in _BUILTIN_ADVANCED_ONLY_CONNECTORS
+                return [entry for entry in raw_tools if isinstance(entry, dict)]
+            return []
+    return None
+
+
+def _find_cached_tool(
+    cloud_dir: Path, connector_id: str, action: str
+) -> dict[str, Any] | None:
+    tools = _connector_tools_from_cache(cloud_dir, connector_id)
     if not tools:
-        return connector_id not in _BUILTIN_ADVANCED_ONLY_CONNECTORS
+        return None
+    for tool_def in tools:
+        tool_action = str(tool_def.get("action") or "")
+        tool_name = str(tool_def.get("name") or "")
+        if tool_action == action or tool_name == action:
+            return tool_def
+    return None
+
+
+def _guided_generic_invoke_allowed(
+    cloud_dir: Path,
+    connector_id: str,
+    action: str | None = None,
+) -> bool:
+    tools = _connector_tools_from_cache(cloud_dir, connector_id)
+    if tools is None or not tools:
+        return False
+    if action:
+        tool_def = _find_cached_tool(cloud_dir, connector_id, action)
+        if tool_def is None:
+            return False
+        return _tool_visibility(tool_def) != "advanced"
     return any(_tool_visibility(tool_def) != "advanced" for tool_def in tools)
+
+
+def _light_validate_payload(
+    payload: dict[str, Any], schema: dict[str, Any]
+) -> str | None:
+    properties = schema.get("properties")
+    if not isinstance(properties, dict):
+        properties = {}
+
+    required = schema.get("required")
+    if isinstance(required, list):
+        for key in required:
+            if not isinstance(key, str):
+                continue
+            if key not in payload:
+                return f"missing required field: {key}"
+
+    any_of = schema.get("anyOf")
+    if isinstance(any_of, list) and any_of:
+        matched = False
+        for branch in any_of:
+            if not isinstance(branch, dict):
+                continue
+            branch_required = branch.get("required")
+            if not isinstance(branch_required, list):
+                continue
+            if all(
+                isinstance(req, str) and req in payload for req in branch_required
+            ):
+                matched = True
+                break
+        if not matched:
+            return "payload does not match any required alternative"
+
+    type_map: dict[str, type | tuple[type, ...]] = {
+        "string": str,
+        "number": (int, float),
+        "integer": int,
+        "boolean": bool,
+        "object": dict,
+        "array": list,
+    }
+    for key, value in payload.items():
+        prop_schema = properties.get(key)
+        if not isinstance(prop_schema, dict):
+            continue
+        expected = prop_schema.get("type")
+        if isinstance(expected, list):
+            types = tuple(
+                type_map[item]
+                for item in expected
+                if isinstance(item, str) and item in type_map
+            )
+            if types and not isinstance(value, types):
+                return f"invalid type for field: {key}"
+        elif isinstance(expected, str) and expected in type_map:
+            if not isinstance(value, type_map[expected]):
+                return f"invalid type for field: {key}"
+    return None
+
+
+def _validate_payload_against_schema(
+    payload: dict[str, Any], schema: dict[str, Any]
+) -> str | None:
+    try:
+        import jsonschema
+    except ImportError:
+        return _light_validate_payload(payload, schema)
+    try:
+        jsonschema.validate(instance=payload, schema=schema)
+    except jsonschema.ValidationError as exc:
+        return str(exc.message)
+    return None
 
 
 def _connector_cache_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
@@ -136,8 +238,7 @@ def _connector_cache_entry(entry: dict[str, Any]) -> dict[str, Any] | None:
             if isinstance(input_schema, dict):
                 tool_cached["input_schema"] = input_schema
             tools.append(tool_cached)
-        if tools:
-            cached["tools"] = tools
+        cached["tools"] = tools
     return cached
 
 
@@ -161,8 +262,7 @@ async def refresh_known_managed_connectors_cache(cloud_dir: Path) -> None:
         cached = _connector_cache_entry(entry)
         if cached is not None:
             connectors.append(cached)
-    if connectors:
-        cloud_storage.save_known_managed_connectors(cloud_dir, connectors)
+    cloud_storage.save_known_managed_connectors(cloud_dir, connectors)
 
 
 def make_managed_tool_shim(
@@ -613,7 +713,11 @@ async def invoke_managed_connector_impl(
         )
 
     ui_mode = getattr(deps.context, "ui_mode", "guided")
-    if ui_mode == "guided" and not _guided_generic_invoke_allowed(cloud_dir, connector_id):
+    action_raw = payload.get("action")
+    action = action_raw.strip() if isinstance(action_raw, str) else None
+    if _is_restricted_ui_mode(ui_mode) and not _guided_generic_invoke_allowed(
+        cloud_dir, connector_id, action=action
+    ):
         raise ModelRetry(
             t(locale, "cloud.connector_advanced_only", connector_id=connector_id)
         )
@@ -643,6 +747,28 @@ async def invoke_managed_connector_impl(
 
         if connector_id not in allowed:
             raise ModelRetry(f"connector_not_allowed:{connector_id}")
+
+        if action:
+            tool_def = _find_cached_tool(cloud_dir, connector_id, action)
+            if tool_def is not None:
+                input_schema = tool_def.get("input_schema")
+                if isinstance(input_schema, dict):
+                    payload_for_validation = {
+                        key: value for key, value in payload.items() if key != "action"
+                    }
+                    validation_error = _validate_payload_against_schema(
+                        payload_for_validation, input_schema
+                    )
+                    if validation_error:
+                        raise ModelRetry(
+                            t(
+                                locale,
+                                "cloud.connector_payload_invalid",
+                                connector_id=connector_id,
+                                action=action,
+                                detail=validation_error,
+                            )
+                        )
 
         gate = deps.confirmation_gate
         if gate is not None:

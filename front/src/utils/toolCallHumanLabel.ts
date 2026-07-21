@@ -1,23 +1,17 @@
 import { t } from './i18nT';
 
 function formatManagedToolLabel(name: string): string {
-  if (name.startsWith('managed__')) {
-    const rest = name.slice('managed__'.length);
-    const sep = rest.indexOf('__');
-    if (sep > 0) {
-      const connector = rest.slice(0, sep);
-      const tool = rest.slice(sep + 2).replace(/_/g, ' ');
-      return t('toolCalls.managedConnectorTool', { connector, tool });
-    }
+  if (!name.startsWith('managed__')) {
+    return name;
   }
-
-  const legacyRest = name.slice('managed_'.length);
-  const legacyParts = legacyRest.split('_');
-  if (legacyParts.length <= 1) {
-    return legacyParts[0] ?? legacyRest;
+  const rest = name.slice('managed__'.length);
+  // Aligné sur parse Python rpartition : dernier "__" sépare connecteur / tool.
+  const sep = rest.lastIndexOf('__');
+  if (sep <= 0 || sep + 2 >= rest.length) {
+    return name;
   }
-  const connector = legacyParts[0] ?? '';
-  const tool = legacyParts.slice(1).join(' ');
+  const connector = rest.slice(0, sep);
+  const tool = rest.slice(sep + 2).replace(/_/g, ' ');
   return t('toolCalls.managedConnectorTool', { connector, tool });
 }
 
@@ -26,7 +20,7 @@ export function fallbackHumanLabel(
   name: string,
   args?: Record<string, unknown>,
 ): string {
-  if (name.startsWith('managed_')) {
+  if (name.startsWith('managed__')) {
     return formatManagedToolLabel(name);
   }
 

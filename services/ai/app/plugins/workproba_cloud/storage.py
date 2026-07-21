@@ -189,8 +189,7 @@ def get_known_managed_connectors(plugin_data_dir: Path) -> list[dict[str, Any]]:
                 normalized_tool = _normalize_managed_tool_entry(tool_entry)
                 if normalized_tool is not None:
                     tools.append(normalized_tool)
-            if tools:
-                connector["tools"] = tools
+            connector["tools"] = tools
         connectors.append(connector)
     return connectors
 
@@ -223,8 +222,7 @@ def save_known_managed_connectors(
                 normalized_tool = _normalize_managed_tool_entry(tool_entry)
                 if normalized_tool is not None:
                     tools.append(normalized_tool)
-            if tools:
-                connector["tools"] = tools
+            connector["tools"] = tools
         normalized.append(connector)
     save_config(plugin_data_dir, {"known_managed_connectors": normalized})
 

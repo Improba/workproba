@@ -499,6 +499,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "connector_advanced_only": (
                 "Le connecteur {connector_id} n'est disponible qu'en mode avancé."
             ),
+            "connector_payload_invalid": (
+                "Paramètres invalides pour {connector_id} / {action} : {detail}"
+            ),
         },
         "preset": {
             "active": "Preset enterprise actif",
@@ -1050,6 +1053,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
             ),
             "connector_advanced_only": (
                 "Connector {connector_id} is only available in advanced mode."
+            ),
+            "connector_payload_invalid": (
+                "Invalid parameters for {connector_id} / {action}: {detail}"
             ),
         },
         "preset": {
