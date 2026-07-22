@@ -37,19 +37,13 @@ def _tool_names(ui_mode: str, *, sandbox_available: bool = True) -> list[str]:
     return sorted(agent._function_toolset.tools.keys())
 
 
-def test_run_code_hidden_in_guided_mode() -> None:
-    names = _tool_names("guided")
-    assert "run_code" not in names
-    assert "generate_document" in names
-
-
 def test_run_code_hidden_in_locked_mode() -> None:
     names = _tool_names("locked")
     assert "run_code" not in names
 
 
-def test_run_code_exposed_in_advanced_mode() -> None:
-    names = _tool_names("advanced")
+def test_run_code_exposed_in_agent_mode() -> None:
+    names = _tool_names("agent")
     assert "run_code" in names
 
 
@@ -343,10 +337,10 @@ async def test_agent_confirm_resolves_pending_gate(monkeypatch: pytest.MonkeyPat
         await confirmation_registry.unregister("sess-resolve", turn_id)
 
 
-async def test_run_code_unavailable_in_advanced_without_docker() -> None:
+async def test_run_code_unavailable_in_agent_without_docker() -> None:
     agent = build_agent(
         TestModel(call_tools=["run_code"]),
-        ui_mode="advanced",
+        ui_mode="agent",
         sandbox_available=False,
     )
     loop = AgentLoop(
@@ -361,7 +355,7 @@ async def test_run_code_unavailable_in_advanced_without_docker() -> None:
         session_id="sess-sandbox",
         message="calcul",
         documents=[],
-        ui_mode="advanced",
+        ui_mode="agent",
     )
     events = await _run_loop(loop, request)
     results = [

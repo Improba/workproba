@@ -8,14 +8,13 @@ import {
   type LlmProviderEntry,
   type ProviderSet,
 } from '@composables/useDesktop';
-import type { DensityMode, LlmProviderName, SettingsMode, ThinkingDetailViewMode, ToolCallViewMode } from '@composables/useDesktop.types';
+import type { DensityMode, LlmProviderName, ThinkingDetailViewMode, ToolCallViewMode } from '@composables/useDesktop.types';
 import type { ReasoningEffort } from '#types';
 import { getAiSidecarUrl, getDesktopSecret } from '@services/aiSidecar';
 import { isLocalLlmProvider } from '@utils/isLocalLlmProvider';
 import { clampReasoningEffort, supportsReasoning, defaultReasoningEffort } from '@utils/reasoningSupport';
 import {
   clampReasoningEffortForSet,
-  defaultReasoningEffortForSet,
   supportsReasoningForSet,
 } from '@utils/providerSetModels';
 import { normalizeLocale, resolveInitialLocale, setLang } from '@boot/i18n';
@@ -24,6 +23,7 @@ import type { UiThemeId } from '@utils/uiTheme';
 import { isUiThemeId, resolveInitialUiTheme, writeCachedUiTheme } from '@utils/uiTheme';
 import {
   applySessionOverridesToSet,
+  defaultStateFromSet,
   migrateLegacyProvidersToSets,
   normalizeStoredSet,
   providerSetToSidecar,
@@ -144,9 +144,9 @@ const confirmBeforeWrite = computed<boolean>(
   () => settings.value.confirmBeforeWrite !== false,
 );
 
-/** Valeur effective envoyée au sidecar : toujours true en mode guidé ou verrouillé. */
+/** Valeur effective envoyée au sidecar : toujours true en mode verrouillé. */
 const confirmBeforeWriteEffective = computed<boolean>(() => {
-  if (settingsLocked.value || settingsMode.value !== 'advanced') {
+  if (settingsLocked.value) {
     return true;
   }
   return confirmBeforeWrite.value;
@@ -154,10 +154,6 @@ const confirmBeforeWriteEffective = computed<boolean>(() => {
 
 const onboardingDone = computed<boolean>(
   () => settings.value.onboardingDone ?? false,
-);
-
-const settingsMode = computed<SettingsMode>(
-  () => settings.value.settingsMode ?? 'guided',
 );
 
 const settingsLocked = computed<boolean>(
@@ -219,7 +215,11 @@ function reasoningFromSetChat(
   model: string,
 ): ReasoningEffort {
   if (!reasoning || reasoning === 'auto') {
-    return defaultReasoningEffortForSet(set, model);
+    return clampReasoningEffortForSet(
+      set,
+      model,
+      defaultStateFromSet(set).reasoningEffort,
+    );
   }
   if (reasoning === 'none') return 'none';
   return clampReasoningEffortForSet(set, model, reasoning);
@@ -392,7 +392,6 @@ export interface UseAppSettingsReturn {
   confirmBeforeWrite: typeof confirmBeforeWrite;
   confirmBeforeWriteEffective: typeof confirmBeforeWriteEffective;
   onboardingDone: typeof onboardingDone;
-  settingsMode: typeof settingsMode;
   settingsLocked: typeof settingsLocked;
   permissionsNetwork: typeof permissionsNetwork;
   codeExecute: typeof codeExecute;
@@ -414,7 +413,6 @@ export interface UseAppSettingsReturn {
   setThinkingDetailView: (view: ThinkingDetailViewMode) => Promise<AppSettings>;
   setConfirmBeforeWrite: (enabled: boolean) => Promise<AppSettings>;
   setOnboardingDone: (done: boolean) => Promise<void>;
-  setSettingsMode: (mode: SettingsMode) => Promise<AppSettings>;
   setDensity: (mode: DensityMode) => Promise<AppSettings>;
   setUiTheme: (themeId: UiThemeId) => Promise<AppSettings>;
   setLocale: (nextLocale: AppLocale) => Promise<AppSettings>;
@@ -554,14 +552,10 @@ export function useAppSettings(): UseAppSettingsReturn {
   }
 
   async function setConfirmBeforeWrite(enabled: boolean): Promise<AppSettings> {
-    if (settingsLocked.value || settingsMode.value !== 'advanced') {
+    if (settingsLocked.value) {
       return settings.value;
     }
     return save({ ...settings.value, confirmBeforeWrite: enabled });
-  }
-
-  async function setSettingsMode(mode: SettingsMode): Promise<AppSettings> {
-    return save({ ...settings.value, settingsMode: mode });
   }
 
   async function setDensity(mode: DensityMode): Promise<AppSettings> {
@@ -601,7 +595,6 @@ export function useAppSettings(): UseAppSettingsReturn {
     confirmBeforeWrite,
     confirmBeforeWriteEffective,
     onboardingDone,
-    settingsMode,
     settingsLocked,
     permissionsNetwork,
     codeExecute,
@@ -623,7 +616,6 @@ export function useAppSettings(): UseAppSettingsReturn {
     setThinkingDetailView,
     setConfirmBeforeWrite,
     setOnboardingDone,
-    setSettingsMode,
     setDensity,
     setUiTheme,
     setLocale,

@@ -541,6 +541,42 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                 attempt_configs.append((fallback_config, True))
             fallback_reason = ""
 
+            from app.plugins.registry import (
+                PLUGIN_WORKPROBA_CLOUD,
+                is_plugin_active,
+                resolve_plugin_data_dir,
+            )
+
+            # Space capabilities snapshot (immutable for this turn).
+            # Resolve once before provider attempts; mid-turn wanted PUT must not
+            # affect attempt 2 via a re-resolve on a mutated payload.active_plugins.
+            machine_active_plugins = list(payload.active_plugins or [])
+            turn_active_plugins = payload.active_plugins
+            managed_allowed: frozenset[str] | None = None
+            if workspace_data_dir is not None:
+                from app.capabilities_turn import resolve_turn_capabilities_snapshot
+
+                snapshot = await resolve_turn_capabilities_snapshot(
+                    workspace_data_dir=workspace_data_dir,
+                    payload_active_plugins=machine_active_plugins,
+                    plugin_data_dir=plugin_dir,
+                )
+                turn_active_plugins = snapshot.active_plugins
+                managed_allowed = snapshot.managed_allowed_connector_ids
+                payload.active_plugins = turn_active_plugins
+            elif is_plugin_active(PLUGIN_WORKPROBA_CLOUD, turn_active_plugins):
+                from app.plugins.workproba_cloud.plugin import (
+                    refresh_known_managed_connectors_cache,
+                )
+
+                cloud_plugin_dir = resolve_plugin_data_dir(
+                    PLUGIN_WORKPROBA_CLOUD, plugin_dir
+                )
+                if cloud_plugin_dir is not None:
+                    managed_allowed = await refresh_known_managed_connectors_cache(
+                        cloud_plugin_dir
+                    )
+
             try:
                 async with asyncio.timeout(settings.turn_timeout_seconds):
                     for attempt_index, (config, strip_thinking) in enumerate(
@@ -597,36 +633,14 @@ async def agent_turn(request: Request, payload: AgentTurnRequest) -> EventSource
                             )
 
                         model = build_model(config)
-                        from app.plugins.registry import (
-                            PLUGIN_WORKPROBA_CLOUD,
-                            is_plugin_active,
-                            resolve_plugin_data_dir,
-                        )
-
-                        managed_allowed: frozenset[str] | None = None
-                        if is_plugin_active(
-                            PLUGIN_WORKPROBA_CLOUD, payload.active_plugins
-                        ):
-                            from app.plugins.workproba_cloud.plugin import (
-                                refresh_known_managed_connectors_cache,
-                            )
-
-                            cloud_plugin_dir = resolve_plugin_data_dir(
-                                PLUGIN_WORKPROBA_CLOUD, plugin_dir
-                            )
-                            if cloud_plugin_dir is not None:
-                                managed_allowed = (
-                                    await refresh_known_managed_connectors_cache(
-                                        cloud_plugin_dir
-                                    )
-                                )
                         agent = build_agent(
                             model,
                             ui_mode=payload.ui_mode,
                             sandbox_available=caps.sandbox_available,
                             locale=payload.locale,
-                            active_plugins=payload.active_plugins,
+                            active_plugins=turn_active_plugins,
                             plugin_data_dir=plugin_dir,
+                            managed_allowed_connector_ids=managed_allowed,
                         )
                         agent_loop = AgentLoop(
                             agent=agent,
@@ -1135,7 +1149,7 @@ async def agent_reprocess_attachment(
     from app.provider_set import resolve_provider_set
 
     provider_set = resolve_provider_set(payload.provider_set)
-    ui_mode = "locked" if provider_set and provider_set.ui_mode_locked else "guided"
+    ui_mode = "locked" if provider_set and provider_set.ui_mode_locked else "agent"
 
     if payload.content_base64:
         try:
@@ -2040,6 +2054,127 @@ async def personas_get_discussion(
     return PersonasDiscussionDetailResponse(discussion=discussion)
 
 
+class WorkspaceCapabilityItem(BaseModel):
+    id: str
+    status: Literal["active", "available", "unavailable"]
+    wanted: bool
+    entitled: bool
+    unavailableReason: str | None = None
+
+
+class WorkspaceCapabilitiesResponse(BaseModel):
+    wanted: dict[str, bool]
+    items: list[WorkspaceCapabilityItem]
+    effectiveIds: list[str]
+    cloudWanted: bool
+    cloudEntitled: bool
+
+
+class WorkspaceCapabilitiesWantedRequest(BaseModel):
+    workspace_data_dir: str
+    wanted: dict[str, bool]
+    plugin_data_dir: str | None = None
+    active_plugins: list[str] | None = None
+    locale: str = "fr"
+
+
+def _workspace_capabilities_response(
+    view: Any,
+) -> WorkspaceCapabilitiesResponse:
+    return WorkspaceCapabilitiesResponse(
+        wanted=view.wanted,
+        items=[
+            WorkspaceCapabilityItem(
+                id=item.id,
+                status=item.status,
+                wanted=item.wanted,
+                entitled=item.entitled,
+                unavailableReason=item.unavailable_reason,
+            )
+            for item in view.items
+        ],
+        effectiveIds=sorted(view.effective_ids),
+        cloudWanted=view.cloud_wanted,
+        cloudEntitled=view.cloud_entitled,
+    )
+
+
+@app.get("/workspace/capabilities", response_model=WorkspaceCapabilitiesResponse)
+async def workspace_capabilities_get(
+    request: Request,
+    workspace_data_dir: str,
+    plugin_data_dir: str | None = None,
+    active_plugins: list[str] | None = Query(default=None),
+    locale: str = "fr",
+) -> WorkspaceCapabilitiesResponse:
+    """Profil wanted de l'espace + statut available/active/unavailable (UI only)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(locale)
+
+    from app.capabilities_api import load_space_capabilities_view
+    from app.capabilities_profile import InvalidCapabilityIdError
+
+    ws_dir = _resolve_workspace_data_dir_path(workspace_data_dir)
+    plugin_root = (
+        _resolve_plugin_data_dir(plugin_data_dir) if plugin_data_dir else None
+    )
+    try:
+        view = await load_space_capabilities_view(
+            workspace_data_dir=ws_dir,
+            payload_active_plugins=active_plugins,
+            plugin_data_dir=plugin_root,
+        )
+    except InvalidCapabilityIdError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _workspace_capabilities_response(view)
+
+
+@app.put("/workspace/capabilities", response_model=WorkspaceCapabilitiesResponse)
+async def workspace_capabilities_put(
+    request: Request,
+    payload: WorkspaceCapabilitiesWantedRequest,
+) -> WorkspaceCapabilitiesResponse:
+    """Met a jour wanted (UI only). Prend effet au prochain turn agent."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(payload.locale)
+
+    from app.capabilities_api import (
+        apply_wanted_updates,
+        load_space_capabilities_view,
+    )
+    from app.capabilities_profile import InvalidCapabilityIdError
+
+    ws_dir = _resolve_workspace_data_dir_path(payload.workspace_data_dir)
+    plugin_root = (
+        _resolve_plugin_data_dir(payload.plugin_data_dir)
+        if payload.plugin_data_dir
+        else None
+    )
+
+    # Ensure profile exists before set_wanted.
+    try:
+        await load_space_capabilities_view(
+            workspace_data_dir=ws_dir,
+            payload_active_plugins=payload.active_plugins,
+            plugin_data_dir=plugin_root,
+        )
+        apply_wanted_updates(ws_dir, payload.wanted, auto_want_cloud_parent=True)
+        view = await load_space_capabilities_view(
+            workspace_data_dir=ws_dir,
+            payload_active_plugins=payload.active_plugins,
+            plugin_data_dir=plugin_root,
+        )
+    except InvalidCapabilityIdError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return _workspace_capabilities_response(view)
+
+
 @app.get("/memory/items", response_model=MemoryItemsResponse)
 async def memory_list_items(
     request: Request,
@@ -2694,12 +2829,23 @@ class CloudLlmQuotaResponse(BaseModel):
     enabled: bool
     period_key: str
     tokens_used: int = 0
-    tokens_limit: int = 0
+    tokens_limit: int | None = None
     requests_count: int = 0
-    requests_limit: int = 0
-    remaining_tokens: int = 0
-    remaining_requests: int = 0
+    requests_limit: int | None = None
+    remaining_tokens: int | None = None
+    remaining_requests: int | None = None
     enrolled: bool = False
+
+
+def _quota_optional_int(payload: dict[str, Any], *keys: str) -> int | None:
+    for key in keys:
+        if key not in payload:
+            continue
+        value = payload[key]
+        if value is None:
+            return None
+        return int(value)
+    return None
 
 
 class CloudArtefactsResponse(BaseModel):
@@ -3624,18 +3770,16 @@ async def cloud_llm_quota_endpoint(
         enabled=bool(payload.get("enabled")),
         period_key=str(payload.get("periodKey") or payload.get("period_key") or ""),
         tokens_used=int(payload.get("tokensUsed") or payload.get("tokens_used") or 0),
-        tokens_limit=int(payload.get("tokensLimit") or payload.get("tokens_limit") or 0),
+        tokens_limit=_quota_optional_int(payload, "tokensLimit", "tokens_limit"),
         requests_count=int(
             payload.get("requestsCount") or payload.get("requests_count") or 0
         ),
-        requests_limit=int(
-            payload.get("requestsLimit") or payload.get("requests_limit") or 0
+        requests_limit=_quota_optional_int(payload, "requestsLimit", "requests_limit"),
+        remaining_tokens=_quota_optional_int(
+            payload, "remainingTokens", "remaining_tokens"
         ),
-        remaining_tokens=int(
-            payload.get("remainingTokens") or payload.get("remaining_tokens") or 0
-        ),
-        remaining_requests=int(
-            payload.get("remainingRequests") or payload.get("remaining_requests") or 0
+        remaining_requests=_quota_optional_int(
+            payload, "remainingRequests", "remaining_requests"
         ),
         enrolled=True,
     )

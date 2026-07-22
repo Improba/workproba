@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   CAPABILITY_CATALOG,
-  GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS,
+  MANAGED_CONNECTOR_ENABLE_BY_DEFAULT_IN_PROJECTS,
   buildManagedCapabilityDefinition,
   getCapabilityDefinition,
   getCapabilityForPlugin,
+  getEnableByDefaultInProjects,
   getNestedCapabilities,
   getTopLevelCapabilities,
   isManagedCapabilityId,
@@ -60,7 +61,24 @@ describe('capabilityCatalog', () => {
     expect(managed.parentId).toBe('workproba_cloud');
     expect(managed.source).toBe('managed');
     expect(managed.resolvedTitle).toBe('IHora');
-    expect(GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS).toContain('echo');
-    expect(GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS).toContain('ihora.shaped');
+    expect(managed.enableByDefaultInProjects).toBe(true);
+  });
+
+  it('expose enableByDefaultInProjects sur le catalogue local et les connecteurs managés', () => {
+    expect(getEnableByDefaultInProjects('workproba_cloud')).toBe(true);
+    expect(getEnableByDefaultInProjects('projects')).toBe(true);
+    expect(getEnableByDefaultInProjects('regards')).toBe(true);
+    expect(getEnableByDefaultInProjects('web_navigation')).toBe(false);
+    expect(getEnableByDefaultInProjects('managed:ihora')).toBe(true);
+    expect(getEnableByDefaultInProjects('managed:echo')).toBe(false);
+    expect(getEnableByDefaultInProjects('managed:ihora.shaped')).toBe(false);
+    expect(MANAGED_CONNECTOR_ENABLE_BY_DEFAULT_IN_PROJECTS).toEqual({
+      echo: false,
+      'ihora.shaped': false,
+      ihora: true,
+    });
+    for (const cap of CAPABILITY_CATALOG) {
+      expect(typeof cap.enableByDefaultInProjects).toBe('boolean');
+    }
   });
 });

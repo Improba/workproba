@@ -11,6 +11,7 @@ from app.documents.pptx_builder import (
     PPTX_LAYOUTS,
     PPTX_THEMES,
     build_pptx_bytes,
+    build_pptx_editable_bytes,
 )
 
 __all__ = [
@@ -19,7 +20,9 @@ __all__ = [
     "PPTX_THEMES",
     "build_docx_bytes",
     "build_pdf_bytes",
+    "build_pdf_bytes_from_slides",
     "build_pptx_bytes",
+    "build_pptx_editable_bytes",
     "build_xlsx_bytes",
     "require_path_extension",
 ]
@@ -114,6 +117,67 @@ def build_pdf_bytes(
             for line in body.strip().splitlines():
                 story.append(Paragraph(line, styles["Normal"]))
             story.append(Spacer(1, 8))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
+def build_pdf_bytes_from_slides(
+    slides: list[dict[str, Any]] | None = None,
+    *,
+    theme: str = "improba",
+) -> bytes:
+    """PDF à partir de slides sémantiques (Chromium si dispo, sinon ReportLab)."""
+    from app.documents.slides_critique import critique_and_fix
+    from app.documents.slides_chromium import chromium_available, html_to_pdf_bytes
+    from app.documents.slides_html import render_deck_html
+
+    critique = critique_and_fix(slides, theme=theme)
+    normalized = critique.slides
+
+    if chromium_available():
+        html = render_deck_html(normalized, theme=theme)
+        try:
+            return html_to_pdf_bytes(html)
+        except Exception:  # noqa: BLE001 - repli ReportLab
+            pass
+
+    return _build_pdf_fallback_from_slides(normalized)
+
+
+def _build_pdf_fallback_from_slides(slides: list[dict[str, Any]]) -> bytes:
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+    except ImportError as exc:
+        raise RuntimeError("reportlab is not installed") from exc
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story: list[Any] = []
+
+    for index, slide in enumerate(slides, start=1):
+        hierarchy = (
+            slide.get("hierarchy") if isinstance(slide.get("hierarchy"), dict) else {}
+        )
+        primary = str(hierarchy.get("primary") or f"Slide {index}").strip()
+        secondary = (
+            hierarchy.get("secondary") if isinstance(hierarchy.get("secondary"), list) else []
+        )
+        secondary_s = [str(s).strip() for s in secondary if str(s).strip()]
+        tertiary = (
+            hierarchy.get("tertiary") if isinstance(hierarchy.get("tertiary"), list) else []
+        )
+        tertiary_s = [str(s).strip() for s in tertiary if str(s).strip()]
+        lines = secondary_s + tertiary_s
+
+        story.append(Paragraph(primary, styles["Heading2"]))
+        story.append(Spacer(1, 6))
+        for line in lines:
+            story.append(Paragraph(f"• {line}", styles["Normal"]))
+        story.append(Spacer(1, 12))
 
     doc.build(story)
     return buf.getvalue()

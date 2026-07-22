@@ -34,6 +34,15 @@ vi.mock('@components/cloud/EnrollCloudModal.vue', () => ({
   },
 }));
 
+vi.mock('@components/cloud/CloudLoginModal.vue', () => ({
+  default: {
+    name: 'CloudLoginModal',
+    template: '<div data-testid="cloud-login-modal" />',
+    props: ['modelValue'],
+    emits: ['update:modelValue', 'enrolled', 'open-invitation'],
+  },
+}));
+
 describe('LockedModelSetup', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,16 +61,16 @@ describe('LockedModelSetup', () => {
     });
   }
 
-  it('affiche le CTA enroll pour workproba-cloud non enrollé', () => {
+  it('affiche le CTA connexion pour workproba-cloud non enrollé', () => {
     const wrapper = mountSetup();
-    expect(wrapper.text()).toContain('Lier ce poste');
+    expect(wrapper.text()).toContain('Se connecter à Improba Cloud');
     expect(wrapper.find('.locked-setup__request--primary').exists()).toBe(true);
   });
 
-  it('ouvre EnrollCloudModal au clic sur Lier ce poste', async () => {
+  it('ouvre CloudLoginModal au clic sur Se connecter', async () => {
     const wrapper = mountSetup();
     await wrapper.find('.locked-setup__request--primary').trigger('click');
-    expect(wrapper.find('[data-testid="enroll-modal"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="cloud-login-modal"]').exists()).toBe(true);
   });
 
   it('affiche Demander l\'accès quand le moteur n\'est pas cloud', () => {

@@ -108,7 +108,6 @@ yarn test:e2e                  # Playwright (smoke)
 - `ConfirmationCard.spec.ts`: effect-oriented headline, protection labels, approve/deny, `write_pptx` preview button.
 - `PreviewChangeDialog.pptx.spec.ts`, `ToolCallCard.pptx.spec.ts`, `fileWriteTools.spec.ts`: PPTX preview and write tool guards.
 - `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection, `work_*` correlation (`streamCorrelation`), edit/regenerate, retry after failed regenerate, `loadMessages` retry reset, `write_pptx` tool_call_start seeding.
-- `chatScroll.spec.ts`: scroll anchor peek and sticky promote helpers.
 - `EngineOnboardingWizard.spec.ts`: first-run engine and cloud setup flow.
 - `CloudLoginModal.spec.ts`, `EnrollCloudModal.spec.ts`: cloud login and enroll modals.
 - `cloudDesktopAuth.spec.ts`, `cloudWebUrls.spec.ts`: `POST /devices/login` client and cloud web URL helpers.

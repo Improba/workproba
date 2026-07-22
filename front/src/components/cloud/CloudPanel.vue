@@ -325,7 +325,7 @@ const emit = defineEmits<{
   (e: 'artefactsChanged'): void;
   (e: 'regardsChanged'): void;
 }>();
-const { settings, settingsLocked, settingsMode } = useAppSettings();
+const { settings, settingsLocked } = useAppSettings();
 const { isProjetPluginActive, getPluginDataDir } = usePlugins();
 const { refresh: refreshPersonas } = usePersonas();
 const {
@@ -365,8 +365,8 @@ const enrollCloudModalOpen = ref(false);
 const projects = ref<ProjetProject[]>([]);
 const projectsLoadError = ref<string | null>(null);
 
-const uiMode = computed(() => resolveUiMode(settingsLocked.value, settingsMode.value));
-const isTechnicalFace = computed(() => uiMode.value === 'advanced');
+const uiMode = computed(() => resolveUiMode(settingsLocked.value));
+const isTechnicalFace = computed(() => uiMode.value === 'agent');
 const isFinalFace = computed(() => !isTechnicalFace.value);
 const showProjectCacheActions = computed(
   () => isTechnicalFace.value || showLocalOptions.value,
@@ -408,9 +408,15 @@ const cloudQuotaLabel = computed(() => {
   if (quotaLoading.value) return t('cloud.quotaLoading');
   if (!quota.value) return '';
   if (!quota.value.enabled) return t('cloud.quotaDisabled');
+  if (quota.value.tokensLimit == null && quota.value.requestsLimit == null) {
+    return t('cloud.quotaUnlimited', {
+      tokens: quota.value.tokensUsed.toLocaleString(),
+      requests: quota.value.requestsCount.toLocaleString(),
+    });
+  }
   return t('cloud.quotaSummary', {
-    tokens: quota.value.remainingTokens.toLocaleString(),
-    requests: quota.value.remainingRequests.toLocaleString(),
+    tokens: quota.value.remainingTokens?.toLocaleString() ?? '0',
+    requests: quota.value.remainingRequests?.toLocaleString() ?? '0',
   });
 });
 

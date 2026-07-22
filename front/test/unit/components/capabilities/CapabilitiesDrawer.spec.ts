@@ -31,6 +31,7 @@ vi.mock('@composables/useCapabilities', () => ({
     activateAndOpen,
     open,
     deactivate,
+    refreshManaged: vi.fn().mockResolvedValue(undefined),
   }),
 }));
 
@@ -48,6 +49,13 @@ vi.mock('vue-i18n', () => ({
 
 vi.mock('quasar', () => ({
   Notify: { create: vi.fn() },
+  Dialog: {
+    create: vi.fn(() => ({
+      onOk: vi.fn().mockReturnThis(),
+      onCancel: vi.fn().mockReturnThis(),
+      onDismiss: vi.fn().mockReturnThis(),
+    })),
+  },
 }));
 
 describe('CapabilitiesDrawer', () => {

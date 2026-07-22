@@ -111,14 +111,12 @@ import { exportEnterprisePreset } from '@composables/useDesktop';
 const { t } = useI18n();
 const { presetActive, preset, loading, refresh } = useEnterprise();
 const { activeDataDir } = useSpace();
-const { settingsMode, settingsLocked, settings, save, load } = useAppSettings();
+const { settingsLocked, settings, save, load } = useAppSettings();
 
 const exporting = ref(false);
 const supportEmailDraft = ref('');
 
-const canExportPreset = computed(
-  () => settingsMode.value === 'advanced' && !settingsLocked.value,
-);
+const canExportPreset = computed(() => !settingsLocked.value);
 
 watch(
   () => settings.value.supportEmail,

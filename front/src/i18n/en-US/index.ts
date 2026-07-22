@@ -57,6 +57,8 @@ export default {
     renameSpacePlaceholder: 'e.g. Acme Client 2026',
     renameSpaceSaved: 'Space renamed',
     renameSpaceFailed: 'Could not rename space',
+    spaceSettingsTitle: 'Space settings',
+    editSpace: 'Space settings',
     spacePathHint: 'Folder: {path}',
     conversationActive: 'Active conversation',
     conversationStreaming: 'Generating',
@@ -189,9 +191,10 @@ export default {
   },
   capabilities: {
     hubButton: 'Capabilities',
-    hubButtonAria: 'Open Capabilities hub',
-    drawerTitle: 'Capabilities',
-    drawerLead: 'Discover and enable capabilities to enrich your space.',
+    hubButtonAria: 'Open available capabilities hub',
+    drawerTitle: 'Available capabilities',
+    drawerLead:
+      'Capabilities installed or connectable on this computer. Enable them here to make them available, then choose which ones are active in each project.',
     regards: {
       title: 'Business perspectives',
       description: 'Consult expert profiles for opinions, discussions, and cross-perspectives.',
@@ -212,7 +215,7 @@ export default {
       title: 'Workproba Cloud',
       description:
         'Connect this computer to your organization. Sub-capabilities (project management, Ihora, …) live here.',
-      home: 'Right panel, Workproba Cloud tab',
+      home: 'Local activation (no dedicated panel)',
     },
     managed: {
       title: 'Managed capability',
@@ -240,6 +243,28 @@ export default {
       configure: 'Configure',
       activateFailed: 'Could not enable this capability',
       deactivateFailed: 'Could not disable this capability',
+      deactivateConfirmTitle: 'Disable on this computer?',
+      deactivateConfirmMessage:
+        'This capability will no longer be available to any project on this machine. In-progress conversations keep their snapshot until the next message.',
+      deactivateConfirmOk: 'Disable on this computer',
+    },
+    space: {
+      title: 'Space capabilities',
+      lead:
+        'Choose which capabilities are active in this space. Changes take effect on the next message.',
+      sectionActive: 'Active',
+      sectionAvailable: 'Available',
+      sectionUnavailable: 'Unavailable',
+      empty: 'No capabilities to show for this space.',
+      nextTurnNote: 'Takes effect on the next message',
+      autoWantedCloud: 'Workproba Cloud was also enabled for this space.',
+      toggleFailed: 'Could not update this capability',
+      toggleAria: 'Enable {name} in this space',
+      setupLink: 'Set up',
+      reasonParentCloudOff: 'Enable Workproba Cloud in this space first',
+      reasonCloudNotReady: 'Workproba Cloud is not available on this computer',
+      reasonMachineDisabled: 'Unavailable on this computer',
+      reasonNotEntitled: 'Not available on this computer',
     },
   },
   home: {
@@ -972,6 +997,7 @@ export default {
     joinFailed: 'Could not connect. Check the invitation code.',
     connectedTo: 'Connected to {org}',
     quotaSummary: '{tokens} tokens · {requests} requests remaining this month',
+    quotaUnlimited: 'No organization cap · {tokens} tokens · {requests} requests this month',
     quotaLoading: 'Loading cloud quota…',
     quotaDisabled: 'Cloud AI subscription is not active for this organization.',
     syncMeta: '{count} document(s) · {lastSync}',

@@ -57,7 +57,7 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Notify } from 'quasar';
+import { Dialog, Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import CapabilityCard from './CapabilityCard.vue';
 import CapabilityNestedGroup from './CapabilityNestedGroup.vue';
@@ -143,7 +143,28 @@ function onOpen(id: CapabilityId): void {
   openCapability(id);
 }
 
+function confirmMachineDeactivate(): Promise<boolean> {
+  return new Promise((resolve) => {
+    Dialog.create({
+      title: t('capabilities.actions.deactivateConfirmTitle'),
+      message: t('capabilities.actions.deactivateConfirmMessage'),
+      cancel: { label: t('common.cancel'), flat: true },
+      ok: {
+        label: t('capabilities.actions.deactivateConfirmOk'),
+        color: 'negative',
+      },
+      persistent: true,
+    })
+      .onOk(() => resolve(true))
+      .onCancel(() => resolve(false))
+      .onDismiss(() => resolve(false));
+  });
+}
+
 async function onDeactivate(id: CapabilityId): Promise<void> {
+  const confirmed = await confirmMachineDeactivate();
+  if (!confirmed) return;
+
   busyCapabilityId.value = id;
   try {
     await deactivate(id);

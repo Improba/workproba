@@ -8,8 +8,8 @@
   ],
   "chat": {
     "provider": "mistral",
-    "model": "mistral-small-latest",
-    "reasoning": "auto",
+    "model": "mistral-medium-latest",
+    "reasoning": "high",
     "api_key_ref": "secrets/mistral",
     "base_url": "https://api.mistral.ai/v1",
     "models": [

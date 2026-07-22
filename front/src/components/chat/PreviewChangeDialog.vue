@@ -35,11 +35,16 @@
           {{ t('chat.previewChange.nouveauFichier') }}
         </p>
         <div
+          v-if="sanitizedPreviewHtml"
+          class="preview-change-dialog__slides"
+          v-html="sanitizedPreviewHtml"
+        />
+        <div
           v-if="sanitizedDiff"
           class="preview-change-dialog__diff"
           v-html="sanitizedDiff"
         />
-        <p v-else class="preview-change-dialog__state">
+        <p v-if="!sanitizedDiff && !sanitizedPreviewHtml" class="preview-change-dialog__state">
           {{ t('chat.previewChange.emptyDiff') }}
         </p>
       </template>
@@ -96,6 +101,12 @@ const fileName = computed(() => {
 
 const sanitizedDiff = computed(() => {
   const html = result.value?.diff_html?.trim();
+  if (!html) return '';
+  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+});
+
+const sanitizedPreviewHtml = computed(() => {
+  const html = result.value?.preview_html?.trim();
   if (!html) return '';
   return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
 });
@@ -226,6 +237,24 @@ watch(
   border-radius: var(--wp-r-sm);
   background: var(--wp-surface-2);
   cursor: pointer;
+}
+
+.preview-change-dialog__slides {
+  flex: 0 0 auto;
+  max-height: 40vh;
+  overflow: auto;
+  margin-bottom: 0.65rem;
+  padding: 0.5rem;
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-surface-2);
+
+  :deep(.wp-slide) {
+    margin-bottom: 0.5rem;
+    transform: scale(0.45);
+    transform-origin: top left;
+    width: 220%;
+  }
 }
 
 .preview-change-dialog__diff {

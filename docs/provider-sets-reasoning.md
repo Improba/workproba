@@ -39,6 +39,18 @@ Builtin sets (`workproba-cloud`, `mistral-default`, `ollama-local`) ship with a 
 
 **Mistral direct** is a public Mistral API profile: the user supplies their own key. It is not the Improba Cloud subscription.
 
+## Default state (per provider set)
+
+Each provider set declares its **default state** in `chat.model` + `chat.reasoning` (explicit effort, never `auto` on builtins).
+
+| Set ID | Default model | Default reasoning |
+|---|---|---|
+| `workproba-cloud` | `mistral-medium-latest` | `high` |
+| `mistral-default` | `mistral-medium-latest` | `high` |
+| `ollama-local` | `llama3.2` | `none` |
+
+Front helper: `defaultStateFromSet(set)` — unique source for UI / payload when there is no session override. Session `auto` means « reuse the set default ».
+
 ### DeviceBearer resolution (`device_bearer`)
 
 When `provider_set.auth_mode === "device_bearer"`:
@@ -235,13 +247,13 @@ Personas and utility paths resolve config from `provider_set` and call `build_mo
 
 ## Front fail-closed readiness (`device_bearer`)
 
-Before chat send or Regards métier SSE (`ask` / `meeting` / `discuss`), the front calls `initCloud()` when the active set has `authMode: 'device_bearer'`. Send is blocked if readiness fails (fail-closed).
+Before chat send or Regards métier SSE (`ask` / `meeting` / `discuss`), the front calls `initCloud()` when the active set has `authMode: 'device_bearer'`. Send is blocked if readiness fails (fail-closed). Product copy refers to **user not connected** to Improba Cloud, not « device not linked ».
 
 Readiness issue codes surfaced to the user:
 
 | Code | Typical cause |
 |---|---|
-| `cloud_not_enrolled` | No device join / missing token |
+| `cloud_not_enrolled` | No cloud session / user not connected |
 | `not_subscribed` | Org LLM quota disabled |
 | `quota_exceeded` | Monthly token or request cap reached |
 | `cloud_unreachable` | Control plane unreachable |

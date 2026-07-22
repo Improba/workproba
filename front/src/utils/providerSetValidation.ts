@@ -191,8 +191,10 @@ export function cloudReadinessFromQuota(
   enrolled: boolean,
   quota: {
     enabled: boolean;
-    remainingTokens: number;
-    remainingRequests: number;
+    tokensLimit: number | null;
+    requestsLimit: number | null;
+    remainingTokens: number | null;
+    remainingRequests: number | null;
   } | null,
   reachable: boolean,
 ): CloudProviderReadiness {
@@ -208,7 +210,12 @@ export function cloudReadinessFromQuota(
   if (!quota.enabled) {
     return { enrolled: true, reachable: true, subscribed: false };
   }
-  const quotaExceeded = quota.remainingTokens <= 0 || quota.remainingRequests <= 0;
+  const unlimited =
+    quota.tokensLimit == null && quota.requestsLimit == null;
+  const quotaExceeded = unlimited
+    ? false
+    : (quota.remainingTokens != null && quota.remainingTokens <= 0)
+      || (quota.remainingRequests != null && quota.remainingRequests <= 0);
   return {
     enrolled: true,
     reachable: true,

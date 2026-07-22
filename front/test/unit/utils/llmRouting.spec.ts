@@ -60,7 +60,7 @@ describe('llmRouting', () => {
     expect(chat?.reasoning_effort).toBe('high');
 
     const utility = toUtilityLlmConfigFromSet(MISTRAL_BUILTIN_SET);
-    expect(utility?.model).toBe('mistral-small-latest');
+    expect(utility?.model).toBe('mistral-medium-latest');
     expect(utility?.reasoning_effort).toBeUndefined();
   });
 

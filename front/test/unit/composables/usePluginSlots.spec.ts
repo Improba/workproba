@@ -60,9 +60,8 @@ describe('usePluginSlots', () => {
     plugins.value = [
       makePlugin('workproba.projet', ['right_panel']),
       makePlugin('workproba.browser', ['right_panel']),
-      makePlugin('workproba.cloud', ['right_panel']),
     ];
-    activePluginIds.value = ['workproba.projet', 'workproba.browser', 'workproba.cloud'];
+    activePluginIds.value = ['workproba.projet', 'workproba.browser'];
 
     const { rightPanelPluginTabs } = usePluginSlots();
     const keys = rightPanelPluginTabs.value.map((tab) => tab.key);
@@ -70,7 +69,6 @@ describe('usePluginSlots', () => {
     expect(keys).toEqual([
       'workproba.projet:right_panel',
       'workproba.browser:right_panel',
-      'workproba.cloud:right_panel',
     ]);
   });
 

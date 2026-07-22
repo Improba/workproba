@@ -203,13 +203,13 @@ def test_human_summary_enroll_to_cloud(locale: str) -> None:
         locale=locale,
     )
     if locale == "fr":
-        assert start == "Je vais connecter ce poste au cloud"
-        assert done == "Ce poste est connecté au cloud"
-        assert error == "Je n'ai pas pu connecter ce poste au cloud"
+        assert start == "Je vais me connecter à Improba Cloud"
+        assert done == "Je suis connecté à Improba Cloud"
+        assert error == "Je n'ai pas pu me connecter à Improba Cloud"
     else:
-        assert start == "I will connect this computer to the cloud"
-        assert done == "This computer is connected to the cloud"
-        assert error == "I could not connect this computer to the cloud"
+        assert start == "I will sign in to Improba Cloud"
+        assert done == "I am signed in to Improba Cloud"
+        assert error == "I could not sign in to Improba Cloud"
 
 
 @pytest.mark.parametrize("locale", ["fr", "en"])

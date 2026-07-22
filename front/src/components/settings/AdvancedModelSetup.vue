@@ -12,9 +12,6 @@
     </div>
 
     <div class="advanced-setup__toolbar">
-      <button type="button" class="advanced-setup__guided-link" @click="emit('switch-to-guided')">
-        {{ t('settings.advancedBackToGuided') }}
-      </button>
       <button type="button" class="advanced-setup__add" :disabled="formOpen" @click="onAddNew">
         <Lucide name="plus" size="16" color="wp-canard" />
         {{ t('settings.advancedAddSet') }}
@@ -178,6 +175,11 @@
     </div>
 
     <EnrollCloudModal v-model="enrollModalOpen" @enrolled="onCloudEnrolled" />
+    <CloudLoginModal
+      v-model="cloudLoginModalOpen"
+      @enrolled="onCloudLoggedIn"
+      @open-invitation="onOpenCloudInvitation"
+    />
   </section>
 </template>
 
@@ -187,6 +189,7 @@ import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
+import CloudLoginModal from '@components/cloud/CloudLoginModal.vue';
 import { useAppSettings, testSet, type ProviderSetTestResult } from '@composables/useAppSettings';
 import type { ProviderSet, LlmProviderName } from '@composables/useDesktop.types';
 import { CLOUD_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
@@ -201,8 +204,6 @@ import {
   WORKPROBA_CLOUD_BUILTIN_SET,
 } from '@utils/providerSets';
 
-const emit = defineEmits<{ 'switch-to-guided': [] }>();
-
 const { sets, settings, setActiveSet, createSet, updateSet, deleteSet, confirmBeforeWrite, setConfirmBeforeWrite, settingsLocked } = useAppSettings();
 const { getPluginDataDir } = usePlugins();
 const { providerReadiness, isEnrolled, init: initCloud, refreshQuota } = useCloud();
@@ -214,6 +215,7 @@ const showKey = ref(false);
 const testingId = ref<string | null>(null);
 const savingConfirm = ref(false);
 const enrollModalOpen = ref(false);
+const cloudLoginModalOpen = ref(false);
 const testResults = reactive<Record<string, ProviderSetTestResult>>({});
 
 const activeSetId = computed(() => settings.value.activeSetId ?? null);
@@ -261,7 +263,7 @@ async function activateSet(id: string): Promise<void> {
 
 function onSetActiveClick(set: ProviderSet): void {
   if (isCloudSet(set) && !isEnrolled.value) {
-    enrollModalOpen.value = true;
+    cloudLoginModalOpen.value = true;
     return;
   }
   void activateSet(set.id);
@@ -270,6 +272,17 @@ function onSetActiveClick(set: ProviderSet): void {
 async function onCloudEnrolled(): Promise<void> {
   await refreshQuota();
   await activateSet(WORKPROBA_CLOUD_BUILTIN_SET.id);
+}
+
+async function onCloudLoggedIn(): Promise<void> {
+  await refreshQuota();
+  cloudLoginModalOpen.value = false;
+  await activateSet(WORKPROBA_CLOUD_BUILTIN_SET.id);
+}
+
+function onOpenCloudInvitation(): void {
+  cloudLoginModalOpen.value = false;
+  enrollModalOpen.value = true;
 }
 
 onMounted(() => {

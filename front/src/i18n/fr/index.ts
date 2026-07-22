@@ -57,6 +57,8 @@ export default {
     renameSpacePlaceholder: 'Ex. Client Dupont 2026',
     renameSpaceSaved: 'Espace renommé',
     renameSpaceFailed: 'Impossible de renommer l\'espace',
+    spaceSettingsTitle: 'Paramètres de l\'espace',
+    editSpace: 'Paramètres de l\'espace',
     spacePathHint: 'Dossier : {path}',
     conversationActive: 'Conversation active',
     conversationStreaming: 'Génération en cours',
@@ -189,9 +191,10 @@ export default {
   },
   capabilities: {
     hubButton: 'Capacités',
-    hubButtonAria: 'Ouvrir le hub Capacités',
-    drawerTitle: 'Capacités',
-    drawerLead: 'Découvrez et activez les capacités pour enrichir votre espace de travail.',
+    hubButtonAria: 'Ouvrir le hub Capacités disponibles',
+    drawerTitle: 'Capacités disponibles',
+    drawerLead:
+      'Capacités installées ou connectables sur ce poste. Activez-les ici pour les rendre disponibles, puis choisissez lesquelles sont actives dans chaque projet.',
     regards: {
       title: 'Regards métier',
       description: 'Consultez des profils métier pour des avis, discussions et regards croisés.',
@@ -212,7 +215,7 @@ export default {
       title: 'Workproba Cloud',
       description:
         'Connectez ce poste à votre organisation. Les sous-capacités (gestion de projet, Ihora, …) s’activent ici.',
-      home: 'Panneau droit, onglet Workproba Cloud',
+      home: 'Activation locale (pas de panneau dédié)',
     },
     managed: {
       title: 'Capacité managée',
@@ -240,6 +243,28 @@ export default {
       configure: 'Configurer',
       activateFailed: 'Impossible d’activer cette capacité',
       deactivateFailed: 'Impossible de désactiver cette capacité',
+      deactivateConfirmTitle: 'Désactiver sur ce poste ?',
+      deactivateConfirmMessage:
+        'Cette capacité ne sera plus disponible pour aucun projet sur cette machine. Les conversations en cours conservent leur snapshot jusqu’au prochain message.',
+      deactivateConfirmOk: 'Désactiver sur ce poste',
+    },
+    space: {
+      title: 'Capacités de l\'espace',
+      lead:
+        'Choisissez les capacités actives pour cet espace. Les changements prennent effet au prochain message.',
+      sectionActive: 'Actives',
+      sectionAvailable: 'Disponibles',
+      sectionUnavailable: 'Indisponibles',
+      empty: 'Aucune capacité à afficher pour cet espace.',
+      nextTurnNote: 'Prendra effet au prochain message',
+      autoWantedCloud: 'Workproba Cloud a aussi été activé pour cet espace.',
+      toggleFailed: 'Impossible de mettre à jour cette capacité',
+      toggleAria: 'Activer {name} dans cet espace',
+      setupLink: 'Configurer',
+      reasonParentCloudOff: 'Activez d’abord Workproba Cloud dans cet espace',
+      reasonCloudNotReady: 'Workproba Cloud n’est pas disponible sur ce poste',
+      reasonMachineDisabled: 'Indisponible sur ce poste',
+      reasonNotEntitled: 'Non disponible sur ce poste',
     },
   },
   home: {
@@ -971,6 +996,7 @@ export default {
     joinFailed: 'Connexion impossible. Vérifiez le code d\'invitation.',
     connectedTo: 'Connecté à {org}',
     quotaSummary: '{tokens} tokens · {requests} requêtes restantes ce mois',
+    quotaUnlimited: 'Pas de plafond organisationnel · {tokens} tokens · {requests} requêtes ce mois',
     quotaLoading: 'Chargement du quota cloud…',
     quotaDisabled: 'Abonnement cloud IA inactif pour cette organisation.',
     syncMeta: '{count} document(s) · {lastSync}',

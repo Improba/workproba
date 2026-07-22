@@ -113,6 +113,7 @@ const props = withDefaults(
   defineProps<{
     messages: ChatMessage[];
     streaming?: boolean;
+    /** Réserve dynamique sous le tour user (turn-anchor). 0 hors mode anchor. */
     spacerHeight?: number;
     projectPath?: string | null;
     sessionId?: string | null;
@@ -122,9 +123,7 @@ const props = withDefaults(
     attachmentStatuses?: Record<string, import('@composables/useChatStream').AttachmentStatusEntry>;
     settingsLocked?: boolean;
   }>(),
-  {
-    spacerHeight: 0,
-  },
+  { spacerHeight: 0 },
 );
 
 const interactionLocked = computed(
@@ -189,11 +188,40 @@ function getScroller(): DynamicScrollerExposed | null {
 }
 
 function scrollToItem(index: number, options?: ScrollToOptions): void {
-  dynamicScrollerRef.value?.scrollToItem(index, options);
+  const target = getScrollTarget();
+  const scroller = dynamicScrollerRef.value;
+  if (!target || !scroller) {
+    dynamicScrollerRef.value?.scrollToItem(index, options);
+    return;
+  }
+  // Scroller = q-scroll-area ; DynamicScroller n'a pas de viewport propre.
+  // On positionne le container Quasar via les offsets mesurés.
+  const itemOffset = scroller.getItemOffset(index);
+  const itemSize = getItemSize(index);
+  const align = options?.align ?? 'start';
+  const extra = options?.offset ?? 0;
+  let top = itemOffset + extra;
+  if (align === 'end') {
+    top = itemOffset + itemSize - target.clientHeight + extra;
+  } else if (align === 'center') {
+    top = itemOffset + itemSize / 2 - target.clientHeight / 2 + extra;
+  }
+  target.scrollTo({
+    top: Math.max(0, top),
+    behavior: options?.smooth ? 'smooth' : 'auto',
+  });
 }
 
 function scrollToPosition(position: number, options?: ScrollToOptions): void {
-  dynamicScrollerRef.value?.scrollToPosition(position, options);
+  const target = getScrollTarget();
+  if (!target) {
+    dynamicScrollerRef.value?.scrollToPosition(position, options);
+    return;
+  }
+  target.scrollTo({
+    top: Math.max(0, position),
+    behavior: options?.smooth ? 'smooth' : 'auto',
+  });
 }
 
 function getItemOffset(index: number): number {
@@ -215,12 +243,14 @@ function getItemSize(itemOrIndex: number | ChatMessage): number {
 // Pendant le streaming, `_contentRev` remplace `item.content` dans size-dependencies
 // pour limiter les re-mesures du virtual scroller à chaque flush de tokens.
 
-/** Cible de scroll stable : le recycle-scroller interne (DynamicScroller). */
+/**
+ * Cible de scroll = container Quasar (vrai viewport).
+ * Le `.vue-recycle-scroller` sans height:100% s'étend avec le contenu et
+ * n'est pas le scrollport : scroller dessus laissait scrollTop coincé à 0.
+ */
 function getScrollTarget(): HTMLElement | null {
   const root = scrollAreaRef.value?.$el as HTMLElement | null;
   if (!root) return null;
-  const recycle = root.querySelector<HTMLElement>('.vue-recycle-scroller');
-  if (recycle) return recycle;
   return root.querySelector<HTMLElement>('.q-scrollarea__container') ?? null;
 }
 
@@ -271,9 +301,11 @@ defineExpose({
 }
 
 .message-list__reply-spacer {
+  display: block;
   width: 100%;
   flex-shrink: 0;
   pointer-events: none;
+  /* Hauteur inline (turn-anchor) ; pas de min-height pour pouvoir retomber à 0. */
 }
 
 .message-list__empty {

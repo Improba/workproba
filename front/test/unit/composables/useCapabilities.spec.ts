@@ -21,7 +21,6 @@ const deactivatePlugin = vi.fn(async (id: string) => {
 });
 
 const settingsLocked = ref(false);
-const settingsMode = ref<'guided' | 'advanced'>('guided');
 const permissionsNetwork = ref(true);
 const permissionsProjectSync = ref(true);
 const permissionsNetworkImprobaCloud = ref(true);
@@ -29,7 +28,6 @@ const settings = ref({
   version: 1,
   providers: [],
   settingsLocked: false,
-  settingsMode: 'guided' as const,
   pluginsAllowed: null as string[] | null,
   permissionsNetwork: true,
   permissionsProjectSync: true,
@@ -67,7 +65,6 @@ vi.mock('@composables/useAppSettings', () => ({
   useAppSettings: () => ({
     settings,
     settingsLocked,
-    settingsMode,
     permissionsNetwork,
     permissionsProjectSync,
     permissionsNetworkImprobaCloud,
@@ -125,14 +122,12 @@ describe('useCapabilities', () => {
       version: 1,
       providers: [],
       settingsLocked: false,
-      settingsMode: 'guided',
       pluginsAllowed: null,
       permissionsNetwork: true,
       permissionsProjectSync: true,
       permissionsNetworkImprobaCloud: true,
     };
     settingsLocked.value = false;
-    settingsMode.value = 'guided';
     permissionsNetwork.value = true;
     permissionsProjectSync.value = true;
     permissionsNetworkImprobaCloud.value = true;
@@ -234,7 +229,7 @@ describe('useCapabilities', () => {
 
     expect(activatePlugin).toHaveBeenCalledWith(CLOUD_PLUGIN_ID);
     expect(activatePlugin).not.toHaveBeenCalledWith(PROJET_PLUGIN_ID);
-    expect(openRightPanel).toHaveBeenCalledWith('workproba.cloud:right_panel');
+    expect(openRightPanel).not.toHaveBeenCalled();
   });
 
   it('workproba_cloud est needs_setup si cloud actif mais non enrollé', () => {
@@ -253,7 +248,7 @@ describe('useCapabilities', () => {
     expect(getById('workproba_cloud')?.state.kind).toBe('active');
   });
 
-  it('open workproba_cloud ouvre l’onglet cloud', () => {
+  it('open workproba_cloud n’ouvre pas de panneau latéral', () => {
     activePluginIds.value = [CLOUD_PLUGIN_ID];
     isEnrolled.value = true;
 
@@ -261,7 +256,7 @@ describe('useCapabilities', () => {
     open('workproba_cloud');
 
     expect(openSideChat).not.toHaveBeenCalled();
-    expect(openRightPanel).toHaveBeenCalledWith('workproba.cloud:right_panel');
+    expect(openRightPanel).not.toHaveBeenCalled();
   });
 
   it('deactivate workproba_cloud désactive uniquement le plugin cloud quand pas d’enfant actif', async () => {
@@ -285,8 +280,11 @@ describe('useCapabilities', () => {
     const { capabilities, getById } = useCapabilities();
     const managed = capabilities.value.filter((v) => v.definition.source === 'managed');
 
-    // Mode guidé : echo et ihora.shaped masqués
-    expect(managed.map((v) => v.definition.managedConnectorId)).toEqual(['ihora']);
+    expect(managed.map((v) => v.definition.managedConnectorId)).toEqual([
+      'echo',
+      'ihora',
+      'ihora.shaped',
+    ]);
     expect(getById('managed:ihora')?.definition.parentId).toBe('workproba_cloud');
     expect(getById('managed:ihora')?.state.kind).toBe('active');
     expect(getById('managed:ihora')?.state.managedByOrganization).toBe(true);
@@ -299,23 +297,6 @@ describe('useCapabilities', () => {
 
     const { getById } = useCapabilities();
     expect(getById('managed:ihora')?.state.kind).toBe('available');
-  });
-
-  it('montre aussi echo en mode avancé', () => {
-    settingsMode.value = 'advanced';
-    settings.value.settingsMode = 'advanced';
-    activePluginIds.value = [CLOUD_PLUGIN_ID];
-    isEnrolled.value = true;
-    connectors.value = [
-      { id: 'echo', name: 'Echo', enabled: true },
-      { id: 'ihora', name: 'IHora', enabled: true },
-    ];
-
-    const { capabilities } = useCapabilities();
-    const ids = capabilities.value
-      .filter((v) => v.definition.source === 'managed')
-      .map((v) => v.definition.managedConnectorId);
-    expect(ids).toEqual(['echo', 'ihora']);
   });
 
   it('n’expose pas de capacités managées si non enrollé', () => {

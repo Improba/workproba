@@ -28,11 +28,11 @@ const sets = ref([
   },
 ]);
 
-const settingsMode = ref<'guided' | 'advanced'>('guided');
+const settingsLocked = ref(false);
 
 vi.mock('@composables/useAppSettings', () => ({
   useAppSettings: () => ({
-    settingsMode,
+    settingsLocked,
   }),
 }));
 
@@ -56,7 +56,7 @@ vi.mock('@composables/usePersonas', () => ({
 
 describe('PersonasCentralPanel', () => {
   beforeEach(() => {
-    settingsMode.value = 'guided';
+    settingsLocked.value = false;
   });
 
   function mountPanel() {
@@ -103,15 +103,15 @@ describe('PersonasCentralPanel', () => {
     expect(wrapper.emitted('ask-opinion')?.[0]).toEqual([['p1']]);
   });
 
-  it('masque la personnalisation des jeux en mode guidé', async () => {
+  it('masque la personnalisation des jeux en mode verrouillé', async () => {
+    settingsLocked.value = true;
     const wrapper = mountPanel();
     await flushPromises();
 
     expect(wrapper.find('.personas-central__advanced').exists()).toBe(false);
   });
 
-  it('affiche la section personnaliser en mode avancé', async () => {
-    settingsMode.value = 'advanced';
+  it('affiche la section personnaliser hors mode verrouillé', async () => {
     const wrapper = mountPanel();
     await flushPromises();
 

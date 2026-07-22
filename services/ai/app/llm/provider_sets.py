@@ -58,10 +58,10 @@ MISTRAL_BUILTIN_SET = ProviderSet(
     badges=["Clé API"],
     chat=ProviderSetChat(
         provider="mistral",
-        model="mistral-small-latest",
+        model="mistral-medium-latest",
         base_url=MISTRAL_DEFAULT_BASE_URL,
         api_key_ref="secrets/mistral",
-        reasoning="auto",
+        reasoning="high",
         models=list(MISTRAL_CHAT_MODELS),
     ),
     embeddings=ProviderSetEmbeddings(
@@ -92,8 +92,8 @@ WORKPROBA_CLOUD_BUILTIN_SET = ProviderSet(
         # mistral : active MistralChatModel (thinking chunks) tout en passant
         # par le proxy OpenAI-compat cloud (`base_url` résolu à {cp}/llm/v1).
         provider="mistral",
-        model="mistral-small-latest",
-        reasoning="auto",
+        model="mistral-medium-latest",
+        reasoning="high",
         models=list(MISTRAL_CHAT_MODELS),
     ),
     embeddings=ProviderSetEmbeddings(
@@ -124,7 +124,7 @@ OLLAMA_BUILTIN_SET = ProviderSet(
         provider="ollama",
         model="llama3.2",
         base_url=OLLAMA_DEFAULT_BASE_URL,
-        reasoning="auto",
+        reasoning="none",
     ),
     embeddings=ProviderSetEmbeddings(
         provider="ollama",

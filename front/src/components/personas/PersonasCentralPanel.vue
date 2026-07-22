@@ -235,7 +235,7 @@ const emit = defineEmits<{
 }>();
 
 const { t } = useI18n();
-const { settingsMode } = useAppSettings();
+const { settingsLocked } = useAppSettings();
 const {
   sets,
   activeSet,
@@ -263,7 +263,7 @@ const advancedOpen = ref(false);
 const personaEditorOpen = ref(false);
 const editingPersona = ref<PersonaInfo | null>(null);
 
-const showAdvanced = computed(() => settingsMode.value === 'advanced');
+const showAdvanced = computed(() => !settingsLocked.value);
 
 const customSetIds = computed(() => new Set(listCustomSets().map((s) => s.id)));
 

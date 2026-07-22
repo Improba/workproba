@@ -150,11 +150,11 @@ pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
             badges: vec!["Cloud Improba".to_string(), "Recommandé".to_string()],
             chat: ProviderSetChatEntry {
                 provider: "mistral".to_string(),
-                model: "mistral-small-latest".to_string(),
+                model: "mistral-medium-latest".to_string(),
                 api_key_ref: None,
                 api_key: None,
                 base_url: None,
-                reasoning: Some("auto".to_string()),
+                reasoning: Some("high".to_string()),
             },
             embeddings: Some(ProviderSetEmbeddingsEntry {
                 provider: "openai_compat".to_string(),
@@ -188,11 +188,11 @@ pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
             badges: vec!["Clé API".to_string()],
             chat: ProviderSetChatEntry {
                 provider: "mistral".to_string(),
-                model: "mistral-small-latest".to_string(),
+                model: "mistral-medium-latest".to_string(),
                 api_key_ref: Some("secrets/mistral".to_string()),
                 api_key: None,
                 base_url: Some("https://api.mistral.ai/v1".to_string()),
-                reasoning: Some("auto".to_string()),
+                reasoning: Some("high".to_string()),
             },
             embeddings: Some(ProviderSetEmbeddingsEntry {
                 provider: "mistral".to_string(),
@@ -230,7 +230,7 @@ pub fn builtin_provider_sets() -> Vec<ProviderSetEntry> {
                 api_key_ref: None,
                 api_key: None,
                 base_url: Some("http://127.0.0.1:11434/v1".to_string()),
-                reasoning: Some("auto".to_string()),
+                reasoning: Some("none".to_string()),
             },
             embeddings: Some(ProviderSetEmbeddingsEntry {
                 provider: "ollama".to_string(),

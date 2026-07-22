@@ -148,7 +148,7 @@ import {
 import type { PluginInfo, PluginSource } from '@composables/useDesktop.types';
 
 const { t, te } = useI18n();
-const { settingsMode, settingsLocked } = useAppSettings();
+const { settingsLocked } = useAppSettings();
 const { openCapabilities } = useShellSurfaces();
 const {
   plugins,
@@ -165,9 +165,7 @@ const togglingId = ref<string | null>(null);
 const installing = ref(false);
 const uninstallingId = ref<string | null>(null);
 
-const showAdvanced = computed(
-  () => settingsMode.value === 'advanced' && !settingsLocked.value,
-);
+const showAdvanced = computed(() => !settingsLocked.value);
 
 const panelTitle = computed(() =>
   showAdvanced.value

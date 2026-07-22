@@ -216,6 +216,41 @@ def test_preview_change_pptx_with_tool_args(tmp_path: Path) -> None:
     assert "wp-diff-add" in data["diff_html"]
     assert "Nouveau pitch" in data["diff_html"]
     assert "Étape 1" in data["diff_html"]
+    assert "wp-slide" in data.get("preview_html", "")
+
+
+def test_preview_change_pptx_applies_critique_split(tmp_path: Path) -> None:
+    """L'aperçu HTML doit refléter l'auto-split (même deck que le PPTX final)."""
+    project = tmp_path / "project"
+    project.mkdir()
+    ws_data = tmp_path / "ws_data"
+    ws_data.mkdir()
+    bullets = [f"Point {i} avec du texte" for i in range(12)]
+
+    with TestClient(mainmod.app) as client:
+        resp = client.post(
+            "/documents/preview-change",
+            json={
+                "workspace_data_dir": str(ws_data),
+                "project_path": str(project),
+                "file_path": "dense.pptx",
+                "tool_name": "write_pptx",
+                "tool_args": {
+                    "theme": "improba",
+                    "slides": [
+                        {
+                            "grammar": "sequence",
+                            "hierarchy": {"primary": "Dense", "secondary": bullets},
+                            "density": "high",
+                        }
+                    ],
+                },
+            },
+            headers=_headers(),
+        )
+    assert resp.status_code == 200
+    html = resp.json().get("preview_html", "")
+    assert html.count("wp-slide") >= 2
 
 
 def test_preview_change_pptx_modify_existing(tmp_path: Path) -> None:

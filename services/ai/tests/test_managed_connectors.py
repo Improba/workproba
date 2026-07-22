@@ -764,7 +764,7 @@ IHORA_TOOLS = [
         "action": "create_timesheet",
         "description": "Creer une saisie de temps",
         "effect": "write",
-        "visibility": "advanced",
+        "visibility": "standard",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -842,7 +842,7 @@ def test_normalize_tool_input_schema_defaults_additional_properties_false() -> N
 
 
 @pytest.mark.asyncio
-async def test_invoke_managed_connector_guided_refuses_advanced_only_connector(
+async def test_invoke_managed_connector_locked_refuses_standard_only_connector(
     tmp_path: Path,
 ) -> None:
     from pydantic_ai import RunContext
@@ -872,7 +872,7 @@ async def test_invoke_managed_connector_guided_refuses_advanced_only_connector(
                     {
                         "name": "echo",
                         "action": "echo",
-                        "visibility": "advanced",
+                        "visibility": "standard",
                         "input_schema": {"type": "object", "properties": {}},
                     }
                 ],
@@ -889,7 +889,7 @@ async def test_invoke_managed_connector_guided_refuses_advanced_only_connector(
             plugin_data_dir=plugins_root,
             locale="fr",
             permissions_network=True,
-            ui_mode="guided",
+            ui_mode="locked",
         ),
         project_client=FakeProjectClient(),
         sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
@@ -906,7 +906,7 @@ async def test_invoke_managed_connector_guided_refuses_advanced_only_connector(
         tool_call_id="tc-guided-echo",
     )
 
-    with pytest.raises(ModelRetry, match="mode avanc"):
+    with pytest.raises(ModelRetry, match="réglages verrouillés"):
         await tool.function(ctx, connector_id="echo", payload_json="{}")
 
 
@@ -960,7 +960,7 @@ def test_build_agent_skips_disabled_managed_tool(tmp_path: Path) -> None:
     assert "managed__ihora__list_absences" not in agent._function_toolset.tools
 
 
-def test_build_agent_guided_hides_advanced_managed_tool(tmp_path: Path) -> None:
+def test_build_agent_agent_registers_standard_managed_tools(tmp_path: Path) -> None:
     from pydantic_ai.models.test import TestModel
 
     from app.agent.tools import build_agent
@@ -974,11 +974,11 @@ def test_build_agent_guided_hides_advanced_managed_tool(tmp_path: Path) -> None:
         TestModel(),
         active_plugins=[PLUGIN_WORKPROBA_CLOUD],
         plugin_data_dir=cloud_dir.parent,
-        ui_mode="guided",
+        ui_mode="agent",
     )
     assert "managed__ihora__list_absences" in agent._function_toolset.tools
     assert "managed__ihora__get_timesheet" in agent._function_toolset.tools
-    assert "managed__ihora__create_timesheet" not in agent._function_toolset.tools
+    assert "managed__ihora__create_timesheet" in agent._function_toolset.tools
 
 
 @pytest.mark.asyncio
@@ -1106,7 +1106,7 @@ def test_cloud_list_connectors_returns_tools(
         assert body["connectors"][0]["tools"][0]["name"] == "list_absences"
 
 
-def test_build_agent_locked_hides_advanced_managed_tool(tmp_path: Path) -> None:
+def test_build_agent_locked_hides_standard_managed_tool(tmp_path: Path) -> None:
     from pydantic_ai.models.test import TestModel
 
     from app.agent.tools import build_agent
@@ -1127,7 +1127,7 @@ def test_build_agent_locked_hides_advanced_managed_tool(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_invoke_managed_connector_guided_refuses_advanced_action(
+async def test_invoke_managed_connector_locked_refuses_standard_action(
     tmp_path: Path,
 ) -> None:
     from pydantic_ai import RunContext
@@ -1163,7 +1163,7 @@ async def test_invoke_managed_connector_guided_refuses_advanced_action(
             plugin_data_dir=plugins_root,
             locale="fr",
             permissions_network=True,
-            ui_mode="guided",
+            ui_mode="locked",
         ),
         project_client=FakeProjectClient(),
         sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
@@ -1174,7 +1174,7 @@ async def test_invoke_managed_connector_guided_refuses_advanced_action(
         TestModel(),
         active_plugins=[PLUGIN_WORKPROBA_CLOUD],
         plugin_data_dir=plugins_root,
-        ui_mode="guided",
+        ui_mode="locked",
     )
     tool = agent._function_toolset.tools["invoke_managed_connector"]
     ctx = RunContext(
@@ -1185,7 +1185,7 @@ async def test_invoke_managed_connector_guided_refuses_advanced_action(
         tool_call_id="tc-guided-create",
     )
 
-    with pytest.raises(ModelRetry, match="mode avanc"):
+    with pytest.raises(ModelRetry, match="réglages verrouillés"):
         await tool.function(
             ctx,
             connector_id="ihora",
@@ -1272,7 +1272,7 @@ async def test_invoke_managed_connector_validates_payload_before_gate(
             plugin_data_dir=plugins_root,
             locale="fr",
             permissions_network=True,
-            ui_mode="advanced",
+            ui_mode="agent",
         ),
         project_client=FakeProjectClient(),
         sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
@@ -1283,7 +1283,7 @@ async def test_invoke_managed_connector_validates_payload_before_gate(
         TestModel(),
         active_plugins=[PLUGIN_WORKPROBA_CLOUD],
         plugin_data_dir=plugins_root,
-        ui_mode="advanced",
+        ui_mode="agent",
     )
     tool = agent._function_toolset.tools["invoke_managed_connector"]
     ctx = RunContext(

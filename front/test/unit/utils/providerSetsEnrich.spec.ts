@@ -39,20 +39,31 @@ describe('providerSets enrichSetFromBuiltin', () => {
     expect(enriched.chat.models).toBeUndefined();
   });
 
-  it('rafraîchit labels et hints sur un set builtin déjà catalogué', () => {
+  it('migre small+auto vers medium+high sur les builtins Mistral', () => {
     const stored = {
       ...MISTRAL_BUILTIN_SET,
       chat: {
         ...MISTRAL_BUILTIN_SET.chat,
-        models: MISTRAL_BUILTIN_SET.chat.models!.map((m) => ({
-          ...m,
-          hint: 'Ancienne description',
-        })),
+        model: 'mistral-small-latest' as const,
+        reasoning: 'auto' as const,
       },
     };
     const enriched = enrichSetFromBuiltin(stored);
-    expect(enriched.chat.models?.[0]?.hint).toBe(
-      'Hybride : chat, code et raisonnement à la demande. Rapide et économique.',
-    );
+    expect(enriched.chat.model).toBe('mistral-medium-latest');
+    expect(enriched.chat.reasoning).toBe('high');
+  });
+
+  it('ne force pas medium+high si le builtin a déjà un modèle choisi', () => {
+    const stored = {
+      ...MISTRAL_BUILTIN_SET,
+      chat: {
+        ...MISTRAL_BUILTIN_SET.chat,
+        model: 'mistral-large-latest' as const,
+        reasoning: 'none' as const,
+      },
+    };
+    const enriched = enrichSetFromBuiltin(stored);
+    expect(enriched.chat.model).toBe('mistral-large-latest');
+    expect(enriched.chat.reasoning).toBe('none');
   });
 });

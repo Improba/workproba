@@ -194,7 +194,7 @@ const chatViewRef = ref<InstanceType<typeof ChatView> | null>(null);
 const sessionLoadGuard = createSessionLoadGuard();
 
 const { activePath, activeDataDir, spaceTitle, documents } = useSpace();
-const { settingsMode, settingsLocked, activeChatRouting, effectiveActiveSet } = useAppSettings();
+const { settingsLocked, activeChatRouting, effectiveActiveSet } = useAppSettings();
 const { setStreaming, setSidecarState } = useChatActivity();
 const { isPersonasPluginActive, isProjetPluginActive, getPluginDataDir } = usePlugins();
 const { consumeAction, pendingAction } = usePersonasNavigation();
@@ -265,7 +265,7 @@ watch(
 );
 
 const uiMode = computed(() =>
-  resolveUiMode(settingsLocked.value, settingsMode.value),
+  resolveUiMode(settingsLocked.value),
 );
 
 const { openFromChatError } = useErrorReport();

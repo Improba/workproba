@@ -266,13 +266,13 @@ settings.
   conversations stay responsive. During streaming, `_contentRev` on
   `ChatMessage` throttles re-measurement (~50 ms token flush in
   `useChatStream`, ~80 ms markdown throttle in `MessageTextPart`).
-- **Scroll pinning** (`ChatView.vue`): auto-scroll to bottom while the user
-  stays at the bottom; wheel/touch-up detaches until they return or tap the
-  scroll-down FAB. `scrollToBottomStable()` retries until `scrollHeight`
+- **Scroll pinning** (`ChatView.vue` + `chatScrollAnchor.ts`): turn-anchor
+  on new user messages (question near the top, dynamic spacer that shrinks as
+  the reply grows); promote to sticky bottom-follow once the reply fills the
+  viewport. Spacer is cleared when streaming ends (no leftover empty space
+  under short replies). Wheel/touch-up detaches until the user returns or taps
+  the scroll-down FAB. `scrollToBottomStable()` retries until `scrollHeight`
   stabilizes (virtual scroller layout).
-- **Scroll helpers** (`front/src/composables/chatScroll.ts`): anchor peek and
-  sticky promote utilities shared by `ChatView` and `MessageList` for stable
-  scroll targeting inside nested `q-scroll-area` + `DynamicScroller`.
 - **Expansion state** (`useToolCallExpansion.ts`): tool-call and reasoning
   card expand/collapse survives `DynamicScroller` item recycling via module-level
   maps + `expansionEpoch` in scroller `size-dependencies`.
@@ -343,8 +343,7 @@ front/src/
 ├── components/workproba/
 │   └── WorkprobaBrand.vue         # shell brand mark/logo
 ├── composables/
-│   ├── useChatStream.ts           # SSE, send, edit, regenerate, retry
-│   └── chatScroll.ts              # scroll anchor / sticky helpers
+│   └── useChatStream.ts           # SSE, send, edit, regenerate, retry
 ├── services/cloudDesktopAuth.ts   # POST /devices/login client
 └── utils/
     ├── cloudWebUrls.ts            # VITE_CLOUD_WEB_URL helpers

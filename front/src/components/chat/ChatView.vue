@@ -90,6 +90,11 @@
         </button>
       </div>
       <EnrollCloudModal v-model="enrollModalOpen" @enrolled="onCloudEnrolled" />
+      <CloudLoginModal
+        v-model="cloudLoginModalOpen"
+        @enrolled="onCloudLoggedIn"
+        @open-invitation="onOpenCloudInvitation"
+      />
       <ChatComposerAttachments
         v-if="hasAttachments"
         :attachments="attachments"
@@ -289,6 +294,7 @@ import { useRouter } from 'vue-router';
 import { useScroll } from '@vueuse/core';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
+import CloudLoginModal from '@components/cloud/CloudLoginModal.vue';
 import ChatModelMenuContent from '@components/chat/ChatModelMenuContent.vue';
 import ChatComposerAttachments from '@components/chat/ChatComposerAttachments.vue';
 import MessageList from '@components/chat/MessageList.vue';
@@ -307,12 +313,16 @@ import type { ChatAttachment, ChatMessage, ReasoningEffort } from '#types';
 import { addMemoryItem } from '@services/aiSidecar';
 import type { QInput, QMenu } from 'quasar';
 import { REASONING_EFFORT_OPTIONS, supportsReasoning } from '@utils/reasoningSupport';
+import { hasModelChoice } from '@utils/modelCatalog';
 import { hasSetModelChoice, supportsReasoningForSet } from '@utils/providerSetModels';
 import {
-  computeAnchorScrollTop,
-  computeSpacerHeight,
+  type ChatScrollMode,
+  clampAnchorPeek,
+  computeDynamicSpacer,
+  scrollToItemOffsetForPeek,
   shouldPromoteAnchorToSticky,
-} from '@composables/chatScroll';
+} from '@composables/chatScrollAnchor';
+import { expansionEpoch } from '@composables/useToolCallExpansion';
 
 const props = defineProps<{
   messages: ChatMessage[];
@@ -387,6 +397,7 @@ const { activeSet, effectiveActiveSet, effectiveActiveSetId } = useAppSettings()
 const { providerReadiness, init: initCloud, refreshQuota } = useCloud();
 
 const enrollModalOpen = ref(false);
+const cloudLoginModalOpen = ref(false);
 
 const showEngineBanner = computed(
   () => !props.settingsLocked && effectiveActiveSetId.value == null,
@@ -420,7 +431,7 @@ const engineBannerActionLabel = computed(() =>
 
 function onEngineBannerAction(): void {
   if (engineBannerNeedsEnroll.value) {
-    enrollModalOpen.value = true;
+    cloudLoginModalOpen.value = true;
     return;
   }
   void router.push({ name: 'settings_models' });
@@ -429,6 +440,16 @@ function onEngineBannerAction(): void {
 async function onCloudEnrolled(): Promise<void> {
   await refreshQuota();
   enrollModalOpen.value = false;
+}
+
+async function onCloudLoggedIn(): Promise<void> {
+  await refreshQuota();
+  cloudLoginModalOpen.value = false;
+}
+
+function onOpenCloudInvitation(): void {
+  cloudLoginModalOpen.value = false;
+  enrollModalOpen.value = true;
 }
 
 const showModelControl = computed(() => {
@@ -497,25 +518,30 @@ const draft = ref('');
 const composerInputRef = ref<QInput | null>(null);
 const messageListRef = ref<InstanceType<typeof MessageList> | null>(null);
 const scrollTarget = ref<HTMLElement | null>(null);
+const scrollMode = ref<ChatScrollMode>('sticky');
+const spacerHeight = ref(0);
+const anchorUserIndex = ref<number | null>(null);
 const isPinned = ref(true);
 const userDetached = ref(false);
-const scrollMode = ref<'sticky' | 'anchor'>('sticky');
-const spacerHeight = ref(0);
-const anchorUserIndex = ref(-1);
+const scrollReady = ref(false);
 let scrollRaf: number | null = null;
+let anchorRaf: number | null = null;
 let scrollListenersTarget: HTMLElement | null = null;
 let lastTouchY: number | null = null;
-let resizeObserver: ResizeObserver | null = null;
-let observedResizeTarget: HTMLElement | null = null;
+/** Compteur de scrolls programmatiques en cours (ignore detach / arrivedState). */
+let programmaticScrollDepth = 0;
+let programmaticReleaseTimer: ReturnType<typeof setTimeout> | null = null;
+let lastAppliedAnchorTop: number | null = null;
+let suppressNextLengthAnchor = false;
+let previousMessageCount = props.messages.length;
 
 const { arrivedState } = useScroll(scrollTarget, { offset: { bottom: 80 } });
 
 const showScrollDown = computed(
   () =>
     userDetached.value ||
-    (!isPinned.value &&
-      scrollMode.value !== 'anchor' &&
-      props.messages.length > 0),
+    scrollMode.value === 'detached' ||
+    (!isPinned.value && props.messages.length > 0),
 );
 
 const canSend = computed(
@@ -545,29 +571,56 @@ function setDraft(text: string, focus = true): void {
   }
 }
 
-defineExpose({ setDraft });
+defineExpose({
+  setDraft,
+  /** Hooks de test / debug scroll (pin, promote, FAB). */
+  getScrollState: () => ({
+    mode: scrollMode.value,
+    spacerHeight: spacerHeight.value,
+    isPinned: isPinned.value,
+    userDetached: userDetached.value,
+    anchorUserIndex: anchorUserIndex.value,
+  }),
+  detachFromBottomForTest: () => {
+    cancelProgrammaticReleaseTimer();
+    programmaticScrollDepth = 0;
+    detachFromBottom();
+  },
+  handleScrollDownClickForTest: () => handleScrollDownClick(),
+});
+
+function beginProgrammaticScroll(): void {
+  programmaticScrollDepth += 1;
+}
+
+function endProgrammaticScroll(): void {
+  programmaticScrollDepth = Math.max(0, programmaticScrollDepth - 1);
+}
+
+function isProgrammaticScroll(): boolean {
+  return programmaticScrollDepth > 0;
+}
+
+function cancelProgrammaticReleaseTimer(): void {
+  if (programmaticReleaseTimer !== null) {
+    clearTimeout(programmaticReleaseTimer);
+    programmaticReleaseTimer = null;
+  }
+}
+
+/** Relâche le lock après un délai ; annule un timer précédent. */
+function releaseProgrammaticScrollAfter(ms: number): void {
+  cancelProgrammaticReleaseTimer();
+  programmaticReleaseTimer = setTimeout(() => {
+    programmaticReleaseTimer = null;
+    endProgrammaticScroll();
+  }, ms);
+}
 
 function bindScrollTarget(): void {
   scrollTarget.value = messageListRef.value?.getScrollTarget() ?? null;
+  if (scrollTarget.value) scrollReady.value = true;
   bindScrollListeners();
-  setupResizeObserver();
-}
-
-function setupResizeObserver(): void {
-  const target = scrollTarget.value;
-  if (target === observedResizeTarget) return;
-  resizeObserver?.disconnect();
-  resizeObserver = null;
-  observedResizeTarget = null;
-  if (!target) return;
-  observedResizeTarget = target;
-  resizeObserver = new ResizeObserver(() => {
-    if (scrollMode.value === 'anchor' && !userDetached.value) {
-      spacerHeight.value = computeSpacerHeight(target.clientHeight);
-      void scrollToAnchorStable();
-    }
-  });
-  resizeObserver.observe(target);
 }
 
 function cancelScheduledScroll(): void {
@@ -577,10 +630,35 @@ function cancelScheduledScroll(): void {
   }
 }
 
+function cancelAnchorTick(): void {
+  if (anchorRaf !== null) {
+    cancelAnimationFrame(anchorRaf);
+    anchorRaf = null;
+  }
+}
+
+function clearSpacer(): void {
+  spacerHeight.value = 0;
+}
+
+function enterStickyMode(): void {
+  scrollMode.value = 'sticky';
+  clearSpacer();
+  anchorUserIndex.value = null;
+  lastAppliedAnchorTop = null;
+  userDetached.value = false;
+  isPinned.value = true;
+}
+
 function detachFromBottom(): void {
+  if (isProgrammaticScroll()) return;
   userDetached.value = true;
   isPinned.value = false;
+  scrollMode.value = 'detached';
   cancelScheduledScroll();
+  cancelAnchorTick();
+  cancelProgrammaticReleaseTimer();
+  programmaticScrollDepth = 0;
 }
 
 function onUserWheel(event: WheelEvent): void {
@@ -617,133 +695,6 @@ function unbindScrollListeners(): void {
   lastTouchY = null;
 }
 
-function maybePromoteToSticky(): void {
-  if (userDetached.value || scrollMode.value !== 'anchor') return;
-  const target = messageListRef.value?.getScrollTarget();
-  if (!target) return;
-  if (
-    !shouldPromoteAnchorToSticky({
-      contentEnd: target.scrollHeight - spacerHeight.value,
-      scrollTop: target.scrollTop,
-      clientHeight: target.clientHeight,
-    })
-  ) {
-    return;
-  }
-  spacerHeight.value = 0;
-  scrollMode.value = 'sticky';
-  isPinned.value = true;
-  // Attendre que le DOM retire le spacer avant de coller au bas (évite un saut).
-  void nextTick(() => {
-    if (isPinned.value && scrollMode.value === 'sticky') {
-      scheduleScrollToBottom();
-    }
-  });
-}
-
-function scrollToAnchor(): boolean {
-  const idx = anchorUserIndex.value;
-  if (idx < 0) return false;
-  const list = messageListRef.value;
-  if (!list) return false;
-  const message = props.messages[idx];
-  if (!message || message.role !== 'user') return false;
-
-  const size = list.getItemSize(message);
-  if (size <= 0) {
-    // Tailles pas encore mesurées : on amène l'item en vue puis on retente.
-    list.scrollToItem(idx, { align: 'start' });
-    return false;
-  }
-
-  const top = computeAnchorScrollTop(list.getItemOffset(idx), size);
-  list.scrollToPosition(top);
-  return true;
-}
-
-/** Réessaie l'ancrage jusqu'à ce que les tailles virtualisées soient prêtes. */
-async function scrollToAnchorStable(): Promise<void> {
-  if (scrollMode.value !== 'anchor') return;
-  await nextTick();
-  const deadline = performance.now() + SCROLL_STABLE_TIMEOUT_MS;
-  let attempts = 0;
-
-  return new Promise<void>((resolve) => {
-    const run = (): void => {
-      if (scrollMode.value !== 'anchor' || !isPinned.value) {
-        resolve();
-        return;
-      }
-
-      const anchored = scrollToAnchor();
-      attempts += 1;
-
-      if (
-        anchored ||
-        attempts >= SCROLL_STABLE_MAX_ATTEMPTS ||
-        performance.now() >= deadline
-      ) {
-        resolve();
-        return;
-      }
-
-      requestAnimationFrame(run);
-    };
-
-    requestAnimationFrame(run);
-  });
-}
-
-function tryResolveAnchor(): boolean {
-  const idx = props.messages.map((m) => m.role).lastIndexOf('user');
-  if (idx < 0) return false;
-  const target = messageListRef.value?.getScrollTarget();
-  if (!target || target.clientHeight === 0) return false;
-  anchorUserIndex.value = idx;
-  spacerHeight.value = computeSpacerHeight(target.clientHeight);
-  return true;
-}
-
-async function enterAnchorMode(): Promise<void> {
-  userDetached.value = false;
-  isPinned.value = true;
-  scrollMode.value = 'anchor';
-  // Évite qu'un watch (messages.length) ancre sur l'ancien index pendant le nextTick.
-  anchorUserIndex.value = -1;
-
-  await nextTick();
-
-  const deadline = performance.now() + SCROLL_STABLE_TIMEOUT_MS;
-  let attempts = 0;
-
-  return new Promise<void>((resolve) => {
-    const run = (): void => {
-      if (scrollMode.value !== 'anchor') {
-        resolve();
-        return;
-      }
-
-      if (tryResolveAnchor()) {
-        void scrollToAnchorStable().then(resolve);
-        return;
-      }
-
-      attempts += 1;
-      if (
-        attempts >= SCROLL_STABLE_MAX_ATTEMPTS ||
-        performance.now() >= deadline
-      ) {
-        resolve();
-        return;
-      }
-
-      requestAnimationFrame(run);
-    };
-
-    requestAnimationFrame(run);
-  });
-}
-
 function scrollToBottom(smooth = false): void {
   const target = messageListRef.value?.getScrollTarget();
   if (!target) return;
@@ -753,73 +704,222 @@ function scrollToBottom(smooth = false): void {
   });
 }
 
+function applyAnchorScrollTop(force = false): void {
+  const list = messageListRef.value;
+  const userIndex = anchorUserIndex.value;
+  if (!list || userIndex == null) return;
+
+  const userSize = list.getItemSize(userIndex);
+  if (userSize <= 0) {
+    // Force le virtual scroller à rendre/mesurer l'item (historique long).
+    beginProgrammaticScroll();
+    list.scrollToItem(userIndex, { align: 'start' });
+    releaseProgrammaticScrollAfter(48);
+    scheduleAnchorTick();
+    return;
+  }
+
+  const peek = clampAnchorPeek(userSize);
+  const itemOffset = scrollToItemOffsetForPeek(userSize);
+  // Clé stable pendant le tour (évite reflow à chaque token).
+  const dedupeKey = userIndex * 1_000_000 + Math.round(userSize) * 1_000 + peek;
+  if (!force && lastAppliedAnchorTop === dedupeKey) return;
+  lastAppliedAnchorTop = dedupeKey;
+
+  beginProgrammaticScroll();
+  // scrollToItem + offset : le scroller stabilise les tailles non mesurées au-dessus.
+  list.scrollToItem(userIndex, { align: 'start', offset: itemOffset });
+  releaseProgrammaticScrollAfter(48);
+}
+
+function findLastUserMessageIndex(): number | null {
+  for (let i = props.messages.length - 1; i >= 0; i -= 1) {
+    if (props.messages[i]?.role === 'user') return i;
+  }
+  return null;
+}
+
+/** Hauteur réelle des messages sous le tour user (items typiquement mesurés / visibles). */
+function measureResponseHeightBelowUser(userIndex: number): number {
+  const list = messageListRef.value;
+  if (!list) return 0;
+  let height = 0;
+  for (let i = userIndex + 1; i < props.messages.length; i += 1) {
+    height += Math.max(0, list.getItemSize(i));
+  }
+  return height;
+}
+
+function updateAnchorLayout(): void {
+  if (scrollMode.value !== 'anchor' || userDetached.value) return;
+
+  const list = messageListRef.value;
+  const target = list?.getScrollTarget();
+  const userIndex = anchorUserIndex.value;
+  if (!list || !target || userIndex == null) return;
+
+  const userSize = list.getItemSize(userIndex);
+  if (userSize <= 0) {
+    beginProgrammaticScroll();
+    list.scrollToItem(userIndex, { align: 'start' });
+    releaseProgrammaticScrollAfter(48);
+    scheduleAnchorTick();
+    return;
+  }
+
+  const peek = clampAnchorPeek(userSize);
+  // Inclut le header ThinkingCard replié (hauteur DOM via getItemSize).
+  const responseHeight = measureResponseHeightBelowUser(userIndex);
+  const nextSpacer = computeDynamicSpacer({
+    viewportHeight: target.clientHeight,
+    anchorPeek: peek,
+    responseHeight,
+  });
+
+  if (nextSpacer !== spacerHeight.value) {
+    spacerHeight.value = nextSpacer;
+    void nextTick(() => {
+      if (scrollMode.value !== 'anchor' || userDetached.value) return;
+      if (shouldPromoteAnchorToSticky(spacerHeight.value) && props.streaming) {
+        enterStickyMode();
+        scheduleScrollToBottom();
+        return;
+      }
+      applyAnchorScrollTop(false);
+    });
+    return;
+  }
+
+  if (shouldPromoteAnchorToSticky(nextSpacer) && props.streaming) {
+    enterStickyMode();
+    scheduleScrollToBottom();
+    return;
+  }
+
+  applyAnchorScrollTop(false);
+}
+
+function scheduleAnchorTick(): void {
+  if (anchorRaf !== null) return;
+  anchorRaf = requestAnimationFrame(() => {
+    anchorRaf = null;
+    updateAnchorLayout();
+  });
+}
+
+async function enterAnchorMode(): Promise<void> {
+  const userIndex = findLastUserMessageIndex();
+  if (userIndex == null) {
+    enterStickyMode();
+    void scrollToBottomStable();
+    return;
+  }
+
+  scrollMode.value = 'anchor';
+  anchorUserIndex.value = userIndex;
+  lastAppliedAnchorTop = null;
+  userDetached.value = false;
+  isPinned.value = true;
+  cancelScheduledScroll();
+  bindScrollTarget();
+  await nextTick();
+
+  // Prime : amène le message user dans le viewport pour forcer sa mesure
+  // (et celle des voisins) avant le calcul de réserve / peek.
+  const list = messageListRef.value;
+  if (list) {
+    beginProgrammaticScroll();
+    list.scrollToItem(userIndex, { align: 'start' });
+    releaseProgrammaticScrollAfter(48);
+  }
+
+  scheduleAnchorTick();
+  requestAnimationFrame(() => {
+    if (scrollMode.value === 'anchor') scheduleAnchorTick();
+  });
+}
+
 const SCROLL_STABLE_MAX_ATTEMPTS = 4;
 const SCROLL_STABLE_TIMEOUT_MS = 250;
 
 /** Réessaie le scroll jusqu'à ce que scrollHeight se stabilise (virtual scroller). */
 async function scrollToBottomStable(smooth = false): Promise<void> {
   await nextTick();
+  beginProgrammaticScroll();
   const deadline = performance.now() + SCROLL_STABLE_TIMEOUT_MS;
   let lastHeight = -1;
   let attempts = 0;
 
-  return new Promise<void>((resolve) => {
-    const run = (): void => {
-      const target = messageListRef.value?.getScrollTarget();
-      if (!target) {
-        if (
-          attempts < SCROLL_STABLE_MAX_ATTEMPTS &&
-          performance.now() < deadline
-        ) {
-          attempts += 1;
-          requestAnimationFrame(run);
+  try {
+    await new Promise<void>((resolve) => {
+      const run = (): void => {
+        const target = messageListRef.value?.getScrollTarget();
+        if (!target) {
+          if (
+            attempts < SCROLL_STABLE_MAX_ATTEMPTS &&
+            performance.now() < deadline
+          ) {
+            attempts += 1;
+            requestAnimationFrame(run);
+            return;
+          }
+          resolve();
           return;
         }
-        resolve();
-        return;
-      }
 
-      const height = target.scrollHeight;
-      if (isPinned.value) {
-        scrollToBottom(smooth && attempts === 0);
-      }
+        const height = target.scrollHeight;
+        if (isPinned.value && scrollMode.value === 'sticky') {
+          scrollToBottom(smooth && attempts === 0);
+        }
 
-      attempts += 1;
-      const stable = height === lastHeight && lastHeight >= 0;
-      lastHeight = height;
+        attempts += 1;
+        const stable = height === lastHeight && lastHeight >= 0;
+        lastHeight = height;
 
-      if (
-        !isPinned.value ||
-        stable ||
-        attempts >= SCROLL_STABLE_MAX_ATTEMPTS ||
-        performance.now() >= deadline
-      ) {
-        resolve();
-        return;
-      }
+        if (
+          !isPinned.value ||
+          scrollMode.value !== 'sticky' ||
+          stable ||
+          attempts >= SCROLL_STABLE_MAX_ATTEMPTS ||
+          performance.now() >= deadline
+        ) {
+          resolve();
+          return;
+        }
+
+        requestAnimationFrame(run);
+      };
 
       requestAnimationFrame(run);
-    };
-
-    requestAnimationFrame(run);
-  });
+    });
+  } finally {
+    if (smooth) {
+      await new Promise((r) => {
+        cancelProgrammaticReleaseTimer();
+        programmaticReleaseTimer = setTimeout(() => {
+          programmaticReleaseTimer = null;
+          r(undefined);
+        }, 350);
+      });
+    }
+    endProgrammaticScroll();
+  }
 }
 
-// Scroll batché par rAF pendant le streaming : on évite les layout thrash
-// (scrollTo à chaque flush de tokens) tout en restant collé au bas.
 function scheduleScrollToBottom(): void {
+  if (scrollMode.value !== 'sticky' || !isPinned.value) return;
   if (scrollRaf !== null) return;
   scrollRaf = requestAnimationFrame(() => {
     scrollRaf = null;
-    if (isPinned.value) scrollToBottom();
+    if (!(isPinned.value && scrollMode.value === 'sticky')) return;
+    beginProgrammaticScroll();
+    scrollToBottom();
+    releaseProgrammaticScrollAfter(32);
   });
 }
 
 function handleScrollDownClick(): void {
-  userDetached.value = false;
-  isPinned.value = true;
-  scrollMode.value = 'sticky';
-  spacerHeight.value = 0;
+  enterStickyMode();
   void scrollToBottomStable(true);
 }
 
@@ -837,8 +937,6 @@ function handleSubmit(): void {
   draft.value = '';
   clearAttachments();
   indexAttachmentsInMemory.value = false;
-  // L'ancrage Gemini démarre quand `streaming` passe à true (messages déjà
-  // poussés). Évite d'ancrer si send échoue avant le push (cloud/init/modèle).
 }
 
 async function indexReadyAttachments(ready: ChatAttachment[]): Promise<void> {
@@ -897,83 +995,119 @@ function onDrop(event: DragEvent): void {
   addFiles(event.dataTransfer?.files ?? null);
 }
 
-// L'utilisateur scroll : on mémorise son intention (collé au bas ou non).
-// isPinned est lu par les watches de contenu AVANT que arrivedState ne se
-// mette à jour suite à la croissance du contenu, ce qui permet de rester
-// collé tant que l'utilisateur n'est pas remonté.
+// Pendant sticky : suivre le bas. Pendant anchor / scroll programmatique :
+// ne pas se laisser dé-pinner par arrivedState.
 watch(
   () => arrivedState.bottom,
   (bottom) => {
-    if (scrollMode.value === 'anchor' && !userDetached.value) {
-      return;
-    }
+    if (!scrollReady.value || isProgrammaticScroll()) return;
+    if (scrollMode.value === 'anchor') return;
     if (userDetached.value) {
       if (bottom) {
         userDetached.value = false;
         isPinned.value = true;
+        scrollMode.value = 'sticky';
       }
       return;
     }
     isPinned.value = bottom;
+    if (!bottom && scrollMode.value === 'sticky') {
+      userDetached.value = true;
+      scrollMode.value = 'detached';
+    }
   },
-  { immediate: true },
 );
 
 watch(
   () => props.messages.length,
-  () => {
+  (length) => {
     bindScrollTarget();
-    if (scrollMode.value === 'anchor') {
-      if (anchorUserIndex.value < 0) {
-        const idx = props.messages.map((m) => m.role).lastIndexOf('user');
-        if (idx >= 0) {
-          anchorUserIndex.value = idx;
-          const target = messageListRef.value?.getScrollTarget();
-          if (target && target.clientHeight > 0) {
-            spacerHeight.value = computeSpacerHeight(target.clientHeight);
-          }
-          void scrollToAnchorStable();
-        }
-      } else {
-        void scrollToAnchorStable();
-      }
+    const prevCount = previousMessageCount;
+    const grew = length > prevCount;
+    previousMessageCount = length;
+    if (suppressNextLengthAnchor) {
+      suppressNextLengthAnchor = false;
       return;
     }
-
-    if (!isPinned.value) return;
-
-    // Nouveau tour (assistant streaming) : le watch `streaming` va entrer en
-    // mode ancre. Ne pas scroller en bas juste avant, ça provoque un saut.
-    const last = props.messages[props.messages.length - 1];
-    if (last?.role === 'assistant' && last.streaming) return;
-
-    void scrollToBottomStable();
+    if (grew && !userDetached.value) {
+      // User+assistant sont poussés ensemble : last peut être assistant.
+      // Ancrer dès qu'un message user apparaît dans le lot ajouté.
+      let newUser = false;
+      for (let i = prevCount; i < length; i += 1) {
+        if (props.messages[i]?.role === 'user') {
+          newUser = true;
+          break;
+        }
+      }
+      if (newUser) {
+        void enterAnchorMode();
+        return;
+      }
+    }
+    if (scrollMode.value === 'sticky' && isPinned.value) {
+      void scrollToBottomStable();
+    }
   },
 );
 
 watch(
   () => props.sessionId,
   () => {
-    userDetached.value = false;
-    isPinned.value = true;
-    scrollMode.value = 'sticky';
-    spacerHeight.value = 0;
-    anchorUserIndex.value = -1;
+    suppressNextLengthAnchor = true;
+    previousMessageCount = props.messages.length;
+    enterStickyMode();
     bindScrollTarget();
     void scrollToBottomStable();
   },
 );
 
-// Réponse courte : on conserve le spacer (comportement Gemini, évite un saut).
-// Réponse longue : déjà passée en sticky via maybePromoteToSticky pendant le stream.
-// Le spacer est retiré au prochain send / FAB / changement de session.
-
 watch(
   () => props.streaming,
   (streaming, wasStreaming) => {
+    if (wasStreaming && !streaming) {
+      cancelAnchorTick();
+      const wasAnchor = scrollMode.value === 'anchor';
+      // Réponse courte : retirer la réserve sans forcer un saut vers le bas
+      // (question + réponse déjà visibles). Réponse longue déjà en sticky : follow.
+      if (wasAnchor && !userDetached.value) {
+        clearSpacer();
+        scrollMode.value = 'sticky';
+        anchorUserIndex.value = null;
+        lastAppliedAnchorTop = null;
+        // Pas de scrollToBottom : évite le saut brutal sur réponses courtes.
+      } else if (!userDetached.value) {
+        clearSpacer();
+        if (scrollMode.value === 'anchor') {
+          enterStickyMode();
+        }
+        if (isPinned.value && scrollMode.value === 'sticky') {
+          void scrollToBottomStable();
+        }
+      } else {
+        // Détaché : retirer la réserve sans bouger la vue.
+        clearSpacer();
+        if (scrollMode.value === 'anchor') {
+          scrollMode.value = 'detached';
+          anchorUserIndex.value = null;
+          lastAppliedAnchorTop = null;
+        }
+      }
+      return;
+    }
     if (streaming && !wasStreaming) {
-      // Messages user+assistant déjà poussés avant ce flag (useChatStream).
-      void enterAnchorMode();
+      if (userDetached.value) return;
+      // Regenerate : pas de nouveau message user, mais on ré-ancre la question.
+      const last = props.messages[props.messages.length - 1];
+      if (last?.role === 'assistant' && scrollMode.value !== 'anchor') {
+        void enterAnchorMode();
+        return;
+      }
+      if (scrollMode.value === 'anchor') {
+        scheduleAnchorTick();
+      } else if (isPinned.value) {
+        enterStickyMode();
+        void scrollToBottomStable();
+      }
     }
   },
 );
@@ -982,12 +1116,23 @@ watch(
   () => {
     const last = props.messages[props.messages.length - 1];
     if (!last) return null;
-    return [last.content, last.thinking, last.parts?.length, last._contentRev] as const;
+    return [
+      last.content,
+      last.parts?.length,
+      last.toolCalls?.length,
+      last._contentRev,
+      last.pendingConfirmation?.confirmationId,
+      last.pendingPlan?.planId,
+      // Repli/dépli ThinkingCard : remesure hauteur DOM.
+      expansionEpoch.value,
+    ] as const;
   },
   () => {
     if (scrollMode.value === 'anchor' && !userDetached.value) {
-      maybePromoteToSticky();
-    } else if (isPinned.value) {
+      scheduleAnchorTick();
+      return;
+    }
+    if (scrollMode.value === 'sticky' && isPinned.value) {
       scheduleScrollToBottom();
     }
   },
@@ -995,16 +1140,17 @@ watch(
 
 onMounted(() => {
   void initCloud();
+  previousMessageCount = props.messages.length;
   bindScrollTarget();
   void scrollToBottomStable();
 });
 
 onUnmounted(() => {
   cancelScheduledScroll();
+  cancelAnchorTick();
+  cancelProgrammaticReleaseTimer();
+  programmaticScrollDepth = 0;
   unbindScrollListeners();
-  resizeObserver?.disconnect();
-  resizeObserver = null;
-  observedResizeTarget = null;
   messageListRef.value = null;
   scrollTarget.value = null;
 });
@@ -1141,6 +1287,11 @@ onUnmounted(() => {
 
   &:hover {
     transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--wp-accent-strong);
+    outline-offset: 2px;
   }
 }
 

@@ -34,10 +34,10 @@ defineProps<{
 }>();
 
 const { t } = useI18n();
-const { settingsMode, settingsLocked } = useAppSettings();
+const { settingsLocked } = useAppSettings();
 
 const pluginsNavLabel = computed(() =>
-  settingsMode.value === 'advanced' && !settingsLocked.value
+  !settingsLocked.value
     ? t('settings.plugins.navTitleAdvanced')
     : t('settings.plugins.navTitle'),
 );

@@ -75,7 +75,6 @@ import type { ReasoningEffort } from '#types';
 import { REASONING_EFFORT_OPTIONS } from '@utils/reasoningSupport';
 import {
   clampReasoningEffortForSet,
-  defaultReasoningEffortForSet,
   hasSetModelChoice,
   modelsForSet,
   supportsReasoningForSet,
@@ -93,6 +92,7 @@ import {
   modelsForProvider,
   type ModelOption,
 } from '@utils/modelCatalog';
+import { defaultStateFromSet } from '@utils/providerSets';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 
 const { t } = useI18n();
@@ -173,7 +173,11 @@ function isModelActive(modelId: string): boolean {
 function onModelChange(modelId: string): void {
   if (!provider.value || isModelActive(modelId)) return;
   const nextEffort = props.providerSet
-    ? defaultReasoningEffortForSet(props.providerSet, modelId)
+    ? clampReasoningEffortForSet(
+        props.providerSet,
+        modelId,
+        defaultStateFromSet(props.providerSet).reasoningEffort,
+      )
     : defaultReasoningEffort(provider.value, modelId);
   emit('update:modelValue', nextEffort);
   emit('update:model', modelId);

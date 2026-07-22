@@ -54,6 +54,41 @@ describe('PreviewChangeDialog write_pptx', () => {
     wrapper.unmount();
   });
 
+  it('affiche preview_html wp-slide pour pptx', async () => {
+    fetchPreviewChange.mockResolvedValue({
+      is_new: true,
+      is_binary: false,
+      diff_html: '<div class="wp-diff"><div class="wp-diff-add">Slide 1</div></div>',
+      preview_html:
+        "<div class='wp-slide'><h1 class='wp-slide__title'>Hello</h1></div>",
+      message: '',
+      old_size: 0,
+      new_size: 12,
+    });
+
+    const wrapper = mount(PreviewChangeDialog, {
+      props: {
+        open: true,
+        workspaceDataDir: '/data',
+        projectPath: '/project',
+        filePath: 'pitch.pptx',
+        toolName: 'write_pptx',
+        toolArgs: {
+          path: 'pitch.pptx',
+          slides: [{ layout: 'title', title: 'Hello' }],
+        },
+      },
+      global: {
+        stubs: { Lucide: true, 'q-dialog': { template: '<div><slot /></div>' } },
+      },
+    });
+
+    await flushPromises();
+    expect(wrapper.find('.preview-change-dialog__slides').exists()).toBe(true);
+    expect(wrapper.text()).toContain('Hello');
+    wrapper.unmount();
+  });
+
   it('affiche le message sidecar quand is_binary', async () => {
     fetchPreviewChange.mockResolvedValue({
       is_new: true,

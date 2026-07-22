@@ -64,13 +64,11 @@ describe('aiSidecar payload', () => {
   });
 
   it('resolveUiMode renvoie locked si settingsLocked', () => {
-    expect(resolveUiMode(true, 'guided')).toBe('locked');
-    expect(resolveUiMode(true, 'advanced')).toBe('locked');
+    expect(resolveUiMode(true)).toBe('locked');
   });
 
-  it('resolveUiMode reprend settingsMode sinon', () => {
-    expect(resolveUiMode(false, 'guided')).toBe('guided');
-    expect(resolveUiMode(false, 'advanced')).toBe('advanced');
+  it('resolveUiMode renvoie agent sinon', () => {
+    expect(resolveUiMode(false)).toBe('agent');
   });
 
   it('buildAgentTurnPayload inclut ui_mode', () => {
@@ -83,9 +81,9 @@ describe('aiSidecar payload', () => {
       null,
       null,
       null,
-      'guided',
+      'agent',
     );
-    expect(payload.ui_mode).toBe('guided');
+    expect(payload.ui_mode).toBe('agent');
   });
 
   it('buildAgentTurnPayload inclut provider_set quand fourni', () => {
@@ -111,7 +109,7 @@ describe('aiSidecar payload', () => {
       null,
       null,
       null,
-      'guided',
+      'agent',
       null,
       true,
       [],
@@ -133,7 +131,7 @@ describe('aiSidecar payload', () => {
       null,
       null,
       null,
-      'guided',
+      'agent',
       null,
       true,
       [],
@@ -154,7 +152,7 @@ describe('aiSidecar payload', () => {
       null,
       null,
       null,
-      'guided',
+      'agent',
       null,
       true,
       [],
@@ -175,7 +173,7 @@ describe('aiSidecar payload', () => {
       null,
       null,
       null,
-      'guided',
+      'agent',
       null,
       true,
       [],
@@ -235,7 +233,7 @@ describe('aiSidecar payload', () => {
       null,
       null,
       null,
-      'advanced',
+      'agent',
       null,
       true,
       [],
@@ -260,7 +258,7 @@ describe('aiSidecar payload', () => {
       null,
       null,
       null,
-      'advanced',
+      'agent',
       null,
       true,
       [],
@@ -285,7 +283,7 @@ describe('aiSidecar payload', () => {
       null,
       null,
       null,
-      'guided',
+      'agent',
       null,
       true,
       [],

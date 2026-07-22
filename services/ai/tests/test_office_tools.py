@@ -45,6 +45,185 @@ def test_build_pdf_bytes_produces_pdf() -> None:
     assert content.startswith(b"%PDF")
 
 
+def _pptx_all_text(content: bytes) -> str:
+    presentation = Presentation(BytesIO(content))
+    texts = [
+        shape.text
+        for slide in presentation.slides
+        for shape in slide.shapes
+        if getattr(shape, "text", None)
+    ]
+    return "\n".join(texts)
+
+
+def test_build_pptx_bytes_split_includes_tertiary() -> None:
+    content = build_pptx_bytes(
+        slides=[
+            {
+                "grammar": "comparison",
+                "hierarchy": {
+                    "primary": "Choix",
+                    "secondary": ["Option A", "Option B"],
+                    "tertiary": ["Detail A", "Detail B"],
+                },
+            }
+        ]
+    )
+    joined = _pptx_all_text(content)
+    assert "Option A" in joined
+    assert "Detail A" in joined
+    assert "Detail B" in joined
+
+
+def test_build_pptx_bytes_hero_includes_tertiary() -> None:
+    content = build_pptx_bytes(
+        slides=[
+            {
+                "grammar": "hero",
+                "hierarchy": {
+                    "primary": "Titre hero",
+                    "secondary": ["Sous-titre"],
+                    "tertiary": ["Puce extra"],
+                },
+            }
+        ]
+    )
+    joined = _pptx_all_text(content)
+    assert "Titre hero" in joined
+    assert "Sous-titre" in joined
+    assert "Puce extra" in joined
+
+
+def test_build_pdf_fallback_from_slides_includes_tertiary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.documents.writer import _build_pdf_fallback_from_slides
+
+    captured: list[str] = []
+    from reportlab.platypus import Paragraph as RealParagraph
+
+    def _capture(text: str, style: object) -> RealParagraph:
+        captured.append(text)
+        return RealParagraph(text, style)
+
+    monkeypatch.setattr("reportlab.platypus.Paragraph", _capture)
+
+    content = _build_pdf_fallback_from_slides(
+        [
+            {
+                "hierarchy": {
+                    "primary": "Slide PDF",
+                    "secondary": ["Ligne sec"],
+                    "tertiary": ["Ligne ter"],
+                },
+            }
+        ]
+    )
+    assert content.startswith(b"%PDF")
+    joined = "\n".join(captured)
+    assert "Slide PDF" in joined
+    assert "Ligne sec" in joined
+    assert "Ligne ter" in joined
+
+
+def test_build_pdf_bytes_from_slides_uses_fallback_without_chromium(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.documents.writer import build_pdf_bytes_from_slides
+
+    monkeypatch.setattr(
+        "app.documents.slides_chromium.chromium_available", lambda: False
+    )
+    content = build_pdf_bytes_from_slides(
+        slides=[
+            {
+                "grammar": "sequence",
+                "hierarchy": {
+                    "primary": "Slide PDF",
+                    "secondary": ["Ligne sec"],
+                    "tertiary": ["Ligne ter"],
+                },
+            }
+        ]
+    )
+    assert content.startswith(b"%PDF")
+    assert len(content) > 100
+
+
+def test_build_pptx_visual_fallback_render_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.documents.pptx_svg import build_pptx_visual_bytes
+
+    monkeypatch.setattr("app.documents.pptx_svg.chromium_available", lambda: False)
+    content, meta = build_pptx_visual_bytes(
+        slides=[{"grammar": "hero", "hierarchy": {"primary": "Visuel", "secondary": []}}]
+    )
+    assert content.startswith(b"PK")
+    assert meta["render_mode"] == "editable_fallback"
+    assert meta["fallback_reason"] == "chromium_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_write_pdf_slides_smoke(tmp_path: Path) -> None:
+    from pydantic_ai import RunContext
+
+    client = FakeProjectClient()
+    deps = _deps(tmp_path, client)
+    agent = build_agent(TestModel())
+    tool = agent._function_toolset.tools["write_pdf"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc5")
+
+    result = await tool.function(
+        ctx,
+        path="deck/slides.pdf",
+        slides=[
+            {
+                "grammar": "sequence",
+                "hierarchy": {
+                    "primary": "Deck",
+                    "secondary": ["Point"],
+                    "tertiary": ["Detail"],
+                },
+            }
+        ],
+    )
+    assert result.get("name") == "deck/slides.pdf"
+    raw = b64decode(client.saved[0]["content_base64"])
+    assert raw.startswith(b"%PDF")
+
+
+def test_build_pptx_bytes_grammar_hero() -> None:
+    content = build_pptx_bytes(
+        slides=[
+            {
+                "grammar": "hero",
+                "hierarchy": {"primary": "Semantic", "secondary": ["Tag"]},
+            }
+        ]
+    )
+    assert content.startswith(b"PK")
+    presentation = Presentation(BytesIO(content))
+    assert len(presentation.slides) == 1
+    texts = [
+        shape.text
+        for slide in presentation.slides
+        for shape in slide.shapes
+        if getattr(shape, "text", None)
+    ]
+    assert any("Semantic" in text for text in texts)
+
+
+def test_build_pptx_bytes_visual_fidelity_fallback_without_chromium() -> None:
+    content = build_pptx_bytes(
+        fidelity="visual",
+        slides=[{"layout": "title", "title": "Visual fallback", "subtitle": "ok"}],
+    )
+    assert content.startswith(b"PK")
+    presentation = Presentation(BytesIO(content))
+    assert len(presentation.slides) >= 1
+
+
 def test_build_pptx_bytes_is_real_presentation() -> None:
     content = build_pptx_bytes(
         theme="improba",
@@ -157,6 +336,38 @@ def test_build_pptx_bytes_rejects_too_many_kpis() -> None:
         )
 
 
+def test_build_pptx_bytes_dashboard_includes_tertiary_without_items() -> None:
+    content = build_pptx_bytes(
+        slides=[
+            {
+                "grammar": "dashboard",
+                "hierarchy": {
+                    "primary": "Tableau",
+                    "secondary": ["Revenu: 10"],
+                    "tertiary": ["Marge: 20"],
+                },
+                "visual": {"type": "kpi_row", "items": []},
+            }
+        ]
+    )
+    joined = _pptx_all_text(content)
+    assert "Revenu" in joined
+    assert "10" in joined
+    assert "Marge" in joined
+    assert "20" in joined
+
+
+def test_build_pptx_editable_skip_critique_rejects_too_many_slides() -> None:
+    from app.documents.pptx_builder import MAX_PPTX_SLIDES, build_pptx_editable_bytes
+
+    slides = [
+        {"grammar": "hero", "hierarchy": {"primary": f"S{i}"}}
+        for i in range(MAX_PPTX_SLIDES + 1)
+    ]
+    with pytest.raises(ValueError, match="Trop de slides"):
+        build_pptx_editable_bytes(slides=slides, skip_critique=True)
+
+
 def test_build_pptx_bytes_rejects_too_many_slides() -> None:
     from app.documents.pptx_builder import MAX_PPTX_SLIDES
 
@@ -212,6 +423,32 @@ async def test_write_docx_persists_file(tmp_path: Path) -> None:
     assert result.get("name") == "out/report.docx"
     assert client.saved
     assert client.saved[0]["mime_type"].endswith("document")
+
+
+@pytest.mark.asyncio
+async def test_write_pptx_editable_reports_critique_issues(tmp_path: Path) -> None:
+    from pydantic_ai import RunContext
+
+    client = FakeProjectClient()
+    deps = _deps(tmp_path, client)
+    agent = build_agent(TestModel())
+    tool = agent._function_toolset.tools["write_pptx"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc2c")
+
+    secondary = [f"Point {i} avec du texte supplementaire" for i in range(7)]
+    await tool.function(
+        ctx,
+        path="deck/dense.pptx",
+        slides=[
+            {
+                "grammar": "sequence",
+                "hierarchy": {"primary": "Dense", "secondary": secondary},
+            }
+        ],
+    )
+    saved_meta = client.saved[0]["metadata"]
+    assert saved_meta["critique_issues"] > 0
+    assert saved_meta["fidelity"] == "editable"
 
 
 @pytest.mark.asyncio

@@ -59,8 +59,8 @@
             <button
               type="button"
               class="wp-space__action"
-              :title="t('shell.renameSpace')"
-              @click.stop="openRenameDialog(ws)"
+              :title="t('shell.editSpace')"
+              @click.stop="openSettingsDialog(ws)"
             >
               <Lucide name="pencil" size="13" color="wp-text-muted" />
             </button>
@@ -122,13 +122,22 @@
         </section>
       </div>
 
+      <SpaceSettingsDialog
+        v-model="settingsDialogOpen"
+        :workspace="settingsTarget"
+        @saved="onSpaceSaved"
+      />
+
       <!-- Pied : profil (bas gauche) + mémoire partagée + réglages -->
       <div class="wp-sidebar__footer">
         <button
           type="button"
           class="wp-sidebar__profile"
-          :class="{ 'wp-sidebar__profile--guest': isGuestIdentity }"
-          :title="isGuestIdentity ? t('shell.guestOrg') : t('shell.editProfile')"
+          :class="{
+            'wp-sidebar__profile--guest': isGuestIdentity,
+            'wp-sidebar__profile--disconnected': isDisconnectedIdentity,
+          }"
+          :title="isGuestIdentity || isDisconnectedIdentity ? t('shell.connectPrompt') : t('shell.editProfile')"
           @click="onProfileClick"
         >
           <span class="wp-sidebar__avatar">{{ sidebarInitials }}</span>
@@ -182,48 +191,6 @@
               {{ t('common.cancel') }}
             </button>
             <button type="button" class="wp-profile-dialog__btn wp-profile-dialog__btn--primary" @click="onSaveProfile">
-              {{ t('common.save') }}
-            </button>
-          </footer>
-        </div>
-      </q-dialog>
-
-      <q-dialog v-model="renameDialogOpen">
-        <div class="wp-profile-dialog">
-          <header class="wp-profile-dialog__head">
-            <span class="wp-profile-dialog__title">{{ t('shell.renameSpaceTitle') }}</span>
-            <button
-              type="button"
-              class="wp-profile-dialog__close"
-              :aria-label="t('common.close')"
-              @click="renameDialogOpen = false"
-            >
-              <Lucide name="x" size="16" color="text-muted" />
-            </button>
-          </header>
-          <p v-if="renameTarget" class="wp-rename-dialog__hint">
-            {{ t('shell.spacePathHint', { path: renameTarget.folderPath }) }}
-          </p>
-          <div class="wp-profile-dialog__field">
-            <label for="wp-rename-space">{{ t('shell.renameSpaceTitle') }}</label>
-            <input
-              id="wp-rename-space"
-              v-model="renameTitleDraft"
-              type="text"
-              :placeholder="t('shell.renameSpacePlaceholder')"
-              @keydown.enter.prevent="onSaveRename"
-            />
-          </div>
-          <footer class="wp-profile-dialog__foot">
-            <button type="button" class="wp-profile-dialog__btn" @click="renameDialogOpen = false">
-              {{ t('common.cancel') }}
-            </button>
-            <button
-              type="button"
-              class="wp-profile-dialog__btn wp-profile-dialog__btn--primary"
-              :disabled="!renameTitleDraft.trim() || renameSaving"
-              @click="onSaveRename"
-            >
               {{ t('common.save') }}
             </button>
           </footer>
@@ -314,6 +281,7 @@ import { createSession, listSessions, type LocalSession } from '@services/worksp
 import { bumpSessions, useSessionSync } from '@composables/useSessionSync';
 import { HOME_ROUTE } from '@router/meta';
 import MemoryPanel from '@components/memory/MemoryPanel.vue';
+import SpaceSettingsDialog from '@components/workproba/SpaceSettingsDialog.vue';
 import CloudLoginModal from '@components/cloud/CloudLoginModal.vue';
 import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
 import { useMemoryPanel } from '@composables/useMemoryPanel';
@@ -337,7 +305,6 @@ const {
   activeDataDir,
   openSpace,
   switchSpace,
-  renameSpace,
   initFromStoredPath,
 } = useSpace();
 
@@ -364,6 +331,7 @@ const sidebarIdentityMode = computed<SidebarIdentityMode>(() => {
 });
 
 const isGuestIdentity = computed(() => sidebarIdentityMode.value === 'guest');
+const isDisconnectedIdentity = computed(() => sidebarIdentityMode.value === 'local');
 
 const sidebarDisplayName = computed(() => {
   switch (sidebarIdentityMode.value) {
@@ -372,7 +340,7 @@ const sidebarDisplayName = computed(() => {
     case 'cloud':
       return profile.value.name.trim() || t('shell.cloudAccount');
     default:
-      return profile.value.name.trim() || t('shell.localMode');
+      return t('shell.localMode');
   }
 });
 
@@ -385,7 +353,7 @@ const sidebarDisplayOrg = computed(() => {
         || status.value?.org_id?.trim()
         || '';
     default:
-      return profile.value.organisation.trim() || t('shell.localMode');
+      return t('shell.connectPrompt');
   }
 });
 
@@ -402,7 +370,7 @@ const cloudLoginModalOpen = ref(false);
 const enrollCloudModalOpen = ref(false);
 
 function onProfileClick(): void {
-  if (isGuestIdentity.value) {
+  if (isGuestIdentity.value || isDisconnectedIdentity.value) {
     cloudLoginModalOpen.value = true;
     return;
   }
@@ -413,10 +381,8 @@ function onOpenCloudInvitation(): void {
   enrollCloudModalOpen.value = true;
 }
 const profileDialogOpen = ref(false);
-const renameDialogOpen = ref(false);
-const renameTarget = ref<WorkspaceInfo | null>(null);
-const renameTitleDraft = ref('');
-const renameSaving = ref(false);
+const settingsDialogOpen = ref(false);
+const settingsTarget = ref<WorkspaceInfo | null>(null);
 const memoryDialogOpen = ref(false);
 const memoryDialogKey = ref(0);
 const memoryHighlightId = ref<string | null>(null);
@@ -577,33 +543,15 @@ async function onOpenSpace(): Promise<void> {
   if (id) expanded[id] = true;
 }
 
-function openRenameDialog(ws: WorkspaceInfo): void {
-  renameTarget.value = ws;
-  renameTitleDraft.value = ws.title || basename(ws.folderPath);
-  renameDialogOpen.value = true;
+function openSettingsDialog(ws: WorkspaceInfo): void {
+  settingsTarget.value = ws;
+  settingsDialogOpen.value = true;
 }
 
-async function onSaveRename(): Promise<void> {
-  const target = renameTarget.value;
-  const title = renameTitleDraft.value.trim();
-  if (!target || !title) return;
-
-  renameSaving.value = true;
-  try {
-    const updated = await renameSpace(target.id, title);
-    const index = recentWorkspaces.value.findIndex((ws) => ws.id === updated.id);
-    if (index >= 0) {
-      recentWorkspaces.value[index] = updated;
-    }
-    renameDialogOpen.value = false;
-    Notify.create({ message: t('shell.renameSpaceSaved'), color: 'dark', timeout: 1500 });
-  } catch (err) {
-    Notify.create({
-      message: err instanceof Error ? err.message : t('shell.renameSpaceFailed'),
-      classes: 'bg-danger text-white',
-    });
-  } finally {
-    renameSaving.value = false;
+function onSpaceSaved(updated: WorkspaceInfo): void {
+  const index = recentWorkspaces.value.findIndex((item) => item.id === updated.id);
+  if (index >= 0) {
+    recentWorkspaces.value[index] = updated;
   }
 }
 
@@ -896,13 +844,6 @@ onMounted(async () => {
   }
 }
 
-.wp-rename-dialog__hint {
-  margin: 0 0 var(--wp-space-3);
-  font-size: var(--wp-fs-xs);
-  color: var(--wp-text-faint);
-  word-break: break-all;
-}
-
 /* Sessions imbriquées */
 .wp-space__children {
   padding: var(--wp-space-1) 0 var(--wp-space-2) 24px;
@@ -1045,7 +986,8 @@ onMounted(async () => {
     background: var(--wp-surface-2);
   }
 
-  &--guest {
+  &--guest,
+  &--disconnected {
     .wp-sidebar__profile-name,
     .wp-sidebar__profile-org {
       color: var(--wp-text-muted);

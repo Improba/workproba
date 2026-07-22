@@ -29,7 +29,29 @@ from app.plugins.workproba_cloud.sync_service import (
     pull_project_artefacts_from_cloud,
 )
 
-UiMode = Literal["guided", "advanced", "locked"]
+UiMode = Literal["agent", "locked"]
+
+
+def _tool_visibility(tool_def: dict[str, Any]) -> str:
+    visibility = tool_def.get("visibility")
+    if isinstance(visibility, str) and visibility.strip():
+        return visibility.strip()
+    return "guided"
+
+
+def _is_restricted_tool_visibility(visibility: str) -> bool:
+    return visibility in ("advanced", "standard")
+
+
+def _is_restricted_ui_mode(ui_mode: UiMode) -> bool:
+    return ui_mode == "locked"
+
+
+def should_register_managed_tool(tool_def: dict[str, Any], ui_mode: UiMode) -> bool:
+    return not (
+        _is_restricted_ui_mode(ui_mode)
+        and _is_restricted_tool_visibility(_tool_visibility(tool_def))
+    )
 
 
 def managed_tool_name(connector_id: str, tool_name: str) -> str:
@@ -56,23 +78,6 @@ def managed_tool_label(tool_name: str) -> str:
     if parsed is None:
         return tool_name
     return parsed[1].replace("_", " ")
-
-
-def _tool_visibility(tool_def: dict[str, Any]) -> str:
-    visibility = tool_def.get("visibility")
-    if isinstance(visibility, str) and visibility.strip():
-        return visibility.strip()
-    return "guided"
-
-
-def _is_restricted_ui_mode(ui_mode: UiMode) -> bool:
-    return ui_mode in ("guided", "locked")
-
-
-def should_register_managed_tool(tool_def: dict[str, Any], ui_mode: UiMode) -> bool:
-    return not (
-        _is_restricted_ui_mode(ui_mode) and _tool_visibility(tool_def) == "advanced"
-    )
 
 
 def normalize_tool_input_schema(schema: Any) -> dict[str, Any]:
@@ -124,8 +129,11 @@ def _guided_generic_invoke_allowed(
         tool_def = _find_cached_tool(cloud_dir, connector_id, action)
         if tool_def is None:
             return False
-        return _tool_visibility(tool_def) != "advanced"
-    return any(_tool_visibility(tool_def) != "advanced" for tool_def in tools)
+        return _tool_visibility(tool_def) not in ("advanced", "standard")
+    return any(
+        _tool_visibility(tool_def) not in ("advanced", "standard")
+        for tool_def in tools
+    )
 
 
 def _light_validate_payload(
@@ -299,11 +307,18 @@ def register_managed_connector_tools(
     cloud_dir: Path,
     *,
     ui_mode: UiMode,
+    managed_allowed_connector_ids: frozenset[str] | None = None,
 ) -> None:
     for connector in cloud_storage.get_known_managed_connectors(cloud_dir):
         connector_id = str(connector.get("id") or "")
         if not connector_id or not cloud_storage.is_managed_connector_enabled(
             cloud_dir, connector_id
+        ):
+            continue
+        # Turn snapshot: when provided, only register connectors frozen for this turn.
+        if (
+            managed_allowed_connector_ids is not None
+            and connector_id not in managed_allowed_connector_ids
         ):
             continue
         tools = connector.get("tools")
@@ -379,11 +394,17 @@ def register_cloud_tools(
     agent: Agent[ToolDeps, str],
     *,
     plugin_data_dir: Path | None = None,
-    ui_mode: UiMode = "guided",
+    ui_mode: UiMode = "agent",
+    managed_allowed_connector_ids: frozenset[str] | None = None,
 ) -> None:
     cloud_dir = resolve_plugin_data_dir(PLUGIN_WORKPROBA_CLOUD, plugin_data_dir)
     if cloud_dir is not None:
-        register_managed_connector_tools(agent, cloud_dir, ui_mode=ui_mode)
+        register_managed_connector_tools(
+            agent,
+            cloud_dir,
+            ui_mode=ui_mode,
+            managed_allowed_connector_ids=managed_allowed_connector_ids,
+        )
 
     @agent.system_prompt
     async def managed_connectors_prompt(ctx: RunContext[ToolDeps]) -> str:
@@ -402,11 +423,18 @@ def register_cloud_tools(
         if not connectors:
             return t(locale, "tools.managed_connectors_empty")
 
+        turn_allowed = ctx.deps.context.managed_allowed_connector_ids
         items = [
             (
                 str(entry["id"]),
                 str(entry.get("name") or entry["id"]),
-                cloud_storage.is_managed_connector_enabled(cloud_dir, str(entry["id"])),
+                (
+                    str(entry["id"]) in turn_allowed
+                    if turn_allowed is not None
+                    else cloud_storage.is_managed_connector_enabled(
+                        cloud_dir, str(entry["id"])
+                    )
+                ),
             )
             for entry in connectors
             if isinstance(entry.get("id"), str) and str(entry.get("id")).strip()
@@ -696,7 +724,7 @@ async def invoke_managed_connector_impl(
             t(locale, "cloud.connector_disabled_locally", connector_id=connector_id)
         )
 
-    ui_mode = getattr(deps.context, "ui_mode", "guided")
+    ui_mode = getattr(deps.context, "ui_mode", "agent")
     action_raw = payload.get("action")
     action = action_raw.strip() if isinstance(action_raw, str) else None
     if _is_restricted_ui_mode(ui_mode) and not _guided_generic_invoke_allowed(

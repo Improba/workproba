@@ -258,10 +258,7 @@ def test_resolve_llm_config_from_provider_set() -> None:
     set_with_key.chat = set_with_key.chat.model_copy(update={"api_key": SecretStr("k")})
     resolved = resolve_llm_config(None, FakeSettings(), provider_set=set_with_key)
     assert resolved.provider == "mistral"
-    assert resolved.model == "mistral-small-latest"
-
-
-def test_resolve_embedding_config_prefers_request_config(mistral_config: LLMProviderConfig) -> None:
+    assert resolved.model == "mistral-medium-latest"
     from app.main import resolve_embedding_config
 
     class FakeSettings:

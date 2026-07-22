@@ -77,7 +77,7 @@ class ToolContext:
     session_item_embeddings: dict[str, tuple[float, ...]] | None = None
     prepared_session_candidates: tuple[dict, ...] | None = None
     prepared_tagged_memories: tuple[dict, ...] | None = None
-    ui_mode: str = "guided"
+    ui_mode: str = "agent"
     # Snapshot allowlist du tour (après refresh cache) ; None = fetch à l'invoke.
     managed_allowed_connector_ids: frozenset[str] | None = None
 
@@ -354,11 +354,12 @@ def filter_rankable_sessions(
 def build_agent(
     model: Any,
     *,
-    ui_mode: UiMode = "guided",
+    ui_mode: UiMode = "agent",
     sandbox_available: bool = True,
     locale: str = DEFAULT_LOCALE,
     active_plugins: list[str] | None = None,
     plugin_data_dir: Path | None = None,
+    managed_allowed_connector_ids: frozenset[str] | None = None,
 ) -> Agent[ToolDeps, str]:
     """Construit l'agent Pydantic AI avec ses outils métier."""
     agent: Agent[ToolDeps, str] = Agent(
@@ -827,7 +828,7 @@ def build_agent(
         except Exception as exc:  # noqa: BLE001 - surfaced to the model
             raise _retry(exc) from exc
 
-    if ui_mode == "advanced":
+    if ui_mode != "locked":
 
         @agent.tool
         async def run_code(
@@ -1138,6 +1139,7 @@ def build_agent(
         active_plugins=active_plugins,
         plugin_data_dir=plugin_data_dir,
         ui_mode=ui_mode,
+        managed_allowed_connector_ids=managed_allowed_connector_ids,
     )
 
     return agent

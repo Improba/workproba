@@ -70,12 +70,22 @@ def test_builtin_sets_workproba_cloud_is_default() -> None:
     assert WORKPROBA_CLOUD_BUILTIN_SET.chat.api_key_ref is None
 
 
+def test_builtin_sets_default_state_is_explicit() -> None:
+    assert WORKPROBA_CLOUD_BUILTIN_SET.chat.model == "mistral-medium-latest"
+    assert WORKPROBA_CLOUD_BUILTIN_SET.chat.reasoning == "high"
+    assert MISTRAL_BUILTIN_SET.chat.model == "mistral-medium-latest"
+    assert MISTRAL_BUILTIN_SET.chat.reasoning == "high"
+    assert OLLAMA_BUILTIN_SET.chat.reasoning == "none"
+    for builtin in BUILTIN_PROVIDER_SETS:
+        assert builtin.chat.reasoning != "auto"
+
+
 def test_resolve_chat_from_set_maps_reasoning() -> None:
     base = MISTRAL_BUILTIN_SET.model_copy(deep=True)
     base.chat = base.chat.model_copy(update={"reasoning": "high", "api_key": SecretStr("k")})
     cfg = resolve_chat_from_set(base)
     assert cfg.provider == "mistral"
-    assert cfg.model == "mistral-small-latest"
+    assert cfg.model == "mistral-medium-latest"
     assert cfg.reasoning_effort == "high"
     assert cfg.api_key is not None
     assert cfg.api_key.get_secret_value() == "k"
@@ -83,7 +93,9 @@ def test_resolve_chat_from_set_maps_reasoning() -> None:
 
 def test_resolve_chat_auto_reasoning_is_none() -> None:
     base = MISTRAL_BUILTIN_SET.model_copy(deep=True)
-    base.chat = base.chat.model_copy(update={"api_key": SecretStr("k")})
+    base.chat = base.chat.model_copy(
+        update={"reasoning": "auto", "api_key": SecretStr("k")}
+    )
     cfg = resolve_chat_from_set(base)
     assert cfg.reasoning_effort is None
 

@@ -17,7 +17,7 @@ export const GUIDED_CARD_PRESETS: Record<GuidedCardId, GuidedCardPreset> = {
     provider: 'mistral',
     baseUrl: 'https://api.mistral.ai/v1',
     label: 'Mistral',
-    defaultModel: 'mistral-small-latest',
+    defaultModel: 'mistral-medium-latest',
     embeddingModel: 'mistral-embed',
   },
   ollama: {

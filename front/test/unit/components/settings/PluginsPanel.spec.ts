@@ -9,7 +9,6 @@ import {
 } from '@composables/usePlugins';
 
 const plugins = ref<PluginInfo[]>([]);
-const settingsMode = ref<'guided' | 'advanced'>('guided');
 const settingsLocked = ref(false);
 const openCapabilities = vi.fn();
 
@@ -56,7 +55,6 @@ vi.mock('@composables/usePlugins', async (importOriginal) => {
 
 vi.mock('@composables/useAppSettings', () => ({
   useAppSettings: () => ({
-    settingsMode,
     settingsLocked,
   }),
 }));
@@ -85,7 +83,6 @@ vi.mock('quasar', () => ({
 
 describe('PluginsPanel', () => {
   beforeEach(() => {
-    settingsMode.value = 'guided';
     settingsLocked.value = false;
     openCapabilities.mockClear();
     plugins.value = [
@@ -110,15 +107,15 @@ describe('PluginsPanel', () => {
     });
   }
 
-  it('masque le plugin cloud en mode guidé', async () => {
+  it('masque le plugin cloud en mode verrouillé', async () => {
+    settingsLocked.value = true;
     const wrapper = mountPanel();
     await flushPromises();
     expect(wrapper.text()).not.toContain(`plugin.${CLOUD_PLUGIN_ID}.name`);
     expect(wrapper.text()).toContain(`plugin.${PERSONAS_PLUGIN_ID}.name`);
   });
 
-  it('affiche le plugin cloud en mode avancé', async () => {
-    settingsMode.value = 'advanced';
+  it('affiche le plugin cloud hors mode verrouillé', async () => {
     const wrapper = mountPanel();
     await flushPromises();
     expect(wrapper.text()).toContain(`plugin.${CLOUD_PLUGIN_ID}.name`);
@@ -142,8 +139,7 @@ describe('PluginsPanel', () => {
     expect(openCapabilities).toHaveBeenCalledWith('regards');
   });
 
-  it('affiche le lien Capacités pour cloud en mode avancé', async () => {
-    settingsMode.value = 'advanced';
+  it('affiche le lien Capacités pour cloud hors mode verrouillé', async () => {
     const wrapper = mountPanel();
     await flushPromises();
     const cloudCard = wrapper

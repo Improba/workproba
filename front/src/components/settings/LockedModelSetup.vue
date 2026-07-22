@@ -31,7 +31,7 @@
       v-if="showEnrollCta"
       type="button"
       class="locked-setup__request locked-setup__request--primary"
-      @click="enrollModalOpen = true"
+      @click="cloudLoginModalOpen = true"
     >
       {{ t('settings.engine.linkDevice') }}
     </button>
@@ -48,6 +48,11 @@
     </p>
 
     <EnrollCloudModal v-model="enrollModalOpen" @enrolled="onCloudEnrolled" />
+    <CloudLoginModal
+      v-model="cloudLoginModalOpen"
+      @enrolled="onCloudLoggedIn"
+      @open-invitation="onOpenCloudInvitation"
+    />
   </section>
 </template>
 
@@ -56,6 +61,7 @@ import { computed, onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
+import CloudLoginModal from '@components/cloud/CloudLoginModal.vue';
 import { useAppSettings } from '@composables/useAppSettings';
 import { useCloud } from '@composables/useCloud';
 import { capabilityLabels, localizedSetDescription, localizedSetName } from '@utils/providerSets';
@@ -66,6 +72,7 @@ const { isEnrolled, init: initCloud, refreshQuota } = useCloud();
 const { t } = useI18n();
 const requestMessage = ref('');
 const enrollModalOpen = ref(false);
+const cloudLoginModalOpen = ref(false);
 
 const capabilities = computed(() => {
   const set = activeSet.value;
@@ -103,6 +110,16 @@ function onRequestAccess(): void {
 
 async function onCloudEnrolled(): Promise<void> {
   await refreshQuota();
+}
+
+async function onCloudLoggedIn(): Promise<void> {
+  await refreshQuota();
+  cloudLoginModalOpen.value = false;
+}
+
+function onOpenCloudInvitation(): void {
+  cloudLoginModalOpen.value = false;
+  enrollModalOpen.value = true;
 }
 
 onMounted(async () => {

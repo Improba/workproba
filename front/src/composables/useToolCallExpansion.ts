@@ -104,6 +104,11 @@ export function collapseThinking(thinkingPartId: string): void {
   bumpEpoch();
 }
 
+/** True si ce segment thinking est déplié (défaut = replié). */
+export function isThinkingPartExpanded(thinkingPartId: string): boolean {
+  return thinkingExpandedOverrides.get(thinkingPartId) === true;
+}
+
 /** Vide les maps d'expansion au changement de session pour éviter une fuite mémoire. */
 export function clearExpansionState(): void {
   techViewOverrides.clear();

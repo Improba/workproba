@@ -20,10 +20,10 @@ import SettingsSubnav from '@components/settings/SettingsSubnav.vue';
 import PluginsPanel from '@components/settings/PluginsPanel.vue';
 
 const { t } = useI18n();
-const { settingsMode, settingsLocked } = useAppSettings();
+const { settingsLocked } = useAppSettings();
 
 const pageTitle = computed(() =>
-  settingsMode.value === 'advanced' && !settingsLocked.value
+  !settingsLocked.value
     ? t('settings.plugins.pageTitleAdvanced')
     : t('settings.plugins.pageTitle'),
 );

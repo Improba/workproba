@@ -6,14 +6,11 @@ import { t } from '@utils/i18nT';
 import { providerSetToSidecar } from '@utils/providerSets';
 import { sanitizeBrowserToolResultForHistory } from '@utils/browserTools';
 
-export type UiMode = 'guided' | 'advanced' | 'locked';
+export type UiMode = 'agent' | 'locked';
 
-export function resolveUiMode(
-  settingsLocked: boolean,
-  settingsMode: 'guided' | 'advanced',
-): UiMode {
+export function resolveUiMode(settingsLocked: boolean): UiMode {
   if (settingsLocked) return 'locked';
-  return settingsMode;
+  return 'agent';
 }
 
 export interface AgentTurnPayload {
@@ -2342,7 +2339,7 @@ export interface ManagedConnectorTool {
   action?: string;
   description?: string;
   effect?: string;
-  visibility?: 'guided' | 'advanced';
+  visibility?: 'guided' | 'standard';
 }
 
 export interface ManagedConnector {
@@ -2352,6 +2349,8 @@ export interface ManagedConnector {
   description?: string;
   /** Activation locale sur ce poste (défaut true si absent). */
   enabled?: boolean;
+  /** Active par defaut dans les nouveaux espaces projet (miroir GET /connectors). */
+  enableByDefaultInProjects?: boolean;
   tools?: ManagedConnectorTool[];
 }
 
@@ -2427,12 +2426,18 @@ export interface CloudLlmQuota {
   enabled: boolean;
   periodKey: string;
   tokensUsed: number;
-  tokensLimit: number;
+  tokensLimit: number | null;
   requestsCount: number;
-  requestsLimit: number;
-  remainingTokens: number;
-  remainingRequests: number;
+  requestsLimit: number | null;
+  remainingTokens: number | null;
+  remainingRequests: number | null;
   enrolled: boolean;
+}
+
+function parseOptionalQuotaNumber(value: unknown): number | null {
+  if (value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export async function fetchCloudLlmQuota(
@@ -2448,11 +2453,11 @@ export async function fetchCloudLlmQuota(
       enabled: boolean;
       period_key: string;
       tokens_used: number;
-      tokens_limit: number;
+      tokens_limit: number | null;
       requests_count: number;
-      requests_limit: number;
-      remaining_tokens: number;
-      remaining_requests: number;
+      requests_limit: number | null;
+      remaining_tokens: number | null;
+      remaining_requests: number | null;
       enrolled: boolean;
     }>(response);
     if (!parsed.ok) return parsed;
@@ -2463,11 +2468,11 @@ export async function fetchCloudLlmQuota(
         enabled: Boolean(data.enabled),
         periodKey: data.period_key ?? '',
         tokensUsed: Number(data.tokens_used ?? 0),
-        tokensLimit: Number(data.tokens_limit ?? 0),
+        tokensLimit: parseOptionalQuotaNumber(data.tokens_limit),
         requestsCount: Number(data.requests_count ?? 0),
-        requestsLimit: Number(data.requests_limit ?? 0),
-        remainingTokens: Number(data.remaining_tokens ?? 0),
-        remainingRequests: Number(data.remaining_requests ?? 0),
+        requestsLimit: parseOptionalQuotaNumber(data.requests_limit),
+        remainingTokens: parseOptionalQuotaNumber(data.remaining_tokens),
+        remainingRequests: parseOptionalQuotaNumber(data.remaining_requests),
         enrolled: Boolean(data.enrolled),
       },
     };
@@ -2591,5 +2596,84 @@ export async function exportAuditCsv(filters: AuditExportFilters): Promise<Blob 
     return await response.blob();
   } catch {
     return null;
+  }
+}
+
+export type SpaceCapabilityStatus = 'active' | 'available' | 'unavailable';
+
+export type SpaceCapabilityUnavailableReason =
+  | 'not_entitled'
+  | 'parent_cloud_off'
+  | 'cloud_not_ready'
+  | 'machine_disabled'
+  | string;
+
+export interface SpaceCapabilityItem {
+  id: string;
+  status: SpaceCapabilityStatus;
+  wanted: boolean;
+  entitled: boolean;
+  unavailableReason?: SpaceCapabilityUnavailableReason | null;
+}
+
+export interface SpaceCapabilitiesProfile {
+  wanted: Record<string, boolean>;
+  items: SpaceCapabilityItem[];
+  effectiveIds: string[];
+  cloudWanted: boolean;
+  cloudEntitled: boolean;
+}
+
+export async function fetchWorkspaceCapabilities(opts: {
+  workspaceDataDir: string;
+  pluginDataDir?: string | null;
+  activePlugins?: string[] | null;
+}): Promise<SidecarResult<SpaceCapabilitiesProfile>> {
+  const params = new URLSearchParams({
+    workspace_data_dir: opts.workspaceDataDir,
+  });
+  if (opts.pluginDataDir) {
+    params.set('plugin_data_dir', opts.pluginDataDir);
+  }
+  for (const pluginId of opts.activePlugins ?? []) {
+    params.append('active_plugins', pluginId);
+  }
+  try {
+    const response = await fetch(
+      `${getAiSidecarUrl()}/workspace/capabilities?${params.toString()}`,
+      { headers: { 'X-Internal-Secret': getDesktopSecret() } },
+    );
+    return parseSidecarJson<SpaceCapabilitiesProfile>(response);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'workspace_capabilities_failed',
+    };
+  }
+}
+
+export async function updateWorkspaceCapabilitiesWanted(opts: {
+  workspaceDataDir: string;
+  wanted: Record<string, boolean>;
+  pluginDataDir?: string | null;
+  activePlugins?: string[] | null;
+}): Promise<SidecarResult<SpaceCapabilitiesProfile>> {
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/workspace/capabilities`, {
+      method: 'PUT',
+      headers: sidecarHeaders(),
+      body: JSON.stringify({
+        workspace_data_dir: opts.workspaceDataDir,
+        wanted: opts.wanted,
+        plugin_data_dir: opts.pluginDataDir ?? undefined,
+        active_plugins: opts.activePlugins ?? undefined,
+      }),
+    });
+    return parseSidecarJson<SpaceCapabilitiesProfile>(response);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'workspace_capabilities_update_failed',
+    };
   }
 }

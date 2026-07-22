@@ -72,10 +72,30 @@ def build_pptx_bytes(
     *,
     slides: list[dict[str, Any]] | None = None,
     theme: str = "improba",
+    fidelity: str = "editable",
 ) -> bytes:
-    """Construit un vrai fichier PowerPoint 16:9 à partir de slides structurées."""
+    """Construit un fichier PowerPoint 16:9 à partir de slides structurées."""
+    fidelity_key = (fidelity or "editable").strip().lower()
+    if fidelity_key == "visual":
+        from app.documents.pptx_svg import build_pptx_visual_bytes
+
+        content, _meta = build_pptx_visual_bytes(slides, theme=theme)
+        return content
+    content, _meta = build_pptx_editable_bytes(slides=slides, theme=theme)
+    return content
+
+
+def build_pptx_editable_bytes(
+    *,
+    slides: list[dict[str, Any]] | None = None,
+    theme: str = "improba",
+    skip_critique: bool = False,
+) -> tuple[bytes, dict[str, Any]]:
+    """Rendu natif éditable (python-pptx) après normalisation + critique."""
     from pptx import Presentation
     from pptx.util import Inches
+
+    from app.documents.slides_critique import critique_and_fix
 
     theme_key = (theme or "improba").strip().lower()
     if theme_key not in _THEMES:
@@ -83,116 +103,30 @@ def build_pptx_bytes(
         raise ValueError(f"Thème inconnu {theme!r}. Utilise: {allowed}")
     palette = _THEMES[theme_key]
 
-    normalized = _normalize_slides(slides)
+    if skip_critique:
+        normalized = list(slides or [])
+        if len(normalized) > MAX_PPTX_SLIDES:
+            raise ValueError(
+                f"Trop de slides ({len(normalized)}). Maximum: {MAX_PPTX_SLIDES}"
+            )
+        critique_issues = 0
+    else:
+        critique = critique_and_fix(slides, theme=theme_key)
+        normalized = critique.slides
+        critique_issues = len(critique.issues)
 
     presentation = Presentation()
     presentation.slide_width = Inches(_SLIDE_W)
     presentation.slide_height = Inches(_SLIDE_H)
 
-    for index, (layout, raw) in enumerate(normalized):
+    for index, slide_data in enumerate(normalized):
         slide = presentation.slides.add_slide(presentation.slide_layouts[6])
         _fill_background(slide, palette.bg)
-        _draw_layout(slide, layout=layout, data=raw, theme=palette, index=index)
+        _draw_grammar(slide, slide_data=slide_data, theme=palette, index=index)
 
     buf = BytesIO()
     presentation.save(buf)
-    return buf.getvalue()
-
-
-def _normalize_slides(
-    slides: list[dict[str, Any]] | None,
-) -> list[tuple[str, dict[str, Any]]]:
-    if slides is None or (isinstance(slides, list) and len(slides) == 0):
-        return [("title", {"layout": "title", "title": "Présentation", "subtitle": ""})]
-
-    if not isinstance(slides, list):
-        raise ValueError("slides doit être une liste de dicts")
-
-    if len(slides) > MAX_PPTX_SLIDES:
-        raise ValueError(
-            f"Trop de slides ({len(slides)}). Maximum: {MAX_PPTX_SLIDES}"
-        )
-
-    normalized: list[tuple[str, dict[str, Any]]] = []
-    for index, raw in enumerate(slides):
-        slide_no = index + 1
-        if not isinstance(raw, dict):
-            raise ValueError(
-                f"Slide {slide_no}: attendu un dict avec 'layout', "
-                f"reçu {type(raw).__name__}"
-            )
-        layout = str(raw.get("layout") or "").strip().lower()
-        if not layout:
-            layout = "bullets"
-        if layout not in PPTX_LAYOUTS:
-            allowed = ", ".join(sorted(PPTX_LAYOUTS))
-            raise ValueError(
-                f"Slide {slide_no}: layout inconnu {layout!r}. Utilise: {allowed}"
-            )
-        _validate_slide_content(layout, raw, slide_no)
-        normalized.append((layout, raw))
-
-    if not normalized:
-        raise ValueError(
-            "Aucune slide exploitable: passe une liste de dicts avec 'layout'"
-        )
-    return normalized
-
-
-def _validate_slide_content(layout: str, data: dict[str, Any], slide_no: int) -> None:
-    title = str(data.get("title") or "").strip()
-    subtitle = str(data.get("subtitle") or "").strip()
-    bullets = _as_str_list(data.get("bullets"))
-    left_items = _as_str_list(data.get("left"))
-    right_items = _as_str_list(data.get("right"))
-    quote = str(data.get("quote") or data.get("body") or "").strip()
-    metrics = data.get("metrics") if isinstance(data.get("metrics"), list) else []
-    metric_dicts = [m for m in metrics if isinstance(m, dict)]
-
-    if layout == "title":
-        return
-    if layout == "section":
-        return
-    if layout == "closing":
-        if not (title or subtitle or bullets):
-            raise ValueError(
-                f"Slide {slide_no} (closing): fournir title, subtitle ou bullets"
-            )
-        return
-    if layout == "bullets":
-        if not (title or bullets):
-            raise ValueError(
-                f"Slide {slide_no} (bullets): fournir title et/ou bullets"
-            )
-        return
-    if layout == "two_column":
-        if not (left_items or right_items or bullets):
-            raise ValueError(
-                f"Slide {slide_no} (two_column): fournir left, right ou bullets"
-            )
-        return
-    if layout == "kpi_row":
-        if len(metric_dicts) > MAX_KPI_CARDS:
-            raise ValueError(
-                f"Slide {slide_no} (kpi_row): maximum {MAX_KPI_CARDS} metrics "
-                f"(reçu: {len(metric_dicts)})"
-            )
-        if not metric_dicts and not bullets:
-            raise ValueError(
-                f"Slide {slide_no} (kpi_row): fournir metrics ou bullets"
-            )
-        if not metric_dicts and len(bullets) > MAX_KPI_CARDS:
-            raise ValueError(
-                f"Slide {slide_no} (kpi_row): maximum {MAX_KPI_CARDS} KPIs "
-                f"(reçu: {len(bullets)} bullets)"
-            )
-        return
-    if layout == "quote":
-        if not (quote or bullets or title):
-            raise ValueError(
-                f"Slide {slide_no} (quote): fournir quote, body, title ou bullets"
-            )
-        return
+    return buf.getvalue(), {"critique_issues": critique_issues}
 
 
 def _rgb(color: tuple[int, int, int]):
@@ -332,287 +266,326 @@ def _as_str_list(value: Any) -> list[str]:
     return out
 
 
-def _draw_layout(
+def _hierarchy_fields(slide_data: dict[str, Any]) -> tuple[str, list[str], list[str]]:
+    hierarchy = (
+        slide_data.get("hierarchy") if isinstance(slide_data.get("hierarchy"), dict) else {}
+    )
+    primary = str(hierarchy.get("primary") or "").strip()
+    secondary = hierarchy.get("secondary") if isinstance(hierarchy.get("secondary"), list) else []
+    secondary_s = [str(s).strip() for s in secondary if str(s).strip()]
+    tertiary = hierarchy.get("tertiary") if isinstance(hierarchy.get("tertiary"), list) else []
+    tertiary_s = [str(s).strip() for s in tertiary if str(s).strip()]
+    return primary, secondary_s, tertiary_s
+
+
+def _visual_fields(slide_data: dict[str, Any]) -> tuple[str, list[Any]]:
+    visual = slide_data.get("visual") if isinstance(slide_data.get("visual"), dict) else {}
+    vtype = str(visual.get("type") or "none")
+    items = visual.get("items") if isinstance(visual.get("items"), list) else []
+    return vtype, items
+
+
+def _split_visual_items(
+    items: list[Any], secondary: list[str]
+) -> tuple[list[str], list[str], str, str]:
+    left_t = right_t = ""
+    left: list[str] = []
+    right: list[str] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        side = str(item.get("side") or "").lower()
+        title = str(item.get("title") or "").strip()
+        lines = item.get("lines") if isinstance(item.get("lines"), list) else []
+        lines_s = [str(x).strip() for x in lines if str(x).strip()]
+        if side == "right":
+            right_t = title or right_t
+            right.extend(lines_s)
+        else:
+            left_t = title or left_t
+            left.extend(lines_s)
+    if not left and not right and secondary:
+        mid = max(1, len(secondary) // 2)
+        left, right = secondary[:mid], secondary[mid:]
+    return left, right, left_t, right_t
+
+
+def _kpi_from_visual(items: list[Any], secondary: list[str]) -> list[dict[str, str]]:
+    cards: list[dict[str, str]] = []
+    for item in items:
+        if isinstance(item, dict):
+            cards.append(
+                {
+                    "label": str(item.get("label") or "").strip(),
+                    "value": str(item.get("value") or "-").strip(),
+                }
+            )
+        if len(cards) >= MAX_KPI_CARDS:
+            break
+    if not cards:
+        for line in secondary[:MAX_KPI_CARDS]:
+            if ":" in line:
+                label, _, value = line.partition(":")
+                cards.append({"label": label.strip(), "value": value.strip()})
+            else:
+                cards.append({"label": "", "value": line})
+    return cards
+
+
+def _draw_grammar(
     slide: Any,
     *,
-    layout: str,
-    data: dict[str, Any],
+    slide_data: dict[str, Any],
     theme: _Theme,
     index: int,
 ) -> None:
-    title = str(data.get("title") or "").strip()
-    subtitle = str(data.get("subtitle") or "").strip()
-    bullets = _as_str_list(data.get("bullets"))
-    left_items = _as_str_list(data.get("left"))
-    right_items = _as_str_list(data.get("right"))
-    quote = str(data.get("quote") or data.get("body") or "").strip()
-    attribution = str(data.get("attribution") or data.get("author") or "").strip()
-    metrics = data.get("metrics") if isinstance(data.get("metrics"), list) else []
+    grammar = str(slide_data.get("grammar") or "sequence")
+    primary, secondary, tertiary = _hierarchy_fields(slide_data)
+    vtype, items = _visual_fields(slide_data)
+    bullets = secondary + tertiary
 
-    # Bandeau accent gauche commun
     _add_rect(slide, left=0, top=0, width=0.18, height=_SLIDE_H, fill=theme.accent)
 
-    if layout == "title":
-        _add_rect(
-            slide,
-            left=0.18,
-            top=0,
-            width=_SLIDE_W - 0.18,
-            height=0.12,
-            fill=theme.accent,
-        )
-        _add_textbox(
-            slide,
-            left=0.9,
-            top=2.4,
-            width=11.2,
-            height=1.6,
-            text=title or "Présentation",
-            font_size=44,
-            color=theme.text,
-            bold=True,
-        )
-        if subtitle:
-            _add_textbox(
+    if grammar == "hero":
+        title = primary or "Présentation"
+        combined = bullets
+        subtitle = combined[0] if combined else ""
+        extra_bullets = combined[1:] if len(combined) > 1 else []
+        _draw_title_slide(slide, title=title, subtitle=subtitle, theme=theme)
+        if extra_bullets:
+            _add_bullets(
                 slide,
                 left=0.9,
-                top=4.2,
+                top=5.2,
                 width=11.2,
-                height=1.0,
-                text=subtitle,
-                font_size=22,
+                height=1.8,
+                items=extra_bullets,
                 color=theme.muted,
+                font_size=18,
             )
         return
 
-    if layout == "section":
+    if grammar in {"split", "comparison"}:
+        left_items, right_items, left_title, right_title = _split_visual_items(
+            items, bullets
+        )
+        _draw_two_column_slide(
+            slide,
+            title=primary,
+            left_title=left_title,
+            right_title=right_title,
+            left_items=left_items,
+            right_items=right_items,
+            theme=theme,
+        )
+        return
+
+    if grammar == "dashboard" or vtype == "kpi_row":
+        cards = _kpi_from_visual(items, bullets)
+        _draw_kpi_slide(slide, title=primary, cards=cards, theme=theme)
+        return
+
+    if grammar == "editorial" or vtype == "quote":
+        quote = primary
+        attribution = secondary[0] if secondary else ""
+        _draw_quote_slide(
+            slide, quote=quote, attribution=attribution, theme=theme
+        )
+        return
+
+    if grammar == "sequence":
+        _draw_bullets_slide(
+            slide, title=primary or f"Slide {index + 1}", bullets=bullets, theme=theme
+        )
+        return
+
+    if grammar == "diagram":
+        steps = bullets or _lines_from_visual_items(items)
+        _draw_bullets_slide(
+            slide, title=primary or f"Slide {index + 1}", bullets=steps, theme=theme
+        )
+        return
+
+    _draw_bullets_slide(
+        slide, title=primary or f"Slide {index + 1}", bullets=bullets, theme=theme
+    )
+
+
+def _lines_from_visual_items(items: list[Any]) -> list[str]:
+    out: list[str] = []
+    for item in items:
+        if isinstance(item, str) and item.strip():
+            out.append(item.strip())
+        elif isinstance(item, dict):
+            text = item.get("text") or item.get("label") or item.get("value")
+            if text:
+                out.append(str(text).strip())
+    return out
+
+
+def _draw_title_slide(
+    slide: Any,
+    *,
+    title: str,
+    subtitle: str,
+    theme: _Theme,
+) -> None:
+    _add_rect(
+        slide,
+        left=0.18,
+        top=0,
+        width=_SLIDE_W - 0.18,
+        height=0.12,
+        fill=theme.accent,
+    )
+    _add_textbox(
+        slide,
+        left=0.9,
+        top=2.4,
+        width=11.2,
+        height=1.6,
+        text=title,
+        font_size=44,
+        color=theme.text,
+        bold=True,
+    )
+    if subtitle:
         _add_textbox(
             slide,
             left=0.9,
-            top=2.6,
+            top=4.2,
             width=11.2,
-            height=1.2,
-            text=title or f"Section {index + 1}",
-            font_size=40,
-            color=theme.text,
-            bold=True,
+            height=1.0,
+            text=subtitle,
+            font_size=22,
+            color=theme.muted,
+        )
+
+
+def _draw_section_slide(slide: Any, *, title: str, subtitle: str, theme: _Theme) -> None:
+    _add_textbox(
+        slide,
+        left=0.9,
+        top=2.6,
+        width=11.2,
+        height=1.2,
+        text=title,
+        font_size=40,
+        color=theme.text,
+        bold=True,
+        align="center",
+    )
+    _add_rect(slide, left=5.4, top=4.0, width=2.5, height=0.08, fill=theme.accent)
+    if subtitle:
+        _add_textbox(
+            slide,
+            left=1.5,
+            top=4.4,
+            width=10.3,
+            height=1.0,
+            text=subtitle,
+            font_size=20,
+            color=theme.muted,
             align="center",
         )
-        _add_rect(
-            slide,
-            left=5.4,
-            top=4.0,
-            width=2.5,
-            height=0.08,
-            fill=theme.accent,
-        )
-        if subtitle:
-            _add_textbox(
-                slide,
-                left=1.5,
-                top=4.4,
-                width=10.3,
-                height=1.0,
-                text=subtitle,
-                font_size=20,
-                color=theme.muted,
-                align="center",
-            )
-        return
 
-    if layout == "quote":
-        body = quote or (bullets[0] if bullets else title)
+
+def _draw_quote_slide(
+    slide: Any, *, quote: str, attribution: str, theme: _Theme
+) -> None:
+    body = quote or "Citation"
+    _add_textbox(
+        slide,
+        left=1.4,
+        top=2.2,
+        width=10.4,
+        height=2.4,
+        text=f"« {body} »",
+        font_size=28,
+        color=theme.text,
+        align="center",
+    )
+    if attribution:
         _add_textbox(
             slide,
             left=1.4,
-            top=2.2,
+            top=4.8,
             width=10.4,
-            height=2.4,
-            text=f"« {body} »",
-            font_size=28,
-            color=theme.text,
+            height=0.6,
+            text=f"- {attribution}",
+            font_size=18,
+            color=theme.muted,
             align="center",
         )
-        if attribution:
-            _add_textbox(
-                slide,
-                left=1.4,
-                top=4.8,
-                width=10.4,
-                height=0.6,
-                text=f"- {attribution}",
-                font_size=18,
-                color=theme.muted,
-                align="center",
-            )
-        return
 
-    if layout == "kpi_row":
-        if title:
-            _add_textbox(
-                slide,
-                left=0.9,
-                top=0.55,
-                width=11.2,
-                height=0.8,
-                text=title,
-                font_size=32,
-                color=theme.text,
-                bold=True,
-            )
-            _add_rect(
-                slide,
-                left=0.9,
-                top=1.35,
-                width=1.8,
-                height=0.07,
-                fill=theme.accent,
-            )
-        cards = [m for m in metrics if isinstance(m, dict)][:MAX_KPI_CARDS]
-        if not cards and bullets:
-            for item in bullets[:MAX_KPI_CARDS]:
-                if ":" in item:
-                    label, _, value = item.partition(":")
-                    cards.append({"label": label.strip(), "value": value.strip()})
-                else:
-                    cards.append({"label": "", "value": item})
-        count = max(len(cards), 1)
-        gap = 0.35
-        usable = 11.4
-        card_w = (usable - gap * (count - 1)) / count
-        top = 2.4
-        for i, card in enumerate(cards):
-            left = 0.9 + i * (card_w + gap)
-            _add_rect(
-                slide,
-                left=left,
-                top=top,
-                width=card_w,
-                height=2.8,
-                fill=theme.surface,
-            )
-            _add_rect(
-                slide,
-                left=left,
-                top=top,
-                width=card_w,
-                height=0.1,
-                fill=theme.accent,
-            )
-            value = str(card.get("value") or "-").strip()
-            label = str(card.get("label") or "").strip()
+
+def _draw_kpi_slide(
+    slide: Any,
+    *,
+    title: str,
+    cards: list[dict[str, str]],
+    theme: _Theme,
+) -> None:
+    if title:
+        _add_textbox(
+            slide,
+            left=0.9,
+            top=0.55,
+            width=11.2,
+            height=0.8,
+            text=title,
+            font_size=32,
+            color=theme.text,
+            bold=True,
+        )
+        _add_rect(slide, left=0.9, top=1.35, width=1.8, height=0.07, fill=theme.accent)
+    count = max(len(cards), 1)
+    gap = 0.35
+    usable = 11.4
+    card_w = (usable - gap * (count - 1)) / count
+    top = 2.4
+    for i, card in enumerate(cards):
+        left = 0.9 + i * (card_w + gap)
+        _add_rect(slide, left=left, top=top, width=card_w, height=2.8, fill=theme.surface)
+        _add_rect(slide, left=left, top=top, width=card_w, height=0.1, fill=theme.accent)
+        value = str(card.get("value") or "-").strip()
+        label = str(card.get("label") or "").strip()
+        _add_textbox(
+            slide,
+            left=left + 0.2,
+            top=top + 0.7,
+            width=card_w - 0.4,
+            height=1.0,
+            text=value,
+            font_size=28 if len(value) < 12 else 22,
+            color=theme.text,
+            bold=True,
+            align="center",
+        )
+        if label:
             _add_textbox(
                 slide,
                 left=left + 0.2,
-                top=top + 0.7,
+                top=top + 1.8,
                 width=card_w - 0.4,
-                height=1.0,
-                text=value,
-                font_size=28 if len(value) < 12 else 22,
-                color=theme.text,
-                bold=True,
+                height=0.6,
+                text=label,
+                font_size=14,
+                color=theme.muted,
                 align="center",
             )
-            if label:
-                _add_textbox(
-                    slide,
-                    left=left + 0.2,
-                    top=top + 1.8,
-                    width=card_w - 0.4,
-                    height=0.6,
-                    text=label,
-                    font_size=14,
-                    color=theme.muted,
-                    align="center",
-                )
-        return
 
-    if layout == "two_column":
-        if title:
-            _add_textbox(
-                slide,
-                left=0.9,
-                top=0.45,
-                width=11.2,
-                height=0.7,
-                text=title,
-                font_size=30,
-                color=theme.text,
-                bold=True,
-            )
-            _add_rect(
-                slide,
-                left=0.9,
-                top=1.15,
-                width=1.8,
-                height=0.07,
-                fill=theme.accent,
-            )
-        left_title = str(data.get("left_title") or "").strip()
-        right_title = str(data.get("right_title") or "").strip()
-        col_top = 1.5
-        if left_title:
-            _add_textbox(
-                slide,
-                left=0.9,
-                top=col_top,
-                width=5.3,
-                height=0.5,
-                text=left_title,
-                font_size=18,
-                color=theme.accent,
-                bold=True,
-            )
-            col_top_left = col_top + 0.55
-        else:
-            col_top_left = col_top
-        if right_title:
-            _add_textbox(
-                slide,
-                left=6.9,
-                top=col_top,
-                width=5.3,
-                height=0.5,
-                text=right_title,
-                font_size=18,
-                color=theme.accent,
-                bold=True,
-            )
-            col_top_right = col_top + 0.55
-        else:
-            col_top_right = col_top
 
-        if left_items or right_items:
-            col_left = left_items
-            col_right = right_items
-        else:
-            mid = max(1, len(bullets) // 2)
-            col_left = bullets[:mid]
-            col_right = bullets[mid:]
-
-        _add_bullets(
-            slide,
-            left=0.9,
-            top=col_top_left,
-            width=5.3,
-            height=4.8,
-            items=col_left,
-            color=theme.text,
-            font_size=18,
-        )
-        _add_bullets(
-            slide,
-            left=6.9,
-            top=col_top_right,
-            width=5.3,
-            height=4.8,
-            items=col_right,
-            color=theme.text,
-            font_size=18,
-        )
-        return
-
-    # bullets + closing
+def _draw_two_column_slide(
+    slide: Any,
+    *,
+    title: str,
+    left_title: str,
+    right_title: str,
+    left_items: list[str],
+    right_items: list[str],
+    theme: _Theme,
+) -> None:
     if title:
         _add_textbox(
             slide,
@@ -625,15 +598,79 @@ def _draw_layout(
             color=theme.text,
             bold=True,
         )
-        _add_rect(
+        _add_rect(slide, left=0.9, top=1.15, width=1.8, height=0.07, fill=theme.accent)
+    col_top = 1.5
+    col_top_left = col_top + (0.55 if left_title else 0)
+    col_top_right = col_top + (0.55 if right_title else 0)
+    if left_title:
+        _add_textbox(
             slide,
             left=0.9,
-            top=1.15,
-            width=1.8,
-            height=0.07,
-            fill=theme.accent,
+            top=col_top,
+            width=5.3,
+            height=0.5,
+            text=left_title,
+            font_size=18,
+            color=theme.accent,
+            bold=True,
         )
-    if subtitle and layout == "closing":
+    if right_title:
+        _add_textbox(
+            slide,
+            left=6.9,
+            top=col_top,
+            width=5.3,
+            height=0.5,
+            text=right_title,
+            font_size=18,
+            color=theme.accent,
+            bold=True,
+        )
+    _add_bullets(
+        slide,
+        left=0.9,
+        top=col_top_left,
+        width=5.3,
+        height=4.8,
+        items=left_items,
+        color=theme.text,
+        font_size=18,
+    )
+    _add_bullets(
+        slide,
+        left=6.9,
+        top=col_top_right,
+        width=5.3,
+        height=4.8,
+        items=right_items,
+        color=theme.text,
+        font_size=18,
+    )
+
+
+def _draw_bullets_slide(
+    slide: Any,
+    *,
+    title: str,
+    bullets: list[str],
+    theme: _Theme,
+    subtitle: str = "",
+) -> None:
+    if title:
+        _add_textbox(
+            slide,
+            left=0.9,
+            top=0.45,
+            width=11.2,
+            height=0.7,
+            text=title,
+            font_size=30,
+            color=theme.text,
+            bold=True,
+        )
+        _add_rect(slide, left=0.9, top=1.15, width=1.8, height=0.07, fill=theme.accent)
+    bullets_top = 1.5
+    if subtitle:
         _add_textbox(
             slide,
             left=0.9,
@@ -645,8 +682,6 @@ def _draw_layout(
             color=theme.muted,
         )
         bullets_top = 2.3
-    else:
-        bullets_top = 1.5
     if bullets:
         _add_bullets(
             slide,
@@ -658,3 +693,18 @@ def _draw_layout(
             color=theme.text,
             font_size=20,
         )
+
+
+def _draw_layout(
+    slide: Any,
+    *,
+    layout: str,
+    data: dict[str, Any],
+    theme: _Theme,
+    index: int,
+) -> None:
+    """Compat tests internes : délègue au rendu par grammaire."""
+    from app.documents.slides_schema import normalize_slide
+
+    slide_data = normalize_slide({**data, "layout": layout}, index=index + 1)
+    _draw_grammar(slide, slide_data=slide_data, theme=theme, index=index)

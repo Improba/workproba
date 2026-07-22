@@ -26,7 +26,6 @@ const mockStatus = ref({
 const mockLoading = ref(false);
 
 const settingsLocked = ref(false);
-const settingsMode = ref<'guided' | 'advanced'>('guided');
 const mockLoadError = ref<string | null>(null);
 
 const { getPluginDataDir, listProjetProjects, isProjetPluginActive } = vi.hoisted(() => ({
@@ -53,7 +52,6 @@ vi.mock('@composables/useAppSettings', () => ({
   useAppSettings: () => ({
     settings: ref({ cloudEndpoint: 'https://cloud.preset.test' }),
     settingsLocked,
-    settingsMode,
   }),
 }));
 
@@ -96,7 +94,7 @@ vi.mock('@composables/usePersonas', () => ({
 
 vi.mock('@services/aiSidecar', () => ({
   listProjetProjects,
-  resolveUiMode: (locked: boolean, mode: string) => (locked ? 'locked' : mode),
+  resolveUiMode: (locked: boolean) => (locked ? 'locked' : 'agent'),
 }));
 
 vi.mock('@composables/useDesktop', () => ({
@@ -159,7 +157,6 @@ describe('CloudPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     settingsLocked.value = false;
-    settingsMode.value = 'guided';
     mockLoading.value = false;
     mockLoadError.value = null;
     mockStatus.value = {
@@ -198,7 +195,15 @@ describe('CloudPanel', () => {
     expect(listProjetProjects).toHaveBeenCalledWith('/data/workproba.projet');
   });
 
-  it('n’affiche pas la section projets en mode guidé non enrollé', async () => {
+  it('affiche la section projets en mode agent même non enrollé', async () => {
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('cloud.projectsTitle');
+  });
+
+  it('n’affiche pas la section projets en mode verrouillé non enrollé', async () => {
+    settingsLocked.value = true;
     const wrapper = mountPanel();
     await flushPromises();
 
@@ -206,7 +211,8 @@ describe('CloudPanel', () => {
     expect(wrapper.find('.cloud-panel__projects').exists()).toBe(false);
   });
 
-  it('affiche la connexion principale en mode guidé non enrollé', async () => {
+  it('affiche la connexion principale en mode verrouillé non enrollé', async () => {
+    settingsLocked.value = true;
     const wrapper = mountPanel();
     await flushPromises();
 
@@ -221,6 +227,7 @@ describe('CloudPanel', () => {
   });
 
   it('affiche le formulaire join après clic invitation', async () => {
+    settingsLocked.value = true;
     const wrapper = mountPanel();
     await flushPromises();
 
@@ -235,7 +242,8 @@ describe('CloudPanel', () => {
     expect(wrapper.find('#cloud-join-token').exists()).toBe(true);
   });
 
-  it('affiche connecté à org quand enrollé en mode guidé', async () => {
+  it('affiche connecté à org quand enrollé en mode verrouillé', async () => {
+    settingsLocked.value = true;
     mockStatus.value = {
       ...mockStatus.value,
       enrolled: true,
@@ -256,7 +264,8 @@ describe('CloudPanel', () => {
     expect(wrapper.text()).not.toContain('cloud.connectedBadge');
   });
 
-  it('affiche le pull après ouverture des options locales en mode guidé enrollé', async () => {
+  it('affiche le pull après ouverture des options locales en mode verrouillé enrollé', async () => {
+    settingsLocked.value = true;
     mockStatus.value = {
       ...mockStatus.value,
       enrolled: true,
@@ -280,7 +289,6 @@ describe('CloudPanel', () => {
   });
 
   it('affiche le pull et masque le sync quand enrollé en mode avancé', async () => {
-    settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
       configured: true,
@@ -297,7 +305,6 @@ describe('CloudPanel', () => {
   });
 
   it('affiche les opérations de cache en mode avancé non enrollé', async () => {
-    settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
       configured: true,
@@ -346,6 +353,7 @@ describe('CloudPanel', () => {
   });
 
   it('réinitialise le dossier local après déconnexion réussie', async () => {
+    settingsLocked.value = true;
     mockStatus.value = {
       ...mockStatus.value,
       enrolled: true,
@@ -375,6 +383,7 @@ describe('CloudPanel', () => {
   });
 
   it('rafraîchit les projets après un join réussi', async () => {
+    settingsLocked.value = true;
     mockEnroll.mockImplementation(async () => {
       mockStatus.value = {
         ...mockStatus.value,
@@ -425,7 +434,6 @@ describe('CloudPanel', () => {
   });
 
   it('demande confirmation avant synchronisation', async () => {
-    settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
       configured: true,
@@ -449,7 +457,6 @@ describe('CloudPanel', () => {
 
   it('n’appelle pas sync si la confirmation est annulée', async () => {
     mockDialogConfirm(false);
-    settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
       configured: true,
@@ -467,7 +474,6 @@ describe('CloudPanel', () => {
   });
 
   it('n’affiche pas le pull hors enrollment en mode avancé', async () => {
-    settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
       configured: true,
@@ -482,7 +488,6 @@ describe('CloudPanel', () => {
   });
 
   it('demande confirmation avant pull quand enrollé en mode avancé', async () => {
-    settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
       enrolled: true,
@@ -504,7 +509,8 @@ describe('CloudPanel', () => {
     expect(mockPull).toHaveBeenCalledWith('p1');
   });
 
-  it('affiche la section connecteurs quand enrollé en mode guidé', async () => {
+  it('affiche la section connecteurs quand enrollé en mode verrouillé', async () => {
+    settingsLocked.value = true;
     mockStatus.value = {
       ...mockStatus.value,
       enrolled: true,
@@ -517,8 +523,7 @@ describe('CloudPanel', () => {
     expect(wrapper.findComponent(ManagedConnectorsSection).exists()).toBe(true);
   });
 
-  it('affiche la section connecteurs quand enrollé en mode avancé', async () => {
-    settingsMode.value = 'advanced';
+  it('affiche la section connecteurs quand enrollé en mode agent', async () => {
     mockStatus.value = {
       ...mockStatus.value,
       enrolled: true,
@@ -531,7 +536,8 @@ describe('CloudPanel', () => {
     expect(wrapper.findComponent(ManagedConnectorsSection).exists()).toBe(true);
   });
 
-  it('affiche le bouton de mise à jour des regards quand enrollé en mode guidé', async () => {
+  it('affiche le bouton de mise à jour des regards quand enrollé en mode verrouillé', async () => {
+    settingsLocked.value = true;
     mockStatus.value = {
       ...mockStatus.value,
       enrolled: true,
@@ -602,8 +608,6 @@ describe('CloudPanel', () => {
   });
 
   it('affiche le panneau technique en mode avancé', async () => {
-    settingsMode.value = 'advanced';
-
     const wrapper = mountPanel();
     await flushPromises();
 
@@ -613,7 +617,6 @@ describe('CloudPanel', () => {
   });
 
   it('affiche sync regards et déconnexion quand enrollé en mode avancé', async () => {
-    settingsMode.value = 'advanced';
     mockStatus.value = {
       ...mockStatus.value,
       enrolled: true,

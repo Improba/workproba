@@ -24,6 +24,10 @@ vi.mock('@components/cloud/EnrollCloudModal.vue', () => ({
   default: { template: '<div />' },
 }));
 
+vi.mock('@components/cloud/CloudLoginModal.vue', () => ({
+  default: { template: '<div />' },
+}));
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
 }));

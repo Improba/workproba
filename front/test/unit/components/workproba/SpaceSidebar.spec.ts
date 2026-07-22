@@ -86,6 +86,7 @@ function mountSidebar() {
       stubs: {
         Lucide: true,
         MemoryPanel: true,
+        SpaceSettingsDialog: true,
         CloudLoginModal: {
           name: 'CloudLoginModal',
           template: '<div data-testid="cloud-login-modal-stub" />',
@@ -144,12 +145,24 @@ describe('SpaceSidebar identity', () => {
   it('affiche le mode local sans orga inventée', async () => {
     onboardingDone.value = true;
     cloudEnrolled.value = false;
-    profile.value = { name: '', organisation: '' };
+    profile.value = { name: 'admin', organisation: 'Local Org' };
 
     const wrapper = mountSidebar();
     await flushPromises();
 
     expect(wrapper.find('.wp-sidebar__profile-name').text()).toBe('shell.localMode');
-    expect(wrapper.find('.wp-sidebar__profile-org').text()).toBe('shell.localMode');
+    expect(wrapper.find('.wp-sidebar__profile-org').text()).toBe('shell.connectPrompt');
+    expect(wrapper.find('.wp-sidebar__profile-name').text()).not.toBe('admin');
+  });
+
+  it('clic non connecté ouvre la modale de connexion cloud', async () => {
+    onboardingDone.value = true;
+    cloudEnrolled.value = false;
+
+    const wrapper = mountSidebar();
+    await wrapper.find('.wp-sidebar__profile').trigger('click');
+    await flushPromises();
+
+    expect(wrapper.findComponent({ name: 'CloudLoginModal' }).props('modelValue')).toBe(true);
   });
 });

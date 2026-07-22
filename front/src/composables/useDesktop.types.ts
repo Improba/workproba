@@ -53,6 +53,7 @@ export type ToolCallViewMode = 'human' | 'tech';
 
 export type ThinkingDetailViewMode = 'summary' | 'raw';
 
+/** @deprecated Ignoré à la lecture ; conservé pour compatibilité de stockage. */
 export type SettingsMode = 'guided' | 'advanced';
 
 export type DensityMode = 'compact' | 'comfortable' | 'spacious';
@@ -76,10 +77,17 @@ export interface ProviderSetChatModel {
 
 export interface ProviderSetChat {
   provider: LlmProviderName;
+  /** Modèle par défaut du set (default state). */
   model: string;
   apiKeyRef?: string | null;
   apiKey?: string | null;
   baseUrl?: string | null;
+  /**
+   * Effort de raisonnement par défaut du set (default state).
+   * Doit être explicite sur les builtins (`none`/`low`/`medium`/`high`).
+   * `auto` = legacy / override session « reprendre le défaut du set » ;
+   * ne pas l'utiliser comme default state d'un set.
+   */
   reasoning?: ProviderSetChatReasoning;
   models?: ProviderSetChatModel[];
 }

@@ -150,7 +150,7 @@ const props = defineProps<{
 }>();
 
 const { t } = useI18n();
-const { settingsMode, settingsLocked } = useAppSettings();
+const { settingsLocked } = useAppSettings();
 const { preset } = useEnterprise();
 const {
   entries,
@@ -172,9 +172,7 @@ const retentionDraft = ref(90);
 const savingRetention = ref(false);
 const exporting = ref(false);
 
-const showRetentionConfig = computed(
-  () => settingsMode.value === 'advanced' || settingsLocked.value,
-);
+const showRetentionConfig = computed(() => true);
 
 const retentionLocked = computed(
   () => settingsLocked.value || preset.value?.auditRetentionDays != null,

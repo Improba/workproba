@@ -49,7 +49,7 @@ describe('PersonasMeetingView', () => {
     });
 
     expect(wrapper.find('.personas-meeting__error').text()).toContain(
-      'Connectez ce poste à Improba Cloud',
+      'Connectez-vous à Improba Cloud',
     );
     expect(wrapper.find('.personas-meeting__error').text()).not.toContain(
       'La réunion a échoué',

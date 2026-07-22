@@ -191,7 +191,7 @@ defineEmits<{
   (e: 'open-shortcuts'): void;
 }>();
 
-const { effectiveActiveSet, activeChatProvider, activeEmbeddingProvider, settingsMode, settingsLocked } = useAppSettings();
+const { effectiveActiveSet, activeSet, activeChatProvider, activeEmbeddingProvider, settingsLocked } = useAppSettings();
 const router = useRouter();
 const { t } = useI18n();
 
@@ -216,9 +216,12 @@ const regardsAriaLabel = computed(() =>
 );
 
 const sidecarState = computed(() => props.sidecarState ?? 'idle');
-const providerChipState = computed(() =>
-  effectiveActiveSet.value ? sidecarState.value : 'error',
-);
+const displaySet = computed(() => effectiveActiveSet.value ?? activeSet.value);
+const providerChipState = computed(() => {
+  if (!displaySet.value) return 'error';
+  if (!effectiveActiveSet.value) return 'error';
+  return sidecarState.value;
+});
 const sidecarLabel = computed(() => {
   switch (sidecarState.value) {
     case 'working':
@@ -241,19 +244,16 @@ function providerDisplay(entry: typeof activeChatProvider.value): string {
   return entry.label?.trim() || capitalize(entry.provider);
 }
 
-const labelMode = computed(() => {
-  if (settingsLocked.value) return 'guided';
-  return settingsMode.value === 'advanced' ? 'advanced' : 'guided';
-});
+const labelMode = computed(() => (settingsLocked.value ? 'guided' : 'advanced'));
 
 const activeSetCapabilities = computed(() => {
-  const set = effectiveActiveSet.value;
+  const set = displaySet.value;
   if (!set) return [];
   return capabilityLabels(set, labelMode.value, t);
 });
 
 const providerLabel = computed(() => {
-  const set = effectiveActiveSet.value;
+  const set = displaySet.value;
   if (set) {
     if (labelMode.value === 'guided') return guidedPresetLabel(set, t);
     return localizedSetName(set, t);
@@ -276,7 +276,7 @@ const providerTooltip = computed(() =>
 );
 
 const chatProviderLabel = computed(() => {
-  const set = effectiveActiveSet.value;
+  const set = displaySet.value;
   if (set) {
     const name = labelMode.value === 'guided' ? guidedPresetLabel(set, t) : localizedSetName(set, t);
     return `${name} ${t('shell.titlebarSep')} ${set.chat.model || '—'}`;
@@ -287,7 +287,7 @@ const chatProviderLabel = computed(() => {
 });
 
 const embeddingProviderLabel = computed(() => {
-  const set = effectiveActiveSet.value;
+  const set = displaySet.value;
   if (set?.embeddings) {
     return `${localizedSetName(set, t)} ${t('shell.titlebarSep')} ${set.embeddings.model}`;
   }

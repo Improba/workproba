@@ -20,6 +20,7 @@ from app.documents.preview import (
 from app.documents.writer import (
     build_docx_bytes,
     build_pdf_bytes,
+    build_pdf_bytes_from_slides,
     build_pptx_bytes,
     build_xlsx_bytes,
 )
@@ -116,6 +117,13 @@ def _build_proposed_office_bytes(tool_name: str, tool_args: dict[str, Any]) -> b
             sheets=sheets if isinstance(sheets, list) else None,
         )
     if tool_name == "write_pdf":
+        slides = tool_args.get("slides")
+        if isinstance(slides, list):
+            theme = tool_args.get("theme")
+            return build_pdf_bytes_from_slides(
+                slides=slides,
+                theme=str(theme) if isinstance(theme, str) and theme else "improba",
+            )
         title = tool_args.get("title")
         sections = tool_args.get("sections")
         return build_pdf_bytes(
@@ -125,9 +133,11 @@ def _build_proposed_office_bytes(tool_name: str, tool_args: dict[str, Any]) -> b
     if tool_name == "write_pptx":
         slides = tool_args.get("slides")
         theme = tool_args.get("theme")
+        fidelity = tool_args.get("fidelity")
         return build_pptx_bytes(
             slides=slides if isinstance(slides, list) else None,
             theme=str(theme) if isinstance(theme, str) and theme else "improba",
+            fidelity=str(fidelity) if isinstance(fidelity, str) and fidelity else "editable",
         )
     raise ValueError(f"Unsupported office tool: {tool_name}")
 
@@ -155,6 +165,7 @@ def _office_preview_diff(
             "is_new": is_new,
             "is_binary": True,
             "diff_html": "",
+            "preview_html": "",
             "message": t(locale, "preview_change.binary_unavailable"),
             "old_size": len(old_bytes),
             "new_size": 0,
@@ -167,10 +178,28 @@ def _office_preview_diff(
             "is_new": is_new,
             "is_binary": True,
             "diff_html": "",
+            "preview_html": "",
             "message": t(locale, "preview_change.binary_unavailable"),
             "old_size": len(old_bytes),
             "new_size": len(new_bytes),
         }
+
+    preview_html = ""
+    if tool_name == "write_pptx":
+        try:
+            from app.documents.slides_critique import critique_and_fix
+            from app.documents.slides_html import render_deck_html
+
+            slides = tool_args.get("slides")
+            theme = tool_args.get("theme")
+            theme_key = str(theme) if isinstance(theme, str) and theme else "improba"
+            if isinstance(slides, list):
+                critique = critique_and_fix(slides, theme=theme_key)
+                preview_html = render_deck_html(critique.slides, theme=theme_key)
+            else:
+                preview_html = render_deck_html(None, theme=theme_key)
+        except Exception:  # noqa: BLE001 - aperçu HTML non bloquant
+            preview_html = ""
 
     try:
         old_text = _render_office_bytes_to_text(target, old_bytes) if old_bytes else ""
@@ -181,6 +210,7 @@ def _office_preview_diff(
         "is_new": is_new,
         "is_binary": False,
         "diff_html": build_line_diff_html(old_text, new_text),
+        "preview_html": preview_html,
         "message": "",
         "old_size": len(old_bytes),
         "new_size": len(new_bytes),

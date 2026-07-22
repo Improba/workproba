@@ -5,9 +5,9 @@
 
       <header class="models-settings__header">
         <div>
-          <h1 class="models-settings__title">{{ pageTitle }}</h1>
+          <h1 class="models-settings__title">{{ t('settings.title') }}</h1>
           <p class="models-settings__subtitle">
-            {{ pageSubtitle }}
+            {{ t('settings.subtitle') }}
           </p>
         </div>
       </header>
@@ -21,11 +21,7 @@
         <LockedModelSetup v-if="settingsLocked" />
 
         <fieldset v-else class="models-settings__body">
-          <AdvancedModelSetup
-            v-if="settingsMode === 'advanced'"
-            @switch-to-guided="onSwitchToGuided"
-          />
-          <GuidedModelSetup v-else @switch-to-advanced="onSwitchToAdvanced" />
+          <AdvancedModelSetup />
         </fieldset>
       </template>
     </div>
@@ -33,11 +29,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { onMounted, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
-import { Notify } from 'quasar';
 import { useAppSettings } from '@composables/useAppSettings';
-import GuidedModelSetup from '@components/settings/GuidedModelSetup.vue';
 import AdvancedModelSetup from '@components/settings/AdvancedModelSetup.vue';
 import LockedModelSetup from '@components/settings/LockedModelSetup.vue';
 import DensityControl from '@components/settings/DensityControl.vue';
@@ -48,46 +42,10 @@ const { t } = useI18n();
 
 const {
   load,
-  setSettingsMode,
-  settingsMode,
   settingsLocked,
 } = useAppSettings();
 
 const loading = ref(true);
-
-const pageTitle = computed(() =>
-  settingsMode.value === 'guided' && !settingsLocked.value
-    ? t('settings.engine.title')
-    : t('settings.title'),
-);
-
-const pageSubtitle = computed(() =>
-  settingsMode.value === 'guided' && !settingsLocked.value
-    ? t('settings.engine.subtitle')
-    : t('settings.subtitle'),
-);
-
-async function onSwitchToAdvanced(): Promise<void> {
-  try {
-    await setSettingsMode('advanced');
-  } catch (err) {
-    Notify.create({
-      message: err instanceof Error ? err.message : t('common.switchFailed'),
-      color: 'negative',
-    });
-  }
-}
-
-async function onSwitchToGuided(): Promise<void> {
-  try {
-    await setSettingsMode('guided');
-  } catch (err) {
-    Notify.create({
-      message: err instanceof Error ? err.message : t('common.switchFailed'),
-      color: 'negative',
-    });
-  }
-}
 
 onMounted(async () => {
   try {

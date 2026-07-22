@@ -112,7 +112,7 @@ async def reprocess_attachment(
     limits: Limits,
     locale: str = DEFAULT_LOCALE,
     provider_set: ProviderSet | None = None,
-    ui_mode: str = "guided",
+    ui_mode: str = "agent",
     cloud_plugin_data_dir: Path | None = None,
     plugin_data_dir: Path | None = None,
 ) -> ReprocessAttachmentResult:
@@ -304,7 +304,7 @@ async def process_inline_attachments(
     *,
     locale: str = DEFAULT_LOCALE,
     provider_set: ProviderSet | None = None,
-    ui_mode: str = "guided",
+    ui_mode: str = "agent",
     cloud_plugin_data_dir: Path | None = None,
     plugin_data_dir: Path | None = None,
 ) -> ProcessedAttachments:
@@ -570,7 +570,7 @@ async def build_inline_attachments_context(
     limits: Limits,
     locale: str = DEFAULT_LOCALE,
     provider_set: ProviderSet | None = None,
-    ui_mode: str = "guided",
+    ui_mode: str = "agent",
 ) -> str:
     """Rétrocompat : retourne uniquement le bloc texte du contexte."""
     result = await process_inline_attachments(

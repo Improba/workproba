@@ -9,7 +9,7 @@ from app.i18n import DEFAULT_LOCALE, normalize_locale
 
 JsonDict = dict[str, Any]
 
-UiMode = Literal["guided", "advanced", "locked"]
+UiMode = Literal["agent", "locked"]
 Locale = Literal["fr", "en"]
 ReasoningEffort = Literal["none", "low", "medium", "high"]
 ProviderSetChatReasoning = Literal["auto", "none", "low", "medium", "high"]
@@ -203,7 +203,7 @@ class AgentTurnRequest(BaseModel):
     # sur les variables d'environnement LLM_EMBEDDING_* du sidecar.
     embedding_config: LLMProviderConfig | None = None
     documents: list[DocumentReference] = Field(default_factory=list)
-    ui_mode: UiMode = "guided"
+    ui_mode: UiMode = "agent"
     locale: Locale = "fr"
     active_plugins: list[str] | None = None
     plugin_data_dir: str | None = None
@@ -681,6 +681,7 @@ class PreviewChangeResponse(BaseModel):
     is_new: bool
     is_binary: bool
     diff_html: str
+    preview_html: str = ""
     message: str = ""
     old_size: int = 0
     new_size: int = 0

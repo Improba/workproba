@@ -548,7 +548,7 @@ async function syncPersonasHistory(pluginDataDir: string): Promise<void> {
 }
 
 export function usePersonas(): UsePersonasReturn {
-  const { locale, settingsLocked, permissionsNetwork, settingsMode, codeExecute, auditEnabled } = useAppSettings();
+  const { locale, settingsLocked, permissionsNetwork, codeExecute, auditEnabled } = useAppSettings();
   const { isPersonasPluginActive, getPluginDataDir } = usePlugins();
   const { buildContextProviderSet } = useLlmSessionContext();
   const { providerReadiness, init: initCloud } = useCloud();
@@ -570,7 +570,7 @@ export function usePersonas(): UsePersonasReturn {
   }
 
   const selectablePersonas = computed(() =>
-    settingsMode.value === 'advanced' ? personas.value : builtinPersonas.value,
+    settingsLocked.value ? builtinPersonas.value : personas.value,
   );
 
   async function refresh(pluginDataDir: string): Promise<void> {

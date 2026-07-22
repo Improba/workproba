@@ -29,7 +29,7 @@
         :show-bearer="showBearerField"
         :disabled="cloudLoading"
         :submitting="submitting"
-        :submit-label="t('settings.engine.linkDevice')"
+        :submit-label="t('cloud.joinSubmit')"
         @submit="onSubmit"
       />
 

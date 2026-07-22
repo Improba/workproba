@@ -151,7 +151,8 @@ def register_plugin_tools(
     *,
     active_plugins: list[str] | None,
     plugin_data_dir: Path | None = None,
-    ui_mode: Literal["guided", "advanced", "locked"] = "guided",
+    ui_mode: Literal["agent", "locked"] = "agent",
+    managed_allowed_connector_ids: frozenset[str] | None = None,
 ) -> None:
     """Ajoute les outils agent des plugins actifs."""
     if is_plugin_active(PLUGIN_WORKPROBA_PROJET, active_plugins):
@@ -173,6 +174,7 @@ def register_plugin_tools(
             agent,
             plugin_data_dir=plugin_data_dir,
             ui_mode=ui_mode,
+            managed_allowed_connector_ids=managed_allowed_connector_ids,
         )
 
 

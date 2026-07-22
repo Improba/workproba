@@ -10,8 +10,8 @@ import type { LlmConfigPayload } from '@composables/useAppSettings';
 import type { ReasoningEffort } from '#types';
 import {
   clampReasoningEffortForSet,
-  defaultReasoningEffortForSet,
   supportsReasoningForSet,
+  supportedReasoningEffortsForSet,
 } from '@utils/providerSetModels';
 
 const MISTRAL_BASE_URL = 'https://api.mistral.ai/v1';
@@ -49,10 +49,10 @@ export const MISTRAL_BUILTIN_SET: ProviderSet = {
   authMode: 'api_key',
   chat: {
     provider: 'mistral',
-    model: 'mistral-small-latest',
+    model: 'mistral-medium-latest',
     baseUrl: MISTRAL_BASE_URL,
     apiKeyRef: 'secrets/mistral',
-    reasoning: 'auto',
+    reasoning: 'high',
     models: MISTRAL_CHAT_MODELS,
   },
   embeddings: {
@@ -77,8 +77,8 @@ export const WORKPROBA_CLOUD_BUILTIN_SET: ProviderSet = {
   chat: {
     // mistral : thinking/reasoning Mistral via le proxy cloud OpenAI-compat.
     provider: 'mistral',
-    model: 'mistral-small-latest',
-    reasoning: 'auto',
+    model: 'mistral-medium-latest',
+    reasoning: 'high',
     models: MISTRAL_CHAT_MODELS,
   },
   embeddings: {
@@ -109,7 +109,7 @@ export const OLLAMA_BUILTIN_SET: ProviderSet = {
     provider: 'ollama',
     model: 'llama3.2',
     baseUrl: OLLAMA_BASE_URL,
-    reasoning: 'auto',
+    reasoning: 'none',
   },
   embeddings: {
     provider: 'ollama',
@@ -203,6 +203,36 @@ export function enrichSetFromBuiltin(set: ProviderSet): ProviderSet {
           : enriched.embeddings,
       };
     }
+    // Migration one-shot : anciens défauts small+auto/none → medium+high
+    // uniquement pour les builtins Mistral connus (pas les sets custom).
+    if (
+      (template.id === 'workproba-cloud' || template.id === 'mistral-default') &&
+      enriched.chat.model === 'mistral-small-latest' &&
+      (enriched.chat.reasoning === 'auto' ||
+        enriched.chat.reasoning === 'none' ||
+        enriched.chat.reasoning == null)
+    ) {
+      enriched = {
+        ...enriched,
+        chat: {
+          ...enriched.chat,
+          model: template.chat.model,
+          reasoning: template.chat.reasoning,
+        },
+      };
+    }
+    if (
+      template.id === 'ollama-local' &&
+      (enriched.chat.reasoning === 'auto' || enriched.chat.reasoning == null)
+    ) {
+      enriched = {
+        ...enriched,
+        chat: {
+          ...enriched.chat,
+          reasoning: template.chat.reasoning,
+        },
+      };
+    }
   }
 
   return enriched;
@@ -217,30 +247,55 @@ export function resolveActiveSet(
   return match ? cloneProviderSet(match) : null;
 }
 
-function chatReasoningToEffort(
-  reasoning: ProviderSetChatReasoning | undefined,
-): ReasoningEffort | null {
-  if (!reasoning || reasoning === 'auto') return null;
-  if (reasoning === 'none') return 'none';
-  return reasoning;
+/** Default state déclaré sur le provider set (`chat.model` + `chat.reasoning`). */
+export interface ProviderSetDefaultState {
+  model: string;
+  reasoningEffort: ReasoningEffort;
+}
+
+/**
+ * Lit le default state du set.
+ * `chat.model` / `chat.reasoning` en sont la source unique.
+ * `auto` / absent (legacy) : fallback défensif vers un effort supporté
+ * (préfère `high` pour les catalogues agent none|high).
+ */
+export function defaultStateFromSet(set: ProviderSet): ProviderSetDefaultState {
+  const model = set.chat.model;
+  const raw = set.chat.reasoning;
+  if (raw && raw !== 'auto') {
+    if (raw === 'none') {
+      return { model, reasoningEffort: 'none' };
+    }
+    return {
+      model,
+      reasoningEffort: clampReasoningEffortForSet(set, model, raw),
+    };
+  }
+  const efforts = supportedReasoningEffortsForSet(set, model);
+  const reasoningEffort: ReasoningEffort = efforts.includes('high')
+    ? 'high'
+    : efforts.includes('medium')
+      ? 'medium'
+      : efforts.includes('low')
+        ? 'low'
+        : 'none';
+  return { model, reasoningEffort };
 }
 
 export function toChatLlmConfigFromSet(set: ProviderSet | null): LlmConfigPayload | null {
   if (!set) return null;
+  const defaults = defaultStateFromSet(set);
   const chat = set.chat;
   const payload: LlmConfigPayload = {
     provider: chat.provider,
-    model: chat.model,
+    model: defaults.model,
     base_url: chat.baseUrl ?? null,
     api_key: chat.apiKey ?? null,
     extra_headers: {},
   };
-  const effort = chatReasoningToEffort(chat.reasoning);
-  if (effort && effort !== 'none' && supportsReasoningForSet(set, chat.model)) {
-    const clamped = clampReasoningEffortForSet(set, chat.model, effort);
-    if (clamped !== 'none') {
-      payload.reasoning_effort = clamped;
-    }
+  const effort = defaults.reasoningEffort;
+  if (effort !== 'none' && supportsReasoningForSet(set, defaults.model)) {
+    payload.reasoning_effort = effort;
   }
   return payload;
 }
@@ -351,7 +406,9 @@ export function applySessionOverridesToSet(
   return next;
 }
 
-/** Effort effectif pour l'UI après overrides session (modèle + raisonnement). */
+/** Effort effectif pour l'UI après overrides session (modèle + raisonnement).
+ * Override `auto` / absent → default state du set (clampé au modèle effectif).
+ */
 export function effectiveReasoningEffortFromSet(
   set: ProviderSet,
   sessionModel?: string | null,
@@ -361,7 +418,8 @@ export function effectiveReasoningEffortFromSet(
   const model = routed.chat.model;
   const reasoning = routed.chat.reasoning;
   if (!reasoning || reasoning === 'auto') {
-    return defaultReasoningEffortForSet(routed, model);
+    const defaults = defaultStateFromSet(set);
+    return clampReasoningEffortForSet(routed, model, defaults.reasoningEffort);
   }
   if (reasoning === 'none') return 'none';
   return clampReasoningEffortForSet(routed, model, reasoning);
@@ -416,9 +474,9 @@ export function emptyCustomSet(): ProviderSet {
     badges: [],
     chat: {
       provider: 'mistral',
-      model: 'mistral-small-latest',
+      model: 'mistral-medium-latest',
       baseUrl: MISTRAL_BASE_URL,
-      reasoning: 'auto',
+      reasoning: 'high',
     },
     embeddings: {
       provider: 'mistral',

@@ -76,7 +76,7 @@ function visibleTools(connector: ManagedConnector): ManagedConnectorTool[] {
   if (props.showAdvancedTools) {
     return tools;
   }
-  return tools.filter((tool) => (tool.visibility ?? 'guided') !== 'advanced');
+  return tools.filter((tool) => (tool.visibility ?? 'guided') !== 'standard');
 }
 </script>
 

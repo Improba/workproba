@@ -6,6 +6,7 @@ import {
 } from '@utils/providerSets';
 import {
   canActivateProviderSet,
+  cloudReadinessFromQuota,
   getSetActivationReadiness,
   pickActivatableReadingSet,
   validateProviderSetChatReady,
@@ -70,6 +71,43 @@ describe('providerSetValidation', () => {
     });
     expect(check.ok).toBe(false);
     if (!check.ok) expect(check.reason).toBe('quota_exceeded');
+  });
+
+  describe('cloudReadinessFromQuota', () => {
+    it('ne signale pas quota dépassé quand les plafonds sont null (illimité)', () => {
+      const readiness = cloudReadinessFromQuota(
+        true,
+        {
+          enabled: true,
+          tokensLimit: null,
+          requestsLimit: null,
+          remainingTokens: null,
+          remainingRequests: null,
+        },
+        true,
+      );
+      expect(readiness).toEqual({
+        enrolled: true,
+        reachable: true,
+        subscribed: true,
+        quotaExceeded: false,
+      });
+    });
+
+    it('signale quota dépassé quand remaining est à zéro', () => {
+      const readiness = cloudReadinessFromQuota(
+        true,
+        {
+          enabled: true,
+          tokensLimit: 1000,
+          requestsLimit: 100,
+          remainingTokens: 0,
+          remainingRequests: 50,
+        },
+        true,
+      );
+      expect(readiness.quotaExceeded).toBe(true);
+    });
   });
 
   describe('getSetActivationReadiness / canActivateProviderSet', () => {

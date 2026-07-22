@@ -1,7 +1,6 @@
 import { computed, type ComputedRef } from 'vue';
 import {
   CAPABILITY_CATALOG,
-  GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS,
   buildManagedCapabilityDefinition,
   connectorIdFromManagedCapability,
   getCapabilityDefinition,
@@ -26,10 +25,6 @@ import { useCloud } from './useCloud';
 export interface CapabilityView {
   definition: CapabilityDefinition;
   state: CapabilityState;
-}
-
-function isGuidedMode(settingsLocked: boolean, settingsMode: string): boolean {
-  return settingsLocked || settingsMode !== 'advanced';
 }
 
 function isPluginBlockedByPreset(
@@ -75,14 +70,12 @@ function computeLocalCapabilityState(
   pluginIdsInstalled: Set<string>,
   activePluginIds: Set<string>,
   settingsLocked: boolean,
-  settingsMode: string,
   pluginsAllowed: string[] | null | undefined,
   permissionsNetwork: boolean,
   permissionsProjectSync: boolean,
   permissionsNetworkImprobaCloud: boolean,
   cloudEnrolled: boolean,
 ): CapabilityState {
-  const guided = isGuidedMode(settingsLocked, settingsMode);
   const requiredPluginIds = collectRequiredPluginIds(definition);
 
   const missingPlugins = requiredPluginIds.filter((id) => !pluginIdsInstalled.has(id));
@@ -109,7 +102,7 @@ function computeLocalCapabilityState(
     return { kind: 'blocked', managedByOrganization: true };
   }
 
-  if (definition.comingSoonInGuided && guided) {
+  if (definition.comingSoonInGuided && settingsLocked) {
     return { kind: 'coming_soon' };
   }
 
@@ -141,7 +134,6 @@ export function useCapabilities(): UseCapabilitiesReturn {
   const {
     settings,
     settingsLocked,
-    settingsMode,
     permissionsNetwork,
     permissionsProjectSync,
     permissionsNetworkImprobaCloud,
@@ -163,9 +155,6 @@ export function useCapabilities(): UseCapabilitiesReturn {
     () => new Set(plugins.value.map((p) => p.manifest.id)),
   );
   const activeIds = computed(() => new Set(activePluginIds.value));
-  const guided = computed(() =>
-    isGuidedMode(settingsLocked.value, settingsMode.value),
-  );
 
   function buildLocalView(definition: CapabilityDefinition): CapabilityView {
     return {
@@ -175,7 +164,6 @@ export function useCapabilities(): UseCapabilitiesReturn {
         pluginIdsInstalled.value,
         activeIds.value,
         settingsLocked.value,
-        settingsMode.value,
         settings.value.pluginsAllowed ?? null,
         permissionsNetwork.value,
         permissionsProjectSync.value,
@@ -191,27 +179,22 @@ export function useCapabilities(): UseCapabilitiesReturn {
       return [];
     }
 
-    const hidden = new Set(
-      guided.value ? GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS : [],
-    );
-
-    return connectors.value
-      .filter((connector) => !hidden.has(connector.id))
-      .map((connector) => {
-        const definition = buildManagedCapabilityDefinition({
-          connectorId: connector.id,
-          name: connector.name,
-          description: connector.description,
-        });
-        const locallyEnabled = connector.enabled !== false;
-        return {
-          definition,
-          state: {
-            kind: (locallyEnabled ? 'active' : 'available') as CapabilityState['kind'],
-            managedByOrganization: true,
-          },
-        };
+    return connectors.value.map((connector) => {
+      const definition = buildManagedCapabilityDefinition({
+        connectorId: connector.id,
+        name: connector.name,
+        description: connector.description,
+        enableByDefaultInProjects: connector.enableByDefaultInProjects,
       });
+      const locallyEnabled = connector.enabled !== false;
+      return {
+        definition,
+        state: {
+          kind: (locallyEnabled ? 'active' : 'available') as CapabilityState['kind'],
+          managedByOrganization: true,
+        },
+      };
+    });
   }
 
   const capabilities = computed(() => [

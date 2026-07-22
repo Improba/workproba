@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use super::audit::log_audit_event;
-use super::settings_store::{load_settings, AppSettings, SettingsMode};
+use super::settings_store::{load_settings, AppSettings};
 use crate::commands::atomic_io::atomic_write;
 
 const PLUGINS_DIR: &str = "plugins";
@@ -173,7 +173,7 @@ pub fn builtin_manifests() -> Vec<PluginManifest> {
                 "settings:section".to_string(),
             ],
             default_enabled: false,
-            ui_slots: vec!["right_panel".to_string(), "settings".to_string()],
+            ui_slots: vec!["settings".to_string()],
             hooks: vec![],
             is_builtin: true,
         },
@@ -257,10 +257,7 @@ fn local_plugins_allowed(settings: &AppSettings) -> bool {
     if let Some(allowed) = settings.local_plugins_allowed {
         return allowed;
     }
-    if is_locked(settings) {
-        return false;
-    }
-    settings.settings_mode == Some(SettingsMode::Advanced)
+    !is_locked(settings)
 }
 
 fn plugin_allowed_by_preset(settings: &AppSettings, plugin_id: &str) -> bool {
@@ -969,16 +966,13 @@ mod plugins_tests {
     }
 
     #[test]
-    fn install_local_plugin_in_advanced_mode() {
+    fn install_local_plugin_when_not_locked() {
         let app_data = temp_app_data();
         let source_base = temp_app_data();
         let manifest = sample_local_manifest("acme.hello");
         let folder = write_local_plugin_folder(&source_base, &manifest);
 
-        let settings = AppSettings {
-            settings_mode: Some(SettingsMode::Advanced),
-            ..AppSettings::default()
-        };
+        let settings = AppSettings::default();
 
         let info = install_local_plugin_at(&app_data, &settings, folder.to_str().unwrap())
             .expect("install");
@@ -1062,7 +1056,6 @@ mod plugins_tests {
         let folder = write_local_plugin_folder(&source_base, &manifest);
 
         let settings = AppSettings {
-            settings_mode: Some(SettingsMode::Advanced),
             settings_locked: Some(true),
             local_plugins_allowed: Some(true),
             ..AppSettings::default()

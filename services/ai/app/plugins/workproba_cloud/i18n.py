@@ -18,9 +18,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "done": "J'ai récupéré {count} document(s) du projet {project_id} depuis le cloud",
             },
             "enroll_to_cloud": {
-                "will": "Je vais connecter ce poste au cloud",
-                "cannot": "Je n'ai pas pu connecter ce poste au cloud",
-                "done": "Ce poste est connecté au cloud",
+                "will": "Je vais me connecter à Improba Cloud",
+                "cannot": "Je n'ai pas pu me connecter à Improba Cloud",
+                "done": "Je suis connecté à Improba Cloud",
             },
             "sync_managed_regards": {
                 "will": "Je vais synchroniser les regards de l'organisation",
@@ -50,9 +50,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "done": "I pulled {count} document(s) for project {project_id} from the cloud",
             },
             "enroll_to_cloud": {
-                "will": "I will connect this computer to the cloud",
-                "cannot": "I could not connect this computer to the cloud",
-                "done": "This computer is connected to the cloud",
+                "will": "I will sign in to Improba Cloud",
+                "cannot": "I could not sign in to Improba Cloud",
+                "done": "I am signed in to Improba Cloud",
             },
             "sync_managed_regards": {
                 "will": "I will sync organization regards",

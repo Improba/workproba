@@ -497,7 +497,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Activez-le dans Capacités."
             ),
             "connector_advanced_only": (
-                "Le connecteur {connector_id} n'est disponible qu'en mode avancé."
+                "Le connecteur {connector_id} n'est pas disponible avec les réglages verrouillés."
             ),
             "connector_payload_invalid": (
                 "Paramètres invalides pour {connector_id} / {action} : {detail}"
@@ -1052,7 +1052,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Enable it in Capabilities."
             ),
             "connector_advanced_only": (
-                "Connector {connector_id} is only available in advanced mode."
+                "Connector {connector_id} is not available with locked settings."
             ),
             "connector_payload_invalid": (
                 "Invalid parameters for {connector_id} / {action}: {detail}"

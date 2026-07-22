@@ -32,7 +32,6 @@ export async function installTauriMock(
         providers: [] as unknown[],
         density: 'comfortable',
         toolCallView: 'human',
-        settingsMode: 'guided',
         settingsLocked: false,
       };
 

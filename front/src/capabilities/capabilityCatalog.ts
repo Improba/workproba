@@ -53,7 +53,7 @@ export interface CapabilityDefinition {
   primarySurface: PrimarySurface;
   /** Capacité parente (ex. sous Workproba Cloud). */
   parentId?: CapabilityId;
-  /** Affichée comme « bientôt disponible » en mode guidé. */
+  /** Affichée comme « bientôt disponible » en mode verrouillé. */
   comingSoonInGuided?: boolean;
   /** Origine produit : locale (plugin) ou managée (via Workproba Cloud). */
   source?: CapabilitySource;
@@ -62,6 +62,8 @@ export interface CapabilityDefinition {
   /** Titre / description résolus (API), sans clé i18n. */
   resolvedTitle?: string;
   resolvedDescription?: string;
+  /** Active par defaut dans les nouveaux espaces projet. */
+  enableByDefaultInProjects: boolean;
 }
 
 export interface CapabilityState {
@@ -69,11 +71,14 @@ export interface CapabilityState {
   managedByOrganization?: boolean;
 }
 
-/** Connecteurs techniques masqués en mode guidé dans le hub Capacités. */
-export const GUIDED_HIDDEN_MANAGED_CONNECTOR_IDS: readonly string[] = [
-  'echo',
-  'ihora.shaped',
-];
+/** Defaults miroir des connecteurs managés (CapabilityId managed:{connectorId}). */
+export const MANAGED_CONNECTOR_ENABLE_BY_DEFAULT_IN_PROJECTS: Readonly<
+  Record<string, boolean>
+> = {
+  echo: false,
+  'ihora.shaped': false,
+  ihora: true,
+};
 
 /**
  * Ordre produit : Workproba Cloud en premier (seul connecteur bureau),
@@ -89,10 +94,10 @@ export const CAPABILITY_CATALOG: readonly CapabilityDefinition[] = [
     icon: 'cloud',
     pluginIds: [CLOUD_PLUGIN_ID],
     primarySurface: {
-      type: 'right_panel',
-      tabKey: `${CLOUD_PLUGIN_ID}:right_panel`,
+      type: 'central_route',
     },
     source: 'local',
+    enableByDefaultInProjects: true,
   },
   {
     id: 'projects',
@@ -107,6 +112,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityDefinition[] = [
       tabKey: `${PROJET_PLUGIN_ID}:right_panel`,
     },
     source: 'local',
+    enableByDefaultInProjects: true,
   },
   {
     id: 'regards',
@@ -120,6 +126,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityDefinition[] = [
       pluginId: PERSONAS_PLUGIN_ID,
     },
     source: 'local',
+    enableByDefaultInProjects: true,
   },
   {
     id: 'web_navigation',
@@ -133,6 +140,7 @@ export const CAPABILITY_CATALOG: readonly CapabilityDefinition[] = [
       tabKey: `${BROWSER_PLUGIN_ID}:right_panel`,
     },
     source: 'local',
+    enableByDefaultInProjects: false,
   },
 ] as const;
 
@@ -148,6 +156,15 @@ export function connectorIdFromManagedCapability(
   id: ManagedCapabilityId,
 ): string {
   return id.slice('managed:'.length);
+}
+
+export function getEnableByDefaultInProjects(id: CapabilityId): boolean {
+  if (isManagedCapabilityId(id)) {
+    const connectorId = connectorIdFromManagedCapability(id);
+    return MANAGED_CONNECTOR_ENABLE_BY_DEFAULT_IN_PROJECTS[connectorId] ?? false;
+  }
+  const cap = getCapabilityDefinition(id);
+  return cap?.enableByDefaultInProjects ?? false;
 }
 
 export function getCapabilityDefinition(
@@ -177,6 +194,7 @@ export function buildManagedCapabilityDefinition(input: {
   connectorId: string;
   name: string;
   description?: string;
+  enableByDefaultInProjects?: boolean;
 }): CapabilityDefinition {
   const id = managedCapabilityId(input.connectorId);
   const title = input.name.trim() || input.connectorId;
@@ -192,6 +210,10 @@ export function buildManagedCapabilityDefinition(input: {
     managedConnectorId: input.connectorId,
     resolvedTitle: title,
     resolvedDescription: input.description?.trim() || undefined,
+    enableByDefaultInProjects:
+      input.enableByDefaultInProjects ??
+      MANAGED_CONNECTOR_ENABLE_BY_DEFAULT_IN_PROJECTS[input.connectorId] ??
+      false,
     primarySurface: {
       // Pas de domicile UI : activation locale uniquement.
       type: 'nested',

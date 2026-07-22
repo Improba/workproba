@@ -130,22 +130,18 @@ describe('MessageList', () => {
             template:
               '<div class="q-scroll-area"><div class="q-scrollarea__container"><slot /></div></div>',
             mounted() {
-              const recycle = (this.$el as HTMLElement).querySelector(
-                '.vue-recycle-scroller',
-              ) as HTMLElement | null;
               const container = (this.$el as HTMLElement).querySelector(
                 '.q-scrollarea__container',
               ) as HTMLElement;
-              const target = recycle ?? container;
-              Object.defineProperty(target, 'scrollHeight', {
+              Object.defineProperty(container, 'scrollHeight', {
                 value: 400,
                 configurable: true,
               });
-              Object.defineProperty(target, 'clientHeight', {
+              Object.defineProperty(container, 'clientHeight', {
                 value: 100,
                 configurable: true,
               });
-              target.scrollTo = scrollTo;
+              container.scrollTo = scrollTo;
             },
           },
         },
@@ -163,12 +159,11 @@ describe('MessageList', () => {
     wrapper.unmount();
   });
 
-  it('rend le spacer reply quand spacerHeight > 0', () => {
+  it('rend la réserve turn-anchor seulement si spacerHeight > 0', async () => {
     const wrapper = mount(MessageList, {
       props: {
         messages: sampleMessages,
-        streaming: false,
-        spacerHeight: 120,
+        spacerHeight: 240,
       },
       global: {
         stubs: {
@@ -183,28 +178,9 @@ describe('MessageList', () => {
 
     const spacer = wrapper.find('.message-list__reply-spacer');
     expect(spacer.exists()).toBe(true);
-    expect(spacer.attributes('style')).toContain('height: 120px');
-    wrapper.unmount();
-  });
+    expect(spacer.attributes('style')).toContain('height: 240px');
 
-  it('n\'affiche pas le spacer quand spacerHeight vaut 0', () => {
-    const wrapper = mount(MessageList, {
-      props: {
-        messages: sampleMessages,
-        streaming: false,
-        spacerHeight: 0,
-      },
-      global: {
-        stubs: {
-          Lucide: true,
-          Message: true,
-          QScrollArea: {
-            template: '<div class="q-scroll-area"><slot /></div>',
-          },
-        },
-      },
-    });
-
+    await wrapper.setProps({ spacerHeight: 0 });
     expect(wrapper.find('.message-list__reply-spacer').exists()).toBe(false);
     wrapper.unmount();
   });

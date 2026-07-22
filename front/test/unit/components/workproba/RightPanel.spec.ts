@@ -22,7 +22,7 @@ vi.mock('@composables/usePluginSlots', () => ({
 vi.mock('@composables/useAppSettings', () => ({
   useAppSettings: () => ({
     settingsLocked: ref(false),
-    settingsMode: ref('guided'),
+    settingsLocked: ref(false),
   }),
 }));
 

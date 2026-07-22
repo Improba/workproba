@@ -17,7 +17,7 @@ const sampleConnectors: ManagedConnector[] = [
       {
         name: 'get_timesheet',
         description: 'Timesheet avancé',
-        visibility: 'advanced',
+        visibility: 'standard',
       },
     ],
   },
