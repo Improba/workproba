@@ -254,10 +254,11 @@ def build_human_summary(
         return t(locale, "human.sync_managed_regards.will")
 
     if tool_name == "invoke_managed_connector":
+        result_data = result or {}
         connector_id = str(
             arguments.get("connector_id")
-            or result.get("connector_id")
-            or result.get("connectorId")
+            or result_data.get("connector_id")
+            or result_data.get("connectorId")
             or ""
         )
         if is_result:
@@ -272,10 +273,11 @@ def build_human_summary(
             managed_tool_label,
         )
 
+        result_data = result or {}
         connector_id = str(
             arguments.get("connector_id")
-            or result.get("connector_id")
-            or result.get("connectorId")
+            or result_data.get("connector_id")
+            or result_data.get("connectorId")
             or managed_connector_id_for_tool(tool_name)
         )
         tool_label = managed_tool_label(tool_name)

@@ -8,19 +8,25 @@
         :data-block-key="block.key"
         v-html="block.html"
       />
-      <div
-        v-if="props.streaming && tailHtml"
-        class="chat-message__md-block chat-message__md-block--tail"
-        v-html="tailHtml"
-      />
+      <span
+        v-if="props.streaming && (tailHtml || visibleCursor)"
+        class="chat-message__stream-tail"
+      >
+        <span
+          v-if="tailHtml"
+          class="chat-message__md-block chat-message__md-block--tail"
+          v-html="tailHtml"
+        />
+        <span
+          v-if="visibleCursor"
+          class="chat-message__cursor"
+          data-testid="chat-message-cursor"
+          aria-hidden="true"
+        />
+      </span>
     </template>
     <div v-else v-html="finalHtml" />
   </div>
-  <span
-    v-if="streaming && showCursor"
-    class="chat-message__cursor"
-    aria-hidden="true"
-  />
 </template>
 
 <script lang="ts">
@@ -52,6 +58,14 @@ const props = withDefaults(
 );
 
 const { t } = useI18n();
+
+/** Curseur seulement s'il y a du texte (indépendant du raisonnement replié/déplié). */
+const visibleCursor = computed(
+  () =>
+    Boolean(props.streaming) &&
+    Boolean(props.showCursor) &&
+    props.content.trim().length > 0,
+);
 
 interface RenderBlock {
   key: number;
@@ -306,13 +320,35 @@ onUnmounted(() => {
   }
 }
 
+.chat-message__md-block {
+  width: 100%;
+}
+
+/* Queue de stream + curseur collés en fin de texte (pas une ligne en dessous). */
+.chat-message__stream-tail {
+  display: inline;
+}
+
+.chat-message__md-block--tail {
+  display: inline;
+
+  :deep(> p) {
+    display: inline;
+    margin: 0;
+  }
+
+  :deep(> p:last-child) {
+    margin-bottom: 0;
+  }
+}
+
 .chat-message__cursor {
   display: inline-block;
   width: 0.55rem;
-  height: 1rem;
+  height: 1em;
   margin-left: 2px;
   vertical-align: text-bottom;
-  background: var(--primary);
+  background: var(--primary, var(--wp-accent));
   border-radius: 2px;
   animation: chat-cursor-blink 1s step-end infinite;
 }

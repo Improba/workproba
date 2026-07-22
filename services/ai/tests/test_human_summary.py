@@ -236,3 +236,47 @@ def test_human_summary_sync_managed_regards(locale: str) -> None:
         assert start == "I will sync organization regards"
         assert done == "I synced 3 organization regard(s)"
         assert error == "I could not sync organization regards"
+
+
+@pytest.mark.parametrize("locale", ["fr", "en"])
+def test_human_summary_managed_ihora_create_project(locale: str) -> None:
+    """tool_call_start passes result=None; must not crash (incident 6a23752e…)."""
+    start = build_human_summary(
+        "managed__ihora__create_project",
+        {"name": "Projet Test Sylvain"},
+        locale=locale,
+    )
+    done = build_human_summary(
+        "managed__ihora__create_project",
+        {"name": "Projet Test Sylvain"},
+        result={"connector_id": "ihora"},
+        locale=locale,
+    )
+    error = build_human_summary(
+        "managed__ihora__create_project",
+        {"name": "Projet Test Sylvain"},
+        result={},
+        is_error=True,
+        locale=locale,
+    )
+    if locale == "fr":
+        assert start == "Je vais appeler create project sur ihora"
+        assert done == "J'ai appelé create project sur ihora"
+        assert error == "Je n'ai pas pu appeler create project sur ihora"
+    else:
+        assert start == "I will call create project on ihora"
+        assert done == "I called create project on ihora"
+        assert error == "I could not call create project on ihora"
+
+
+@pytest.mark.parametrize("locale", ["fr", "en"])
+def test_human_summary_invoke_managed_connector_start(locale: str) -> None:
+    start = build_human_summary(
+        "invoke_managed_connector",
+        {"connector_id": "ihora"},
+        locale=locale,
+    )
+    if locale == "fr":
+        assert start == "Je vais appeler le connecteur managé ihora"
+    else:
+        assert start == "I will call the managed connector ihora"

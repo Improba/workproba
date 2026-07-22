@@ -88,7 +88,7 @@
       <template v-else>
         <template v-for="part in renderParts" :key="part.id">
         <MessageTextPart
-          v-if="part.type === 'text'"
+          v-if="part.type === 'text' && Boolean(part.content?.trim())"
           :content="part.content"
           :streaming="!!message.streaming"
           :show-cursor="part.id === lastTextPartId && !!message.streaming"

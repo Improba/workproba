@@ -256,6 +256,46 @@ describe('Message accessibilité', () => {
     wrapper.unmount();
   });
 
+  it('n’affiche pas de part texte vide pendant le raisonnement (replié ou non)', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-empty-text-thinking',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          parts: [
+            { type: 'text', id: 'empty-text', content: '' },
+            {
+              type: 'thinking',
+              id: 'think-part',
+              thinkingId: 'think-0',
+              content: 'Je réfléchis…',
+              done: false,
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: {
+            props: ['thinking', 'streaming'],
+            template: '<div class="thinking-card-stub" />',
+          },
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.text-part').exists()).toBe(false);
+    expect(wrapper.find('.thinking-card-stub').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('affiche les citations mémoire sur un message assistant', () => {
     const wrapper = mount(Message, {
       props: {

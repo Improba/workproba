@@ -165,4 +165,40 @@ describe('MessageTextPart', () => {
     }
     wrapper.unmount();
   });
+
+  it('n’affiche pas le curseur si le contenu texte est vide', async () => {
+    const wrapper = mount(MessageTextPart, {
+      props: {
+        content: '',
+        streaming: true,
+        showCursor: true,
+      },
+    });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="chat-message-cursor"]').exists()).toBe(
+      false,
+    );
+    wrapper.unmount();
+  });
+
+  it('colle le curseur en fin de queue de stream quand il y a du texte', async () => {
+    const wrapper = mount(MessageTextPart, {
+      props: {
+        content: 'Salut',
+        streaming: true,
+        showCursor: true,
+      },
+    });
+    await flushPromises();
+
+    const cursor = wrapper.find('[data-testid="chat-message-cursor"]');
+    expect(cursor.exists()).toBe(true);
+    expect(cursor.element.parentElement?.classList.contains('chat-message__stream-tail')).toBe(
+      true,
+    );
+    expect(
+      wrapper.find('.chat-message__markdown').element.contains(cursor.element),
+    ).toBe(true);
+    wrapper.unmount();
+  });
 });
