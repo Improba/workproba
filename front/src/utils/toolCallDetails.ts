@@ -254,6 +254,8 @@ export function statusLabel(status: ChatToolCall['status']): string {
   switch (status) {
     case 'running':
       return t('toolCalls.statusRunning');
+    case 'pending_confirmation':
+      return t('toolCalls.statusPendingConfirmation');
     case 'awaiting_confirmation':
       return t('toolCalls.statusAwaitingConfirmation');
     case 'success':

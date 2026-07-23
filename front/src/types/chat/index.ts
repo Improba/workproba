@@ -3,6 +3,7 @@ export type ChatMessageRole = 'user' | 'assistant' | 'system';
 export type ToolCallStatus =
   | 'pending'
   | 'running'
+  | 'pending_confirmation'
   | 'awaiting_confirmation'
   | 'success'
   | 'error';
@@ -20,6 +21,7 @@ export interface ChatConfirmation {
   targets?: string[];
   headline?: string;
   protectionLabels?: string[];
+  trustKey?: string | null;
 }
 
 export interface ChatPlanStep {
@@ -140,6 +142,8 @@ export interface ChatToolCall {
   filePath?: string;
   snapshotPath?: string;
   humanSummary?: string;
+  /** True si l'appel a été auto-approuvé via trust de tour. */
+  autoApproved?: boolean;
 }
 
 /** Segment texte d'un message assistant (rendu markdown). */
@@ -245,6 +249,13 @@ export interface ChatMessage {
   error?: ChatError | null;
   /** Demande de confirmation avant écriture fichier (flux de confiance). */
   pendingConfirmation?: ChatConfirmation | null;
+  /** Confirmation en préparation (avant résumé riche ihora). */
+  preparingConfirmation?: {
+    toolCallId: string;
+    toolName?: string;
+    connectorId?: string;
+    action?: string;
+  } | null;
   /** Plan proposé par l'agent (mode planification). */
   pendingPlan?: ChatProposedPlan | null;
   /** Au moins un plan a déjà été proposé dans ce tour (replan). */
@@ -299,7 +310,9 @@ export type ChatStreamEventType =
   | 'thinking_delta'
   | 'thinking_end'
   | 'tool_call_start'
+  | 'confirmation_preparing'
   | 'confirmation_request'
+  | 'tool_auto_approved'
   | 'tool_call_result'
   | 'plan_proposed'
   | 'compaction'
@@ -373,6 +386,20 @@ export interface ChatStreamConfirmationRequestData {
   targets?: string[];
   headline?: string;
   protectionLabels?: string[];
+  trustKey?: string | null;
+}
+
+export interface ChatStreamConfirmationPreparingData {
+  toolCallId: string;
+  toolName?: string;
+  connectorId?: string;
+  action?: string;
+}
+
+export interface ChatStreamToolAutoApprovedData {
+  toolCallId: string;
+  toolName?: string;
+  trustKey?: string;
 }
 
 export interface ChatStreamErrorData {
@@ -441,8 +468,10 @@ export type ChatStreamEvent =
   | { type: 'thinking_delta'; data: ChatStreamThinkingDeltaData }
   | { type: 'thinking_end'; data: ChatStreamThinkingEndData }
   | { type: 'tool_call_start'; data: ChatStreamToolCallStartData }
+  | { type: 'confirmation_preparing'; data: ChatStreamConfirmationPreparingData }
   | { type: 'tool_call_result'; data: ChatStreamToolCallResultData }
   | { type: 'confirmation_request'; data: ChatStreamConfirmationRequestData }
+  | { type: 'tool_auto_approved'; data: ChatStreamToolAutoApprovedData }
   | { type: 'plan_proposed'; data: ChatStreamPlanProposedData }
   | { type: 'compaction'; data: ChatStreamCompactionData }
   | { type: 'fallback'; data: ChatStreamFallbackData }

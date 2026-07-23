@@ -36,7 +36,7 @@ Framework: **pytest** + `pytest-asyncio`. Offline tests are deterministic (no LL
 - `tests/test_versions.py`: file versions
 - `tests/test_extractor.py`: `.docx` extraction, binary
 - `tests/test_confirmation_sandbox.py`: write confirmation and sandbox gating
-- `tests/test_effect_gate.py`: Human Approval Gate (effect classification, `request_effect`, audit, deny/timeout)
+- `tests/test_effect_gate.py`: Human Approval Gate (effect classification, `request_effect`, audit, deny/timeout, `approve_remaining` / `trust_key`, `tool_auto_approved`, `confirmation_preparing`)
 - `tests/test_work_events.py`: Work Event Bus (`work_started`, `work_contribution`, `work_completed`, `work_failed`)
 - `tests/test_memory_flow.py`: cross-session memory promotion and recall flows
 - `tests/test_live_mistral.py`: **live** (network + Mistral key), skipped by default
@@ -82,7 +82,7 @@ WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 
 ### Current coverage
 
-Run `pytest -q` for the up-to-date count (**~900+ offline tests** + a few skips, plus live/eval suites). Covers: agent, approval gate, work events, scoped memory (hybrid ranking + embedding cache), plugins, managed connectors, per-space capabilities, documents / slides HTML, audit, attachments, RAG, HTTP SSE, web search.
+Run `pytest -q` for the up-to-date count (**~900+ offline tests** + a few skips, plus live/eval suites). Covers: agent, approval gate (approve_remaining, trust, preparing, interrupted tools), work events, scoped memory (hybrid ranking + embedding cache), plugins, managed connectors, per-space capabilities, documents / slides HTML, audit, attachments, RAG, HTTP SSE, web search.
 
 ## Frontend (`front/`)
 
@@ -107,11 +107,11 @@ yarn test:e2e                  # Playwright (smoke)
 
 ### Notable unit specs
 
-- `ConfirmationCard.spec.ts`: effect-oriented headline, protection labels, approve/deny, `write_pptx` preview button, **managed / external_send layout** (human summary, args, protections).
+- `ConfirmationCard.spec.ts`: effect-oriented headline, protection labels, approve/deny, **approve remaining**, preparing state, `write_pptx` preview button, **managed / external_send layout** (human summary, args, protections).
 - `PreviewChangeDialog.pptx.spec.ts`, `ToolCallCard.pptx.spec.ts`, `fileWriteTools.spec.ts`: PPTX preview and write tool guards.
-- `ChatView.scroll.spec.ts`: turn-anchor scroll, spacer shrink, sticky promote, detach on wheel.
+- `ChatView.scroll.spec.ts`: turn-anchor scroll, spacer shrink, sticky promote, detach on wheel, **confirmation scroll** (`ensureConfirmationVisible`).
 - `SpaceCapabilitiesPanel.spec.ts`, `capabilityCatalog.spec.ts`: per-space wanted toggles and catalog defaults.
-- `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection, `work_*` correlation (`streamCorrelation`), edit/regenerate, retry after failed regenerate, `loadMessages` retry reset, `write_pptx` tool_call_start seeding.
+- `useChatStream.spec.ts`: SSE handling, confirmation flow, approval gate retry detection, `work_*` correlation (`streamCorrelation`), edit/regenerate, retry after failed regenerate, `loadMessages` retry reset, `write_pptx` tool_call_start seeding, **title on first user message** (without assistant reply), **cloud reconnect helpers**, interrupted tool finalization.
 - `EngineOnboardingWizard.spec.ts`: first-run engine and cloud setup flow.
 - `CloudLoginModal.spec.ts`, `EnrollCloudModal.spec.ts`: cloud login and enroll modals.
 - `cloudDesktopAuth.spec.ts`, `cloudWebUrls.spec.ts`: `POST /devices/login` client and cloud web URL helpers.

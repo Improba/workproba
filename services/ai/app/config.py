@@ -68,7 +68,7 @@ class Settings(BaseSettings):
 
     # Timeout global d'un tour agent (LLM + outils + attente de confirmation).
     turn_timeout_seconds: int = Field(
-        default=180,
+        default=600,
         ge=30,
         le=3600,
         validation_alias="TURN_TIMEOUT_SECONDS",
@@ -257,9 +257,9 @@ class Settings(BaseSettings):
     )
 
     max_agent_iterations: int = Field(
-        default=6,
+        default=40,
         ge=1,
-        le=32,
+        le=64,
         validation_alias="MAX_AGENT_ITERATIONS",
     )
 

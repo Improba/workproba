@@ -458,4 +458,221 @@ describe('ChatView scroll behavior', () => {
     expect(state.isPinned).toBe(true);
     wrapper.unmount();
   });
+
+  it('passe en sticky et scrolle quand une confirmation apparaît', async () => {
+    const wrapper = mountChat([]);
+    await settle();
+
+    await wrapper.setProps({
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'Q',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    });
+    await settle();
+    expect(scrollState(wrapper).mode).toBe('anchor');
+
+    mockSizes[1] = 200;
+    scrollEl.scrollTo.mockClear();
+    await wrapper.setProps({
+      streaming: true,
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'Q',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: '',
+          toolCalls: [
+            {
+              id: 'tc_1',
+              name: 'invoke_managed_connector',
+              status: 'awaiting_confirmation',
+            },
+          ],
+          pendingConfirmation: {
+            confirmationId: 'cf_1',
+            toolCallId: 'tc_1',
+            toolName: 'invoke_managed_connector',
+            action: 'create',
+            proposedPath: '',
+            humanSummary: 'Confirmer',
+            trustKey: 'connector:ihora',
+          },
+          createdAt: '2026-01-01T00:00:01.000Z',
+          streaming: true,
+        },
+      ],
+    });
+    await settle();
+
+    const state = scrollState(wrapper);
+    expect(state.mode).toBe('sticky');
+    expect(state.isPinned).toBe(true);
+    expect(scrollEl.scrollTo).toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
+  it('détache même pendant un scroll programmatique', async () => {
+    const wrapper = mountChat([
+      {
+        id: 'u1',
+        role: 'user',
+        content: 'Q',
+        createdAt: '2026-01-01T00:00:00.000Z',
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: 'Réponse',
+        createdAt: '2026-01-01T00:00:01.000Z',
+      },
+    ]);
+    await settle();
+
+    const vm = wrapper.vm as unknown as {
+      beginProgrammaticScrollForTest: () => void;
+      detachFromBottomForTest: () => void;
+    };
+    vm.beginProgrammaticScrollForTest();
+    vm.detachFromBottomForTest();
+    await settle();
+
+    const state = scrollState(wrapper);
+    expect(state.userDetached).toBe(true);
+    expect(state.mode).toBe('detached');
+    expect(state.isPinned).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('reprend le suivi sticky au prochain stream après détachement', async () => {
+    const wrapper = mountChat(
+      [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'Q1',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: 'R1',
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+      ],
+      false,
+    );
+    await settle();
+
+    const vm = wrapper.vm as unknown as {
+      detachFromBottomForTest: () => void;
+    };
+    vm.detachFromBottomForTest();
+    await settle();
+    expect(scrollState(wrapper).userDetached).toBe(true);
+
+    mockSizes[2] = 80;
+    mockSizes[3] = 64;
+    await wrapper.setProps({
+      streaming: true,
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'Q1',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: 'R1',
+          createdAt: '2026-01-01T00:00:01.000Z',
+        },
+        {
+          id: 'u2',
+          role: 'user',
+          content: 'Q2',
+          createdAt: '2026-01-01T00:00:02.000Z',
+        },
+        {
+          id: 'a2',
+          role: 'assistant',
+          content: '',
+          createdAt: '2026-01-01T00:00:03.000Z',
+          streaming: true,
+        },
+      ],
+    });
+    await settle();
+
+    const state = scrollState(wrapper);
+    expect(state.userDetached).toBe(false);
+    expect(state.isPinned).toBe(true);
+    expect(['anchor', 'sticky']).toContain(state.mode);
+    wrapper.unmount();
+  });
+
+  it('ne suit plus le bas pendant le stream si détaché', async () => {
+    const wrapper = mountChat(
+      [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'Q',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: 'Hi',
+          createdAt: '2026-01-01T00:00:01.000Z',
+          streaming: true,
+          _contentRev: 1,
+        },
+      ],
+      true,
+    );
+    await settle();
+
+    const vm = wrapper.vm as unknown as {
+      detachFromBottomForTest: () => void;
+    };
+    vm.detachFromBottomForTest();
+    await settle();
+    scrollEl.scrollTo.mockClear();
+
+    await wrapper.setProps({
+      streaming: true,
+      messages: [
+        {
+          id: 'u1',
+          role: 'user',
+          content: 'Q',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+        {
+          id: 'a1',
+          role: 'assistant',
+          content: 'Hi there, longer reply',
+          createdAt: '2026-01-01T00:00:01.000Z',
+          streaming: true,
+          _contentRev: 2,
+        },
+      ],
+    });
+    await settle();
+
+    expect(scrollState(wrapper).userDetached).toBe(true);
+    expect(scrollEl.scrollTo).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
 });

@@ -104,9 +104,19 @@ def test_util_title_and_summarize_routes(monkeypatch: pytest.MonkeyPatch) -> Non
             },
             headers=headers,
         )
+        title_without_assistant_resp = client.post(
+            "/util/title",
+            json={
+                "first_user_message": "Analyse les ventes Q2",
+                "llm_provider_config": llm_config,
+            },
+            headers=headers,
+        )
 
     assert title_resp.status_code == 200
     assert title_resp.json()["title"] == "Analyser les ventes Q2"
+    assert title_without_assistant_resp.status_code == 200
+    assert title_without_assistant_resp.json()["title"] == "Analyser les ventes Q2"
     assert summarize_resp.status_code == 200
     assert summarize_resp.json()["summary"]
     assert summarize_resp.json()["input_tokens"] == 12

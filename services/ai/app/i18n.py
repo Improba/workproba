@@ -379,17 +379,29 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "l'approbation explicite de l'utilisateur. Si l'utilisateur refuse "
                 "ou laisse expirer la confirmation, n'insiste pas pour répéter la "
                 "même action : informe l'utilisateur et propose une alternative "
-                "(lecture, brouillon, reformulation)."
+                "(lecture, brouillon, reformulation, demander des précisions). "
+                "N'invente pas d'action connecteur absente du catalogue."
             ),
             "approval_denied_retry": (
                 "L'utilisateur a refusé cette action. N'insiste pas pour répéter "
-                "la même écriture. Explique brièvement et propose une alternative."
+                "la même écriture. Explique brièvement et propose une alternative "
+                "(lecture, brouillon, reformulation, demander à l'utilisateur). "
+                "N'invente pas d'action connecteur inconnue."
             ),
             "approval_timeout_retry": (
                 "La confirmation a expiré sans réponse. N'insiste pas pour répéter "
-                "la même écriture. Informe l'utilisateur et propose une alternative."
+                "la même écriture. Informe l'utilisateur et propose une alternative "
+                "(lecture, brouillon, reformulation, demander à l'utilisateur). "
+                "N'invente pas d'action connecteur inconnue."
             ),
             "managed_connectors_header": "Connecteurs managés Improba Cloud (état local) :",
+            "managed_connectors_catalog_hint": (
+                "N'utilisez que les actions du catalogue (outils managed_* ou action "
+                "listée). N'inventez pas d'action connecteur. Si une action est "
+                "inconnue ou absente, informez l'utilisateur et arrêtez-vous ; ne "
+                "proposez pas une autre action connecteur nécessitant une nouvelle "
+                "confirmation."
+            ),
             "managed_connectors_enabled": (
                 "{id} ({name}) : activé localement ; utiliser les outils managed_*"
             ),
@@ -530,6 +542,16 @@ MESSAGES: dict[str, dict[str, Any]] = {
             ),
             "connector_payload_invalid": (
                 "Paramètres invalides pour {connector_id} / {action} : {detail}"
+            ),
+            "connector_action_required": (
+                "Action requise pour le connecteur {connector_id}. Actions disponibles : "
+                "{available}. N'inventez pas d'action ; informez l'utilisateur et "
+                "arrêtez-vous."
+            ),
+            "connector_unknown_action": (
+                "Action inconnue « {action} » pour le connecteur {connector_id}. "
+                "Actions disponibles : {available}. N'inventez pas d'action ; informez "
+                "l'utilisateur et arrêtez-vous."
             ),
             "connector_user_resolution_failed": (
                 "Impossible de résoudre l'utilisateur Ihora avant confirmation pour "
@@ -975,17 +997,29 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Write tools (documents, files, publishing) require explicit user "
                 "approval. If the user denies or lets the confirmation expire, do not "
                 "insist on repeating the same action: inform the user and suggest an "
-                "alternative (read-only review, draft, reformulation)."
+                "alternative (read-only review, draft, reformulation, ask for "
+                "clarification). Do not invent connector actions missing from the "
+                "catalog."
             ),
             "approval_denied_retry": (
                 "The user denied this action. Do not insist on repeating the same "
-                "write. Briefly explain and suggest an alternative."
+                "write. Briefly explain and suggest an alternative (read-only review, "
+                "draft, reformulation, ask the user). Do not invent an unknown "
+                "connector action."
             ),
             "approval_timeout_retry": (
                 "The confirmation expired without a response. Do not insist on "
-                "repeating the same write. Inform the user and suggest an alternative."
+                "repeating the same write. Inform the user and suggest an alternative "
+                "(read-only review, draft, reformulation, ask the user). Do not "
+                "invent an unknown connector action."
             ),
             "managed_connectors_header": "Improba Cloud managed connectors (local state):",
+            "managed_connectors_catalog_hint": (
+                "Use only catalog actions (managed_* tools or listed action). Do not "
+                "invent connector actions. If an action is unknown or missing, inform "
+                "the user and stop; do not propose another connector action that "
+                "requires a new confirmation."
+            ),
             "managed_connectors_enabled": (
                 "{id} ({name}): enabled locally; use the managed_* tools"
             ),
@@ -1124,6 +1158,15 @@ MESSAGES: dict[str, dict[str, Any]] = {
             ),
             "connector_payload_invalid": (
                 "Invalid parameters for {connector_id} / {action}: {detail}"
+            ),
+            "connector_action_required": (
+                "Action required for connector {connector_id}. Available actions: "
+                "{available}. Do not invent an action; inform the user and stop."
+            ),
+            "connector_unknown_action": (
+                "Unknown action « {action} » for connector {connector_id}. Available "
+                "actions: {available}. Do not invent an action; inform the user and "
+                "stop."
             ),
             "connector_user_resolution_failed": (
                 "Could not resolve the Ihora user before confirmation for "

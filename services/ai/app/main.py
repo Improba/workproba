@@ -386,7 +386,9 @@ async def util_summarize(
 
 
 @app.post("/agent/confirm")
-async def agent_confirm(payload: AgentConfirmRequest) -> dict[str, bool]:
+async def agent_confirm(request: Request, payload: AgentConfirmRequest) -> dict[str, bool]:
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
     resolved = confirmation_registry.resolve(
         payload.session_id,
         payload.turn_id,

@@ -1,6 +1,6 @@
 # Workproba architecture
 
-> **Last updated:** 23/07/2026 (per-space capabilities, managed tools catalog, PPTX HTML/Chromium pipeline, DeviceBearer durable, chat scroll anchor)
+> **Last updated:** 23/07/2026 (confirmation trust / approve_remaining, chat UX polish, auto-title on first user message, Ihora budget tools)
 
 ## Overview
 
@@ -69,10 +69,11 @@ Read-only tools (`read_document`, `list_files`, `remember`, `propose_plan`, pers
 **Backend flow:**
 
 1. `classify_effect()` (`app/agent/effects.py`) builds an `EffectProposal` (effect, targets, protections).
-2. `ConfirmationGate.request_effect()` emits SSE `confirmation_request` with `headline` and `protection_labels` (localized via `app/i18n.py`).
-3. The front shows `ConfirmationCard.vue`; the user approves or denies via `POST /agent/confirm`. For `external_send` / managed tools, the card uses a dedicated layout (primary human summary, optional secondary target, argument list, protection labels).
-4. On **approve**: the tool runs. On **deny** or **timeout** (5 min): `ModelRetry` informs the model (`workproba:approval_denied` / `workproba:approval_timeout` markers).
-5. Optional audit: `approval.requested` / `approval.resolved` in `{app_data}/audit/`.
+2. For managed writes that need pre-resolution (e.g. Ihora member identity), the gate may emit SSE `confirmation_preparing` first. The front shows a **preparing** card (no actions) until the rich `confirmation_request` arrives.
+3. `ConfirmationGate.request_effect()` emits SSE `confirmation_request` with `headline` and `protection_labels` (localized via `app/i18n.py`).
+4. The front shows `ConfirmationCard.vue`; the user approves or denies via `POST /agent/confirm`. For `external_send` / managed tools, the card uses a dedicated layout (primary human summary, optional secondary target, argument list, protection labels). **Approve remaining** (`approve_remaining`) records turn-scoped trust in `_turn_trust` keyed by `trust_key` (`connector:{id}`, `effect:{effect}`, `file_write:{create|modify}`). Later tools in the same turn with the same `trust_key` skip the card and emit SSE `tool_auto_approved` (UI: auto-approved).
+5. On **approve**: the tool runs. On **deny** or **timeout** (5 min): `ModelRetry` informs the model (`workproba:approval_denied` / `workproba:approval_timeout` markers). Incomplete tool calls are finalized on abort, idle, or confirmation timeout.
+6. Optional audit: `approval.requested` / `approval.resolved` in `{app_data}/audit/`.
 
 Protections shown on the card include: preview available, automatic version before modify, no network, no external send, and (when relevant) user unresolved before confirmation.
 
@@ -102,11 +103,11 @@ WorkprobaTitleBar          ← WorkprobaBrand, Capabilities hub, engine chip, pa
 └── CapabilitiesDrawer (non-modal, Escape to close): discover / activate capabilities
 ```
 
-**Sidebar** (`WorkspaceSidebar.vue`): spaces → conversations tree, renameable display titles, streaming indicator, user profile, memory and model settings access.
+**Sidebar** (`WorkspaceSidebar.vue`): spaces → conversations tree, renameable display titles, **auto-generated conversation title on the first user message** (`POST /util/title`; optional `first_assistant_reply`), streaming indicator, user profile, memory and model settings access.
 
 **Right panel** (`RightPanel.vue`): file explorer, document preview, **plugin tabs for active capabilities only** (Project, Browser when enabled). Cloud tab hidden in guided mode. Inactive modules are discoverable via the Capabilities hub, not as ghost tabs.
 
-**Chat** (`ChatView.vue`): pill composer, "+" menu (attachments only), compact **Regards** chip when personas active, model/reasoning control, file drag-and-drop.
+**Chat** (`ChatView.vue`): grid composer (full-width field, `+` and send on bottom row), stream error banner above composer, "+" menu (attachments only), compact **Regards** chip when personas active, model/reasoning control, file drag-and-drop.
 
 **Capabilities** (`useCapabilities.ts`, `useShellSurfaces.ts`): product catalog maps capabilities to plugin activation (Tauri) and shell navigation (right panel tab, side chat). `activateAndOpen()` activates plugins then opens the documented home surface.
 
@@ -270,17 +271,21 @@ settings.
 
 ## Chat UX (composer & reasoning)
 
-- **Pill composer**: when empty, the field and actions (model/reasoning,
-  send) fit on one line. As soon as you type, the field expands to multiple lines
-  and actions move to a bar below, with the field taking full width.
+- **Grid composer**: full-width input field; `+` menu and send sit on a bottom row. Send is blocked while a human approval gate is active (`hasActiveHumanGate()`).
+- **Stream errors**: error banner sits just above the composer (not in the `ChatPage` header).
+- **Message chrome**: role avatars and visible role headers removed (sr-only labels remain).
 - **Send**: the field clears, the user message appears immediately
   (pushed synchronously in `useChatStream.send`) and the view scrolls to the bottom.
   `MessageList.getScrollTarget` detects the actually scrollable container
   (double `q-scroll-area` + `DynamicScroller` container) to target the right one.
 - **Reasoning in progress**: a **spinner** plus label "Reasoning in
   progress…" appears in the reasoning zone (`ThinkingCard`) during
-  streaming. A "The model is thinking…" placeholder covers the startup delay
+  streaming. The thinking icon aligns with the first line of the subject.
+  A "The model is thinking…" placeholder covers the startup delay
   between send and the first event (`thinking_start` or token).
+- **Reasoning / tool order**: `thinking_id` = `think-{model_round}-{index}` so reasoning and tool cards stay ordered across model rounds.
+- **Continuation placeholder**: "Suite de la génération…" between finished tool cards and the next assistant text chunk.
+- **Confirmation scroll**: `ensureConfirmationVisible` scrolls the confirmation card into view so Approve stays reachable.
 
 ### Message list and streaming performance
 

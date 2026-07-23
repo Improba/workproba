@@ -431,6 +431,7 @@ def test_build_managed_connectors_agent_prompt() -> None:
         ],
     )
     assert t("fr", "tools.managed_connectors_header") in text
+    assert t("fr", "tools.managed_connectors_catalog_hint") in text
     assert "ihora" in text
     assert "Ihora" in text
     assert t("fr", "tools.managed_connectors_enabled", id="ihora", name="Ihora") in text
@@ -1709,11 +1710,12 @@ async def test_write_managed_tool_calls_confirmation_gate(
 
 
 @pytest.mark.asyncio
-async def test_invoke_generic_unknown_action_calls_gate(
+async def test_invoke_generic_unknown_action_rejects_before_gate(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from pydantic_ai import RunContext
+    from pydantic_ai.exceptions import ModelRetry
     from pydantic_ai.models.test import TestModel
 
     from app.agent.confirmation import ConfirmationGate
@@ -1729,6 +1731,9 @@ async def test_invoke_generic_unknown_action_calls_gate(
     gate_called = {"value": False}
 
     class CaptureGate(ConfirmationGate):
+        async def notify_preparing(self, **kwargs):  # type: ignore[no-untyped-def]
+            gate_called["value"] = True
+
         async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
             gate_called["value"] = True
             return "approved"
@@ -1749,7 +1754,7 @@ async def test_invoke_generic_unknown_action_calls_gate(
         return {"ihora"}
 
     async def fake_invoke_remote(self, connector_id, payload, identity):  # type: ignore[no-untyped-def]
-        return {"ok": True, "result": {"action": "unknown_action"}}
+        raise AssertionError("cloud invoke must not be reached for unknown action")
 
     monkeypatch.setattr(CloudControlPlaneClient, "fetch_allowed_connector_ids", fake_allowed)
     monkeypatch.setattr(
@@ -1783,9 +1788,104 @@ async def test_invoke_generic_unknown_action_calls_gate(
         tool_call_id="tc-unknown-gate",
     )
 
-    await tool.function(
-        ctx,
-        connector_id="ihora",
-        payload_json='{"action":"unknown_action"}',
+    with pytest.raises(ModelRetry, match="inconnue") as exc_info:
+        await tool.function(
+            ctx,
+            connector_id="ihora",
+            payload_json='{"action":"unknown_action"}',
+        )
+    assert gate_called["value"] is False
+    message = str(exc_info.value)
+    assert "unknown_action" in message
+    assert "list_absences" in message
+
+
+@pytest.mark.asyncio
+async def test_invoke_generic_missing_action_rejects_before_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.exceptions import ModelRetry
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.confirmation import ConfirmationGate
+    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.limits import DEFAULT_LIMITS
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.sandbox.runner import SandboxRunner
+
+    from conftest import FakeProjectClient
+
+    gate_called = {"value": False}
+
+    class CaptureGate(ConfirmationGate):
+        async def notify_preparing(self, **kwargs):  # type: ignore[no-untyped-def]
+            gate_called["value"] = True
+
+        async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
+            gate_called["value"] = True
+            return "approved"
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
+    _seed_ihora_connectors_cache(cloud_dir)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.test",
+        plugin_data_dir=cloud_dir,
     )
-    assert gate_called["value"] is True
+    client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
+
+    async def fake_allowed(self: CloudControlPlaneClient) -> set[str]:
+        return {"ihora"}
+
+    async def fake_invoke_remote(self, connector_id, payload, identity):  # type: ignore[no-untyped-def]
+        raise AssertionError("cloud invoke must not be reached for missing action")
+
+    monkeypatch.setattr(CloudControlPlaneClient, "fetch_allowed_connector_ids", fake_allowed)
+    monkeypatch.setattr(
+        "app.plugins.workproba_cloud.plugin.open_remote_capability_gateway",
+        lambda **kwargs: type("GW", (), {"invoke_remote": fake_invoke_remote})(),
+    )
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugins_root,
+            locale="fr",
+            permissions_network=True,
+            managed_allowed_connector_ids=frozenset({"ihora"}),
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=CaptureGate(session_id="s1", turn_id="t1"),
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_WORKPROBA_CLOUD])
+    tool = agent._function_toolset.tools["invoke_managed_connector"]
+    ctx = RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id="tc-missing-action-gate",
+    )
+
+    with pytest.raises(ModelRetry, match="Action requise") as exc_info:
+        await tool.function(
+            ctx,
+            connector_id="ihora",
+            payload_json='{"foo": 1}',
+        )
+    assert gate_called["value"] is False
+    message = str(exc_info.value)
+    assert "Actions disponibles" in message
+    assert "list_absences" in message

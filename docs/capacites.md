@@ -60,7 +60,7 @@ Solo projects stay **local SoT** (on the machine). Shared projects and **managed
 
 Managed capabilities use Improba Cloud Mode A. Each org-allowed connector exposes a `tools[]` catalog from the control plane (`name`, `action`, `description`, `effect`, `visibility`, `input_schema`, plus connector-level `enableByDefaultInProjects` / `requiresSecrets`). `GET /connectors` also returns `catalogVersion`. When a managed capability is **enabled on this computer** and **wanted in the current space**, the chat registers one agent tool per entry: `managed_{connector_id}_{tool_name}` (connector dots become underscores). The generic `invoke_managed_connector` remains a fallback. Validation of `action` and payload is **authoritative on the cloud** at invoke time. Human Approval Gate: `external_send` (dedicated confirmation layout with human summary and args). The desktop does not send `device_id`, `subject_id` or `org_id` in the invoke body. Guided mode hides tools with `visibility: advanced`. Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
-**Ihora (example):** 15 tools including `list_users` (resolve email/name → numeric userId) before `create_project` / `update_project_member` (userId or email). The agent prompt includes the signed-in cloud user identity for « add me » flows.
+**Ihora (example):** 17 tools including `list_users` (resolve email/name → numeric userId) before `create_project` / `update_project_member` (userId or email), plus `create_project_budget` and `update_project_budget`. The agent prompt includes the signed-in cloud user identity for « add me » flows.
 
 ## How to activate
 

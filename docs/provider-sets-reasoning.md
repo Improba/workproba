@@ -1,6 +1,6 @@
 # Provider sets and reasoning effort
 
-> **Last updated:** 20/07/2026  
+> **Last updated:** 23/07/2026  
 > **Status:** implemented (catalog-driven UI + backend clamp + Improba Cloud DeviceBearer)
 
 This document describes how Workproba routes LLM models and **reasoning effort** through **provider sets**, how the front and sidecar stay aligned, and how we avoid provider API errors (notably Mistral's `none` / `high`-only models).
@@ -236,7 +236,7 @@ These endpoints accept optional `provider_set` and `cloud_plugin_data_dir` (in a
 | Route | Role |
 |---|---|
 | `POST /llm/sets/test` | Test chat + embeddings for a set |
-| `POST /util/title` | Conversation title generation |
+| `POST /util/title` | Conversation title generation (fires on **first user message**; `first_assistant_reply` optional) |
 | `POST /util/summarize` | Text summarization (session summary, compaction) |
 | `POST /memory/promote-session` | Session summary → project memory |
 | `POST /plugins/personas/ask` | Regards métier opinion (SSE) |

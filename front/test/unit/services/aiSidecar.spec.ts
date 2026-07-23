@@ -340,6 +340,140 @@ describe('aiSidecar payload', () => {
     expect(payload.history[1].content!.length).toBe(MAX_TOOL_RESULT_HISTORY_CHARS + 1);
   });
 
+  it('toPythonHistory émet role tool pour error sans result', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'Écriture interrompue',
+          toolCalls: [
+            {
+              id: 'tc1',
+              name: 'write_docx',
+              status: 'error',
+              args: { path: 'out.docx' },
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      [],
+    );
+
+    expect(payload.history).toHaveLength(2);
+    expect(payload.history[1]).toMatchObject({
+      role: 'tool',
+      tool_call_id: 'tc1',
+    });
+    expect(payload.history[1].content).toContain('missing_tool_result');
+  });
+
+  it('toPythonHistory émet role tool pour awaiting_confirmation sans result', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'En attente',
+          toolCalls: [
+            {
+              id: 'tc1',
+              name: 'write_docx',
+              status: 'awaiting_confirmation',
+              args: { path: 'out.docx' },
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      [],
+    );
+
+    expect(payload.history).toHaveLength(2);
+    expect(payload.history[0]).toMatchObject({
+      role: 'assistant',
+      tool_calls: [{ id: 'tc1', name: 'write_docx' }],
+    });
+    expect(payload.history[1]).toMatchObject({
+      role: 'tool',
+      tool_call_id: 'tc1',
+    });
+    expect(payload.history[1].content).toContain('missing_tool_result');
+  });
+
+  it('toPythonHistory émet role tool pour running sans result', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'Exécution',
+          toolCalls: [
+            {
+              id: 'tc1',
+              name: 'read_file',
+              status: 'running',
+              args: { path: 'doc.txt' },
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      [],
+    );
+
+    expect(payload.history).toHaveLength(2);
+    expect(payload.history[1]).toMatchObject({
+      role: 'tool',
+      tool_call_id: 'tc1',
+    });
+    expect(payload.history[1].content).toContain('missing_tool_result');
+  });
+
+  it('toPythonHistory ne marque pas interrupted un success sans result', () => {
+    const payload = buildAgentTurnPayload(
+      'sess-1',
+      '/proj',
+      'hello',
+      [
+        {
+          id: 'm1',
+          role: 'assistant',
+          content: 'OK sans payload',
+          toolCalls: [
+            {
+              id: 'tc1',
+              name: 'read_file',
+              status: 'success',
+              args: { path: 'doc.txt' },
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+      [],
+    );
+
+    expect(payload.history).toHaveLength(2);
+    expect(payload.history[1]).toMatchObject({
+      role: 'tool',
+      tool_call_id: 'tc1',
+    });
+    expect(payload.history[1].content).toContain('missing_tool_result');
+    expect(payload.history[1].content).not.toContain('interrupted');
+    expect(payload.history[1].content).toContain('"ok":true');
+  });
+
   it('buildAgentTurnPayload agrège thinking depuis parts si m.thinking est absent', () => {
     const payload = buildAgentTurnPayload(
       'sess-1',

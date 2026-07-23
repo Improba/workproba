@@ -475,15 +475,19 @@ class AgentLoop:
                 model_settings=self._model_settings or None,
                 usage_limits=UsageLimits(request_limit=self._max_iterations),
             ) as run:
+                model_round = 0
                 async for node in run:
                     if Agent.is_model_request_node(node):
-                        async for event in self._iter_model_stream(node, run.ctx):
+                        async for event in self._iter_model_stream(
+                            node, run.ctx, model_round=model_round
+                        ):
                             if not emitted and isinstance(
                                 event,
                                 (TokenEvent, ThinkingDeltaEvent, ThinkingStartEvent),
                             ):
                                 emitted = True
                             yield event
+                        model_round += 1
                     elif Agent.is_call_tools_node(node):
                         async for event in self._iter_tool_stream(
                             node,
@@ -615,10 +619,12 @@ class AgentLoop:
                 session_id=request.session_id,
             )
 
-    async def _iter_model_stream(self, node: Any, ctx: Any) -> AsyncIterator[AgentEvent]:
+    async def _iter_model_stream(
+        self, node: Any, ctx: Any, *, model_round: int = 0
+    ) -> AsyncIterator[AgentEvent]:
         """Émet les deltas de texte et de raisonnement du modèle."""
         async with node.stream(ctx) as stream:
-            async for event in map_model_stream_events(stream):
+            async for event in map_model_stream_events(stream, model_round=model_round):
                 yield event
 
     async def _iter_tool_stream(
@@ -730,7 +736,9 @@ class AgentLoop:
                         )
 
 
-async def map_model_stream_events(stream: Any) -> AsyncIterator[AgentEvent]:
+async def map_model_stream_events(
+    stream: Any, *, model_round: int = 0
+) -> AsyncIterator[AgentEvent]:
     """Mappe les ModelResponseStreamEvent Pydantic AI vers les events SSE Workproba."""
     from pydantic_ai.messages import (
         PartDeltaEvent,
@@ -745,7 +753,9 @@ async def map_model_stream_events(stream: Any) -> AsyncIterator[AgentEvent]:
     async for event in stream:
         if isinstance(event, PartStartEvent):
             if isinstance(event.part, ThinkingPart):
-                yield ThinkingStartEvent(thinking_id=_thinking_id(event.index))
+                yield ThinkingStartEvent(
+                    thinking_id=_thinking_id(model_round, event.index)
+                )
                 # pydantic-ai embarque le premier chunk de raisonnement dans le
                 # PartStartEvent (pas de PartDeltaEvent séparé) : il faut le
                 # relayer comme ThinkingDeltaEvent, sinon le début du thinking
@@ -753,7 +763,7 @@ async def map_model_stream_events(stream: Any) -> AsyncIterator[AgentEvent]:
                 start_text = event.part.content or ""
                 if start_text:
                     yield ThinkingDeltaEvent(
-                        thinking_id=_thinking_id(event.index),
+                        thinking_id=_thinking_id(model_round, event.index),
                         content=start_text,
                     )
             elif isinstance(event.part, TextPart):
@@ -771,7 +781,7 @@ async def map_model_stream_events(stream: Any) -> AsyncIterator[AgentEvent]:
                 delta_text = event.delta.content_delta or ""
                 if delta_text:
                     yield ThinkingDeltaEvent(
-                        thinking_id=_thinking_id(event.index),
+                        thinking_id=_thinking_id(model_round, event.index),
                         content=delta_text,
                     )
             elif isinstance(event.delta, TextPartDelta):
@@ -780,11 +790,13 @@ async def map_model_stream_events(stream: Any) -> AsyncIterator[AgentEvent]:
                     yield TokenEvent(content=delta_text)
         elif isinstance(event, PartEndEvent):
             if isinstance(event.part, ThinkingPart):
-                yield ThinkingEndEvent(thinking_id=_thinking_id(event.index))
+                yield ThinkingEndEvent(
+                    thinking_id=_thinking_id(model_round, event.index)
+                )
 
 
-def _thinking_id(index: int) -> str:
-    return f"think-{index}"
+def _thinking_id(model_round: int, index: int) -> str:
+    return f"think-{model_round}-{index}"
 
 
 def is_compaction_summary_message(message: ChatMessage, locale: str) -> bool:

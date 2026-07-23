@@ -11,7 +11,10 @@
       <h3 class="confirmation-card__title">{{ t('chat.confirmationRegion') }}</h3>
     </header>
 
-    <template v-if="showExternalManagedLayout">
+    <template v-if="preparing">
+      <p class="confirmation-card__summary">{{ t('chat.confirmationPreparing') }}</p>
+    </template>
+    <template v-else-if="showExternalManagedLayout">
       <p class="confirmation-card__headline">{{ externalPrimarySummary }}</p>
       <p v-if="externalSecondaryTarget" class="confirmation-card__secondary">
         {{ t('chat.confirmationTarget', { target: externalSecondaryTarget }) }}
@@ -88,7 +91,7 @@
       </i18n-t>
     </template>
 
-    <div class="confirmation-card__actions">
+    <div v-if="!preparing" class="confirmation-card__actions">
       <button
         v-if="canPreview"
         type="button"
@@ -115,6 +118,17 @@
         @click="emit('approve')"
       >
         {{ busy ? t('common.inProgress') : t('chat.confirmationApproveShort') }}
+      </button>
+      <button
+        v-if="canApproveRemaining"
+        type="button"
+        class="confirmation-card__btn confirmation-card__btn--approve-remaining"
+        :disabled="busy"
+        :title="t('chat.confirmationApproveRemainingHint')"
+        :aria-label="t('chat.confirmationApproveRemaining')"
+        @click="emit('approve-remaining')"
+      >
+        {{ busy ? t('common.inProgress') : t('chat.confirmationApproveRemaining') }}
       </button>
     </div>
 
@@ -148,14 +162,21 @@ const props = defineProps<{
   toolArgs?: Record<string, unknown>;
   /** Rattachée visuellement au ToolCallCard au-dessus (empilement unique). */
   attached?: boolean;
+  /** Skeleton pendant la préparation (avant résumé riche). */
+  preparing?: boolean;
 }>();
 
 const { t } = useI18n();
 
 const emit = defineEmits<{
   approve: [];
+  'approve-remaining': [];
   cancel: [];
 }>();
+
+const canApproveRemaining = computed(
+  () => !props.preparing && Boolean(props.confirmation.trustKey?.trim()),
+);
 
 const previewOpen = ref(false);
 
@@ -508,6 +529,17 @@ const customSummaryHtml = computed(() => {
 
   &:not(:disabled):hover {
     background: var(--wp-accent-strong);
+  }
+}
+
+.confirmation-card__btn--approve-remaining {
+  flex: 1 1 100%;
+  border: 1px solid var(--wp-border-strong);
+  background: var(--wp-surface);
+  color: var(--wp-accent-strong);
+
+  &:not(:disabled):hover {
+    background: var(--wp-surface-2);
   }
 }
 </style>

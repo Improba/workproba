@@ -327,12 +327,12 @@ def test_turn_prompt_not_duplicated_on_provider_fallback(
     call_count = {"n": 0}
 
     async def fail_once_then_succeed(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         call_count["n"] += 1
         if call_count["n"] == 1:
             raise APITimeoutError(request=httpx.Request("POST", "http://example.test/v1/chat"))
-        async for event in original(self, node, ctx):
+        async for event in original(self, node, ctx, model_round=model_round):
             yield event
 
     monkeypatch.setattr(AgentLoop, "_iter_model_stream", fail_once_then_succeed)

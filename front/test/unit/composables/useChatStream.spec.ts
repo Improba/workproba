@@ -54,7 +54,7 @@ vi.mock('@composables/useAppSettings', () => ({
   }),
 }));
 
-import { useChatStream, mapPythonSseEvent, applyStreamEvent, applyCompactionToMessages, applyAttachmentStatusEvent, mergeLlmConfigsWithSessionReasoning, type UseChatStreamReturn } from '@composables/useChatStream';
+import { useChatStream, mapPythonSseEvent, applyStreamEvent, applyCompactionToMessages, applyAttachmentStatusEvent, mergeLlmConfigsWithSessionReasoning, clearHumanGatesOnAbort, finalizeIncompleteToolsOnMessage, finalizeInterruptedTool, type UseChatStreamReturn } from '@composables/useChatStream';
 import type { ChatMessage } from '#types';
 
 /** Construit une Response SSE dont le body émet `events` puis ferme le flux. */
@@ -445,6 +445,178 @@ describe('useChatStream — feedbacks', () => {
     expect(assistant.toolCalls?.[0]?.status).toBe('error');
     expect(assistant.toolCalls?.[0]?.humanSummary).toContain('expiré');
     expect(assistant.toolCalls?.[0]?.endedAt).toBeTypeOf('number');
+    expect(assistant.toolCalls?.[0]?.result).toEqual({
+      ok: false,
+      error: 'interrupted',
+      reason: 'confirmation_timeout',
+    });
+  });
+
+  it('clearHumanGatesOnAbort finalise le tool avec result synthétique', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        toolCalls: [
+          {
+            id: 'tc_1',
+            name: 'write_docx',
+            status: 'awaiting_confirmation',
+          },
+        ],
+        pendingConfirmation: {
+          confirmationId: 'cf_1',
+          toolCallId: 'tc_1',
+          toolName: 'write_docx',
+          action: 'create',
+          proposedPath: 'out.docx',
+          humanSummary: 'Créer out.docx',
+        },
+      },
+    ];
+
+    clearHumanGatesOnAbort(messages);
+
+    const tool = messages[0].toolCalls?.[0];
+    expect(messages[0].pendingConfirmation).toBeNull();
+    expect(tool?.status).toBe('error');
+    expect(tool?.endedAt).toBeTypeOf('number');
+    expect(tool?.humanSummary).toBeTruthy();
+    expect(tool?.result).toEqual({
+      ok: false,
+      error: 'interrupted',
+      reason: 'aborted_by_user',
+    });
+  });
+
+  it('clearHumanGatesOnAbort finalise un tool running sans pendingConfirmation', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        toolCalls: [
+          {
+            id: 'tc_1',
+            name: 'read_file',
+            status: 'running',
+          },
+        ],
+      },
+    ];
+
+    clearHumanGatesOnAbort(messages);
+
+    const tool = messages[0].toolCalls?.[0];
+    expect(tool?.status).toBe('error');
+    expect(tool?.endedAt).toBeTypeOf('number');
+    expect(tool?.humanSummary).toBeTruthy();
+    expect(tool?.result).toEqual({
+      ok: false,
+      error: 'interrupted',
+      reason: 'aborted_by_user',
+    });
+  });
+
+  it('finalizeIncompleteToolsOnMessage finalise les tools incomplets avec reason et summary', () => {
+    const message: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      streaming: true,
+      toolCalls: [
+        {
+          id: 'tc_1',
+          name: 'read_file',
+          status: 'running',
+        },
+        {
+          id: 'tc_2',
+          name: 'write_docx',
+          status: 'success',
+          result: { ok: true },
+        },
+      ],
+      pendingConfirmation: {
+        confirmationId: 'cf_1',
+        toolCallId: 'tc_1',
+        toolName: 'read_file',
+        action: 'create',
+        proposedPath: 'out.docx',
+        humanSummary: 'Lire fichier',
+      },
+    };
+
+    finalizeIncompleteToolsOnMessage(message, 'idle_timeout', 'Délai dépassé');
+
+    const runningTool = message.toolCalls?.[0];
+    const successTool = message.toolCalls?.[1];
+    expect(message.pendingConfirmation).toBeNull();
+    expect(runningTool?.status).toBe('error');
+    expect(runningTool?.humanSummary).toBe('Délai dépassé');
+    expect(runningTool?.result).toEqual({
+      ok: false,
+      error: 'interrupted',
+      reason: 'idle_timeout',
+    });
+    expect(successTool?.result).toEqual({ ok: true });
+  });
+
+  it('send est bloqué si human gate actif', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const { api, unmount } = mountStream();
+    api.loadMessages([
+      {
+        id: 'u1',
+        role: 'user',
+        content: 'question',
+      },
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        toolCalls: [
+          {
+            id: 'tc_1',
+            name: 'write_docx',
+            status: 'awaiting_confirmation',
+          },
+        ],
+        pendingConfirmation: {
+          confirmationId: 'cf_1',
+          toolCallId: 'tc_1',
+          toolName: 'write_docx',
+          action: 'create',
+          proposedPath: 'out.docx',
+          humanSummary: 'Créer out.docx',
+        },
+      },
+    ]);
+
+    await api.send('nouveau message');
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(api.messages.value).toHaveLength(2);
+    unmount();
+  });
+
+  it('finalizeInterruptedTool ne remplace pas un result existant', () => {
+    const existingResult = { ok: false, error: 'denied', reason: 'user_rejected' };
+    const tool = {
+      id: 'tc_1',
+      name: 'write_docx',
+      status: 'awaiting_confirmation' as const,
+      result: existingResult,
+    };
+
+    finalizeInterruptedTool(tool, 'aborted_by_user');
+
+    expect(tool.status).toBe('error');
+    expect(tool.endedAt).toBeTypeOf('number');
+    expect(tool.result).toBe(existingResult);
   });
 
   it('continue le stream SSE après confirmation_timeout', async () => {
@@ -761,6 +933,115 @@ describe('useChatStream — feedbacks', () => {
     expect(mapped.data.protectionLabels).toEqual(['Aperçu disponible avant validation']);
   });
 
+  it('mappe confirmation_preparing et tool_auto_approved', () => {
+    const preparing = mapPythonSseEvent({
+      type: 'confirmation_preparing',
+      data: {
+        tool_call_id: 'tc_1',
+        tool_name: 'invoke_managed_connector',
+        connector_id: 'ihora',
+        action: 'send',
+      },
+    });
+    expect(preparing?.type).toBe('confirmation_preparing');
+    expect(preparing?.data.toolCallId).toBe('tc_1');
+    expect(preparing?.data.connectorId).toBe('ihora');
+
+    const auto = mapPythonSseEvent({
+      type: 'tool_auto_approved',
+      data: {
+        tool_call_id: 'tc_2',
+        tool_name: 'invoke_managed_connector',
+        trust_key: 'connector:ihora',
+      },
+    });
+    expect(auto?.type).toBe('tool_auto_approved');
+    expect(auto?.data.trustKey).toBe('connector:ihora');
+  });
+
+  it('applyStreamEvent: confirmation_preparing puis confirmation_request', () => {
+    const messages = [
+      {
+        id: 'a1',
+        role: 'assistant' as const,
+        content: '',
+        streaming: true,
+        toolCalls: [
+          {
+            id: 'tc_1',
+            name: 'invoke_managed_connector',
+            status: 'running' as const,
+          },
+        ],
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'confirmation_preparing',
+      data: {
+        toolCallId: 'tc_1',
+        toolName: 'invoke_managed_connector',
+        connectorId: 'ihora',
+        action: 'send',
+      },
+    });
+    expect(messages[0].toolCalls?.[0]?.status).toBe('pending_confirmation');
+    expect(messages[0].preparingConfirmation?.toolCallId).toBe('tc_1');
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'confirmation_request',
+      data: {
+        confirmationId: 'cf_1',
+        toolCallId: 'tc_1',
+        toolName: 'invoke_managed_connector',
+        action: 'create',
+        proposedPath: '',
+        humanSummary: 'Résumé riche',
+        trustKey: 'connector:ihora',
+      },
+    });
+    expect(messages[0].preparingConfirmation).toBeNull();
+    expect(messages[0].pendingConfirmation?.trustKey).toBe('connector:ihora');
+    expect(messages[0].toolCalls?.[0]?.status).toBe('awaiting_confirmation');
+  });
+
+  it('applyStreamEvent: tool_auto_approved remet le tool en running', () => {
+    const messages = [
+      {
+        id: 'a1',
+        role: 'assistant' as const,
+        content: '',
+        streaming: true,
+        toolCalls: [
+          {
+            id: 'tc_2',
+            name: 'invoke_managed_connector',
+            status: 'pending_confirmation' as const,
+          },
+        ],
+        preparingConfirmation: {
+          toolCallId: 'tc_2',
+          toolName: 'invoke_managed_connector',
+          connectorId: 'ihora',
+        },
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_auto_approved',
+      data: {
+        toolCallId: 'tc_2',
+        toolName: 'invoke_managed_connector',
+        trustKey: 'connector:ihora',
+      },
+    });
+    expect(messages[0].toolCalls?.[0]?.status).toBe('running');
+    expect(messages[0].toolCalls?.[0]?.autoApproved).toBe(true);
+    expect(messages[0].preparingConfirmation).toBeNull();
+  });
+
   it('mappe turn_start et propage turn_id jusqu\'au confirm', async () => {
     const mapped = mapPythonSseEvent({
       type: 'turn_start',
@@ -807,6 +1088,40 @@ describe('useChatStream — feedbacks', () => {
     expect(confirmBody.decision).toBe('approve');
     expect(confirmBody.turn_id).toBe('turn_abc');
     expect(confirmBody.locale).toBe('fr');
+    unmount();
+  });
+
+  it('confirm approve_remaining envoie la bonne décision', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValue(
+      sseResponse([
+        {
+          event: 'tool_call_start',
+          data: { tool_call_id: 'tc_1', tool_name: 'invoke_managed_connector' },
+        },
+        {
+          event: 'confirmation_request',
+          data: {
+            confirmation_id: 'cf_1',
+            tool_call_id: 'tc_1',
+            tool_name: 'invoke_managed_connector',
+            action: 'create',
+            proposed_path: '',
+            human_summary: 'Envoyer',
+            trust_key: 'connector:ihora',
+          },
+        },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('hi');
+
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await api.confirm('approve_remaining');
+
+    const confirmBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(confirmBody.decision).toBe('approve_remaining');
     unmount();
   });
 

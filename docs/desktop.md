@@ -1,7 +1,7 @@
 # Workproba Desktop (application locale)
 
 > **Status:** Product decision: desktop pivot  
-> **Last updated:** 20/07/2026  
+> **Last updated:** 23/07/2026  
 > **Terminology:** user-facing **space** (FR: **espace**) = one local folder you work in
 
 ## Decision
@@ -98,9 +98,12 @@ Workproba metadata lives in the **application folder**, not in the client folder
    See [provider-sets-reasoning.md](./provider-sets-reasoning.md).
 5. Python runs the agent loop: LLM, fixed file/Office tools, local search (`run_code` not exposed in V2).
 6. Before sensitive actions (file write, publish, network, code execution), the sidecar
-   emits `confirmation_request` (effect-oriented headline + protections). The user approves
-   or denies in `ConfirmationCard`; the front calls `POST /agent/confirm`. On deny or
-   timeout, the model receives a `ModelRetry` and can adapt.
+   may emit `confirmation_preparing` (preparing card, no actions) then `confirmation_request`
+   (effect-oriented headline + protections). The user approves or denies in `ConfirmationCard`;
+   the front calls `POST /agent/confirm`. **Approve remaining** trusts the same `trust_key`
+   for the rest of the turn (`tool_auto_approved` on later matches). On deny or timeout, the
+   model receives a `ModelRetry` and can adapt. Agent loop limits: see [stack.md](./stack.md)
+   (`MAX_AGENT_ITERATIONS` default 40, max 64; `TURN_TIMEOUT_SECONDS` default 600).
 7. SSE events are shown in chat (tokens, reasoning with spinner, tool calls, `work_*`
    business events); sessions are persisted in `{app_data}/spaces/{id}/.workproba/conversations/`.
 
@@ -148,7 +151,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, builtin plugins (Regards métier), attachments, document preview, audit, Human Approval Gate, Work Event Bus |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
-| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`): desktop login (`POST /devices/login` → `desktop-bearer` → durable `wp_dev_*`), join via `join_token`, first-run onboarding (`EngineOnboardingWizard`), managed capabilities under **Workproba Cloud** (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org, **15 tools** incl. `list_users`), dedicated agent tools + `invoke_managed_connector`, **per-space** `capabilities.json`, CloudPanel, sync published artefacts, Capabilities hub hierarchy (21/07), PPTX visual pipeline (HTML + Chromium fallback) |
+| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`): desktop login (`POST /devices/login` → `desktop-bearer` → durable `wp_dev_*`), join via `join_token`, first-run onboarding (`EngineOnboardingWizard`), managed capabilities under **Workproba Cloud** (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org, **17 tools** incl. `list_users`, `create_project_budget`, `update_project_budget`), dedicated agent tools + `invoke_managed_connector`, **per-space** `capabilities.json`, CloudPanel, sync published artefacts, Capabilities hub hierarchy (21/07), PPTX visual pipeline (HTML + Chromium fallback), Human Approval Gate polish (preparing, approve_remaining / trust) |
 
 ### Phase D: validation
 
@@ -163,11 +166,12 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 **Livré (MVP Mode A, 20–23/07/2026)** :
 
+- Human Approval Gate : preparing card, approve remaining (turn-scoped `trust_key`), auto-approved SSE ; chat UX (composer grid, error banner near composer, lighter message chrome, confirmation scroll)
 - Desktop cloud login (`CloudLoginModal` → `POST /devices/login` → sidecar exchange → DeviceBearer `wp_dev_*` durable after sleep/wake)
 - First-run onboarding (`EngineOnboardingWizard`: engine choice, cloud login/register, Mistral key, manual OpenAI-compat)
 - Join device (`POST /devices/join` via `join_token`; `device_code` → `join_token_required`; pasting an existing bearer still works)
-- Capacités managées (API `connectors`) : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel, **15 tools** dont `list_users`, allowlist org) via `GET /connectors` (`catalogVersion`), `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client
-- Desktop : `RemoteCapabilityGateway`, outils agent dédiés `managed_*` + `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`, freeze allowlist par tour
+- Capacités managées (API `connectors`) : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel, **17 tools** dont `list_users`, `create_project_budget`, `update_project_budget`, allowlist org) via `GET /connectors` (`catalogVersion`), `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client
+- Desktop : `RemoteCapabilityGateway`, outils agent dédiés `managed_*` + `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`, freeze allowlist par tour ; Human Approval Gate : `confirmation_preparing`, `approve_remaining` / `trust_key`, `tool_auto_approved`
 - **Hub Capacités (21/07)** : **Workproba Cloud** en premier ; zone **Sous-capacités** dépliante (Gestion de projet + managées type Ihora, cartes compactes) ; stubs masqués en guidé
 - **Capacités par espace (22/07)** : `capabilities.json`, `SpaceCapabilitiesPanel`, `GET`/`PUT /workspace/capabilities`
 - CloudPanel (join, capacités managées, regards, projets), sync artefacts publiés, org LLM (DeviceBearer) ; quota illimité sans ligne `llm_quota_limit`

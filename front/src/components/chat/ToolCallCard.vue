@@ -48,7 +48,7 @@
           {{ statusLabel }}
         </span>
         <q-spinner
-          v-if="toolCall.status === 'running' || toolCall.status === 'awaiting_confirmation'"
+          v-if="toolCall.status === 'running' || toolCall.status === 'awaiting_confirmation' || toolCall.status === 'pending_confirmation'"
           size="14px"
           class="tool-call-card__spinner"
         />
@@ -136,14 +136,20 @@ const humanLabel = computed(() => {
   if (props.confirmationActive) {
     return t('chat.awaitingConfirmation');
   }
-  if (props.toolCall.status === 'awaiting_confirmation') {
+  if (
+    props.toolCall.status === 'pending_confirmation' ||
+    props.toolCall.status === 'awaiting_confirmation'
+  ) {
     const summary = props.toolCall.humanSummary?.trim();
     if (summary) return summary;
     return t('chat.awaitingConfirmation');
   }
   const summary = props.toolCall.humanSummary?.trim();
-  if (summary) return summary;
-  return fallbackHumanLabel(props.toolCall.name, props.toolCall.args);
+  const base = summary || fallbackHumanLabel(props.toolCall.name, props.toolCall.args);
+  if (props.toolCall.autoApproved) {
+    return `${base} · ${t('toolCalls.autoApproved')}`;
+  }
+  return base;
 });
 
 const details = computed(() => buildToolCallDetails(props.toolCall));
@@ -229,7 +235,8 @@ const fileIcon = computed(() => {
     background: var(--wp-gold);
   }
 
-  &--awaiting_confirmation {
+  &--awaiting_confirmation,
+  &--pending_confirmation {
     background: var(--wp-gold);
     animation: wp-breathe 1.6s ease-in-out infinite;
   }
@@ -334,7 +341,8 @@ const fileIcon = computed(() => {
   color: var(--wp-text-muted);
 
   &--running,
-  &--awaiting_confirmation {
+  &--awaiting_confirmation,
+  &--pending_confirmation {
     background: var(--wp-accent-soft);
     color: var(--wp-accent-strong);
   }

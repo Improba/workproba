@@ -194,7 +194,7 @@ async def test_run_turn_fallbackable_before_emit_raises(
     """Monkeypatch _iter_model_stream : échec avant tout token -> repli possible."""
 
     async def fail_stream(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         raise APITimeoutError(request=_httpx_request())
         yield  # pragma: no cover
@@ -226,7 +226,7 @@ async def test_run_turn_fallbackable_mid_stream_yields_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def emit_then_fail(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         yield TokenEvent(content="partial")
         raise APITimeoutError(request=_httpx_request())
@@ -306,7 +306,7 @@ async def test_run_turn_thinking_start_counts_as_emitted(
     """ThinkingStartEvent seul (sans delta) bloque le repli provider."""
 
     async def thinking_start_then_fail(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         yield ThinkingStartEvent(thinking_id="think-0")
         raise APITimeoutError(request=_httpx_request())
@@ -346,12 +346,12 @@ def test_agent_turn_fallback_success(tmp_path, monkeypatch: pytest.MonkeyPatch) 
     call_count = {"n": 0}
 
     async def patched_stream(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         call_count["n"] += 1
         if call_count["n"] == 1:
             raise APITimeoutError(request=_httpx_request())
-        async for event in original(self, node, ctx):
+        async for event in original(self, node, ctx, model_round=model_round):
             yield event
 
     monkeypatch.setattr(AgentLoop, "_iter_model_stream", patched_stream)
@@ -399,7 +399,7 @@ def test_agent_turn_mid_stream_no_fallback(tmp_path, monkeypatch: pytest.MonkeyP
     )
 
     async def emit_then_fail(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         yield TokenEvent(content="partial")
         raise APITimeoutError(request=_httpx_request())
@@ -442,7 +442,7 @@ def test_agent_turn_no_fallback_configured(tmp_path, monkeypatch: pytest.MonkeyP
     )
 
     async def fail_stream(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         raise APITimeoutError(request=_httpx_request())
         yield  # pragma: no cover
@@ -491,7 +491,7 @@ def test_agent_turn_fallback_also_fails(tmp_path, monkeypatch: pytest.MonkeyPatc
     )
 
     async def always_fail(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         raise RateLimitError(
             "rate limited",

@@ -269,6 +269,16 @@ export function mapPythonSseEvent(
         },
       };
     }
+    case 'confirmation_preparing':
+      return {
+        type: 'confirmation_preparing',
+        data: {
+          toolCallId: String(data.tool_call_id ?? ''),
+          toolName: String(data.tool_name ?? ''),
+          connectorId: String(data.connector_id ?? ''),
+          action: String(data.action ?? ''),
+        },
+      };
     case 'confirmation_request':
       return {
         type: 'confirmation_request',
@@ -288,6 +298,21 @@ export function mapPythonSseEvent(
             : Array.isArray(data.protectionLabels)
               ? data.protectionLabels.map(String)
               : [],
+          trustKey:
+            typeof data.trust_key === 'string' && data.trust_key.trim()
+              ? data.trust_key.trim()
+              : typeof data.trustKey === 'string' && data.trustKey.trim()
+                ? data.trustKey.trim()
+                : null,
+        },
+      };
+    case 'tool_auto_approved':
+      return {
+        type: 'tool_auto_approved',
+        data: {
+          toolCallId: String(data.tool_call_id ?? ''),
+          toolName: String(data.tool_name ?? ''),
+          trustKey: String(data.trust_key ?? data.trustKey ?? ''),
         },
       };
     case 'thinking_start':
@@ -569,6 +594,8 @@ function localizeAgentError(code: string, fallback: string): string {
       return t('errors.agentTurnTimeout');
     case 'confirmation_timeout':
       return t('errors.agentConfirmationTimeout');
+    case 'idle_timeout':
+      return t('errors.idleTimeout');
     case 'plan_timeout':
       return t('errors.agentPlanTimeout');
     case 'usage_limit_exceeded':
@@ -725,27 +752,67 @@ function extractSnapshotPathFromResult(result: unknown): string | undefined {
     : undefined;
 }
 
+/** Finalise un tool interrompu (abort, timeout) avec un résultat synthétique. */
+export function finalizeInterruptedTool(tool: ChatToolCall, reason: string): void {
+  tool.status = 'error';
+  if (tool.endedAt == null) {
+    tool.endedAt = Date.now();
+  }
+  if (tool.result === undefined) {
+    tool.result = { ok: false, error: 'interrupted', reason };
+  }
+}
+
+const INTERRUPTIBLE_TOOL_STATUSES = new Set<ChatToolCall['status']>([
+  'pending',
+  'running',
+  'pending_confirmation',
+  'awaiting_confirmation',
+]);
+
+function shouldFinalizeIncompleteTool(tool: ChatToolCall): boolean {
+  if (tool.result !== undefined) return false;
+  if (tool.status === 'success') return false;
+  return (
+    !tool.status ||
+    INTERRUPTIBLE_TOOL_STATUSES.has(tool.status) ||
+    tool.status === 'error'
+  );
+}
+
+/** Finalise les tools incomplets d'un message assistant et efface les human gates orphelines. */
+export function finalizeIncompleteToolsOnMessage(
+  message: ChatMessage,
+  reason: string,
+  humanSummary?: string,
+): void {
+  if (message.role !== 'assistant') return;
+
+  for (const tool of message.toolCalls ?? []) {
+    if (!shouldFinalizeIncompleteTool(tool)) continue;
+    finalizeInterruptedTool(tool, reason);
+    if (humanSummary != null) {
+      tool.humanSummary = humanSummary;
+    }
+  }
+
+  if (message.pendingConfirmation) {
+    message.pendingConfirmation = null;
+  }
+  if (message.preparingConfirmation) {
+    message.preparingConfirmation = null;
+  }
+  if (message.pendingPlan?.status === 'pending') {
+    message.pendingPlan = null;
+  }
+}
+
 /** Efface les human gates orphelines après un abort utilisateur. */
 export function clearHumanGatesOnAbort(messages: ChatMessage[]): void {
-  const now = Date.now();
   const abortedSummary = t('errors.agentAborted');
   for (const message of messages) {
     if (message.role !== 'assistant') continue;
-
-    const pending = message.pendingConfirmation;
-    if (pending) {
-      const tool = message.toolCalls?.find((tc) => tc.id === pending.toolCallId);
-      if (tool) {
-        tool.status = 'error';
-        tool.endedAt = now;
-        tool.humanSummary = abortedSummary;
-      }
-      message.pendingConfirmation = null;
-    }
-
-    if (message.pendingPlan?.status === 'pending') {
-      message.pendingPlan = null;
-    }
+    finalizeIncompleteToolsOnMessage(message, 'aborted_by_user', abortedSummary);
   }
 }
 
@@ -785,6 +852,20 @@ export function applyStreamEvent(
       });
       break;
     }
+    case 'confirmation_preparing': {
+      const toolId = event.data.toolCallId;
+      const tool = assistant.toolCalls?.find((t) => t.id === toolId);
+      if (tool) {
+        tool.status = 'pending_confirmation';
+      }
+      assistant.preparingConfirmation = {
+        toolCallId: toolId,
+        toolName: event.data.toolName || undefined,
+        connectorId: event.data.connectorId || undefined,
+        action: event.data.action || undefined,
+      };
+      break;
+    }
     case 'confirmation_request': {
       const toolId = event.data.toolCallId;
       const tool = assistant.toolCalls?.find((t) => t.id === toolId);
@@ -793,6 +874,9 @@ export function applyStreamEvent(
         if (!tool.filePath && event.data.proposedPath) {
           tool.filePath = event.data.proposedPath;
         }
+      }
+      if (assistant.preparingConfirmation?.toolCallId === toolId) {
+        assistant.preparingConfirmation = null;
       }
       const confirmation: ChatConfirmation = {
         confirmationId: event.data.confirmationId,
@@ -806,9 +890,27 @@ export function applyStreamEvent(
         targets: event.data.targets ?? [],
         headline: event.data.headline ?? '',
         protectionLabels: event.data.protectionLabels ?? [],
+        trustKey: event.data.trustKey ?? null,
       };
       assistant.pendingConfirmation = confirmation;
       onConfirmationRequest?.();
+      break;
+    }
+    case 'tool_auto_approved': {
+      const toolId = event.data.toolCallId;
+      const tool = assistant.toolCalls?.find((t) => t.id === toolId);
+      if (tool) {
+        if (tool.status === 'pending_confirmation' || tool.status === 'awaiting_confirmation') {
+          tool.status = 'running';
+        }
+        tool.autoApproved = true;
+      }
+      if (assistant.preparingConfirmation?.toolCallId === toolId) {
+        assistant.preparingConfirmation = null;
+      }
+      if (assistant.pendingConfirmation?.toolCallId === toolId) {
+        assistant.pendingConfirmation = null;
+      }
       break;
     }
     case 'tool_call_result': {
@@ -835,6 +937,9 @@ export function applyStreamEvent(
         }
         if (assistant.pendingConfirmation?.toolCallId === toolId) {
           assistant.pendingConfirmation = null;
+        }
+        if (assistant.preparingConfirmation?.toolCallId === toolId) {
+          assistant.preparingConfirmation = null;
         }
       }
       break;
@@ -941,11 +1046,13 @@ export function applyStreamEvent(
         if (pending) {
           const tool = assistant.toolCalls?.find((t) => t.id === pending.toolCallId);
           if (tool) {
-            tool.status = 'error';
-            tool.endedAt = Date.now();
+            finalizeInterruptedTool(tool, 'confirmation_timeout');
             tool.humanSummary = localizeAgentError('confirmation_timeout', '');
           }
           assistant.pendingConfirmation = null;
+        }
+        if (assistant.preparingConfirmation) {
+          assistant.preparingConfirmation = null;
         }
         break;
       }
@@ -1091,7 +1198,7 @@ export interface UseChatStreamReturn {
   attachmentStatuses: Ref<Record<string, AttachmentStatusEntry>>;
   streamCorrelation: Ref<StreamCorrelation>;
   send: (text: string, options?: Partial<SendMessagePayload>) => Promise<void>;
-  confirm: (decision: 'approve' | 'deny') => Promise<void>;
+  confirm: (decision: 'approve' | 'deny' | 'approve_remaining') => Promise<void>;
   approvePlan: (approved: boolean) => Promise<void>;
   retry: () => Promise<void>;
   editAndResend: (userMessageId: string, newText: string) => Promise<void>;
@@ -1394,7 +1501,7 @@ export function useChatStream(
     payload: Partial<SendMessagePayload> = {},
   ): Promise<void> {
     const trimmed = text.trim();
-    if (!trimmed || streaming.value) return;
+    if (!trimmed || streaming.value || hasActiveHumanGate()) return;
 
     const projectPath = options.projectPath?.value;
     if (!projectPath) {
@@ -1636,6 +1743,11 @@ export function useChatStream(
           },
           correlationContext(),
         );
+        const idleSummary = localizeAgentError('idle_timeout', '');
+        for (const message of messages.value) {
+          if (message.role !== 'assistant') continue;
+          finalizeIncompleteToolsOnMessage(message, 'idle_timeout', idleSummary);
+        }
         const assistant = messages.value.find(
           (m) => m.id === assistantMessage.id,
         );
@@ -1793,7 +1905,7 @@ export function useChatStream(
     });
   }
 
-  async function confirm(decision: 'approve' | 'deny'): Promise<void> {
+  async function confirm(decision: 'approve' | 'deny' | 'approve_remaining'): Promise<void> {
     const assistant = messages.value.find((m) => m.pendingConfirmation);
     const pending = assistant?.pendingConfirmation;
     if (!pending || confirming.value) return;

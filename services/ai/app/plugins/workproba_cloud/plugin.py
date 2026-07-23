@@ -122,6 +122,16 @@ def _find_cached_tool(
     return None
 
 
+def _cached_connector_action_names(tools: list[dict[str, Any]]) -> list[str]:
+    return sorted(
+        {
+            str(tool_def.get("action") or "")
+            for tool_def in tools
+            if isinstance(tool_def, dict) and tool_def.get("action")
+        }
+    )
+
+
 def _is_managed_read_action(
     cloud_dir: Path, connector_id: str, action: str | None
 ) -> bool:
@@ -383,7 +393,10 @@ def build_managed_connectors_agent_prompt(
     """Fragment advisory : connecteurs org et activation locale."""
     if not items:
         return ""
-    lines = [t(locale, "tools.managed_connectors_header")]
+    lines = [
+        t(locale, "tools.managed_connectors_header"),
+        t(locale, "tools.managed_connectors_catalog_hint"),
+    ]
     for connector_id, name, enabled_local in items:
         if enabled_local:
             lines.append(
@@ -1059,7 +1072,49 @@ async def invoke_managed_connector_impl(
         if connector_id not in allowed:
             raise ModelRetry(f"connector_not_allowed:{connector_id}")
 
-        if action:
+        tools = _connector_tools_from_cache(cloud_dir, connector_id)
+        if tools is not None:
+            available = _cached_connector_action_names(tools)
+            available_str = ", ".join(available) or "(none)"
+            if not action:
+                raise ModelRetry(
+                    t(
+                        locale,
+                        "cloud.connector_action_required",
+                        connector_id=connector_id,
+                        available=available_str,
+                    )
+                )
+            tool_def = _find_cached_tool(cloud_dir, connector_id, action)
+            if tool_def is None:
+                raise ModelRetry(
+                    t(
+                        locale,
+                        "cloud.connector_unknown_action",
+                        connector_id=connector_id,
+                        action=action,
+                        available=available_str,
+                    )
+                )
+            input_schema = tool_def.get("input_schema")
+            if isinstance(input_schema, dict):
+                payload_for_validation = {
+                    key: value for key, value in payload.items() if key != "action"
+                }
+                validation_error = _validate_payload_against_schema(
+                    payload_for_validation, input_schema
+                )
+                if validation_error:
+                    raise ModelRetry(
+                        t(
+                            locale,
+                            "cloud.connector_payload_invalid",
+                            connector_id=connector_id,
+                            action=action,
+                            detail=validation_error,
+                        )
+                    )
+        elif action:
             tool_def = _find_cached_tool(cloud_dir, connector_id, action)
             if tool_def is not None:
                 input_schema = tool_def.get("input_schema")
@@ -1092,6 +1147,15 @@ async def invoke_managed_connector_impl(
         resolved_user: dict[str, Any] | None = None
         resolution_failed = False
         requires_user_resolution = _user_resolution_candidate(payload) is not None
+        skip_gate = _is_managed_read_action(cloud_dir, connector_id, action)
+        gate = deps.confirmation_gate
+        if gate is not None and not skip_gate:
+            await gate.notify_preparing(
+                tool_call_id=ctx.tool_call_id or "",
+                tool_name=gate_tool_name,
+                connector_id=connector_id,
+                action=action or "",
+            )
         if _should_preresolve_ihora_user(connector_id, action, payload):
             preresolve_gateway = open_remote_capability_gateway(
                 caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
@@ -1123,7 +1187,6 @@ async def invoke_managed_connector_impl(
                 )
             )
 
-        skip_gate = _is_managed_read_action(cloud_dir, connector_id, action)
         if skip_gate and deps.context.plugin_data_dir is not None:
             from app.agent.work_events import audit_details_with_work_id
             from app.audit import log_event, resolve_app_data_dir
@@ -1144,7 +1207,6 @@ async def invoke_managed_connector_impl(
                 enabled=deps.context.audit_enabled,
             )
 
-        gate = deps.confirmation_gate
         if gate is not None and not skip_gate:
             summary_connector_id = human_connector_id or connector_id
             human_summary = _build_managed_gate_human_summary(

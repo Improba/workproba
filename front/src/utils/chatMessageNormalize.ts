@@ -15,6 +15,7 @@ const VALID_ROLES = new Set<ChatMessageRole>(['user', 'assistant', 'system']);
 const VALID_TOOL_STATUSES = new Set<ToolCallStatus>([
   'pending',
   'running',
+  'pending_confirmation',
   'awaiting_confirmation',
   'success',
   'error',

@@ -214,8 +214,9 @@ function setDetailView(view: ThinkingDetailViewMode): void {
 
 .thinking-card__header {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
+  /* Première ligne du subject : icône alignée dessus, jamais seule au-dessus. */
+  align-items: flex-start;
+  flex-wrap: nowrap;
   gap: 0.5rem;
   width: 100%;
   padding: 0.65rem 0.85rem;
@@ -238,11 +239,14 @@ function setDetailView(view: ThinkingDetailViewMode): void {
 
 .thinking-card__icon {
   flex: 0 0 auto;
+  /* Aligne le glyphe 16px sur la 1re ligne du label (fs-sm / lh-normal). */
+  margin-top: 0.15rem;
   color: var(--wp-text-muted);
 }
 
 .thinking-card__labels {
-  flex: 1 1 auto;
+  /* Basis 0 : tronque le subject au lieu de faire wraper l'icône. */
+  flex: 1 1 0;
   min-width: 0;
   display: flex;
   flex-direction: column;
@@ -267,6 +271,7 @@ function setDetailView(view: ThinkingDetailViewMode): void {
 
 .thinking-card__hint {
   flex: 0 0 auto;
+  align-self: center;
   padding: 0.2rem 0.55rem;
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-pill);
@@ -278,6 +283,7 @@ function setDetailView(view: ThinkingDetailViewMode): void {
 
 .thinking-card__chevron {
   flex: 0 0 auto;
+  align-self: center;
   transition: transform var(--wp-dur) var(--wp-ease);
 
   &--up {
@@ -289,6 +295,7 @@ function setDetailView(view: ThinkingDetailViewMode): void {
   flex: 0 0 auto;
   width: 0.9rem;
   height: 0.9rem;
+  margin-top: 0.2rem;
   border-radius: 999px;
   border: 2px solid var(--wp-accent-soft);
   border-top-color: var(--wp-accent);

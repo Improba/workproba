@@ -203,8 +203,16 @@ export function toPythonHistory(messages: ChatMessage[]): AgentTurnPayload['hist
     history.push(entry);
 
     for (const tc of m.toolCalls ?? []) {
-      if (tc.result === undefined) continue;
-      const sanitized = sanitizeBrowserToolResultForHistory(tc.name, tc.result);
+      let result = tc.result;
+      if (result === undefined) {
+        // Invariant Mistral: chaque tool_call a un role:tool. success sans
+        // result = incohérence de données (pas une interruption).
+        result =
+          tc.status === 'success'
+            ? { ok: true, note: 'missing_tool_result' }
+            : { ok: false, error: 'interrupted', reason: 'missing_tool_result' };
+      }
+      const sanitized = sanitizeBrowserToolResultForHistory(tc.name, result);
       history.push({
         role: 'tool',
         content: truncateToolResult(toolResultToString(sanitized)),
@@ -397,33 +405,37 @@ export function ragIsUpToDate(report: WorkspaceIndexReport | null): boolean {
 
 export async function requestTitle(opts: {
   firstUserMessage: string;
-  firstAssistantReply: string;
+  firstAssistantReply?: string;
   chatConfig?: LlmConfigPayload | null;
   utilityConfig?: LlmConfigPayload | null;
   providerSet?: ProviderSet | null;
   cloudPluginDataDir?: string | null;
   locale?: 'fr' | 'en' | null;
 }): Promise<string> {
+  const body: Record<string, unknown> = {
+    first_user_message: opts.firstUserMessage,
+    llm_provider_config: opts.providerSet ? null : (opts.chatConfig ?? null),
+    utility_llm_config: opts.providerSet ? null : (opts.utilityConfig ?? null),
+    provider_set: opts.providerSet ? providerSetToSidecar(opts.providerSet) : null,
+    cloud_plugin_data_dir: opts.cloudPluginDataDir ?? null,
+    locale: opts.locale ?? undefined,
+  };
+  const assistantReply = opts.firstAssistantReply?.trim();
+  if (assistantReply) {
+    body.first_assistant_reply = assistantReply;
+  }
   const response = await fetch(`${getAiSidecarUrl()}/util/title`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'X-Internal-Secret': getDesktopSecret(),
     },
-    body: JSON.stringify({
-      first_user_message: opts.firstUserMessage,
-      first_assistant_reply: opts.firstAssistantReply,
-      llm_provider_config: opts.providerSet ? null : (opts.chatConfig ?? null),
-      utility_llm_config: opts.providerSet ? null : (opts.utilityConfig ?? null),
-      provider_set: opts.providerSet ? providerSetToSidecar(opts.providerSet) : null,
-      cloud_plugin_data_dir: opts.cloudPluginDataDir ?? null,
-      locale: opts.locale ?? undefined,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok) {
-    const body = await response.text().catch(() => '');
-    throw new Error(body || `HTTP ${response.status}`);
+    const errorBody = await response.text().catch(() => '');
+    throw new Error(errorBody || `HTTP ${response.status}`);
   }
 
   const data = (await response.json()) as { title?: string };

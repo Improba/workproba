@@ -14,14 +14,34 @@ from app.agent.effects import EffectProposal, protections_to_dict
 from app.agent.work_events import audit_details_with_work_id, work_id_for_turn
 from app.audit import log_event
 from app.i18n import t
-from app.schemas import AgentEvent, ConfirmationRequestEvent, make_error_event
+from app.schemas import (
+    AgentEvent,
+    ConfirmationPreparingEvent,
+    ConfirmationRequestEvent,
+    ToolAutoApprovedEvent,
+    make_error_event,
+)
 
-ConfirmationDecision = Literal["approve", "deny"]
+ConfirmationDecision = Literal["approve", "deny", "approve_remaining"]
 ApprovalOutcome = Literal["approved", "denied", "timeout"]
 APPROVAL_DENIED_MARKER = "workproba:approval_denied"
 APPROVAL_TIMEOUT_MARKER = "workproba:approval_timeout"
 
 CONFIRMATION_TIMEOUT_SECONDS = 300.0
+
+
+def trust_key_for_proposal(proposal: EffectProposal) -> str | None:
+    if proposal.effect == "external_send":
+        if proposal.targets and proposal.targets[0]:
+            return f"connector:{proposal.targets[0]}"
+        return None
+    if proposal.effect:
+        return f"effect:{proposal.effect}"
+    return None
+
+
+def trust_key_for_write(*, action: Literal["create", "modify"]) -> str:
+    return f"file_write:{action}"
 
 
 def approval_denied_retry(locale: str, *, timeout: bool = False) -> ModelRetry:
@@ -56,6 +76,7 @@ class _PendingConfirmation:
     tool_call_id: str
     event: asyncio.Event = field(default_factory=asyncio.Event)
     decision: ConfirmationDecision | None = None
+    trust_key: str | None = None
 
 
 class ConfirmationGate:
@@ -68,6 +89,41 @@ class ConfirmationGate:
         self._pending: dict[str, _PendingConfirmation] = {}
         self.event_queue: asyncio.Queue[AgentEvent] = asyncio.Queue()
         self._lock = asyncio.Lock()
+        self._turn_trust: set[str] = set()
+
+    def _outcome_from_decision(
+        self,
+        decision: ConfirmationDecision | None,
+        *,
+        trust_key: str | None,
+    ) -> ApprovalOutcome:
+        if decision == "approve":
+            return "approved"
+        if decision == "approve_remaining":
+            if trust_key:
+                self._turn_trust.add(trust_key)
+            return "approved"
+        if decision == "deny":
+            return "denied"
+        return "timeout"
+
+    async def notify_preparing(
+        self,
+        *,
+        tool_call_id: str,
+        tool_name: str = "",
+        connector_id: str = "",
+        action: str = "",
+    ) -> None:
+        await self.event_queue.put(
+            ConfirmationPreparingEvent(
+                turn_id=self.turn_id,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                connector_id=connector_id,
+                action=action,
+            )
+        )
 
     async def _await_decision(
         self,
@@ -103,14 +159,28 @@ class ConfirmationGate:
         action: Literal["create", "modify"],
         proposed_path: str,
         human_summary: str,
+        audit_app_data_dir: Path | None = None,
+        audit_enabled: bool | None = None,
     ) -> ApprovalOutcome:
         """Émet confirmation_request et attend approve/deny."""
         async with self._lock:
+            trust_key = trust_key_for_write(action=action)
+            if trust_key in self._turn_trust:
+                await self._emit_auto_approved(
+                    tool_call_id=tool_call_id,
+                    tool_name=tool_name,
+                    trust_key=trust_key,
+                    audit_app_data_dir=audit_app_data_dir,
+                    audit_enabled=audit_enabled,
+                )
+                return "approved"
+
             confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
             pending = _PendingConfirmation(
                 session_id=self.session_id,
                 turn_id=self.turn_id,
                 tool_call_id=tool_call_id,
+                trust_key=trust_key,
             )
             self._pending[confirmation_id] = pending
 
@@ -125,13 +195,46 @@ class ConfirmationGate:
                     action=action,
                     proposed_path=proposed_path,
                     human_summary=human_summary,
+                    trust_key=trust_key,
                 ),
             )
-            if decision == "approve":
-                return "approved"
-            if decision == "deny":
-                return "denied"
-            return "timeout"
+            return self._outcome_from_decision(decision, trust_key=trust_key)
+
+    async def _emit_auto_approved(
+        self,
+        *,
+        tool_call_id: str,
+        tool_name: str,
+        trust_key: str,
+        audit_app_data_dir: Path | None = None,
+        audit_enabled: bool | None = None,
+    ) -> None:
+        work_id = work_id_for_turn(self.turn_id)
+        if audit_app_data_dir is not None:
+            log_event(
+                audit_app_data_dir,
+                "approval.auto_approved",
+                "agent",
+                audit_details_with_work_id(
+                    {
+                        "trust_key": trust_key,
+                        "tool_name": tool_name,
+                        "tool_call_id": tool_call_id,
+                    },
+                    work_id,
+                    turn_id=self.turn_id,
+                    session_id=self.session_id,
+                ),
+                enabled=audit_enabled,
+            )
+        await self.event_queue.put(
+            ToolAutoApprovedEvent(
+                turn_id=self.turn_id,
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                trust_key=trust_key,
+            )
+        )
 
     async def request_effect(
         self,
@@ -143,11 +246,23 @@ class ConfirmationGate:
     ) -> ApprovalOutcome:
         """Émet confirmation_request enrichi et attend approve/deny."""
         async with self._lock:
+            trust_key = trust_key_for_proposal(proposal)
+            if trust_key and trust_key in self._turn_trust:
+                await self._emit_auto_approved(
+                    tool_call_id=tool_call_id,
+                    tool_name=proposal.tool_name,
+                    trust_key=trust_key,
+                    audit_app_data_dir=audit_app_data_dir,
+                    audit_enabled=audit_enabled,
+                )
+                return "approved"
+
             confirmation_id = f"cf_{uuid.uuid4().hex[:16]}"
             pending = _PendingConfirmation(
                 session_id=self.session_id,
                 turn_id=self.turn_id,
                 tool_call_id=tool_call_id,
+                trust_key=trust_key,
             )
             self._pending[confirmation_id] = pending
 
@@ -186,6 +301,7 @@ class ConfirmationGate:
                     protections=protections_to_dict(proposal.protections),
                     headline=proposal.headline,
                     protection_labels=list(proposal.protection_labels),
+                    trust_key=trust_key or "",
                 ),
             )
 
@@ -201,11 +317,7 @@ class ConfirmationGate:
                     enabled=audit_enabled,
                 )
 
-            if decision == "approve":
-                return "approved"
-            if decision == "deny":
-                return "denied"
-            return "timeout"
+            return self._outcome_from_decision(decision, trust_key=trust_key)
 
     def resolve(self, confirmation_id: str, decision: ConfirmationDecision) -> bool:
         pending = self._pending.get(confirmation_id)

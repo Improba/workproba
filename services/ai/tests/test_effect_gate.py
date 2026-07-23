@@ -17,6 +17,8 @@ from app.agent.confirmation import (
     ApprovalOutcome,
     ConfirmationGate,
     approval_gate_retry_kind,
+    trust_key_for_proposal,
+    trust_key_for_write,
 )
 from app.agent.effects import (
     EffectProtection,
@@ -32,7 +34,7 @@ from app.limits import DEFAULT_LIMITS
 from app.plugins.workproba_projet import PLUGIN_ID
 from app.plugins.workproba_projet import storage
 from app.sandbox.runner import SandboxRunner
-from app.schemas import ConfirmationRequestEvent
+from app.schemas import ConfirmationPreparingEvent, ConfirmationRequestEvent, ToolAutoApprovedEvent
 
 from conftest import FakeProjectClient
 
@@ -751,3 +753,132 @@ def test_generate_document_persists_via_gate_path(tmp_path: Path) -> None:
     asyncio.run(run())
     assert len(gate.effect_calls) == 1
     assert gate.effect_calls[0].tool_name == "generate_document"
+
+
+def test_trust_key_for_proposal_external_send_uses_connector() -> None:
+    proposal = EffectProposal(
+        effect="external_send",
+        tool_name="invoke_managed_connector",
+        targets=["ihora"],
+        action="create",
+    )
+    assert trust_key_for_proposal(proposal) == "connector:ihora"
+
+
+def test_trust_key_for_proposal_external_send_without_target_is_none() -> None:
+    proposal = EffectProposal(
+        effect="external_send",
+        tool_name="sync_to_cloud",
+        targets=[],
+        action="create",
+    )
+    assert trust_key_for_proposal(proposal) is None
+
+
+def test_trust_key_for_write_scopes_by_action() -> None:
+    assert trust_key_for_write(action="create") == "file_write:create"
+    assert trust_key_for_write(action="modify") == "file_write:modify"
+
+
+def test_trust_key_for_proposal_other_effect() -> None:
+    proposal = EffectProposal(
+        effect="create",
+        tool_name="write_docx",
+        targets=["out.docx"],
+        action="create",
+        proposed_path="out.docx",
+    )
+    assert trust_key_for_proposal(proposal) == "effect:create"
+
+
+@pytest.mark.asyncio
+async def test_notify_preparing_then_request_effect_emits_in_order() -> None:
+    gate = ConfirmationGate(session_id="s1", turn_id="t-prep")
+    proposal = EffectProposal(
+        effect="external_send",
+        tool_name="invoke_managed_connector",
+        targets=["ihora"],
+        action="create",
+        human_summary="Envoyer vers ihora",
+    )
+
+    async def consume_and_approve() -> None:
+        preparing = await gate.event_queue.get()
+        assert isinstance(preparing, ConfirmationPreparingEvent)
+        assert preparing.tool_call_id == "tc1"
+        event = await gate.event_queue.get()
+        assert isinstance(event, ConfirmationRequestEvent)
+        gate.resolve(event.confirmation_id, "approve")
+
+    consumer = asyncio.create_task(consume_and_approve())
+    await gate.notify_preparing(
+        tool_call_id="tc1",
+        tool_name="invoke_managed_connector",
+        connector_id="ihora",
+        action="send",
+    )
+    approved = await gate.request_effect(tool_call_id="tc1", proposal=proposal)
+    await consumer
+    assert approved == "approved"
+
+
+@pytest.mark.asyncio
+async def test_approve_remaining_auto_approves_same_trust_key() -> None:
+    gate = ConfirmationGate(session_id="s1", turn_id="t-trust")
+    proposal = EffectProposal(
+        effect="external_send",
+        tool_name="invoke_managed_connector",
+        targets=["ihora"],
+        action="create",
+        human_summary="Envoyer vers ihora",
+    )
+
+    async def approve_remaining_then_consume_auto() -> None:
+        event = await gate.event_queue.get()
+        assert isinstance(event, ConfirmationRequestEvent)
+        assert event.trust_key == "connector:ihora"
+        gate.resolve(event.confirmation_id, "approve_remaining")
+        auto = await gate.event_queue.get()
+        assert isinstance(auto, ToolAutoApprovedEvent)
+        assert auto.tool_call_id == "tc2"
+        assert auto.trust_key == "connector:ihora"
+
+    consumer = asyncio.create_task(approve_remaining_then_consume_auto())
+    first = await gate.request_effect(tool_call_id="tc1", proposal=proposal)
+    second = await gate.request_effect(tool_call_id="tc2", proposal=proposal)
+    await consumer
+    assert first == "approved"
+    assert second == "approved"
+
+
+@pytest.mark.asyncio
+async def test_different_trust_key_stays_gated() -> None:
+    gate = ConfirmationGate(session_id="s1", turn_id="t-diff")
+    proposal_a = EffectProposal(
+        effect="external_send",
+        tool_name="invoke_managed_connector",
+        targets=["ihora"],
+        action="create",
+        human_summary="Envoyer vers ihora",
+    )
+    proposal_b = EffectProposal(
+        effect="external_send",
+        tool_name="invoke_managed_connector",
+        targets=["other"],
+        action="create",
+        human_summary="Envoyer vers other",
+    )
+
+    async def consume_both() -> None:
+        event_a = await gate.event_queue.get()
+        assert isinstance(event_a, ConfirmationRequestEvent)
+        gate.resolve(event_a.confirmation_id, "approve_remaining")
+        event_b = await gate.event_queue.get()
+        assert isinstance(event_b, ConfirmationRequestEvent)
+        assert event_b.trust_key == "connector:other"
+        gate.resolve(event_b.confirmation_id, "approve")
+
+    consumer = asyncio.create_task(consume_both())
+    await gate.request_effect(tool_call_id="tc-a", proposal=proposal_a)
+    await gate.request_effect(tool_call_id="tc-b", proposal=proposal_b)
+    await consumer

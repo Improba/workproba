@@ -208,12 +208,19 @@ def test_done_event_serializes_usage_tokens() -> None:
 # --- map_model_stream_events -----------------------------------------------
 
 
-async def _collect_stream_events(events: list[Any]) -> list[Any]:
+async def _collect_stream_events(
+    events: list[Any], *, model_round: int = 0
+) -> list[Any]:
     async def _fake_stream() -> Any:
         for event in events:
             yield event
 
-    return [event async for event in map_model_stream_events(_fake_stream())]
+    return [
+        event
+        async for event in map_model_stream_events(
+            _fake_stream(), model_round=model_round
+        )
+    ]
 
 
 async def test_map_model_stream_events_thinking_and_text() -> None:
@@ -228,10 +235,10 @@ async def test_map_model_stream_events_thinking_and_text() -> None:
     mapped = await _collect_stream_events(events)
 
     assert mapped == [
-        ThinkingStartEvent(thinking_id="think-0"),
-        ThinkingDeltaEvent(thinking_id="think-0", content="Hello "),
-        ThinkingDeltaEvent(thinking_id="think-0", content="world"),
-        ThinkingEndEvent(thinking_id="think-0"),
+        ThinkingStartEvent(thinking_id="think-0-0"),
+        ThinkingDeltaEvent(thinking_id="think-0-0", content="Hello "),
+        ThinkingDeltaEvent(thinking_id="think-0-0", content="world"),
+        ThinkingEndEvent(thinking_id="think-0-0"),
         TokenEvent(content="Answer"),
     ]
 
@@ -254,13 +261,27 @@ async def test_map_model_stream_events_first_chunk_embedded_in_part_start() -> N
     mapped = await _collect_stream_events(events)
 
     assert mapped == [
-        ThinkingStartEvent(thinking_id="think-0"),
-        ThinkingDeltaEvent(thinking_id="think-0", content="je calcule "),
-        ThinkingDeltaEvent(thinking_id="think-0", content="2+2"),
-        ThinkingEndEvent(thinking_id="think-0"),
+        ThinkingStartEvent(thinking_id="think-0-0"),
+        ThinkingDeltaEvent(thinking_id="think-0-0", content="je calcule "),
+        ThinkingDeltaEvent(thinking_id="think-0-0", content="2+2"),
+        ThinkingEndEvent(thinking_id="think-0-0"),
         TokenEvent(content="4"),
         TokenEvent(content="! 😄"),
     ]
+
+
+async def test_map_model_stream_events_distinct_ids_per_model_round() -> None:
+    """Chaque round modèle doit produire des thinking_id distincts."""
+    events = [
+        PartStartEvent(index=0, part=ThinkingPart(content="round thinking")),
+        PartEndEvent(index=0, part=ThinkingPart(content="round thinking")),
+    ]
+    round_0 = await _collect_stream_events(events, model_round=0)
+    round_1 = await _collect_stream_events(events, model_round=1)
+
+    assert round_0[0].thinking_id == "think-0-0"
+    assert round_1[0].thinking_id == "think-1-0"
+    assert round_0[0].thinking_id != round_1[0].thinking_id
 
 
 

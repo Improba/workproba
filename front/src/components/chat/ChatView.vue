@@ -35,12 +35,14 @@
         @open-file="(path) => emit('open-file', path)"
         @restored="(path) => emit('restored', path)"
         @confirm-approve="emit('confirm-approve')"
+        @confirm-approve-remaining="emit('confirm-approve-remaining')"
         @confirm-deny="emit('confirm-deny')"
         @plan-approve="emit('plan-approve')"
         @plan-reject="emit('plan-reject')"
         @personas-another="(card) => emit('personas-another', card)"
         @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
         @regenerate="(id) => emit('regenerate', id)"
+        @error-reconnect="(cta) => emit('error-reconnect', cta)"
       />
 
       <Transition name="chat-scroll-fab">
@@ -88,6 +90,40 @@
           {{ engineBannerActionLabel }}
         </button>
       </div>
+      <div
+        v-if="showStreamErrorBanner"
+        class="chat-view__stream-error"
+        role="alert"
+      >
+        <Lucide name="alert-circle" size="sm" color="danger" />
+        <span class="chat-view__stream-error-msg">{{ streamErrorMessage }}</span>
+        <button
+          type="button"
+          class="chat-view__stream-error-action"
+          @click="emit('stream-error-report')"
+        >
+          <Lucide name="flag" size="xs" color="primary" />
+          {{ t('errors.reportOpenAction') }}
+        </button>
+        <button
+          v-if="streamErrorReconnect"
+          type="button"
+          class="chat-view__stream-error-action"
+          @click="emit('stream-error-reconnect')"
+        >
+          <Lucide name="log-in" size="xs" color="primary" />
+          {{ t('errors.cloudReconnect') }}
+        </button>
+        <button
+          v-if="streamError?.retryable && !streamErrorReconnect"
+          type="button"
+          class="chat-view__stream-error-action"
+          @click="emit('stream-error-retry')"
+        >
+          <Lucide name="rotate-ccw" size="xs" color="primary" />
+          {{ t('common.retry') }}
+        </button>
+      </div>
       <EnrollCloudModal v-model="enrollModalOpen" @enrolled="onCloudEnrolled" />
       <CloudLoginModal
         v-model="cloudLoginModalOpen"
@@ -115,7 +151,6 @@
           :accept="ATTACHMENT_ACCEPT"
           @change="onFileInputChange"
         />
-        <div class="chat-view__composer-input-row">
         <button
           type="button"
           class="chat-view__attach"
@@ -245,7 +280,6 @@
             @paste="onPaste"
           />
         </div>
-        </div>
 
         <div class="chat-view__composer-actions">
           <button
@@ -299,7 +333,7 @@ import {
   MAX_ATTACHMENTS,
   useChatAttachments,
 } from '@composables/useChatAttachments';
-import type { ChatAttachment, ChatMessage, ReasoningEffort } from '#types';
+import type { ChatAttachment, ChatError, ChatMessage, ReasoningEffort } from '#types';
 import { addMemoryItem } from '@services/aiSidecar';
 import type { QInput, QMenu } from 'quasar';
 import { supportsReasoning } from '@utils/reasoningSupport';
@@ -331,6 +365,8 @@ const props = defineProps<{
   embedded?: boolean;
   emptyHero?: string | null;
   layout?: 'chat' | 'hub';
+  streamError?: ChatError | null;
+  streamErrorReconnect?: 'login' | 'enroll' | null;
 }>();
 
 const emit = defineEmits<{
@@ -339,6 +375,7 @@ const emit = defineEmits<{
   'open-file': [path: string];
   restored: [path: string];
   'confirm-approve': [];
+  'confirm-approve-remaining': [];
   'confirm-deny': [];
   'plan-approve': [];
   'plan-reject': [];
@@ -350,6 +387,10 @@ const emit = defineEmits<{
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
   regenerate: [messageId: string];
+  'stream-error-report': [];
+  'stream-error-retry': [];
+  'stream-error-reconnect': [];
+  'error-reconnect': [cta: 'login' | 'enroll'];
 }>();
 
 const COMPOSER_MAX_LENGTH = 32_000;
@@ -391,6 +432,26 @@ const cloudLoginModalOpen = ref(false);
 const showEngineBanner = computed(
   () => !props.settingsLocked && effectiveActiveSetId.value == null,
 );
+
+const lastAssistantError = computed(() => {
+  for (let i = props.messages.length - 1; i >= 0; i -= 1) {
+    if (props.messages[i]?.role === 'assistant') {
+      return props.messages[i]?.error ?? null;
+    }
+  }
+  return null;
+});
+
+const showStreamErrorBanner = computed(() => {
+  if (!props.streamError) return false;
+  const streamTurnId = props.streamError.turnId;
+  if (!streamTurnId) return true;
+  const assistantError = lastAssistantError.value;
+  if (!assistantError?.turnId) return true;
+  return assistantError.turnId !== streamTurnId;
+});
+
+const streamErrorMessage = computed(() => props.streamError?.message ?? '');
 
 const activeSetReadinessIssue = computed(() => {
   if (!activeSet.value || effectiveActiveSetId.value != null) return null;
@@ -549,9 +610,10 @@ defineExpose({
     anchorUserIndex: anchorUserIndex.value,
   }),
   detachFromBottomForTest: () => {
-    cancelProgrammaticReleaseTimer();
-    programmaticScrollDepth = 0;
     detachFromBottom();
+  },
+  beginProgrammaticScrollForTest: () => {
+    beginProgrammaticScroll();
   },
   handleScrollDownClickForTest: () => handleScrollDownClick(),
 });
@@ -618,14 +680,15 @@ function enterStickyMode(): void {
 }
 
 function detachFromBottom(): void {
-  if (isProgrammaticScroll()) return;
-  userDetached.value = true;
-  isPinned.value = false;
-  scrollMode.value = 'detached';
+  // Intention utilisateur prioritaire : même pendant un scroll programmatique
+  // (sinon le suivi sticky pendant le stream empêche de reprendre la main).
   cancelScheduledScroll();
   cancelAnchorTick();
   cancelProgrammaticReleaseTimer();
   programmaticScrollDepth = 0;
+  userDetached.value = true;
+  isPinned.value = false;
+  scrollMode.value = 'detached';
 }
 
 function onUserWheel(event: WheelEvent): void {
@@ -668,6 +731,50 @@ function scrollToBottom(smooth = false): void {
   target.scrollTo({
     top: target.scrollHeight,
     behavior: smooth ? 'smooth' : 'auto',
+  });
+}
+
+/**
+ * Amène les actions de confirmation (Approuver) dans le viewport.
+ * Le virtual scroller sous-estime souvent la hauteur juste après le mount
+ * de ConfirmationCard ; scrollHeight seul ne suffit pas.
+ */
+function scrollConfirmationActionsIntoView(): void {
+  const target = messageListRef.value?.getScrollTarget();
+  if (!target || typeof target.querySelector !== 'function') return;
+  const card = target.querySelector<HTMLElement>(
+    '[data-testid="confirmation-card"]',
+  );
+  if (!card) return;
+  const actions =
+    card.querySelector<HTMLElement>('.confirmation-card__actions') ?? card;
+  const targetRect = target.getBoundingClientRect();
+  const actionsRect = actions.getBoundingClientRect();
+  const margin = 12;
+  if (actionsRect.bottom <= targetRect.bottom - margin) return;
+
+  const delta = actionsRect.bottom - targetRect.bottom + margin;
+  beginProgrammaticScroll();
+  target.scrollTop += delta;
+  releaseProgrammaticScrollAfter(80);
+}
+
+/** Confirmation interactive : sticky + bas de liste + fine-tune sur les boutons. */
+async function ensureConfirmationVisible(): Promise<void> {
+  if (userDetached.value) return;
+  if (scrollMode.value === 'anchor') {
+    enterStickyMode();
+  } else if (scrollMode.value !== 'sticky') {
+    enterStickyMode();
+  } else {
+    isPinned.value = true;
+  }
+  await scrollToBottomStable();
+  await nextTick();
+  scrollConfirmationActionsIntoView();
+  requestAnimationFrame(() => {
+    if (userDetached.value) return;
+    scrollConfirmationActionsIntoView();
   });
 }
 
@@ -1027,9 +1134,10 @@ watch(
       suppressNextLengthAnchor = false;
       return;
     }
-    if (grew && !userDetached.value) {
+    if (grew) {
       // User+assistant sont poussés ensemble : last peut être assistant.
       // Ancrer dès qu'un message user apparaît dans le lot ajouté.
+      // Un nouvel élan utilisateur reprend le suivi même si on était détaché.
       let newUser = false;
       for (let i = prevCount; i < length; i += 1) {
         if (props.messages[i]?.role === 'user') {
@@ -1042,7 +1150,7 @@ watch(
         return;
       }
     }
-    if (scrollMode.value === 'sticky' && isPinned.value) {
+    if (scrollMode.value === 'sticky' && isPinned.value && !userDetached.value) {
       void scrollToBottomStable();
     }
   },
@@ -1093,9 +1201,20 @@ watch(
       return;
     }
     if (streaming && !wasStreaming) {
-      if (userDetached.value) return;
-      // Regenerate : pas de nouveau message user, mais on ré-ancre la question.
+      // Prochain tour IA : reprendre le suivi auto (le détachement ne dure
+      // que jusqu'à cette génération, sauf si l'utilisateur se re-détache).
+      if (userDetached.value) {
+        userDetached.value = false;
+        isPinned.value = true;
+      }
       const last = props.messages[props.messages.length - 1];
+      // Confirmation interactive : prioritaire sur le ré-ancrage (sinon les
+      // boutons Approuver restent hors viewport).
+      if (last?.pendingConfirmation || last?.preparingConfirmation) {
+        void ensureConfirmationVisible();
+        return;
+      }
+      // Regenerate : pas de nouveau message user, mais on ré-ancre la question.
       if (last?.role === 'assistant' && scrollMode.value !== 'anchor') {
         void enterAnchorMode();
         return;
@@ -1120,12 +1239,22 @@ watch(
       last.toolCalls?.length,
       last._contentRev,
       last.pendingConfirmation?.confirmationId,
+      last.preparingConfirmation?.toolCallId,
       last.pendingPlan?.planId,
       // Repli/dépli ThinkingCard : remesure hauteur DOM.
       expansionEpoch.value,
     ] as const;
   },
-  () => {
+  (curr, prev) => {
+    const confirmationAppeared =
+      curr != null &&
+      prev != null &&
+      (curr[4] !== prev[4] || curr[5] !== prev[5]) &&
+      (curr[4] != null || curr[5] != null);
+    if (confirmationAppeared && !userDetached.value) {
+      void ensureConfirmationVisible();
+      return;
+    }
     if (scrollMode.value === 'anchor' && !userDetached.value) {
       scheduleAnchorTick();
       return;
@@ -1353,6 +1482,47 @@ onUnmounted(() => {
   }
 }
 
+.chat-view__stream-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  padding: 0.5rem 0.65rem;
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-danger);
+  background: var(--wp-danger-soft);
+  border: 1px solid var(--wp-danger);
+  border-radius: var(--wp-r-md);
+}
+
+.chat-view__stream-error-msg {
+  flex: 1 1 12rem;
+  min-width: 0;
+  line-height: var(--wp-lh-normal);
+  word-break: break-word;
+}
+
+.chat-view__stream-error-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  border: 1px solid var(--wp-accent);
+  border-radius: var(--wp-r-md);
+  background: var(--wp-accent-soft);
+  color: var(--wp-accent-strong, var(--wp-accent));
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+
+  &:hover {
+    background: var(--wp-accent);
+    color: var(--wp-canard);
+  }
+}
+
 .chat-view__memory-index {
   display: inline-flex;
   align-items: center;
@@ -1367,7 +1537,7 @@ onUnmounted(() => {
   }
 }
 
-/* Pilule : [+] [champ texte] à gauche, [send] à droite. */
+/* Pilule : [+] [champ texte] [send]. Étendu : champ plein largeur, [+] et send en bas. */
 .chat-view__composer-form {
   display: flex;
   align-items: center;
@@ -1388,22 +1558,21 @@ onUnmounted(() => {
 }
 
 .chat-view__composer--expanded .chat-view__composer-form {
-  flex-direction: column;
-  align-items: stretch;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-areas:
+    'field field'
+    'attach actions';
+  align-items: center;
+  column-gap: 0.45rem;
+  row-gap: 4px;
   border-radius: var(--wp-r-lg);
   padding: 10px 10px 8px;
 }
 
-.chat-view__composer-input-row {
-  display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  flex: 1;
-  min-width: 0;
-}
-
-.chat-view__composer--expanded .chat-view__composer-input-row {
-  width: 100%;
+.chat-view__composer--expanded .chat-view__attach {
+  grid-area: attach;
+  justify-self: start;
 }
 
 .chat-view__composer-field {
@@ -1415,6 +1584,7 @@ onUnmounted(() => {
 }
 
 .chat-view__composer--expanded .chat-view__composer-field {
+  grid-area: field;
   justify-content: flex-start;
 }
 
@@ -1426,9 +1596,8 @@ onUnmounted(() => {
 }
 
 .chat-view__composer--expanded .chat-view__composer-actions {
-  width: 100%;
-  justify-content: flex-end;
-  padding-top: 4px;
+  grid-area: actions;
+  justify-self: end;
 }
 
 .chat-view__file-input {

@@ -84,13 +84,7 @@ async def generate_title(req: UtilityTitleRequest, settings: Any) -> UtilityTitl
         output_type=str,
         model_settings=build_model_settings(config),
     )
-    result = await agent.run(
-        f"{t(locale, 'utility.user_message_label')}\n"
-        f"{req.first_user_message.strip()}\n\n"
-        f"{t(locale, 'utility.assistant_reply_label')}\n"
-        f"{req.first_assistant_reply.strip()}\n\n"
-        f"{t(locale, 'utility.title_prompt_suffix')}"
-    )
+    result = await agent.run(_title_prompt(req, locale))
     return UtilityTitleResponse(
         title=_clean_title(_result_output(result), locale=locale)
     )
@@ -157,6 +151,19 @@ def _utility_config_from_settings(settings: Any) -> LLMProviderConfig | None:
         )
     except ValidationError as exc:
         raise ValueError(f"Configuration LLM utilitaire invalide : {exc}") from exc
+
+
+def _title_prompt(req: UtilityTitleRequest, locale: str) -> str:
+    parts = [
+        f"{t(locale, 'utility.user_message_label')}\n{req.first_user_message.strip()}",
+    ]
+    assistant_reply = (req.first_assistant_reply or "").strip()
+    if assistant_reply:
+        parts.append(
+            f"{t(locale, 'utility.assistant_reply_label')}\n{assistant_reply}"
+        )
+    parts.append(t(locale, "utility.title_prompt_suffix"))
+    return "\n\n".join(parts)
 
 
 def _summary_prompt(req: UtilitySummarizeRequest, locale: str) -> str:

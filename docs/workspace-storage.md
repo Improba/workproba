@@ -102,7 +102,7 @@ One session = one JSON file, read/written via Tauri commands
 | Field | Role |
 |---|---|
 | `id` | Session identifier (`sess_…`) |
-| `title` | Display title (auto, first question) |
+| `title` | Display title (auto-generated on **first user message** via `POST /util/title`; `first_assistant_reply` optional) |
 | `messages` | Message list (roles `user`/`assistant`, ordered `parts` text/reasoning/tool) |
 | `reasoningEffort` | Reasoning level chosen for the conversation (`none`/`low`/`medium`/`high`) |
 | `model` | LLM model chosen for the conversation (overrides provider default) |

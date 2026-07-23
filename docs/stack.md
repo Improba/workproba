@@ -61,7 +61,8 @@ Sidecar logs in dev: `tail -f .dev-ai.log` at the monorepo root.
 | `LLM_EMBEDDING_*` | RAG embedding config (`MODEL` required to enable vector RAG) |
 | `MEMORY_RANKING_*`, `MEMORY_EMBEDDING_CACHE_MAX_ENTRIES` | Hybrid memory/session ranking + embedding LRU cache (see [memory.md](./memory.md)) |
 | `SANDBOX_TIMEOUT_SECONDS` | Subprocess sandbox timeout |
-| `MAX_AGENT_ITERATIONS` | Agent loop limit |
+| `MAX_AGENT_ITERATIONS` | Agent loop limit (default 40, max 64) |
+| `TURN_TIMEOUT_SECONDS` | Global agent turn timeout (default 600) |
 
 ### Dev variables (root)
 

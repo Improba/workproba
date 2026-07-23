@@ -250,7 +250,7 @@ class AgentTurnRequest(BaseModel):
 
 class UtilityTitleRequest(BaseModel):
     first_user_message: str
-    first_assistant_reply: str
+    first_assistant_reply: str | None = None
     llm_provider_config: LLMProviderConfig | None = None
     utility_llm_config: LLMProviderConfig | None = None
     provider_set: ProviderSet | None = None
@@ -327,6 +327,23 @@ class ToolCallResultEvent(BaseModel):
     human_summary: str = ""
 
 
+class ConfirmationPreparingEvent(BaseModel):
+    type: Literal["confirmation_preparing"] = "confirmation_preparing"
+    turn_id: str
+    tool_call_id: str
+    tool_name: str = ""
+    connector_id: str = ""
+    action: str = ""
+
+
+class ToolAutoApprovedEvent(BaseModel):
+    type: Literal["tool_auto_approved"] = "tool_auto_approved"
+    turn_id: str
+    tool_call_id: str
+    tool_name: str = ""
+    trust_key: str = ""
+
+
 class ConfirmationRequestEvent(BaseModel):
     type: Literal["confirmation_request"] = "confirmation_request"
     turn_id: str
@@ -341,6 +358,7 @@ class ConfirmationRequestEvent(BaseModel):
     protections: dict[str, bool] = Field(default_factory=dict)
     headline: str = ""
     protection_labels: list[str] = Field(default_factory=list)
+    trust_key: str = ""
 
 
 class PlanStepInfo(BaseModel):
@@ -374,7 +392,7 @@ class AgentPlanApproveRequest(BaseModel):
 class AgentConfirmRequest(BaseModel):
     session_id: str
     confirmation_id: str
-    decision: Literal["approve", "deny"]
+    decision: Literal["approve", "deny", "approve_remaining"]
     # Rétrocompat : si absent, résolution sur la gate la plus récente de la session.
     turn_id: str | None = None
     locale: Locale | None = None
@@ -524,6 +542,8 @@ AgentEvent = Annotated[
     | ThinkingEndEvent
     | ToolCallStartEvent
     | ToolCallResultEvent
+    | ConfirmationPreparingEvent
+    | ToolAutoApprovedEvent
     | ConfirmationRequestEvent
     | PlanProposedEvent
     | CompactionEvent

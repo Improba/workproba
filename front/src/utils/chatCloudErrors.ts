@@ -27,3 +27,27 @@ export function isMistralOutageCode(code: string): boolean {
     || code === 'mistral_upstream_error'
   );
 }
+
+export function chatErrorReconnectCta(code: string): 'login' | 'enroll' | null {
+  if (code === 'invalid_user_jwt') return 'login';
+  if (
+    code === 'invalid_device_token' ||
+    code === 'bearer_token_required' ||
+    code === 'cloud_not_enrolled'
+  ) {
+    return 'enroll';
+  }
+  return null;
+}
+
+/** Efface les erreurs inline reconnectables sur les messages assistant. */
+export function clearReconnectableChatErrors(
+  messages: Array<{ role: string; error?: { code?: string } | null }>,
+): void {
+  for (const message of messages) {
+    if (message.role !== 'assistant') continue;
+    const code = message.error?.code;
+    if (!code || !chatErrorReconnectCta(code)) continue;
+    message.error = null;
+  }
+}

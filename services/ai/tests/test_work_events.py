@@ -352,7 +352,7 @@ def test_agent_turn_provider_unavailable_emits_work_failed_before_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     async def fail_stream(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         raise APITimeoutError(request=_httpx_request())
         yield  # pragma: no cover
@@ -414,12 +414,12 @@ def test_agent_turn_fallback_retry_emits_single_work_started(
     call_count = {"n": 0}
 
     async def patched_stream(
-        self: AgentLoop, node: Any, ctx: Any
+        self: AgentLoop, node: Any, ctx: Any, *, model_round: int = 0
     ) -> AsyncIterator[Any]:
         call_count["n"] += 1
         if call_count["n"] == 1:
             raise APITimeoutError(request=_httpx_request())
-        async for event in original(self, node, ctx):
+        async for event in original(self, node, ctx, model_round=model_round):
             yield event
 
     monkeypatch.setattr(AgentLoop, "_iter_model_stream", patched_stream)

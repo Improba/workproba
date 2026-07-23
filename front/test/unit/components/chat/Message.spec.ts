@@ -5,7 +5,7 @@ import Message from '@components/chat/Message.vue';
 import * as expansion from '@composables/useToolCallExpansion';
 
 describe('Message accessibilité', () => {
-  it('affiche un libellé de rôle visible pour le message user', () => {
+  it('affiche un libellé de rôle sr-only pour le message user', () => {
     const user = mount(Message, {
       props: {
         message: {
@@ -28,12 +28,12 @@ describe('Message accessibilité', () => {
 
     const roleLabel = user.find('.chat-message__role');
     expect(roleLabel.exists()).toBe(true);
-    expect(roleLabel.isVisible()).toBe(true);
+    expect(roleLabel.classes()).toContain('wp-sr-only');
     expect(roleLabel.text()).toBe('Vous');
     user.unmount();
   });
 
-  it('affiche un libellé de rôle visible pour le message assistant', () => {
+  it('affiche un libellé de rôle sr-only pour le message assistant', () => {
     const assistant = mount(Message, {
       props: {
         message: {
@@ -56,12 +56,12 @@ describe('Message accessibilité', () => {
 
     const roleLabel = assistant.find('.chat-message__role');
     expect(roleLabel.exists()).toBe(true);
-    expect(roleLabel.isVisible()).toBe(true);
+    expect(roleLabel.classes()).toContain('wp-sr-only');
     expect(roleLabel.text()).toBe('Assistant');
     assistant.unmount();
   });
 
-  it('associe le libellé de rôle visible à l’article via aria-labelledby', () => {
+  it('associe le libellé de rôle sr-only à l’article via aria-labelledby', () => {
     const wrapper = mount(Message, {
       props: {
         message: {
@@ -85,6 +85,41 @@ describe('Message accessibilité', () => {
     const article = wrapper.find('article.chat-message');
     expect(article.attributes('aria-labelledby')).toBe('chat-message-role-u2');
     expect(wrapper.find('#chat-message-role-u2').text()).toBe('Vous');
+    wrapper.unmount();
+  });
+
+  it('associe aria-labelledby au libellé sr-only pour un message compaction', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'compact-1',
+          role: 'user',
+          content: 'Résumé des échanges précédents :\n\nContenu résumé',
+          messageKind: 'compaction',
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          MessageTextPart: { template: '<div class="text-part" />' },
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    const article = wrapper.find('article.chat-message');
+    expect(article.attributes('aria-labelledby')).toBe('chat-message-role-compact-1');
+    const roleLabel = wrapper.find('#chat-message-role-compact-1');
+    expect(roleLabel.exists()).toBe(true);
+    expect(roleLabel.classes()).toContain('wp-sr-only');
+    expect(roleLabel.text()).toBe('Résumé de conversation');
+    const card = wrapper.find('.chat-message__compaction-card');
+    expect(card.exists()).toBe(true);
+    expect(card.attributes('aria-label')).toBeUndefined();
+    expect(card.attributes('role')).toBeUndefined();
     wrapper.unmount();
   });
 
@@ -534,6 +569,124 @@ describe('Message accessibilité', () => {
 
     expect(collapseSpy).not.toHaveBeenCalled();
     collapseSpy.mockRestore();
+    wrapper.unmount();
+  });
+});
+
+describe('Message erreur inline', () => {
+  const defaultStubs = {
+    Lucide: true,
+    MessageTextPart: { template: '<div class="text-part" />' },
+    ThinkingCard: true,
+    ToolCallCard: true,
+    ConfirmationCard: true,
+  };
+
+  it('affiche le bouton reconnect sur invalid_user_jwt et émet error-reconnect', async () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-err',
+          role: 'assistant',
+          content: '',
+          error: {
+            message: 'Session expirée',
+            code: 'invalid_user_jwt',
+            retryable: false,
+          },
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: { stubs: defaultStubs },
+    });
+
+    const reconnectBtn = wrapper.find('.chat-message__error-reconnect');
+    expect(reconnectBtn.exists()).toBe(true);
+    expect(reconnectBtn.text()).toContain('Se reconnecter');
+    await reconnectBtn.trigger('click');
+    expect(wrapper.emitted('error-reconnect')).toEqual([['login']]);
+    wrapper.unmount();
+  });
+});
+
+describe('Message placeholder continuation', () => {
+  const defaultStubs = {
+    Lucide: true,
+    MessageTextPart: { template: '<div class="text-part" />' },
+    ThinkingCard: true,
+    ToolCallCard: true,
+    ConfirmationCard: true,
+  };
+
+  function mountStreamingToolsMessage(overrides: Record<string, unknown> = {}) {
+    return mount(Message, {
+      props: {
+        message: {
+          id: 'a-continuation',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          toolCalls: [{ id: 'tc-1', name: 'list_files', status: 'success' }],
+          parts: [{ type: 'tool_call', id: 'tc-part', toolCallId: 'tc-1' }],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          ...overrides,
+        },
+      },
+      global: { stubs: defaultStubs },
+    });
+  }
+
+  it('affiche le placeholder continuation quand tools terminaux et pas de texte', () => {
+    const wrapper = mountStreamingToolsMessage();
+    const placeholder = wrapper.find('.chat-message__continuation');
+
+    expect(placeholder.exists()).toBe(true);
+    expect(placeholder.text()).toContain('Suite de la génération');
+    wrapper.unmount();
+  });
+
+  it('masque le placeholder continuation si un tool est encore running', () => {
+    const wrapper = mountStreamingToolsMessage({
+      toolCalls: [{ id: 'tc-1', name: 'list_files', status: 'running' }],
+    });
+
+    expect(wrapper.find('.chat-message__continuation').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('masque le placeholder continuation si du texte assistant est visible', () => {
+    const wrapper = mountStreamingToolsMessage({
+      content: 'Voici la suite.',
+      parts: [
+        { type: 'tool_call', id: 'tc-part', toolCallId: 'tc-1' },
+        { type: 'text', id: 'text-part', content: 'Voici la suite.' },
+      ],
+    });
+
+    expect(wrapper.find('.chat-message__continuation').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('masque le placeholder continuation quand streaming est terminé', () => {
+    const wrapper = mountStreamingToolsMessage({ streaming: false });
+
+    expect(wrapper.find('.chat-message__continuation').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('masque le placeholder continuation pendant une confirmation active', () => {
+    const wrapper = mountStreamingToolsMessage({
+      pendingConfirmation: {
+        confirmationId: 'cf-1',
+        toolCallId: 'tc-1',
+        toolName: 'write_docx',
+        action: 'create',
+        proposedPath: 'out.docx',
+        humanSummary: 'Créer',
+      },
+    });
+
+    expect(wrapper.find('.chat-message__continuation').exists()).toBe(false);
     wrapper.unmount();
   });
 });

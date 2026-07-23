@@ -27,6 +27,7 @@
               item.streaming,
               item.error?.code,
               item.pendingConfirmation?.confirmationId,
+              item.preparingConfirmation?.toolCallId,
               item.pendingPlan?.planId,
               expansionEpoch,
             ]"
@@ -46,12 +47,14 @@
               @open-file="(path) => emit('open-file', path)"
               @restored="(path) => emit('restored', path)"
               @confirm-approve="emit('confirm-approve')"
+              @confirm-approve-remaining="emit('confirm-approve-remaining')"
               @confirm-deny="emit('confirm-deny')"
               @plan-approve="emit('plan-approve')"
               @plan-reject="emit('plan-reject')"
               @personas-another="(card) => emit('personas-another', card)"
               @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
               @regenerate="(id) => emit('regenerate', id)"
+              @error-reconnect="(cta) => emit('error-reconnect', cta)"
             />
           </DynamicScrollerItem>
         </template>
@@ -140,12 +143,14 @@ const emit = defineEmits<{
   'open-file': [path: string];
   restored: [path: string];
   'confirm-approve': [];
+  'confirm-approve-remaining': [];
   'confirm-deny': [];
   'plan-approve': [];
   'plan-reject': [];
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
   regenerate: [messageId: string];
+  'error-reconnect': [cta: 'login' | 'enroll'];
 }>();
 
 const { t } = useI18n();

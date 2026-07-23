@@ -9,11 +9,14 @@
     }"
     :aria-labelledby="`chat-message-role-${message.id}`"
   >
+    <span
+      :id="`chat-message-role-${message.id}`"
+      class="wp-sr-only chat-message__role"
+    >{{ roleLabel }}</span>
+
     <div
       v-if="isCompactionMessage"
       class="chat-message__compaction-card"
-      role="note"
-      :aria-label="t('chat.compactionSummary')"
     >
       <header class="chat-message__compaction-header">
         <Lucide name="archive" size="14" color="wp-text-muted" />
@@ -22,168 +25,177 @@
       <p class="chat-message__compaction-body">{{ compactionBody }}</p>
     </div>
 
-    <template v-else>
-    <div class="chat-message__frame">
-    <header class="chat-message__header">
-      <div class="chat-message__avatar" aria-hidden="true">
-        <Lucide
-          :name="message.role === 'user' ? 'user' : 'sparkles'"
-          size="14"
-          :color="message.role === 'user' ? 'primary' : 'accent'"
-        />
-      </div>
-      <span
-        :id="`chat-message-role-${message.id}`"
-        class="chat-message__role"
-      >
-        {{ roleLabel }}
-      </span>
-    </header>
-
-    <div class="chat-message__body">
-      <MessageAttachments
-        v-if="message.role === 'user' && message.attachments?.length"
-        :attachments="message.attachments"
-        :attachment-statuses="attachmentStatuses"
-        :settings-locked="settingsLocked"
-      />
-      <ThinkingCard
-        v-if="showThinkingPlaceholder"
-        :thinking="thinkingPlaceholderPart"
-        :streaming="true"
-      />
-
-      <template v-else>
-        <template v-for="part in renderParts" :key="part.id">
-        <MessageTextPart
-          v-if="part.type === 'text' && Boolean(part.content?.trim())"
-          :content="part.content"
-          :streaming="!!message.streaming"
-          :show-cursor="part.id === lastTextPartId && !!message.streaming"
+    <div v-else class="chat-message__frame">
+      <div class="chat-message__body">
+        <MessageAttachments
+          v-if="message.role === 'user' && message.attachments?.length"
+          :attachments="message.attachments"
+          :attachment-statuses="attachmentStatuses"
+          :settings-locked="settingsLocked"
         />
         <ThinkingCard
-          v-else-if="part.type === 'thinking'"
-          :thinking="part"
-          :streaming="!!message.streaming"
+          v-if="showThinkingPlaceholder"
+          :thinking="thinkingPlaceholderPart"
+          :streaming="true"
         />
-        <div
-          v-else-if="part.type === 'tool_call' && toolCallById(part.toolCallId)"
-          :class="{
-            'chat-message__confirmation-group':
-              message.pendingConfirmation?.toolCallId === part.toolCallId,
-          }"
-        >
-          <ToolCallCard
-            :tool-call="toolCallById(part.toolCallId)!"
-            :project-path="projectPath"
-            :session-id="sessionId"
-            :confirmation-active="
-              message.pendingConfirmation?.toolCallId === part.toolCallId
-            "
-            @open-file="(path) => emit('open-file', path)"
-            @restored="(path) => emit('restored', path)"
-          />
-          <ConfirmationCard
-            v-if="message.pendingConfirmation?.toolCallId === part.toolCallId"
-            :confirmation="message.pendingConfirmation!"
-            :busy="confirming"
-            :workspace-data-dir="workspaceDataDir"
-            :project-path="projectPath"
-            :tool-args="toolCallById(part.toolCallId)?.args"
-            attached
-            @approve="emit('confirm-approve')"
-            @cancel="emit('confirm-deny')"
-          />
-        </div>
-        <p
-          v-else-if="part.type === 'tool_call'"
-          class="chat-message__unknown-tool"
-        >
-          {{ t('chat.unknownTool') }}
-        </p>
+
+        <template v-else>
+          <template v-for="part in renderParts" :key="part.id">
+            <MessageTextPart
+              v-if="part.type === 'text' && Boolean(part.content?.trim())"
+              :content="part.content"
+              :streaming="!!message.streaming"
+              :show-cursor="part.id === lastTextPartId && !!message.streaming"
+            />
+            <ThinkingCard
+              v-else-if="part.type === 'thinking'"
+              :thinking="part"
+              :streaming="!!message.streaming"
+            />
+            <div
+              v-else-if="part.type === 'tool_call' && toolCallById(part.toolCallId)"
+              :class="{
+                'chat-message__confirmation-group':
+                  message.pendingConfirmation?.toolCallId === part.toolCallId ||
+                  message.preparingConfirmation?.toolCallId === part.toolCallId,
+              }"
+            >
+              <ToolCallCard
+                :tool-call="toolCallById(part.toolCallId)!"
+                :project-path="projectPath"
+                :session-id="sessionId"
+                :confirmation-active="
+                  message.pendingConfirmation?.toolCallId === part.toolCallId ||
+                  message.preparingConfirmation?.toolCallId === part.toolCallId
+                "
+                @open-file="(path) => emit('open-file', path)"
+                @restored="(path) => emit('restored', path)"
+              />
+              <ConfirmationCard
+                v-if="message.preparingConfirmation?.toolCallId === part.toolCallId && !message.pendingConfirmation"
+                :confirmation="preparingConfirmationStub(part.toolCallId)"
+                preparing
+                attached
+              />
+              <ConfirmationCard
+                v-if="message.pendingConfirmation?.toolCallId === part.toolCallId"
+                :confirmation="message.pendingConfirmation!"
+                :busy="confirming"
+                :workspace-data-dir="workspaceDataDir"
+                :project-path="projectPath"
+                :tool-args="toolCallById(part.toolCallId)?.args"
+                attached
+                @approve="emit('confirm-approve')"
+                @approve-remaining="emit('confirm-approve-remaining')"
+                @cancel="emit('confirm-deny')"
+              />
+            </div>
+            <p
+              v-else-if="part.type === 'tool_call'"
+              class="chat-message__unknown-tool"
+            >
+              {{ t('chat.unknownTool') }}
+            </p>
+          </template>
         </template>
-      </template>
 
-      <PlanCard
-        v-if="message.pendingPlan && message.role === 'assistant'"
-        :plan="message.pendingPlan"
-        :busy="approvingPlan"
-        @approve="emit('plan-approve')"
-        @reject="emit('plan-reject')"
-      />
+        <p
+          v-if="showContinuationPlaceholder"
+          class="chat-message__continuation"
+          aria-live="polite"
+          :aria-busy="true"
+        >
+          <span class="chat-message__continuation-spinner" aria-hidden="true" />
+          {{ t('chat.continuationPlaceholder') }}
+        </p>
 
-      <PersonasOpinionCard
-        v-if="message.personasOpinion"
-        :card="message.personasOpinion"
-        :show-publish="isProjetPluginActive"
-        @another="emit('personas-another', message.personasOpinion!)"
-        @to-discussion="emit('personas-to-discussion', message.personasOpinion!)"
-        @publish="openOpinionPublish"
-      />
+        <PlanCard
+          v-if="message.pendingPlan && message.role === 'assistant'"
+          :plan="message.pendingPlan"
+          :busy="approvingPlan"
+          @approve="emit('plan-approve')"
+          @reject="emit('plan-reject')"
+        />
 
-      <MemoryCitationsBar
-        v-if="message.role === 'assistant' && message.memoryCitations?.length"
-        :citations="message.memoryCitations"
-      />
+        <PersonasOpinionCard
+          v-if="message.personasOpinion"
+          :card="message.personasOpinion"
+          :show-publish="isProjetPluginActive"
+          @another="emit('personas-another', message.personasOpinion!)"
+          @to-discussion="emit('personas-to-discussion', message.personasOpinion!)"
+          @publish="openOpinionPublish"
+        />
 
-      <WebSearchCitationsBar
-        v-if="message.role === 'assistant' && webSearchCitations.length"
-        :citations="webSearchCitations"
-      />
+        <MemoryCitationsBar
+          v-if="message.role === 'assistant' && message.memoryCitations?.length"
+          :citations="message.memoryCitations"
+        />
 
-      <PublishToProjectDialog
-        v-if="message.personasOpinion"
-        v-model:open="opinionPublishOpen"
-        :content="opinionPublishMarkdown"
-        :default-name="opinionPublishName"
-        :workspace-data-dir="workspaceDataDir"
-      />
+        <WebSearchCitationsBar
+          v-if="message.role === 'assistant' && webSearchCitations.length"
+          :citations="webSearchCitations"
+        />
 
-      <div v-if="message.error" class="chat-message__error" role="alert">
-        <Lucide name="alert-circle" size="sm" color="danger" />
-        <div class="chat-message__error-body">
-          <p class="chat-message__error-msg">{{ message.error.message }}</p>
-          <span v-if="message.error.code" class="chat-message__error-code">
-            {{ message.error.code }}
-          </span>
-          <button
-            type="button"
-            class="chat-message__error-report"
-            @click="openMessageErrorReport"
-          >
-            {{ t('errors.reportOpenAction') }}
-          </button>
+        <PublishToProjectDialog
+          v-if="message.personasOpinion"
+          v-model:open="opinionPublishOpen"
+          :content="opinionPublishMarkdown"
+          :default-name="opinionPublishName"
+          :workspace-data-dir="workspaceDataDir"
+        />
+
+        <div v-if="message.error" class="chat-message__error" role="alert">
+          <Lucide name="alert-circle" size="sm" color="danger" />
+          <div class="chat-message__error-body">
+            <p class="chat-message__error-msg">{{ message.error.message }}</p>
+            <span v-if="message.error.code" class="chat-message__error-code">
+              {{ message.error.code }}
+            </span>
+            <button
+              type="button"
+              class="chat-message__error-report"
+              @click="openMessageErrorReport"
+            >
+              {{ t('errors.reportOpenAction') }}
+            </button>
+            <button
+              v-if="reconnectCta"
+              type="button"
+              class="chat-message__error-reconnect"
+              @click="emit('error-reconnect', reconnectCta)"
+            >
+              {{ t('errors.cloudReconnect') }}
+            </button>
+          </div>
         </div>
-      </div>
 
-      <footer
-        v-if="showCopyAction || showRegenerateAction"
-        class="chat-message__actions"
-      >
-        <button
-          v-if="showRegenerateAction"
-          type="button"
-          class="chat-message__action"
-          :aria-label="t('chat.regenerateAria')"
-          @click="emit('regenerate', message.id)"
+        <footer
+          v-if="showCopyAction || showRegenerateAction"
+          class="chat-message__actions"
         >
-          <Lucide name="rotate-ccw" size="xs" color="wp-text-muted" />
-          <span>{{ t('chat.regenerate') }}</span>
-        </button>
-        <button
-          v-if="showCopyAction"
-          type="button"
-          class="chat-message__action"
-          :aria-label="t('chat.copyMessageAria')"
-          @click="copyAssistantMessage"
-        >
-          <Lucide name="copy" size="xs" color="wp-text-muted" />
-          <span>{{ copyLabel }}</span>
-        </button>
-      </footer>
+          <button
+            v-if="showRegenerateAction"
+            type="button"
+            class="chat-message__action"
+            :aria-label="t('chat.regenerateAria')"
+            @click="emit('regenerate', message.id)"
+          >
+            <Lucide name="rotate-ccw" size="xs" color="wp-text-muted" />
+            <span>{{ t('chat.regenerate') }}</span>
+          </button>
+          <button
+            v-if="showCopyAction"
+            type="button"
+            class="chat-message__action"
+            :aria-label="t('chat.copyMessageAria')"
+            @click="copyAssistantMessage"
+          >
+            <Lucide name="copy" size="xs" color="wp-text-muted" />
+            <span>{{ copyLabel }}</span>
+          </button>
+        </footer>
+      </div>
     </div>
-    </div>
-    </template>
   </article>
 </template>
 
@@ -207,12 +219,13 @@ import { useErrorReport } from '@composables/useErrorReport';
 import { usePlugins } from '@composables/usePlugins';
 import { formatOpinionMarkdown } from '@composables/usePersonas';
 import { isCompactionMessageLike } from '@utils/compactionMessage';
+import { chatErrorReconnectCta } from '@utils/chatCloudErrors';
 import { getAssistantCopyText } from '@utils/messageCopy';
 import {
   deriveThinkingSubjectDone,
   deriveThinkingSummary,
 } from '@utils/thinkingPresentation';
-import type { ChatMessage, ChatMessagePart, ChatThinkingPart, ChatToolCall } from '#types';
+import type { ChatConfirmation, ChatMessage, ChatMessagePart, ChatThinkingPart, ChatToolCall } from '#types';
 
 const props = defineProps<{
   message: ChatMessage;
@@ -233,12 +246,14 @@ const emit = defineEmits<{
   'open-file': [path: string];
   restored: [path: string];
   'confirm-approve': [];
+  'confirm-approve-remaining': [];
   'confirm-deny': [];
   'plan-approve': [];
   'plan-reject': [];
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
   regenerate: [messageId: string];
+  'error-reconnect': [cta: 'login' | 'enroll'];
 }>();
 
 const copyLabel = ref('');
@@ -254,6 +269,12 @@ function openMessageErrorReport(): void {
     workId: props.message.error.workId ?? null,
   });
 }
+
+const reconnectCta = computed<'login' | 'enroll' | null>(() => {
+  const code = props.message.error?.code;
+  if (!code) return null;
+  return chatErrorReconnectCta(code);
+});
 const { isProjetPluginActive } = usePlugins();
 
 const opinionPublishMarkdown = computed(() =>
@@ -367,6 +388,69 @@ const thinkingPlaceholderPart = computed<ChatThinkingPart>(() => ({
   done: false,
 }));
 
+const hasVisibleAssistantText = computed(() => {
+  const parts = props.message.parts ?? [];
+  const hasPartText = parts.some(
+    (p) => p.type === 'text' && (p as { content?: string }).content?.trim().length,
+  );
+  if (hasPartText) return true;
+  return Boolean(props.message.content?.trim());
+});
+
+const allToolCallsTerminal = computed(() => {
+  const toolCalls = props.message.toolCalls ?? [];
+  if (toolCalls.length === 0) return false;
+  return toolCalls.every((tc) => tc.status === 'success' || tc.status === 'error');
+});
+
+const hasActiveToolCall = computed(() =>
+  (props.message.toolCalls ?? []).some(
+    (tc) =>
+      tc.status === 'running' ||
+      tc.status === 'pending_confirmation' ||
+      tc.status === 'awaiting_confirmation',
+  ),
+);
+
+const isThinkingDoneOrAbsent = computed(() => {
+  const parts = props.message.parts ?? [];
+  const thinkingParts = parts.filter(
+    (p): p is ChatThinkingPart => p.type === 'thinking',
+  );
+  if (thinkingParts.length === 0) return true;
+  return thinkingParts.every((part) => part.done);
+});
+
+function preparingConfirmationStub(toolCallId: string): ChatConfirmation {
+  const preparing = props.message.preparingConfirmation;
+  return {
+    confirmationId: '',
+    toolCallId,
+    toolName: preparing?.toolName ?? '',
+    action: 'create',
+    proposedPath: '',
+    humanSummary: '',
+  };
+}
+
+/**
+ * Indicateur « Suite de la génération… » affiché sous les outils terminés
+ * tant que le tour stream encore sans texte assistant visible.
+ */
+const showContinuationPlaceholder = computed(() => {
+  if (props.message.role !== 'assistant') return false;
+  if (!props.message.streaming) return false;
+  if (props.message.error) return false;
+  if (showThinkingPlaceholder.value) return false;
+  if (props.message.pendingConfirmation) return false;
+  if (props.message.preparingConfirmation) return false;
+  if (hasVisibleAssistantText.value) return false;
+  if (hasActiveToolCall.value) return false;
+  if (!isThinkingDoneOrAbsent.value) return false;
+  if (allToolCallsTerminal.value) return true;
+  return (props.message.toolCalls ?? []).length === 0;
+});
+
 const copyableText = computed(() =>
   props.message.role === 'assistant' ? getAssistantCopyText(props.message) : '',
 );
@@ -467,7 +551,6 @@ function toolCallById(id: string): ChatToolCall | undefined {
 .chat-message__frame {
   display: flex;
   flex-direction: column;
-  gap: var(--wp-space-2);
   min-width: 0;
 }
 
@@ -483,15 +566,11 @@ function toolCallById(id: string): ChatToolCall | undefined {
     background: var(--wp-user-bubble-bg);
     box-shadow: var(--wp-shadow-1);
   }
-
-  .chat-message__role {
-    color: var(--wp-user-bubble-text);
-  }
 }
 
 .chat-message--assistant {
   .chat-message__frame {
-    padding: var(--wp-space-1) 0;
+    padding: 0;
   }
 }
 
@@ -530,44 +609,6 @@ function toolCallById(id: string): ChatToolCall | undefined {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--wp-text);
-}
-
-.chat-message__header {
-  display: flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-}
-
-.chat-message__avatar {
-  flex: 0 0 auto;
-  width: 1.625rem;
-  height: 1.625rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--wp-r-pill);
-  background: var(--wp-surface-2);
-}
-
-.chat-message--user .chat-message__avatar {
-  background: color-mix(in srgb, var(--wp-primary) 10%, var(--wp-user-bubble-bg));
-}
-
-.chat-message--assistant .chat-message__avatar {
-  background: var(--wp-accent-soft);
-}
-
-.chat-message--assistant .chat-message__role {
-  color: var(--wp-text-muted);
-}
-
-.chat-message__role {
-  font-size: var(--wp-fs-xs);
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--wp-text-faint);
-  line-height: var(--wp-lh-tight, 1.2);
 }
 
 .chat-message__body {
@@ -649,11 +690,51 @@ function toolCallById(id: string): ChatToolCall | undefined {
   text-underline-offset: 2px;
 }
 
+.chat-message__error-reconnect {
+  display: inline-flex;
+  flex: 1 1 100%;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--wp-accent);
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .chat-message__unknown-tool {
   margin: 0;
   font-size: var(--wp-fs-sm);
   color: var(--wp-text-muted);
   font-style: italic;
+}
+
+.chat-message__continuation {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin: 0;
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-text-muted);
+  font-style: italic;
+}
+
+.chat-message__continuation-spinner {
+  flex: 0 0 auto;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  border: 2px solid var(--wp-accent-soft);
+  border-top-color: var(--wp-accent);
+  animation: chat-message-continuation-spin 0.7s linear infinite;
+}
+
+@keyframes chat-message-continuation-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .chat-message__actions {

@@ -24,38 +24,6 @@
           </span>
         </div>
       </div>
-      <div class="chat-page__header-actions">
-        <div v-if="showStreamErrorBanner" class="chat-page__error" role="alert">
-          <Lucide name="alert-circle" size="sm" color="danger" />
-          <span class="chat-page__error-msg">{{ streamError.message }}</span>
-          <button
-            type="button"
-            class="chat-page__retry"
-            @click="openStreamErrorReport"
-          >
-            <Lucide name="flag" size="xs" color="primary" />
-            {{ t('errors.reportOpenAction') }}
-          </button>
-          <button
-            v-if="streamErrorReconnectCta"
-            type="button"
-            class="chat-page__retry"
-            @click="onStreamErrorReconnect"
-          >
-            <Lucide name="log-in" size="xs" color="primary" />
-            {{ t('errors.cloudReconnect') }}
-          </button>
-          <button
-            v-if="streamError.retryable"
-            type="button"
-            class="chat-page__retry"
-            @click="retry"
-          >
-            <Lucide name="rotate-ccw" size="xs" color="primary" />
-            {{ t('common.retry') }}
-          </button>
-        </div>
-      </div>
     </header>
 
     <CloudLoginModal
@@ -96,12 +64,19 @@
         :reasoning-effort="displayReasoningEffort"
         :reasoning-provider="activeChatRouting?.provider ?? null"
         :reasoning-model="displayReasoningModel"
+        :stream-error="streamError"
+        :stream-error-reconnect="streamErrorReconnectCta"
         @send="(text, atts) => send(text, { attachments: atts })"
         @abort="abort"
         @open-file="handleOpenFile"
         @update:reasoning-effort="(value) => (displayReasoningEffort = value)"
         @update:reasoning-model="(value) => onReasoningModelChange(value)"
+        @stream-error-report="openStreamErrorReport"
+        @stream-error-retry="retry"
+        @stream-error-reconnect="onStreamErrorReconnect"
+        @error-reconnect="openCloudReconnect"
         @confirm-approve="() => confirm('approve')"
+        @confirm-approve-remaining="() => confirm('approve_remaining')"
         @confirm-deny="() => confirm('deny')"
         @plan-approve="() => approvePlan(true)"
         @plan-reject="() => approvePlan(false)"
@@ -127,7 +102,6 @@ import ChatView from '@components/chat/ChatView.vue';
 import CloudLoginModal from '@components/cloud/CloudLoginModal.vue';
 import EnrollCloudModal from '@components/cloud/EnrollCloudModal.vue';
 import PersonasMeetingView from '@components/personas/PersonasMeetingView.vue';
-import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useChatActivity } from '@composables/useChatActivity';
 import { useChatStream } from '@composables/useChatStream';
 import { useErrorReport } from '@composables/useErrorReport';
@@ -163,7 +137,7 @@ import {
 } from '@utils/providerSetModels';
 import { effectiveReasoningEffortFromSet } from '@utils/providerSets';
 import { defaultReasoningEffort, supportsReasoning } from '@utils/reasoningSupport';
-import type { ChatErrorCode, ChatMessage, PersonasOpinionCard, ReasoningEffort } from '#types';
+import type { ChatMessage, PersonasOpinionCard, ReasoningEffort } from '#types';
 import { CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import { useCloud } from '@composables/useCloud';
 import { usePersonasNavigation } from '@composables/usePersonasNavigation';
@@ -178,6 +152,7 @@ import { useSideChat } from '@composables/useSideChat';
 import { useMainChatContext } from '@composables/useMainChatContext';
 import { useBrowser } from '@composables/useBrowser';
 import { isProviderSetReadinessIssue } from '@utils/providerSetErrors';
+import { chatErrorReconnectCta, clearReconnectableChatErrors } from '@utils/chatCloudErrors';
 
 const route = useRoute();
 const router = useRouter();
@@ -273,12 +248,6 @@ const { disconnect, refreshQuota } = useCloud();
 const cloudLoginModalOpen = ref(false);
 const enrollCloudModalOpen = ref(false);
 
-const CLOUD_ENROLL_ERROR_CODES = new Set<ChatErrorCode>([
-  'invalid_device_token',
-  'bearer_token_required',
-  'cloud_not_enrolled',
-]);
-
 const {
   messages,
   streaming,
@@ -315,30 +284,13 @@ const {
   browserPilotagePaused: pilotagePaused,
 });
 
-const lastAssistantHasError = computed(() => {
-  for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-    if (messages.value[i].role === 'assistant') {
-      return Boolean(messages.value[i].error);
-    }
-  }
-  return false;
-});
-
-const showStreamErrorBanner = computed(
-  () => Boolean(streamError.value) && !lastAssistantHasError.value,
-);
-
 const streamErrorReconnectCta = computed<'login' | 'enroll' | null>(() => {
   const code = streamError.value?.code;
   if (!code) return null;
-  if (code === 'invalid_user_jwt') return 'login';
-  if (CLOUD_ENROLL_ERROR_CODES.has(code)) return 'enroll';
-  return null;
+  return chatErrorReconnectCta(code);
 });
 
-async function onStreamErrorReconnect(): Promise<void> {
-  const cta = streamErrorReconnectCta.value;
-  if (!cta) return;
+async function openCloudReconnect(cta: 'login' | 'enroll'): Promise<void> {
   if (cta === 'login') {
     await disconnect();
     cloudLoginModalOpen.value = true;
@@ -347,19 +299,42 @@ async function onStreamErrorReconnect(): Promise<void> {
   enrollCloudModalOpen.value = true;
 }
 
+async function onStreamErrorReconnect(): Promise<void> {
+  const cta = streamErrorReconnectCta.value;
+  if (!cta) return;
+  await openCloudReconnect(cta);
+}
+
 function onOpenCloudInvitation(): void {
   cloudLoginModalOpen.value = false;
   enrollCloudModalOpen.value = true;
 }
 
+function retryStreamErrorIfNeeded(): void {
+  const err = streamError.value;
+  if (err?.retryable) {
+    void retry().catch(() => {
+      // Ne pas bloquer la reconnexion cloud si le retry échoue.
+    });
+    return;
+  }
+  if (streamErrorReconnectCta.value) {
+    streamError.value = null;
+  }
+}
+
 async function onCloudReconnected(): Promise<void> {
   await refreshQuota();
   cloudLoginModalOpen.value = false;
+  retryStreamErrorIfNeeded();
+  clearReconnectableChatErrors(messages.value);
 }
 
 async function onCloudEnrolled(): Promise<void> {
   await refreshQuota();
   enrollCloudModalOpen.value = false;
+  retryStreamErrorIfNeeded();
+  clearReconnectableChatErrors(messages.value);
 }
 
 function openStreamErrorReport(): void {
@@ -559,8 +534,8 @@ async function tryAutoTitle(loadGen?: number): Promise<void> {
     (m) => m.role === 'assistant' && m.content?.trim() && !m.streaming,
   );
   const firstUserMessage = firstUser?.content?.trim();
+  if (!firstUserMessage) return;
   const firstAssistantReply = firstAssistant?.content?.trim();
-  if (!firstUserMessage || !firstAssistantReply) return;
 
   const targetSessionId = sessionId.value;
   autoTitleStarted.value = true;
@@ -570,7 +545,7 @@ async function tryAutoTitle(loadGen?: number): Promise<void> {
     const cloudPluginDataDir = await getPluginDataDir(CLOUD_PLUGIN_ID);
     const title = await requestTitle({
       firstUserMessage,
-      firstAssistantReply,
+      ...(firstAssistantReply ? { firstAssistantReply } : {}),
       chatConfig: sessionLlmConfigs().chat,
       utilityConfig: buildUtilityLlmConfig(),
       providerSet,
@@ -673,9 +648,14 @@ watch(completedTurns, async (turns) => {
   }
 });
 
-watch(completedTurns, async (turns) => {
-  if (turns < 1) return;
-  await tryAutoTitle();
+const firstUserMessageForTitle = computed(() => {
+  const user = messages.value.find((m) => m.role === 'user');
+  return user?.content?.trim() || '';
+});
+
+watch(firstUserMessageForTitle, (text) => {
+  if (!text) return;
+  void tryAutoTitle();
 });
 
 function onReasoningEffortChange(effort: ReasoningEffort): void {
@@ -1067,14 +1047,6 @@ onUnmounted(() => {
   gap: 0.15rem;
 }
 
-.chat-page__header-actions {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-shrink: 0;
-  min-width: 0;
-}
-
 .chat-page__title {
   margin: 0;
   font-family: var(--wp-font-head);
@@ -1134,47 +1106,6 @@ onUnmounted(() => {
   border-radius: var(--wp-r-pill);
   background: var(--wp-accent);
   animation: wp-breathe 1.4s ease-in-out infinite;
-}
-
-.chat-page__error {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  flex-shrink: 0;
-  max-width: 60%;
-  font-size: 0.8125rem;
-  color: var(--wp-danger);
-  background: var(--wp-danger-soft);
-  border: 1px solid var(--wp-danger);
-  border-radius: var(--wp-r-sm);
-  padding: 0.35rem 0.55rem;
-}
-
-.chat-page__error-msg {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.chat-page__retry {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  flex-shrink: 0;
-  border: 1px solid var(--primary-low);
-  border-radius: 6px;
-  background: var(--primary-lowest);
-  color: var(--text-link);
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.2rem 0.5rem;
-  cursor: pointer;
-  transition: background 0.15s ease;
-
-  &:hover {
-    background: var(--primary-lower);
-  }
 }
 
 .chat-page__body {
