@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 from pathlib import Path
 from typing import Any, Literal
 
@@ -28,6 +29,10 @@ from app.plugins.workproba_cloud.sync_service import (
     is_mount_configured,
     pull_project_artefacts_from_cloud,
 )
+
+logger = logging.getLogger(__name__)
+
+LIST_USERS_PRERESOLVE_TIMEOUT_SECONDS = 5.0
 
 UiMode = Literal["agent", "locked"]
 
@@ -106,15 +111,27 @@ def _connector_tools_from_cache(
 def _find_cached_tool(
     cloud_dir: Path, connector_id: str, action: str
 ) -> dict[str, Any] | None:
+    """Résout le descriptor local par `action` uniquement (aligné sur le cloud)."""
     tools = _connector_tools_from_cache(cloud_dir, connector_id)
     if not tools:
         return None
     for tool_def in tools:
         tool_action = str(tool_def.get("action") or "")
-        tool_name = str(tool_def.get("name") or "")
-        if tool_action == action or tool_name == action:
+        if tool_action == action:
             return tool_def
     return None
+
+
+def _is_managed_read_action(
+    cloud_dir: Path, connector_id: str, action: str | None
+) -> bool:
+    if not action:
+        return False
+    tool_def = _find_cached_tool(cloud_dir, connector_id, action)
+    if tool_def is None:
+        return False
+    effect = tool_def.get("effect")
+    return isinstance(effect, str) and effect == "read"
 
 
 def _guided_generic_invoke_allowed(
@@ -275,8 +292,17 @@ async def refresh_known_managed_connectors_cache(cloud_dir: Path) -> frozenset[s
         cached = _connector_cache_entry(entry)
         if cached is not None:
             connectors.append(cached)
-    cloud_storage.save_known_managed_connectors(cloud_dir, connectors)
-    return frozenset(str(entry["id"]) for entry in connectors)
+    allowlist = frozenset(str(entry["id"]) for entry in connectors)
+    catalog_version = CloudControlPlaneClient.extract_catalog_version(payload)
+    stored_version = cloud_storage.get_known_managed_connectors_catalog_version(cloud_dir)
+    if catalog_version is not None and catalog_version == stored_version:
+        return allowlist
+    cloud_storage.save_known_managed_connectors(
+        cloud_dir,
+        connectors,
+        catalog_version=catalog_version,
+    )
+    return allowlist
 
 
 def make_managed_tool_shim(
@@ -368,6 +394,8 @@ def build_managed_connectors_agent_prompt(
                     name=name,
                 )
             )
+            if connector_id == "ihora":
+                lines.append(t(locale, "tools.managed_connectors_ihora_users_hint"))
         else:
             lines.append(
                 t(
@@ -378,6 +406,190 @@ def build_managed_connectors_agent_prompt(
                 )
             )
     return "\n".join(lines)
+
+
+def _display_name_from_ihora_user(user: dict[str, Any]) -> str:
+    first = str(user.get("firstname") or user.get("firstName") or "").strip()
+    last = str(user.get("lastname") or user.get("lastName") or "").strip()
+    full_name = f"{first} {last}".strip()
+    if full_name:
+        return full_name
+    email = user.get("email")
+    if isinstance(email, str) and email.strip():
+        return email.strip()
+    user_id = user.get("userId")
+    if user_id is not None and str(user_id).strip():
+        return str(user_id).strip()
+    return ""
+
+
+def _extract_list_users(result: dict[str, Any]) -> list[dict[str, Any]]:
+    inner = result.get("result")
+    if isinstance(inner, dict):
+        users = inner.get("users")
+        if isinstance(users, list):
+            return [entry for entry in users if isinstance(entry, dict)]
+    users = result.get("users")
+    if isinstance(users, list):
+        return [entry for entry in users if isinstance(entry, dict)]
+    return []
+
+
+def _match_ihora_listed_users(
+    users: list[dict[str, Any]], candidate: str
+) -> list[dict[str, Any]]:
+    needle = candidate.strip().lower()
+    if not needle:
+        return []
+    exact = [
+        user
+        for user in users
+        if isinstance(user.get("email"), str) and user["email"].lower() == needle
+    ]
+    local_part = [
+        user
+        for user in users
+        if isinstance(user.get("email"), str)
+        and (
+            user["email"].lower() == needle
+            or user["email"].lower().startswith(f"{needle}@")
+        )
+    ]
+    matches = exact if exact else local_part
+    if not matches and len(users) == 1:
+        return users
+    return matches
+
+
+def _user_resolution_candidate(payload: dict[str, Any]) -> str | None:
+    raw_user_id = payload.get("userId")
+    raw_user_id_str = str(raw_user_id).strip() if raw_user_id is not None else ""
+    if raw_user_id_str and raw_user_id_str.isdigit():
+        return None
+    email = payload.get("email")
+    email_str = str(email).strip() if email is not None else ""
+    if email_str:
+        return email_str
+    if raw_user_id_str:
+        return raw_user_id_str
+    return None
+
+
+def _should_preresolve_ihora_user(
+    connector_id: str, action: str | None, payload: dict[str, Any]
+) -> bool:
+    if connector_id != "ihora" or action != "update_project_member":
+        return False
+    if _user_resolution_candidate(payload) is not None:
+        return True
+    raw_user_id = payload.get("userId")
+    raw_user_id_str = str(raw_user_id).strip() if raw_user_id is not None else ""
+    if raw_user_id_str.isdigit() and payload.get("email"):
+        return True
+    return False
+
+
+async def _preresolve_ihora_user_for_gate(
+    gateway: Any,
+    *,
+    connector_id: str,
+    payload: dict[str, Any],
+    identity: IdentityDelegation,
+    locale: str,
+) -> tuple[dict[str, Any] | None, bool]:
+    """Résout userId via list_users avant confirmation. Retourne (user, failed)."""
+    candidate = _user_resolution_candidate(payload)
+    enrich_only = candidate is None
+    if enrich_only:
+        email = payload.get("email")
+        candidate = str(email).strip() if email is not None else ""
+        if not candidate:
+            return None, False
+
+    try:
+        list_result = await gateway.invoke_remote(
+            connector_id,
+            {"action": "list_users", "search": candidate},
+            identity,
+        )
+    except Exception:
+        logger.debug("list_users preresolve failed", exc_info=True)
+        return None, True
+
+    if not isinstance(list_result, dict) or not list_result.get("ok", True):
+        return None, True
+
+    users = _extract_list_users(list_result)
+    matches = _match_ihora_listed_users(users, candidate)
+    if len(matches) != 1:
+        return None, True
+
+    matched = matches[0]
+    resolved_id = matched.get("userId")
+    if resolved_id is None or not str(resolved_id).strip().isdigit():
+        return None, True
+
+    resolved_id_int = int(str(resolved_id).strip())
+    raw_user_id = payload.get("userId")
+    raw_user_id_str = str(raw_user_id).strip() if raw_user_id is not None else ""
+    if raw_user_id_str.isdigit() and int(raw_user_id_str) != resolved_id_int:
+        raise ModelRetry(
+            t(
+                locale,
+                "cloud.connector_user_id_email_conflict",
+                user_id=raw_user_id_str,
+                resolved_user_id=str(resolved_id_int),
+                email=candidate,
+            )
+        )
+
+    payload["userId"] = resolved_id_int
+
+    resolved: dict[str, Any] = {
+        "userId": str(resolved_id).strip(),
+        "email": str(matched.get("email") or "").strip(),
+        "displayName": _display_name_from_ihora_user(matched),
+        "firstname": matched.get("firstname") or matched.get("firstName"),
+        "lastname": matched.get("lastname") or matched.get("lastName"),
+    }
+    return resolved, False
+
+
+def _build_managed_gate_human_summary(
+    gate_tool_name: str,
+    *,
+    connector_id: str,
+    action: str | None,
+    payload: dict[str, Any],
+    resolved_user: dict[str, Any] | None,
+    locale: str,
+) -> str:
+    if action == "update_project_member" and resolved_user:
+        display_name = str(resolved_user.get("displayName") or "").strip()
+        email = str(resolved_user.get("email") or "").strip()
+        user_id = str(resolved_user.get("userId") or "").strip()
+        tool_label = managed_tool_label(gate_tool_name)
+        if display_name and email and user_id:
+            return t(
+                locale,
+                "human.managed_connector_tool.will_update_member_resolved",
+                connector_id=connector_id,
+                tool_label=tool_label,
+                display_name=display_name,
+                email=email,
+                user_id=user_id,
+            )
+    gate_args: dict[str, Any] = {
+        "connector_id": connector_id,
+        "tool_name": gate_tool_name,
+        "action": action or "",
+    }
+    gate_args.update({key: value for key, value in payload.items() if key != "action"})
+    if resolved_user:
+        gate_args["resolvedUserId"] = resolved_user.get("userId")
+        gate_args["resolvedEmail"] = resolved_user.get("email")
+        gate_args["resolvedDisplayName"] = resolved_user.get("displayName")
+    return build_human_summary(gate_tool_name, gate_args, locale=locale)
 
 
 def _cloud_data_dir(ctx: RunContext[ToolDeps]) -> Path:
@@ -440,6 +652,91 @@ def register_cloud_tools(
             if isinstance(entry.get("id"), str) and str(entry.get("id")).strip()
         ]
         return build_managed_connectors_agent_prompt(locale, items)
+
+    @agent.system_prompt
+    async def cloud_current_user_identity_prompt(ctx: RunContext[ToolDeps]) -> str:
+        locale = ctx.deps.context.locale
+        identity_email: str | None = None
+        identity_username: str | None = None
+
+        context_email = (ctx.deps.context.current_user_email or "").strip()
+        if context_email:
+            if "@" in context_email:
+                identity_email = context_email
+            else:
+                identity_username = context_email
+        else:
+            try:
+                cloud_dir = _cloud_data_dir(ctx)
+            except ModelRetry:
+                return ""
+            identity = cloud_storage.get_current_user_identity(cloud_dir)
+            if identity is None:
+                return ""
+            stored_email = identity.get("email")
+            if isinstance(stored_email, str) and stored_email.strip() and "@" in stored_email:
+                identity_email = stored_email.strip()
+            else:
+                username_raw = identity.get("username")
+                if isinstance(username_raw, str) and username_raw.strip():
+                    username = username_raw.strip()
+                    if "@" in username:
+                        identity_email = username
+                    else:
+                        identity_username = username
+                elif isinstance(stored_email, str) and stored_email.strip():
+                    identity_email = stored_email.strip()
+
+        if not identity_email and not identity_username:
+            return ""
+
+        display_name = (ctx.deps.context.current_user_display_name or "").strip()
+        lines: list[str] = []
+        if identity_email:
+            if not display_name:
+                display_name = identity_email.split("@", 1)[0]
+            lines.extend(
+                [
+                    t(
+                        locale,
+                        "tools.cloud_current_user_identity",
+                        email=identity_email,
+                        display_name=display_name,
+                    ),
+                    t(
+                        locale,
+                        "tools.cloud_current_user_add_me_hint",
+                        email=identity_email,
+                        display_name=display_name,
+                    ),
+                ]
+            )
+        else:
+            assert identity_username is not None
+            if not display_name:
+                display_name = identity_username
+            lines.extend(
+                [
+                    t(
+                        locale,
+                        "tools.cloud_current_user_identity_username_only",
+                        display_name=display_name,
+                        username=identity_username,
+                    ),
+                    t(locale, "tools.cloud_current_user_username_only_hint"),
+                ]
+            )
+
+        ihora_id = (ctx.deps.context.current_user_ihora_id or "").strip()
+        if ihora_id:
+            lines.append(
+                t(
+                    locale,
+                    "tools.cloud_current_user_ihora_id",
+                    user_id=ihora_id,
+                )
+            )
+        return "\n".join(lines)
 
     @agent.tool
     async def sync_to_cloud(ctx: RunContext[ToolDeps], project_id: str) -> dict[str, Any]:
@@ -784,34 +1081,110 @@ async def invoke_managed_connector_impl(
                             )
                         )
 
-        gate = deps.confirmation_gate
-        if gate is not None:
-            summary_connector_id = human_connector_id or connector_id
-            human_summary = build_human_summary(
-                gate_tool_name,
-                {
-                    "connector_id": summary_connector_id,
-                    "tool_name": gate_tool_name,
-                    "action": action or "",
-                },
+        plugins_root = cloud_dir.parent
+        identity = IdentityDelegation(
+            subject_id=subject,
+            org_id=org_id_str,
+            scopes=frozenset({"connectors:invoke"}),
+            access_token=access_token.strip(),
+        )
+        gateway = None
+        resolved_user: dict[str, Any] | None = None
+        resolution_failed = False
+        requires_user_resolution = _user_resolution_candidate(payload) is not None
+        if _should_preresolve_ihora_user(connector_id, action, payload):
+            preresolve_gateway = open_remote_capability_gateway(
+                caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
+                caller_permissions=frozenset(
+                    [
+                        "capability:remote",
+                        "network:improba-cloud",
+                    ]
+                ),
+                plugins_root=plugins_root,
+                base_url=base_url,
+                allowed_capability_ids=allowed,
+                timeout_seconds=LIST_USERS_PRERESOLVE_TIMEOUT_SECONDS,
+            )
+            resolved_user, resolution_failed = await _preresolve_ihora_user_for_gate(
+                preresolve_gateway,
+                connector_id=connector_id,
+                payload=payload,
+                identity=identity,
                 locale=locale,
             )
+
+        if requires_user_resolution and resolution_failed:
+            raise ModelRetry(
+                t(
+                    locale,
+                    "cloud.connector_user_resolution_failed",
+                    connector_id=connector_id,
+                )
+            )
+
+        skip_gate = _is_managed_read_action(cloud_dir, connector_id, action)
+        if skip_gate and deps.context.plugin_data_dir is not None:
+            from app.agent.work_events import audit_details_with_work_id
+            from app.audit import log_event, resolve_app_data_dir
+
+            log_event(
+                resolve_app_data_dir(deps.context.plugin_data_dir),
+                "connector.read.no_gate",
+                "agent",
+                audit_details_with_work_id(
+                    {
+                        "connector_id": connector_id,
+                        "action": action,
+                        "tool_name": gate_tool_name,
+                    },
+                    deps.context.work_id,
+                    session_id=deps.context.session_id,
+                ),
+                enabled=deps.context.audit_enabled,
+            )
+
+        gate = deps.confirmation_gate
+        if gate is not None and not skip_gate:
+            summary_connector_id = human_connector_id or connector_id
+            human_summary = _build_managed_gate_human_summary(
+                gate_tool_name,
+                connector_id=summary_connector_id,
+                action=action,
+                payload=payload,
+                resolved_user=resolved_user,
+                locale=locale,
+            )
+            gate_args: dict[str, Any] = {
+                "connector_id": summary_connector_id,
+                "tool_name": gate_tool_name,
+                "action": action or "",
+            }
+            gate_args.update(
+                {key: value for key, value in payload.items() if key != "action"}
+            )
+            if resolved_user:
+                gate_args["resolvedUserId"] = resolved_user.get("userId")
+                gate_args["resolvedEmail"] = resolved_user.get("email")
+                gate_args["resolvedDisplayName"] = resolved_user.get("displayName")
             proposal = classify_effect(
                 gate_tool_name,
-                {
-                    "connector_id": summary_connector_id,
-                    "tool_name": gate_tool_name,
-                    "action": action or "",
-                },
+                gate_args,
                 permissions_network=deps.context.permissions_network,
             )
             if proposal is None:
                 raise ModelRetry(f"Effet non classifiable pour {gate_tool_name}")
+            labels = protection_labels(proposal, locale)
+            if resolution_failed:
+                labels = [
+                    *labels,
+                    t(locale, "effect.protection.user_unresolved"),
+                ]
             proposal = proposal.model_copy(update={"human_summary": human_summary})
             proposal = proposal.model_copy(
                 update={
                     "headline": effect_headline(proposal, locale),
-                    "protection_labels": protection_labels(proposal, locale),
+                    "protection_labels": labels,
                 }
             )
             outcome = await gate.request_effect(
@@ -827,25 +1200,19 @@ async def invoke_managed_connector_impl(
                 t(locale, "cloud.connector_disabled_locally", connector_id=connector_id)
             )
 
-        plugins_root = cloud_dir.parent
-        gateway = open_remote_capability_gateway(
-            caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
-            caller_permissions=frozenset(
-                [
-                    "capability:remote",
-                    "network:improba-cloud",
-                ]
-            ),
-            plugins_root=plugins_root,
-            base_url=base_url,
-            allowed_capability_ids=allowed,
-        )
-        identity = IdentityDelegation(
-            subject_id=subject,
-            org_id=org_id_str,
-            scopes=frozenset({"connectors:invoke"}),
-            access_token=access_token.strip(),
-        )
+        if gateway is None:
+            gateway = open_remote_capability_gateway(
+                caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
+                caller_permissions=frozenset(
+                    [
+                        "capability:remote",
+                        "network:improba-cloud",
+                    ]
+                ),
+                plugins_root=plugins_root,
+                base_url=base_url,
+                allowed_capability_ids=allowed,
+            )
         result = await gateway.invoke_remote(connector_id, payload, identity)
     except ModelRetry:
         raise

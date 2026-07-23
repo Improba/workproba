@@ -2195,6 +2195,7 @@ export interface CloudStatus {
   org_id?: string | null;
   org_label?: string | null;
   device_id?: string | null;
+  current_user_email?: string | null;
 }
 
 export async function fetchCloudStatus(
@@ -2490,6 +2491,7 @@ export async function enrollCloud(opts: {
   bearerToken?: string;
   joinToken?: string;
   deviceName?: string;
+  username?: string;
 }): Promise<SidecarResult<{ authenticated: boolean; org_id?: string | null }>> {
   try {
     const body: Record<string, unknown> = {
@@ -2504,6 +2506,9 @@ export async function enrollCloud(opts: {
     }
     if (opts.deviceName?.trim()) {
       body.device_name = opts.deviceName.trim();
+    }
+    if (opts.username?.trim()) {
+      body.username = opts.username.trim();
     }
     const response = await fetch(`${getAiSidecarUrl()}/plugins/cloud/enroll`, {
       method: 'POST',

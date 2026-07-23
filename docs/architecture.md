@@ -1,6 +1,6 @@
 # Workproba architecture
 
-> **Last updated:** 20/07/2026 (V2.2 PR 1–3 + Improba Cloud LLM + PPTX + desktop cloud auth UX)
+> **Last updated:** 23/07/2026 (per-space capabilities, managed tools catalog, PPTX HTML/Chromium pipeline, DeviceBearer durable, chat scroll anchor)
 
 ## Overview
 
@@ -70,11 +70,11 @@ Read-only tools (`read_document`, `list_files`, `remember`, `propose_plan`, pers
 
 1. `classify_effect()` (`app/agent/effects.py`) builds an `EffectProposal` (effect, targets, protections).
 2. `ConfirmationGate.request_effect()` emits SSE `confirmation_request` with `headline` and `protection_labels` (localized via `app/i18n.py`).
-3. The front shows `ConfirmationCard.vue`; the user approves or denies via `POST /agent/confirm`.
+3. The front shows `ConfirmationCard.vue`; the user approves or denies via `POST /agent/confirm`. For `external_send` / managed tools, the card uses a dedicated layout (primary human summary, optional secondary target, argument list, protection labels).
 4. On **approve**: the tool runs. On **deny** or **timeout** (5 min): `ModelRetry` informs the model (`workproba:approval_denied` / `workproba:approval_timeout` markers).
 5. Optional audit: `approval.requested` / `approval.resolved` in `{app_data}/audit/`.
 
-Protections shown on the card include: preview available, automatic version before modify, no network, no external send (when applicable).
+Protections shown on the card include: preview available, automatic version before modify, no network, no external send, and (when relevant) user unresolved before confirmation.
 
 ### Work Event Bus (`work_*`)
 
@@ -123,6 +123,8 @@ Fixed agent tools generate native Office and PDF files in the project folder (Hu
 
 **PPTX** (`pptx_builder.py`): native 16:9 generation via `python-pptx`. Layouts: `title`, `section`, `bullets`, `two_column`, `kpi_row`, `quote`, `closing`. Themes: `improba` (default), `light`, `dark`. Hard cap: `MAX_PPTX_SLIDES = 60`.
 
+**Visual PPTX pipeline** (`pptx_svg.py` + `slides_html.py` + `slides_chromium.py`): optional high-fidelity path renders the deck as HTML, captures PNG pages via Chromium when available, then embeds images in the PPTX (`render_mode: visual`). If Chromium is missing or capture fails, the writer falls back to the editable native builder (`editable_fallback`). A light layout critique (`slides_critique.py`) runs before either path. Preview HTML for PPTX uses the same HTML deck (`wp-slide` / `wp-pptx-slide` classes).
+
 ## Attachments and document preview
 
 - **Attachments**: stored in `{workspace_data_dir}/attachments/{session_id}/{attachment_id}/`. Reprocess OCR/vision via `POST /agent/reprocess-attachment`.
@@ -133,6 +135,26 @@ Fixed agent tools generate native Office and PDF files in the project folder (Hu
 ## Plugins and capabilities
 
 Four builtin plugins; guided UX presents them as **activatable capabilities**. Order in the Capabilities hub: **Workproba Cloud** first (with a **collapsible** sub-capabilities zone: Project management, managed services such as Ihora), then Regards métier, then Navigation web. Org services from the control plane still use the API name `connectors`. Technical plugin details in advanced Settings → Extensions. See [plugins.md](./plugins.md), [capacites.md](./capacites.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
+
+### Per-space capabilities profile
+
+Activation is resolved **per space**, not only machine-wide:
+
+| Layer | Role |
+|---|---|
+| Machine plugins (`active_plugins`) | Which builtins are installed / entitled on this workstation |
+| Org allowlist + local disable | Which managed connectors the org permits; local disable under Workproba Cloud |
+| Space profile `{space}/.workproba/capabilities.json` | Per-space `wanted` map (`true`/`false`) for local ids and `managed:{connectorId}` |
+
+UI: **Space settings** (`SpaceSettingsDialog` → `SpaceCapabilitiesPanel`) lists items as `active` / `available` / `unavailable` with reasons (plugin off, cloud not connected, not allowlisted). API: `GET` / `PUT /workspace/capabilities`. Defaults use `enableByDefaultInProjects` from the local catalog and from each connector descriptor (e.g. Ihora defaults on in new project spaces; web navigation defaults off).
+
+### Turn freeze (managed allowlist)
+
+At the start of each agent turn, `resolve_turn_capabilities_snapshot()` (`capabilities_turn.py`) builds an immutable **`TurnCapabilitiesSnapshot`**: effective plugins, effective capability ids, and `managed_allowed_connector_ids`. One cloud connectors refresh feeds tools registration, system prompt, and invoke guards for the whole turn (no mid-turn divergent `GET /connectors`). Profile mutations during the turn do not apply until the next turn.
+
+### Managed tools in chat
+
+When a managed connector is effective for the space, the sidecar registers dedicated agent tools `managed_{connector_id}_{tool_name}` (dots in connector id become underscores) from the cloud `tools[]` catalog, plus generic `invoke_managed_connector` as fallback. Human Approval Gate uses `external_send`. Guided UI hides `visibility: advanced` tools. Tool cards use localized **human summaries**; Ihora write confirmations can show resolved member identity (display name, email, userId) after `list_users` resolution. The signed-in cloud user identity (email / display name, optional cached Ihora userId) is injected into the tool context for « add me » style requests.
 
 **File versions** (T-V2-15): snapshots live under `{space}/versions/`; the sidecar exposes `GET /versions`, `POST /versions/restore`, and optional `POST /versions/purge` (keep last N, default 20, and/or drop entries older than X days). The right-panel **Versions** tab offers restore and manual cleanup.
 
@@ -321,35 +343,48 @@ are not replayed on resend).
   `aria-expanded`, `aria-label`, and `role="alert"` where appropriate.
 - Streaming cursor respects `prefers-reduced-motion`.
 
-### Key front files (chat, brand, onboarding)
+### Key front files (chat, brand, onboarding, space capabilities)
 
 ```
 front/src/
 ├── assets/brand/                  # mark + logo (light/dark SVG)
 ├── components/chat/
-│   ├── ChatView.vue               # composer, scroll pinning, drag-drop
+│   ├── ChatView.vue               # composer, turn-anchor scroll, drag-drop
 │   ├── MessageList.vue            # virtual scroller, a11y live region
 │   ├── Message.vue                # interleaved parts, edit/regenerate actions
 │   ├── MessageTextPart.vue        # markdown (incremental + final)
 │   ├── ThinkingCard.vue           # reasoning block
 │   ├── ToolCallCard.vue           # tool call human/tech views
-│   ├── ConfirmationCard.vue       # human approval gate UI
+│   ├── ConfirmationCard.vue       # human approval gate UI (managed layout)
 │   └── PlanCard.vue               # multi-step plan approval
+├── components/capabilities/
+│   ├── CapabilitiesDrawer.vue     # hub Capacités
+│   ├── SpaceCapabilitiesPanel.vue # per-space wanted toggles
+│   └── SpaceCapabilityRow.vue
 ├── components/onboarding/
 │   └── EngineOnboardingWizard.vue # first-run engine + cloud setup
 ├── components/cloud/
 │   ├── CloudLoginModal.vue        # username/password → User JWT
 │   └── EnrollCloudModal.vue       # join_token → DeviceBearer
 ├── components/workproba/
-│   └── WorkprobaBrand.vue         # shell brand mark/logo
+│   ├── WorkprobaBrand.vue         # shell brand mark/logo
+│   └── SpaceSettingsDialog.vue    # space title + capabilities
 ├── composables/
-│   └── useChatStream.ts           # SSE, send, edit, regenerate, retry
+│   ├── useChatStream.ts           # SSE, send, edit, regenerate, retry
+│   ├── chatScrollAnchor.ts        # turn-anchor / sticky promote
+│   └── useSpaceCapabilities.ts    # GET/PUT /workspace/capabilities
 ├── services/cloudDesktopAuth.ts   # POST /devices/login client
 └── utils/
     ├── cloudWebUrls.ts            # VITE_CLOUD_WEB_URL helpers
     ├── markdownRender.ts          # shared markdown pipeline
     └── markdownStreaming.ts       # block split for streaming
 
-services/ai/app/documents/
-└── pptx_builder.py                # native PPTX generation (write_pptx)
+services/ai/app/
+├── capabilities_profile.py        # capabilities.json load/save
+├── capabilities_turn.py           # TurnCapabilitiesSnapshot (frozen allowlist)
+└── documents/
+    ├── pptx_builder.py            # editable PPTX (write_pptx)
+    ├── pptx_svg.py                # visual PPTX via HTML + Chromium
+    ├── slides_html.py             # HTML deck renderer
+    └── slides_chromium.py         # PNG capture / PDF helpers
 ```

@@ -335,6 +335,32 @@ class AgentLoop:
                     gate.turn_id,
                     exc_info=True,
                 )
+        current_user_email: str | None = None
+        current_user_display_name: str | None = None
+        current_user_ihora_id: str | None = None
+        from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD, resolve_plugin_data_dir
+        from app.plugins.workproba_cloud import storage as cloud_storage
+
+        cloud_dir = (
+            cloud_plugin_data_dir
+            if cloud_plugin_data_dir is not None
+            else resolve_plugin_data_dir(PLUGIN_WORKPROBA_CLOUD, plugin_data_dir)
+        )
+        if cloud_dir is not None:
+            identity = cloud_storage.get_current_user_identity(cloud_dir)
+            if identity is not None:
+                email_raw = identity.get("email") or identity.get("username")
+                if isinstance(email_raw, str) and email_raw.strip():
+                    current_user_email = email_raw.strip()
+                display_raw = identity.get("display_name")
+                if isinstance(display_raw, str) and display_raw.strip():
+                    current_user_display_name = display_raw.strip()
+                elif current_user_email and "@" in current_user_email:
+                    current_user_display_name = current_user_email.split("@", 1)[0]
+                ihora_raw = identity.get("ihora_user_id")
+                if ihora_raw is not None and str(ihora_raw).strip():
+                    current_user_ihora_id = str(ihora_raw).strip()
+
         context = ToolContext(
             tenant_id=request.tenant_id or "",
             project_id=request.project_id,
@@ -362,6 +388,9 @@ class AgentLoop:
             prepared_tagged_memories=prepared_tagged_memories,
             ui_mode=request.ui_mode,
             managed_allowed_connector_ids=self._managed_allowed_connector_ids,
+            current_user_email=current_user_email,
+            current_user_display_name=current_user_display_name,
+            current_user_ihora_id=current_user_ihora_id,
         )
         deps = ToolDeps(
             context=context,

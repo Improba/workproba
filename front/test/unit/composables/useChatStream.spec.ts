@@ -354,7 +354,7 @@ describe('useChatStream — feedbacks', () => {
     unmount();
   });
 
-  it('sur un event error SSE, attache une erreur localisée au message + au ref global', async () => {
+  it('sur un event error SSE, attache une erreur localisée au message sans dupliquer error.value', async () => {
     (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
       sseResponse([
         {
@@ -372,10 +372,8 @@ describe('useChatStream — feedbacks', () => {
     expect(assistant?.error?.message).toContain("limite d'itérations");
     expect(assistant?.error?.retryable).toBe(true);
     expect(assistant?.streaming).toBe(false);
-    expect(api.error.value?.code).toBe('max_iterations_reached');
-    expect(api.error.value?.retryable).toBe(true);
+    expect(api.error.value).toBeNull();
     expect(assistant?.error?.incidentId).toBeTruthy();
-    expect(api.error.value?.incidentId).toBeTruthy();
     unmount();
   });
 
@@ -675,10 +673,10 @@ describe('useChatStream — feedbacks', () => {
     const { api, unmount } = mountStream();
     await api.send('hi');
 
-    expect(api.error.value?.code).toBe('sidecar_unreachable');
-    expect(api.error.value?.retryable).toBe(true);
-    expect(api.error.value?.message).toContain("service IA n'est pas accessible");
+    expect(api.error.value).toBeNull();
     expect(lastAssistant(api.messages.value)?.error?.code).toBe('sidecar_unreachable');
+    expect(lastAssistant(api.messages.value)?.error?.retryable).toBe(true);
+    expect(lastAssistant(api.messages.value)?.error?.message).toContain("service IA n'est pas accessible");
     unmount();
   });
 
@@ -690,7 +688,8 @@ describe('useChatStream — feedbacks', () => {
     const { api, unmount } = mountStream();
     await api.send('hi');
 
-    expect(api.error.value?.code).toBe('sidecar_unreachable');
+    expect(api.error.value).toBeNull();
+    expect(lastAssistant(api.messages.value)?.error?.code).toBe('sidecar_unreachable');
     unmount();
   });
 
@@ -707,10 +706,10 @@ describe('useChatStream — feedbacks', () => {
     const { api, unmount } = mountStream();
     await api.send('hi');
 
-    expect(api.error.value?.code).toBe('api_key_missing');
-    expect(api.error.value?.message).toContain('Clé API manquante');
-    expect(api.error.value?.retryable).toBe(false);
+    expect(api.error.value).toBeNull();
     expect(lastAssistant(api.messages.value)?.error?.code).toBe('api_key_missing');
+    expect(lastAssistant(api.messages.value)?.error?.message).toContain('Clé API manquante');
+    expect(lastAssistant(api.messages.value)?.error?.retryable).toBe(false);
     unmount();
   });
 
@@ -941,7 +940,8 @@ describe('useChatStream — feedbacks', () => {
     await api.send('hi');
     // Premier tour : échec -> 1 user + 1 assistant en erreur.
     expect(api.messages.value).toHaveLength(2);
-    expect(api.error.value?.code).toBe('sidecar_unreachable');
+    expect(api.error.value).toBeNull();
+    expect(lastAssistant(api.messages.value)?.error?.code).toBe('sidecar_unreachable');
 
     await api.retry();
     // Second tour : la paire échouée a été retirée puis recréée -> toujours 2.
@@ -1036,7 +1036,8 @@ describe('useChatStream — feedbacks', () => {
 
     const { api, unmount } = mountStream();
     await api.send('ancien message');
-    expect(api.error.value?.code).toBe('sidecar_unreachable');
+    expect(api.error.value).toBeNull();
+    expect(lastAssistant(api.messages.value)?.error?.code).toBe('sidecar_unreachable');
 
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock.mockClear();
@@ -1632,7 +1633,8 @@ describe('useChatStream — browser tool results', () => {
 
     await api.regenerateFrom(assistantId);
     expect(api.messages.value).toHaveLength(2);
-    expect(api.error.value?.code).toBe('sidecar_unreachable');
+    expect(api.error.value).toBeNull();
+    expect(lastAssistant(api.messages.value)?.error?.code).toBe('sidecar_unreachable');
 
     await api.retry();
     expect(api.messages.value).toHaveLength(2);

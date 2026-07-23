@@ -11,7 +11,41 @@
       <h3 class="confirmation-card__title">{{ t('chat.confirmationRegion') }}</h3>
     </header>
 
-    <template v-if="hasEffectHeadline">
+    <template v-if="showExternalManagedLayout">
+      <p class="confirmation-card__headline">{{ externalPrimarySummary }}</p>
+      <p v-if="externalSecondaryTarget" class="confirmation-card__secondary">
+        {{ t('chat.confirmationTarget', { target: externalSecondaryTarget }) }}
+      </p>
+      <dl
+        v-if="externalArgEntries.length"
+        class="confirmation-card__args"
+        data-testid="confirmation-args"
+      >
+        <div
+          v-for="entry in externalArgEntries"
+          :key="entry.key"
+          class="confirmation-card__arg"
+        >
+          <dt>{{ entry.key }}</dt>
+          <dd>{{ entry.value }}</dd>
+        </div>
+      </dl>
+      <ul
+        v-if="confirmation.protectionLabels?.length"
+        class="confirmation-card__protections"
+        data-testid="confirmation-protections"
+      >
+        <li
+          v-for="(label, index) in confirmation.protectionLabels"
+          :key="`${index}-${label}`"
+          class="confirmation-card__protection"
+        >
+          <Lucide name="check-circle-2" size="xs" color="wp-accent-strong" />
+          <span>{{ label }}</span>
+        </li>
+      </ul>
+    </template>
+    <template v-else-if="hasEffectHeadline">
       <p v-if="headlineParts" class="confirmation-card__headline">
         <span class="confirmation-card__headline-lead">{{ headlineParts.lead }}</span><strong
           v-if="headlineParts.target"
@@ -139,6 +173,114 @@ const hasEffectHeadline = computed(() =>
   Boolean(props.confirmation.headline?.trim()),
 );
 
+const isExternalOrManagedConfirmation = computed(() => {
+  const { effect, toolName } = props.confirmation;
+  return (
+    effect === 'external_send' ||
+    toolName === 'invoke_managed_connector' ||
+    toolName.startsWith('managed_')
+  );
+});
+
+const externalPrimarySummary = computed(
+  () => props.confirmation.humanSummary?.trim() ?? '',
+);
+
+const showExternalManagedLayout = computed(
+  () =>
+    isExternalOrManagedConfirmation.value &&
+    Boolean(externalPrimarySummary.value),
+);
+
+const externalSecondaryTarget = computed(() => {
+  if (!showExternalManagedLayout.value) return null;
+  const headline = props.confirmation.headline?.trim();
+  if (!headline) return null;
+  const colonIndex = headline.indexOf(':');
+  if (colonIndex === -1) return null;
+  const target = headline.slice(colonIndex + 1).trim();
+  if (!target) return null;
+  if (externalPrimarySummary.value.toLowerCase().includes(target.toLowerCase())) {
+    return null;
+  }
+  return target;
+});
+
+const EXTERNAL_ARG_SKIP = new Set([
+  'connector_id',
+  'connectorId',
+  'tool_name',
+  'toolName',
+]);
+
+const RESOLVED_SUMMARY_RAW_USER_ARG_SKIP = new Set(['userId', 'email']);
+
+function humanSummaryHasResolvedUser(summary: string): boolean {
+  return summary.includes('userId') && summary.includes('@');
+}
+
+const USER_ARG_PRIORITY = [
+  'resolvedDisplayName',
+  'resolvedEmail',
+  'resolvedUserId',
+  'userId',
+  'email',
+  'firstname',
+  'lastname',
+  'firstName',
+  'lastName',
+];
+
+function userArgSortIndex(key: string): number {
+  const idx = USER_ARG_PRIORITY.indexOf(key);
+  return idx === -1 ? USER_ARG_PRIORITY.length : idx;
+}
+
+function formatArgValue(value: unknown): string | null {
+  if (value == null) return null;
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return null;
+    return value
+      .map((item) => formatArgValue(item))
+      .filter((item): item is string => Boolean(item))
+      .join(', ');
+  }
+  if (typeof value === 'object') {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+const externalArgEntries = computed(() => {
+  if (!showExternalManagedLayout.value || !props.toolArgs) return [];
+  const skipRawUserArgs = humanSummaryHasResolvedUser(externalPrimarySummary.value);
+  const entries: { key: string; value: string }[] = [];
+  for (const [key, raw] of Object.entries(props.toolArgs)) {
+    if (EXTERNAL_ARG_SKIP.has(key)) continue;
+    if (skipRawUserArgs && RESOLVED_SUMMARY_RAW_USER_ARG_SKIP.has(key)) continue;
+    const value = formatArgValue(raw);
+    if (!value) continue;
+    entries.push({ key, value });
+  }
+  return entries.sort((left, right) => {
+    const leftIdx = userArgSortIndex(left.key);
+    const rightIdx = userArgSortIndex(right.key);
+    if (leftIdx !== rightIdx) return leftIdx - rightIdx;
+    return left.key.localeCompare(right.key);
+  });
+});
+
 const headlineParts = computed(() => {
   const text = props.confirmation.headline?.trim();
   if (!text) return null;
@@ -234,6 +376,44 @@ const customSummaryHtml = computed(() => {
   font-family: var(--wp-font-mono, ui-monospace, monospace);
   font-weight: 700;
   color: var(--wp-text);
+}
+
+.confirmation-card__secondary {
+  margin: -0.35rem 0 0.75rem;
+  font-size: var(--wp-fs-sm, 0.875rem);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-text-muted, var(--wp-text));
+}
+
+.confirmation-card__args {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--wp-r-sm, 0.35rem);
+  background: color-mix(in srgb, var(--wp-surface) 70%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.confirmation-card__arg {
+  display: grid;
+  grid-template-columns: minmax(5rem, max-content) 1fr;
+  gap: 0.5rem 0.75rem;
+  font-size: var(--wp-fs-sm, 0.875rem);
+  line-height: var(--wp-lh-normal);
+
+  dt {
+    margin: 0;
+    font-weight: 600;
+    color: var(--wp-text-muted, var(--wp-text));
+  }
+
+  dd {
+    margin: 0;
+    font-family: var(--wp-font-mono, ui-monospace, monospace);
+    color: var(--wp-text);
+    word-break: break-word;
+  }
 }
 
 .confirmation-card__summary {

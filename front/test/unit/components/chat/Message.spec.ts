@@ -116,7 +116,7 @@ describe('Message accessibilité', () => {
     wrapper.unmount();
   });
 
-  it('affiche modifier sur un message user terminé', () => {
+  it('n’affiche pas modifier sur un message user', () => {
     const wrapper = mount(Message, {
       props: {
         message: {
@@ -138,7 +138,8 @@ describe('Message accessibilité', () => {
       },
     });
 
-    expect(wrapper.text()).toContain('Modifier');
+    expect(wrapper.text()).not.toContain('Modifier');
+    expect(wrapper.find('.chat-message__actions').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -165,37 +166,6 @@ describe('Message accessibilité', () => {
     });
 
     expect(wrapper.text()).toContain('Regénérer');
-    wrapper.unmount();
-  });
-
-  it('émet edit après enregistrement du brouillon', async () => {
-    const wrapper = mount(Message, {
-      props: {
-        message: {
-          id: 'u-save',
-          role: 'user',
-          content: 'Ancien texte',
-          createdAt: '2026-01-01T00:00:00.000Z',
-        },
-        chatStreaming: false,
-      },
-      global: {
-        stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
-        },
-      },
-    });
-
-    await wrapper.find('.chat-message__action').trigger('click');
-    const textarea = wrapper.find('.chat-message__edit-field');
-    await textarea.setValue('Nouveau texte');
-    await wrapper.find('.chat-message__action--primary').trigger('click');
-
-    expect(wrapper.emitted('edit')).toEqual([['u-save', 'Nouveau texte']]);
     wrapper.unmount();
   });
 

@@ -335,7 +335,7 @@ export default {
     addMenuPersonas: 'Regards',
     stop: 'Stop',
     send: 'Send',
-    composerHint: 'Enter = new line · Ctrl+Enter to send',
+    composerHint: 'Enter to send · Ctrl+Enter = new line',
     composerReading: 'Reading…',
     modelControlSep: '·',
     modelControlModel: 'Model',
@@ -377,6 +377,7 @@ export default {
     confirmationModify: 'modify',
     confirmationCreate: 'create',
     confirmationSummary: 'I will {verb} {file}',
+    confirmationTarget: 'Target: {target}',
     plan: {
       proposed: 'Proposed plan',
       updated: 'Updated plan',

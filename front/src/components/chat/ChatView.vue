@@ -40,7 +40,6 @@
         @plan-reject="emit('plan-reject')"
         @personas-another="(card) => emit('personas-another', card)"
         @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
-        @edit="(id, text) => emit('edit', id, text)"
         @regenerate="(id) => emit('regenerate', id)"
       />
 
@@ -120,19 +119,11 @@
         <button
           type="button"
           class="chat-view__attach"
-          :class="{ 'chat-view__attach--reasoning': showReasoningBadge }"
           :aria-label="attachAriaLabel"
           :title="attachTitle"
           aria-haspopup="menu"
         >
           <Lucide name="plus" size="18" color="wp-text" />
-          <span
-            v-if="showReasoningBadge"
-            class="chat-view__attach-badge"
-            aria-hidden="true"
-          >
-            <Lucide name="brain" size="10" color="accent" />
-          </span>
           <q-menu
             ref="addMenuRef"
             anchor="bottom left"
@@ -250,8 +241,7 @@
             class="chat-view__input"
             :placeholder="t('chat.messagePlaceholder')"
             :maxlength="COMPOSER_MAX_LENGTH"
-            @keydown.enter.ctrl.prevent="handleSubmit"
-            @keydown.enter.meta.prevent="handleSubmit"
+            @keydown.enter="onComposerEnter"
             @paste="onPaste"
           />
         </div>
@@ -312,7 +302,7 @@ import {
 import type { ChatAttachment, ChatMessage, ReasoningEffort } from '#types';
 import { addMemoryItem } from '@services/aiSidecar';
 import type { QInput, QMenu } from 'quasar';
-import { REASONING_EFFORT_OPTIONS, supportsReasoning } from '@utils/reasoningSupport';
+import { supportsReasoning } from '@utils/reasoningSupport';
 import { hasModelChoice } from '@utils/modelCatalog';
 import { hasSetModelChoice, supportsReasoningForSet } from '@utils/providerSetModels';
 import {
@@ -359,7 +349,6 @@ const emit = defineEmits<{
   'personas-discuss': [];
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
-  edit: [messageId: string, newText: string];
   regenerate: [messageId: string];
 }>();
 
@@ -462,32 +451,10 @@ const showModelControl = computed(() => {
   return hasModelChoice(provider) || supportsReasoning(provider, model);
 });
 
-const showReasoningBadge = computed(
-  () =>
-    showModelControl.value &&
-    props.reasoningEffort != null &&
-    props.reasoningEffort !== 'none',
-);
-
-const reasoningBadgeTitle = computed(() => {
-  const match = REASONING_EFFORT_OPTIONS.find(
-    (opt) => opt.value === props.reasoningEffort,
-  );
-  return match
-    ? `${t('chat.modelControlReasoning')}: ${match.label}`
-    : t('chat.modelControlReasoning');
-});
-
-const attachTitle = computed(() =>
-  showReasoningBadge.value
-    ? `${t('chat.addMenuTitle')} · ${reasoningBadgeTitle.value}`
-    : t('chat.addMenuTitle'),
-);
+const attachTitle = computed(() => t('chat.addMenuTitle'));
 
 const attachAriaLabel = computed(() =>
-  showReasoningBadge.value
-    ? `${t('chat.attachFileAria', { current: attachments.length, max: MAX_ATTACHMENTS })} · ${reasoningBadgeTitle.value}`
-    : t('chat.attachFileAria', { current: attachments.length, max: MAX_ATTACHMENTS }),
+  t('chat.attachFileAria', { current: attachments.length, max: MAX_ATTACHMENTS }),
 );
 
 function closeAddMenu(): void {
@@ -921,6 +888,37 @@ function scheduleScrollToBottom(): void {
 function handleScrollDownClick(): void {
   enterStickyMode();
   void scrollToBottomStable(true);
+}
+
+function insertComposerNewline(e: KeyboardEvent): void {
+  const el = e.target as HTMLTextAreaElement | null;
+  const value = draft.value;
+  if (value.length >= COMPOSER_MAX_LENGTH) return;
+
+  if (!el || typeof el.selectionStart !== 'number') {
+    draft.value = `${value}\n`;
+    return;
+  }
+
+  const start = el.selectionStart;
+  const end = el.selectionEnd;
+  draft.value = `${value.slice(0, start)}\n${value.slice(end)}`;
+  void nextTick(() => {
+    const pos = start + 1;
+    el.selectionStart = pos;
+    el.selectionEnd = pos;
+  });
+}
+
+function onComposerEnter(e: KeyboardEvent): void {
+  if (e.ctrlKey || e.metaKey) {
+    e.preventDefault();
+    insertComposerNewline(e);
+    return;
+  }
+  if (e.shiftKey || e.altKey) return;
+  e.preventDefault();
+  handleSubmit();
 }
 
 function handleSubmit(): void {
@@ -1473,25 +1471,6 @@ onUnmounted(() => {
     outline: none;
     box-shadow: 0 0 0 3px var(--wp-accent-soft);
   }
-}
-
-.chat-view__attach--reasoning {
-  border-color: color-mix(in srgb, var(--wp-accent) 45%, var(--wp-border));
-}
-
-.chat-view__attach-badge {
-  position: absolute;
-  top: -3px;
-  right: -3px;
-  width: 14px;
-  height: 14px;
-  border-radius: 999px;
-  background: var(--wp-surface);
-  border: 1px solid var(--wp-accent);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
 }
 
 /* Menu « + » : pièces jointes, Regards et modèle/raisonnement. */

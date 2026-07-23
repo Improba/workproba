@@ -455,6 +455,15 @@ class CloudControlPlaneClient:
         _ = org_id
         return await self._get_json("/policies")
 
+    @staticmethod
+    def extract_catalog_version(payload: JsonDict) -> str | None:
+        """Lit catalog_version ou catalogVersion (camelCase cloud)."""
+        for key in ("catalog_version", "catalogVersion"):
+            raw = payload.get(key)
+            if isinstance(raw, str) and raw.strip():
+                return raw.strip()
+        return None
+
     async def list_connectors(self, *, org_id: str | None = None) -> JsonDict:
         """GET /connectors — connecteurs managés autorisés pour le device."""
         _ = org_id  # org is implied by DeviceBearer on the server

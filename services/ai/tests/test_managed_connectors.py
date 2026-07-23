@@ -434,6 +434,7 @@ def test_build_managed_connectors_agent_prompt() -> None:
     assert "ihora" in text
     assert "Ihora" in text
     assert t("fr", "tools.managed_connectors_enabled", id="ihora", name="Ihora") in text
+    assert t("fr", "tools.managed_connectors_ihora_users_hint") in text
     assert t("fr", "tools.managed_connectors_disabled", id="echo", name="Echo") in text
 
 
@@ -1223,6 +1224,152 @@ async def test_refresh_known_managed_connectors_cache_clears_tools(
     assert cloud_storage.get_known_managed_connectors(cloud_dir) == []
 
 
+def test_extract_catalog_version_accepts_camel_and_snake() -> None:
+    assert (
+        CloudControlPlaneClient.extract_catalog_version(
+            {"catalogVersion": "2026.07.23.1", "connectors": []}
+        )
+        == "2026.07.23.1"
+    )
+    assert (
+        CloudControlPlaneClient.extract_catalog_version(
+            {"catalog_version": "2026.07.23.2", "connectors": []}
+        )
+        == "2026.07.23.2"
+    )
+    assert CloudControlPlaneClient.extract_catalog_version({"connectors": []}) is None
+
+
+def test_known_managed_connectors_catalog_version_roundtrip(tmp_path: Path) -> None:
+    from app.plugins.workproba_cloud import storage as cloud_storage
+
+    cloud_dir = tmp_path / "cloud"
+    cloud_dir.mkdir()
+    assert cloud_storage.get_known_managed_connectors_catalog_version(cloud_dir) is None
+
+    cloud_storage.save_known_managed_connectors(
+        cloud_dir,
+        [{"id": "echo", "name": "Echo"}],
+        catalog_version="2026.07.23.1",
+    )
+    assert (
+        cloud_storage.get_known_managed_connectors_catalog_version(cloud_dir)
+        == "2026.07.23.1"
+    )
+
+
+@pytest.mark.asyncio
+async def test_refresh_known_managed_connectors_cache_skips_save_same_version(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.plugin import refresh_known_managed_connectors_cache
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.save_known_managed_connectors(
+        cloud_dir,
+        [{"id": "ihora", "name": "Ihora", "tools": IHORA_TOOLS}],
+        catalog_version="2026.07.23.1",
+    )
+    config_mtime_before = (cloud_dir / "config.json").stat().st_mtime
+
+    async def fake_list(self: CloudControlPlaneClient) -> dict:
+        return {
+            "connectors": [{"id": "echo", "name": "Echo"}],
+            "catalogVersion": "2026.07.23.1",
+        }
+
+    save_called = {"value": False}
+    original_save = cloud_storage.save_known_managed_connectors
+
+    def tracking_save(*args, **kwargs):
+        save_called["value"] = True
+        return original_save(*args, **kwargs)
+
+    monkeypatch.setattr(CloudControlPlaneClient, "list_connectors", fake_list)
+    monkeypatch.setattr(
+        "app.plugins.workproba_cloud.plugin.is_cloud_enrolled",
+        lambda _cloud_dir: True,
+    )
+    monkeypatch.setattr(cloud_storage, "save_known_managed_connectors", tracking_save)
+
+    allowed = await refresh_known_managed_connectors_cache(cloud_dir)
+
+    assert allowed == frozenset({"echo"})
+    assert save_called["value"] is False
+    assert cloud_storage.get_known_managed_connectors(cloud_dir)[0]["id"] == "ihora"
+    assert (
+        cloud_storage.get_known_managed_connectors_catalog_version(cloud_dir)
+        == "2026.07.23.1"
+    )
+    assert (cloud_dir / "config.json").stat().st_mtime == config_mtime_before
+
+
+@pytest.mark.asyncio
+async def test_refresh_known_managed_connectors_cache_refreshes_on_version_bump(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.plugin import refresh_known_managed_connectors_cache
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.save_known_managed_connectors(
+        cloud_dir,
+        [{"id": "ihora", "name": "Ihora", "tools": IHORA_TOOLS}],
+        catalog_version="2026.07.23.1",
+    )
+
+    async def fake_list(self: CloudControlPlaneClient) -> dict:
+        return {
+            "connectors": [
+                {
+                    "id": "echo",
+                    "name": "Echo",
+                    "tools": [
+                        {
+                            "name": "ping",
+                            "action": "ping",
+                            "effect": "read",
+                        }
+                    ],
+                }
+            ],
+            "catalog_version": "2026.07.23.2",
+        }
+
+    monkeypatch.setattr(CloudControlPlaneClient, "list_connectors", fake_list)
+    monkeypatch.setattr(
+        "app.plugins.workproba_cloud.plugin.is_cloud_enrolled",
+        lambda _cloud_dir: True,
+    )
+
+    allowed = await refresh_known_managed_connectors_cache(cloud_dir)
+
+    assert allowed == frozenset({"echo"})
+    known = cloud_storage.get_known_managed_connectors(cloud_dir)
+    assert known == [
+        {
+            "id": "echo",
+            "name": "Echo",
+            "tools": [{"name": "ping", "action": "ping", "effect": "read"}],
+        }
+    ]
+    assert (
+        cloud_storage.get_known_managed_connectors_catalog_version(cloud_dir)
+        == "2026.07.23.2"
+    )
+
+
 @pytest.mark.asyncio
 async def test_invoke_managed_connector_validates_payload_before_gate(
     tmp_path: Path,
@@ -1300,3 +1447,345 @@ async def test_invoke_managed_connector_validates_payload_before_gate(
             connector_id="ihora",
             payload_json='{"action":"create_timesheet","date":"2026-07-03"}',
         )
+
+
+def test_is_managed_read_action_from_cached_effect(tmp_path: Path) -> None:
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.plugin import _is_managed_read_action
+
+    cloud_dir = tmp_path / "cloud"
+    cloud_dir.mkdir()
+    _seed_ihora_connectors_cache(cloud_dir)
+
+    assert _is_managed_read_action(cloud_dir, "ihora", "list_absences") is True
+    assert _is_managed_read_action(cloud_dir, "ihora", "get_timesheet") is True
+    assert _is_managed_read_action(cloud_dir, "ihora", "create_timesheet") is False
+    assert _is_managed_read_action(cloud_dir, "ihora", "unknown_action") is False
+    assert _is_managed_read_action(cloud_dir, "ihora", None) is False
+
+    cloud_storage.save_known_managed_connectors(
+        cloud_dir,
+        [
+            {
+                "id": "ihora",
+                "name": "Ihora",
+                "tools": [
+                    {
+                        "name": "list_users",
+                        "action": "list_users",
+                        "description": "List users",
+                        "input_schema": {"type": "object", "properties": {}},
+                    }
+                ],
+            }
+        ],
+    )
+    assert _is_managed_read_action(cloud_dir, "ihora", "list_users") is False
+
+
+def test_find_cached_tool_matches_action_not_name(tmp_path: Path) -> None:
+    """name≠action : ne pas résoudre par name (aligné sur le cloud)."""
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.plugin import (
+        _find_cached_tool,
+        _is_managed_read_action,
+    )
+
+    cloud_dir = tmp_path / "cloud"
+    cloud_dir.mkdir()
+    cloud_storage.save_known_managed_connectors(
+        cloud_dir,
+        [
+            {
+                "id": "ihora",
+                "name": "Ihora",
+                "tools": [
+                    {
+                        "name": "list_users",
+                        "action": "update_project_member",
+                        "effect": "write",
+                        "description": "Write disguised",
+                        "input_schema": {"type": "object", "properties": {}},
+                    },
+                    {
+                        "name": "other",
+                        "action": "list_users",
+                        "effect": "read",
+                        "description": "Real list",
+                        "input_schema": {"type": "object", "properties": {}},
+                    },
+                ],
+            }
+        ],
+    )
+    # Resolve by action only
+    found = _find_cached_tool(cloud_dir, "ihora", "list_users")
+    assert found is not None
+    assert found["effect"] == "read"
+    assert found["action"] == "list_users"
+    # Looking up by name must NOT find the write tool as a read
+    assert _is_managed_read_action(cloud_dir, "ihora", "list_users") is True
+    assert _find_cached_tool(cloud_dir, "ihora", "update_project_member") is not None
+    assert (
+        _is_managed_read_action(cloud_dir, "ihora", "update_project_member") is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_read_managed_tool_skips_confirmation_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.confirmation import ConfirmationGate
+    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.limits import DEFAULT_LIMITS
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.sandbox.runner import SandboxRunner
+
+    from conftest import FakeProjectClient
+
+    class FailGate(ConfirmationGate):
+        async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
+            raise AssertionError("gate must not run for read managed tools")
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
+    _seed_ihora_connectors_cache(cloud_dir)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.test",
+        plugin_data_dir=cloud_dir,
+    )
+    client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
+
+    async def fake_allowed(self: CloudControlPlaneClient) -> set[str]:
+        return {"ihora"}
+
+    async def fake_invoke_remote(self, connector_id, payload, identity):  # type: ignore[no-untyped-def]
+        return {
+            "ok": True,
+            "result": {"action": "list_absences", "absences": []},
+        }
+
+    monkeypatch.setattr(CloudControlPlaneClient, "fetch_allowed_connector_ids", fake_allowed)
+    monkeypatch.setattr(
+        "app.plugins.workproba_cloud.plugin.open_remote_capability_gateway",
+        lambda **kwargs: type("GW", (), {"invoke_remote": fake_invoke_remote})(),
+    )
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugins_root,
+            locale="fr",
+            permissions_network=True,
+            managed_allowed_connector_ids=frozenset({"ihora"}),
+            audit_enabled=True,
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=FailGate(session_id="s1", turn_id="t1"),
+    )
+    agent = build_agent(
+        TestModel(),
+        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
+        plugin_data_dir=plugins_root,
+    )
+    tool = agent._function_toolset.tools["managed__ihora__list_absences"]
+    ctx = RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id="tc-read-skip-gate",
+    )
+
+    result = await tool.function(
+        ctx,
+        **{"from": "2026-01-01", "to": "2026-01-31", "email": "user@example.com"},
+    )
+    assert result["ok"] is True
+
+
+@pytest.mark.asyncio
+async def test_write_managed_tool_calls_confirmation_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.confirmation import ConfirmationGate
+    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.limits import DEFAULT_LIMITS
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.sandbox.runner import SandboxRunner
+
+    from conftest import FakeProjectClient
+
+    gate_called = {"value": False}
+
+    class CaptureGate(ConfirmationGate):
+        async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
+            gate_called["value"] = True
+            return "approved"
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
+    _seed_ihora_connectors_cache(cloud_dir)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.test",
+        plugin_data_dir=cloud_dir,
+    )
+    client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
+
+    async def fake_allowed(self: CloudControlPlaneClient) -> set[str]:
+        return {"ihora"}
+
+    async def fake_invoke_remote(self, connector_id, payload, identity):  # type: ignore[no-untyped-def]
+        return {"ok": True, "result": {"action": "create_timesheet"}}
+
+    monkeypatch.setattr(CloudControlPlaneClient, "fetch_allowed_connector_ids", fake_allowed)
+    monkeypatch.setattr(
+        "app.plugins.workproba_cloud.plugin.open_remote_capability_gateway",
+        lambda **kwargs: type("GW", (), {"invoke_remote": fake_invoke_remote})(),
+    )
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugins_root,
+            locale="fr",
+            permissions_network=True,
+            managed_allowed_connector_ids=frozenset({"ihora"}),
+            ui_mode="agent",
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=CaptureGate(session_id="s1", turn_id="t1"),
+    )
+    agent = build_agent(
+        TestModel(),
+        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
+        plugin_data_dir=plugins_root,
+        ui_mode="agent",
+    )
+    tool = agent._function_toolset.tools["managed__ihora__create_timesheet"]
+    ctx = RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id="tc-write-gate",
+    )
+
+    await tool.function(
+        ctx,
+        date="2026-07-03",
+        hours=8,
+        employeeId=1,
+    )
+    assert gate_called["value"] is True
+
+
+@pytest.mark.asyncio
+async def test_invoke_generic_unknown_action_calls_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.confirmation import ConfirmationGate
+    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.limits import DEFAULT_LIMITS
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.sandbox.runner import SandboxRunner
+
+    from conftest import FakeProjectClient
+
+    gate_called = {"value": False}
+
+    class CaptureGate(ConfirmationGate):
+        async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
+            gate_called["value"] = True
+            return "approved"
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
+    _seed_ihora_connectors_cache(cloud_dir)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.test",
+        plugin_data_dir=cloud_dir,
+    )
+    client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
+
+    async def fake_allowed(self: CloudControlPlaneClient) -> set[str]:
+        return {"ihora"}
+
+    async def fake_invoke_remote(self, connector_id, payload, identity):  # type: ignore[no-untyped-def]
+        return {"ok": True, "result": {"action": "unknown_action"}}
+
+    monkeypatch.setattr(CloudControlPlaneClient, "fetch_allowed_connector_ids", fake_allowed)
+    monkeypatch.setattr(
+        "app.plugins.workproba_cloud.plugin.open_remote_capability_gateway",
+        lambda **kwargs: type("GW", (), {"invoke_remote": fake_invoke_remote})(),
+    )
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugins_root,
+            locale="fr",
+            permissions_network=True,
+            managed_allowed_connector_ids=frozenset({"ihora"}),
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=CaptureGate(session_id="s1", turn_id="t1"),
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_WORKPROBA_CLOUD])
+    tool = agent._function_toolset.tools["invoke_managed_connector"]
+    ctx = RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id="tc-unknown-gate",
+    )
+
+    await tool.function(
+        ctx,
+        connector_id="ihora",
+        payload_json='{"action":"unknown_action"}',
+    )
+    assert gate_called["value"] is True

@@ -148,11 +148,11 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, builtin plugins (Regards métier), attachments, document preview, audit, Human Approval Gate, Work Event Bus |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
-| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`): desktop login (`POST /devices/login`), join via `join_token` (or existing bearer), first-run onboarding (`EngineOnboardingWizard`), managed capabilities under **Workproba Cloud** (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org), relay via `invoke_managed_connector`, CloudPanel, sync published artefacts, Capabilities hub hierarchy (21/07) |
+| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`): desktop login (`POST /devices/login` → `desktop-bearer` → durable `wp_dev_*`), join via `join_token`, first-run onboarding (`EngineOnboardingWizard`), managed capabilities under **Workproba Cloud** (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org, **15 tools** incl. `list_users`), dedicated agent tools + `invoke_managed_connector`, **per-space** `capabilities.json`, CloudPanel, sync published artefacts, Capabilities hub hierarchy (21/07), PPTX visual pipeline (HTML + Chromium fallback) |
 
 ### Phase D: validation
 
-- **Sidecar (Python)**: streaming chat, fixed file/Office tools, RAG, scoped memory, builtin plugins, work events, effect gate. pytest: **634 tests** (see [testing.md](./testing.md)).
+- **Sidecar (Python)**: streaming chat, fixed file/Office tools, RAG, scoped memory, builtin plugins, managed connectors, per-space capabilities, work events, effect gate. pytest: **~900+ tests** collected (see [testing.md](./testing.md)).
 - **Rust shell**: venv-aware sidecar spawn + `ai_sidecar_status` + `protocol-asset` for image preview. `cargo check` OK.
 - **Front**: `WorkprobaLayout` (sidebar, right panel, side chat, Capabilities drawer), `useSidecarHealth`, Regards chip in composer (**V2.2 PR 3**).
 - **End-to-end desktop run**: `make dev`, open a space, test chat, memory, personas, document preview, confirmation on file write.
@@ -161,16 +161,18 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 
 ### Product (phase F)
 
-**Livré (MVP Mode A, 20/07/2026)** :
+**Livré (MVP Mode A, 20–23/07/2026)** :
 
-- Desktop cloud login (`CloudLoginModal` → `POST /devices/login` → sidecar exchange → DeviceBearer `wp_dev_*`)
+- Desktop cloud login (`CloudLoginModal` → `POST /devices/login` → sidecar exchange → DeviceBearer `wp_dev_*` durable after sleep/wake)
 - First-run onboarding (`EngineOnboardingWizard`: engine choice, cloud login/register, Mistral key, manual OpenAI-compat)
 - Join device (`POST /devices/join` via `join_token`; `device_code` → `join_token_required`; pasting an existing bearer still works)
-- Capacités managées (API `connectors`) : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel, allowlist org) via `GET /connectors`, `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client
-- Desktop : `RemoteCapabilityGateway`, outil agent `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`
+- Capacités managées (API `connectors`) : `echo`, `ihora.shaped` (stub), `ihora` (HTTP réel, **15 tools** dont `list_users`, allowlist org) via `GET /connectors` (`catalogVersion`), `POST /connectors/:id/invoke` ; invoke sans `subject_id` / `org_id` côté client
+- Desktop : `RemoteCapabilityGateway`, outils agent dédiés `managed_*` + `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`, freeze allowlist par tour
 - **Hub Capacités (21/07)** : **Workproba Cloud** en premier ; zone **Sous-capacités** dépliante (Gestion de projet + managées type Ihora, cartes compactes) ; stubs masqués en guidé
-- CloudPanel (join, capacités managées, regards, projets), sync artefacts publiés, org LLM (DeviceBearer)
-- Secrets org connecteurs : persistés PostgreSQL + AES-GCM ; UI admin org allowlist/secrets
+- **Capacités par espace (22/07)** : `capabilities.json`, `SpaceCapabilitiesPanel`, `GET`/`PUT /workspace/capabilities`
+- CloudPanel (join, capacités managées, regards, projets), sync artefacts publiés, org LLM (DeviceBearer) ; quota illimité sans ligne `llm_quota_limit`
+- Secrets org + overrides user connecteurs : persistés PostgreSQL (+ AES-GCM pour secrets) ; UI admin org allowlist/secrets/overrides
+- PPTX : builder natif éditable + pipeline HTML/Chromium (`pptx_svg`) avec repli
 
 **Ouvert** : SSO Microsoft, Mode B deploy, smoke E2E HTTP, presets connecteurs complets.
 
@@ -191,7 +193,8 @@ Monorepo `workproba-cloud/` (NestJS + Quasar admin). Plugin desktop `workproba.c
 - **V1→V2 storage migration** (T-V2-15b): legacy `.workproba/` under client folders not yet migrated to canonical `app_data/spaces/`.
 - **Durable (Temporal/Inngest)**: deferred. Current agent loop is synchronous (one SSE turn). No long workflow resume/persistence on crash.
 - **Configurable approval policy**: effect gate is always on for mapped sensitive tools; a global "auto-approve" setting is not implemented yet.
-- **Office preview before write**: `POST /documents/preview-change` builds proposed Office bytes (docx/xlsx/pdf/pptx) and shows HTML preview before approval. Pixel-perfect binary diff is not available (T-V2-14 partially addressed).
+- **Office preview before write**: `POST /documents/preview-change` builds proposed Office bytes (docx/xlsx/pdf/pptx) and shows HTML preview before approval (PPTX uses the HTML slides pipeline when available). Pixel-perfect binary diff is not available (T-V2-14 partially addressed).
+- **Per-space capabilities**: see [capacites.md](./capacites.md) and [architecture.md](./architecture.md#per-space-capabilities-profile).
 
 ### Quality / integration
 

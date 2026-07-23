@@ -114,10 +114,49 @@ def get_device_id(plugin_data_dir: Path) -> str | None:
     return None
 
 
+def save_current_user_identity(
+    plugin_data_dir: Path,
+    *,
+    username: str,
+    email: str | None = None,
+    display_name: str | None = None,
+    ihora_user_id: str | None = None,
+) -> dict[str, Any]:
+    """Persiste l'identité cloud de l'utilisateur connecté (login username/email)."""
+    cleaned_username = username.strip()
+    if not cleaned_username:
+        return {}
+    identity: dict[str, Any] = {"username": cleaned_username}
+    resolved_email = (email or "").strip() or (
+        cleaned_username if "@" in cleaned_username else ""
+    )
+    if resolved_email:
+        identity["email"] = resolved_email
+    cleaned_display = (display_name or "").strip()
+    if cleaned_display:
+        identity["display_name"] = cleaned_display
+    cleaned_ihora_id = (ihora_user_id or "").strip()
+    if cleaned_ihora_id:
+        identity["ihora_user_id"] = cleaned_ihora_id
+    save_config(plugin_data_dir, {"current_user_identity": identity})
+    return identity
+
+
+def get_current_user_identity(plugin_data_dir: Path) -> dict[str, Any] | None:
+    raw = load_config(plugin_data_dir).get("current_user_identity")
+    if not isinstance(raw, dict):
+        return None
+    username = raw.get("username")
+    if not isinstance(username, str) or not username.strip():
+        return None
+    return raw
+
+
 def clear_enrollment(plugin_data_dir: Path) -> None:
     """Supprime jetons et identifiants cloud (déconnexion locale)."""
     config = load_config(plugin_data_dir)
     config.pop("tokens", None)
+    config.pop("current_user_identity", None)
     plugin_data_dir.mkdir(parents=True, exist_ok=True)
     with _config_path(plugin_data_dir).open("w", encoding="utf-8") as handle:
         json.dump(config, handle, ensure_ascii=False, indent=2)
@@ -166,6 +205,14 @@ def _normalize_managed_tool_entry(entry: Any) -> dict[str, Any] | None:
     return normalized
 
 
+def get_known_managed_connectors_catalog_version(plugin_data_dir: Path) -> str | None:
+    """Version du catalogue connecteurs associée au cache disque."""
+    raw = load_config(plugin_data_dir).get("known_managed_connectors_catalog_version")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    return None
+
+
 def get_known_managed_connectors(plugin_data_dir: Path) -> list[dict[str, Any]]:
     """Derniers connecteurs org connus (cache disque pour le prompt agent)."""
     raw = load_config(plugin_data_dir).get("known_managed_connectors")
@@ -197,6 +244,8 @@ def get_known_managed_connectors(plugin_data_dir: Path) -> list[dict[str, Any]]:
 def save_known_managed_connectors(
     plugin_data_dir: Path,
     connectors: list[dict[str, Any]],
+    *,
+    catalog_version: str | None = None,
 ) -> None:
     """Met à jour le cache disque id/name/tools des connecteurs managés."""
     normalized: list[dict[str, Any]] = []
@@ -224,7 +273,12 @@ def save_known_managed_connectors(
                     tools.append(normalized_tool)
             connector["tools"] = tools
         normalized.append(connector)
-    save_config(plugin_data_dir, {"known_managed_connectors": normalized})
+    config_update: dict[str, Any] = {"known_managed_connectors": normalized}
+    if catalog_version is not None:
+        cleaned_version = catalog_version.strip()
+        if cleaned_version:
+            config_update["known_managed_connectors_catalog_version"] = cleaned_version
+    save_config(plugin_data_dir, config_update)
 
 
 def set_managed_connector_enabled(
@@ -258,6 +312,13 @@ def status(plugin_data_dir: Path) -> dict[str, Any]:
         mount = Path(mount_path).expanduser()
         if mount.is_dir():
             synced_count = sum(1 for _ in mount.rglob("*") if _.is_file())
+    identity = get_current_user_identity(plugin_data_dir)
+    current_user_email: str | None = None
+    if identity is not None:
+        email_raw = identity.get("email") or identity.get("username")
+        if isinstance(email_raw, str) and email_raw.strip():
+            current_user_email = email_raw.strip()
+
     return {
         "configured": mount_path is not None,
         "mount_path": mount_path,
@@ -269,6 +330,7 @@ def status(plugin_data_dir: Path) -> dict[str, Any]:
         "org_id": get_org_id(plugin_data_dir),
         "org_label": get_org_label(plugin_data_dir),
         "device_id": get_device_id(plugin_data_dir),
+        "current_user_email": current_user_email,
     }
 
 

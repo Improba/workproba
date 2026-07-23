@@ -16,6 +16,142 @@ function baseConfirmation(overrides: Partial<ChatConfirmation> = {}): ChatConfir
 }
 
 describe('ConfirmationCard', () => {
+  it('affiche le summary enrichi avec utilisateur résolu', () => {
+    const wrapper = mount(ConfirmationCard, {
+      props: {
+        confirmation: baseConfirmation({
+          toolName: 'managed__ihora__update_project_member',
+          effect: 'external_send',
+          headline: 'Action externe : ihora',
+          humanSummary:
+            'Je vais mettre à jour le membre Sylvain Meylan (sylvain.meylan@improba.ch, userId 7) sur ihora',
+          proposedPath: '',
+        }),
+        toolArgs: {
+          connector_id: 'ihora',
+          action: 'update_project_member',
+          projectId: 42,
+          email: 'sylvain.meylan@improba.ch',
+          role: 'manager',
+        },
+      },
+      global: {
+        stubs: {
+          PreviewChangeDialog: true,
+          Lucide: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.confirmation-card__headline').text()).toContain('Sylvain Meylan');
+    expect(wrapper.find('.confirmation-card__headline').text()).toContain('userId 7');
+    const args = wrapper.find('[data-testid="confirmation-args"]');
+    expect(args.text()).not.toContain('sylvain.meylan@improba.ch');
+    expect(args.text()).toContain('projectId');
+    expect(args.text()).toContain('42');
+    wrapper.unmount();
+  });
+
+  it('masque userId et email bruts quand le summary affiche déjà la résolution', () => {
+    const wrapper = mount(ConfirmationCard, {
+      props: {
+        confirmation: baseConfirmation({
+          toolName: 'managed__ihora__update_project_member',
+          effect: 'external_send',
+          headline: 'Action externe : ihora',
+          humanSummary:
+            'Je vais mettre à jour le membre Sylvain Meylan (sylvain.meylan@improba.ch, userId 7) sur ihora',
+          proposedPath: '',
+        }),
+        toolArgs: {
+          connector_id: 'ihora',
+          action: 'update_project_member',
+          projectId: 42,
+          userId: 1,
+          email: 'sylvain.meylan@improba.ch',
+          role: 'manager',
+        },
+      },
+      global: {
+        stubs: {
+          PreviewChangeDialog: true,
+          Lucide: true,
+        },
+      },
+    });
+
+    const args = wrapper.find('[data-testid="confirmation-args"]');
+    expect(args.text()).toContain('projectId');
+    expect(args.text()).toContain('role');
+    expect(args.text()).not.toMatch(/\buserId\b/);
+    expect(args.text()).not.toContain('sylvain.meylan@improba.ch');
+    wrapper.unmount();
+  });
+
+  it('priorise humanSummary pour external_send avec headline vague', () => {
+    const wrapper = mount(ConfirmationCard, {
+      props: {
+        confirmation: baseConfirmation({
+          toolName: 'invoke_managed_connector',
+          effect: 'external_send',
+          headline: 'Action externe : ihora',
+          humanSummary: 'Je vais appeler update project member sur ihora',
+          proposedPath: '',
+          protectionLabels: ['Confirmation requise'],
+        }),
+        toolArgs: {
+          connector_id: 'ihora',
+          action: 'update_project_member',
+          projectId: 42,
+          userId: 'sylvain.meylan',
+          role: 'manager',
+        },
+      },
+      global: {
+        stubs: {
+          PreviewChangeDialog: true,
+          Lucide: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.confirmation-card__headline').text()).toContain('update project member');
+    expect(wrapper.find('.confirmation-card__secondary').exists()).toBe(false);
+    const args = wrapper.find('[data-testid="confirmation-args"]');
+    expect(args.exists()).toBe(true);
+    expect(args.text()).toContain('projectId');
+    expect(args.text()).toContain('42');
+    expect(args.text()).toContain('userId');
+    expect(args.text()).toContain('sylvain.meylan');
+    expect(args.text()).not.toContain('connector_id');
+    expect(wrapper.findAll('[data-testid="confirmation-protections"] li')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
+  it('affiche une cible secondaire quand headline apporte une cible absente du summary', () => {
+    const wrapper = mount(ConfirmationCard, {
+      props: {
+        confirmation: baseConfirmation({
+          toolName: 'invoke_managed_connector',
+          effect: 'external_send',
+          headline: 'Action externe : salesforce',
+          humanSummary: 'Je vais appeler update project member',
+          proposedPath: '',
+        }),
+      },
+      global: {
+        stubs: {
+          PreviewChangeDialog: true,
+          Lucide: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.confirmation-card__headline').text()).toContain('update project member');
+    expect(wrapper.find('.confirmation-card__secondary').text()).toBe('Cible : salesforce');
+    wrapper.unmount();
+  });
+
   it('affiche le rendu orienté effet quand headline est présent', () => {
     const wrapper = mount(ConfirmationCard, {
       props: {

@@ -25,11 +25,11 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 
 ## Technical architecture
 
-- **[architecture.md](./architecture.md)**: Overview, stack, UI shell, Office writers (PPTX), chat, LLM models, human approval gate, work events, Improba Cloud desktop auth UX
+- **[architecture.md](./architecture.md)**: Overview, stack, UI shell, Office writers (PPTX + HTML/Chromium visual path), **per-space capabilities**, managed tools, chat, LLM models, human approval gate, work events, Improba Cloud desktop auth UX
 - **[provider-sets-reasoning.md](./provider-sets-reasoning.md)**: Provider set catalog, reasoning effort clamping (Mistral none/high), front/back alignment, cloud login vs device enroll
 - **[stack.md](./stack.md)**: Component versions, ports, environment variables, dev commands
-- **[workspace-storage.md](./workspace-storage.md)**: Per-space storage and global user data (Space UX, `{app_data}/spaces/`, migration from legacy `workspaces/`)
-- **[capacites.md](./capacites.md)**: Activatable capabilities hub (guided mode, FR/EN UI)
+- **[workspace-storage.md](./workspace-storage.md)**: Per-space storage and global user data (Space UX, `{app_data}/spaces/`, `capabilities.json`, migration from legacy `workspaces/`)
+- **[capacites.md](./capacites.md)**: Activatable capabilities hub + **per-space profile** (guided mode, FR/EN UI)
 - **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, hybrid ranking, embedding cache, promotion, cross-session recall
 - **[plugins.md](./plugins.md)**: Plugin system, capabilities, Regards métier — honest implementation status
 - **[browser.md](./browser.md)**: Browser plugin (Playwright, agent tools, live view, security)
@@ -48,7 +48,9 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 ## Desktop onboarding & cloud auth
 
 - **[architecture.md § Improba Cloud desktop auth UX](./architecture.md#improba-cloud-desktop-auth-ux)**: `EngineOnboardingWizard`, `CloudLoginModal`, `EnrollCloudModal`, `cloudWebUrls`
-- **[architecture.md § Office writers](./architecture.md#office-writers)**: `write_pptx`, layouts, themes, `MAX_PPTX_SLIDES`
+- **[architecture.md § Office writers](./architecture.md#office-writers)**: `write_pptx`, layouts, themes, `MAX_PPTX_SLIDES`, HTML/Chromium visual path
+- **[architecture.md § Per-space capabilities](./architecture.md#per-space-capabilities-profile)**: `capabilities.json`, turn freeze, managed tools
+- **[capacites.md](./capacites.md)**: hub + space profile (product view)
 
 ## Tests
 

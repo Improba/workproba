@@ -214,7 +214,11 @@ async function onSubmit(): Promise<void> {
       password: passwordDraft.value,
     });
 
-    const ok = await enroll({ baseUrl, bearerToken: token });
+    const ok = await enroll({
+      baseUrl,
+      bearerToken: token,
+      username,
+    });
     if (!ok) {
       Notify.create({
         message: displayError.value || t('cloud.loginFailed'),

@@ -51,7 +51,6 @@
               @plan-reject="emit('plan-reject')"
               @personas-another="(card) => emit('personas-another', card)"
               @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
-              @edit="(id, text) => emit('edit', id, text)"
               @regenerate="(id) => emit('regenerate', id)"
             />
           </DynamicScrollerItem>
@@ -146,7 +145,6 @@ const emit = defineEmits<{
   'plan-reject': [];
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
-  edit: [messageId: string, newText: string];
   regenerate: [messageId: string];
 }>();
 

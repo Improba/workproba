@@ -110,6 +110,7 @@ describe('CloudLoginModal', () => {
     expect(mockEnroll).toHaveBeenCalledWith({
       baseUrl: 'https://cloud.preset.test',
       bearerToken: 'jwt-user',
+      username: 'alice@org.test',
     });
     expect(mockRefreshStatus).toHaveBeenCalled();
     expect(mockRefreshQuota).toHaveBeenCalled();

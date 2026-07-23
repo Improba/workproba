@@ -80,6 +80,9 @@ class ToolContext:
     ui_mode: str = "agent"
     # Snapshot allowlist du tour (après refresh cache) ; None = fetch à l'invoke.
     managed_allowed_connector_ids: frozenset[str] | None = None
+    current_user_email: str | None = None
+    current_user_display_name: str | None = None
+    current_user_ihora_id: str | None = None
 
 
 @dataclass

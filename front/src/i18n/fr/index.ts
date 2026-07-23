@@ -334,7 +334,7 @@ export default {
     addMenuPersonas: 'Regards',
     stop: 'Arrêter',
     send: 'Envoyer',
-    composerHint: 'Entrée = saut de ligne · Ctrl+Entrée pour envoyer',
+    composerHint: 'Entrée pour envoyer · Ctrl+Entrée = saut de ligne',
     composerReading: 'Lecture…',
     modelControlSep: '·',
     modelControlModel: 'Modèle',
@@ -376,6 +376,7 @@ export default {
     confirmationModify: 'modifier',
     confirmationCreate: 'créer',
     confirmationSummary: 'Je vais {verb} {file}',
+    confirmationTarget: 'Cible : {target}',
     plan: {
       proposed: 'Plan proposé',
       updated: 'Plan mis à jour',

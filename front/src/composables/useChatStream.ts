@@ -1281,14 +1281,6 @@ export function useChatStream(
         options.onBrowserToolCall?.(toolName, event.data.result);
       }
     }
-    if (event.type === 'error') {
-      const softGate =
-        event.data.code === 'confirmation_timeout' ||
-        event.data.code === 'plan_timeout';
-      if (!softGate) {
-        error.value = buildStreamChatError(event.data, correlationContext());
-      }
-    }
     if (event.type === 'done') {
       lastUsage.value = {
         inputTokens: parseOptionalInt(event.data.input_tokens),
@@ -1644,26 +1636,28 @@ export function useChatStream(
           },
           correlationContext(),
         );
-        error.value = chatError;
         const assistant = messages.value.find(
           (m) => m.id === assistantMessage.id,
         );
         if (assistant) {
           assistant.streaming = false;
           assistant.error = chatError;
+        } else {
+          error.value = chatError;
         }
       } else if (name === 'AbortError') {
         // Abort utilisateur (stop / navigation) : silencieux, le finally normalise.
         // On conserve le contenu partiel déjà streamé, sans marquer d'erreur.
       } else if (err instanceof SidecarHttpError) {
         const chatError = chatErrorFromSidecarHttp(err, correlationContext());
-        error.value = chatError;
         const assistant = messages.value.find(
           (m) => m.id === assistantMessage.id,
         );
         if (assistant) {
           assistant.streaming = false;
           assistant.error = chatError;
+        } else {
+          error.value = chatError;
         }
       } else {
         const detail = err instanceof Error ? err.message : '';
@@ -1677,13 +1671,14 @@ export function useChatStream(
           },
           correlationContext(),
         );
-        error.value = chatError;
         const assistant = messages.value.find(
           (m) => m.id === assistantMessage.id,
         );
         if (assistant) {
           assistant.streaming = false;
           assistant.error = chatError;
+        } else {
+          error.value = chatError;
         }
       }
     } finally {

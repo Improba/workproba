@@ -262,6 +262,7 @@ export function useCloud(): UseCloudReturn {
     baseUrl: string;
     bearerToken?: string;
     joinToken?: string;
+    username?: string;
   }): Promise<boolean> {
     if (!pluginDataDir || !opts.baseUrl.trim()) return false;
     const hasJoin = Boolean(opts.joinToken?.trim());
@@ -273,6 +274,7 @@ export function useCloud(): UseCloudReturn {
       baseUrl: opts.baseUrl.trim(),
       bearerToken: opts.bearerToken?.trim(),
       joinToken: opts.joinToken?.trim(),
+      username: opts.username?.trim(),
     });
     if (!result.ok) {
       loadError.value = result.error;

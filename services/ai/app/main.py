@@ -2735,6 +2735,7 @@ class CloudStatusResponse(BaseModel):
     org_id: str | None = None
     org_label: str | None = None
     device_id: str | None = None
+    current_user_email: str | None = None
 
 
 class CloudConfigRequest(BaseModel):
@@ -2779,6 +2780,7 @@ class CloudEnrollRequest(BaseModel):
     join_token: str | None = None
     org_id: str | None = None
     device_name: str | None = None
+    username: str | None = None
     locale: str = "fr"
 
 
@@ -3478,6 +3480,11 @@ async def cloud_enroll_endpoint(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=502, detail="control_plane_unreachable") from exc
+    if payload.username and payload.username.strip():
+        cloud_storage.save_current_user_identity(
+            cloud_dir,
+            username=payload.username.strip(),
+        )
     _ = locale
     return CloudEnrollResponse(
         authenticated=bool(result.get("authenticated")),

@@ -159,6 +159,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "will": "Je vais appeler {tool_label} sur {connector_id}",
                 "cannot": "Je n'ai pas pu appeler {tool_label} sur {connector_id}",
                 "done": "J'ai appelé {tool_label} sur {connector_id}",
+                "will_update_member_resolved": (
+                    "Je vais mettre à jour le membre {display_name} "
+                    "({email}, userId {user_id}) sur {connector_id}"
+                ),
             },
         },
         "loop": {
@@ -396,6 +400,31 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "managed_connectors_empty": (
                 "Aucun connecteur managé connu pour cette organisation."
             ),
+            "managed_connectors_ihora_users_hint": (
+                "Ihora : pour résoudre un utilisateur (email/nom → userId numérique), "
+                "appeler list_users avec un fragment (ex. sylvain.meylan), puis utiliser "
+                "le userId renvoyé. update_project_member accepte userId ou email ; "
+                "get_project_team ne liste que les membres déjà sur le projet."
+            ),
+            "cloud_current_user_identity": (
+                "Utilisateur cloud connecté : {display_name} ({email})."
+            ),
+            "cloud_current_user_add_me_hint": (
+                "Si l'utilisateur dit « ajoute-moi » ou équivalent sur un projet Ihora, "
+                "cible {display_name} ({email}) sauf indication contraire explicite."
+            ),
+            "cloud_current_user_identity_username_only": (
+                "Utilisateur cloud connecté : {display_name} (identifiant {username}, "
+                "sans adresse e-mail connue)."
+            ),
+            "cloud_current_user_username_only_hint": (
+                "Pour cibler cet utilisateur sur Ihora, appelez list_users avec un e-mail "
+                "explicite ou demandez-le à l'utilisateur ; l'identifiant de connexion seul "
+                "ne suffit pas."
+            ),
+            "cloud_current_user_ihora_id": (
+                "Identifiant Ihora connu pour cet utilisateur : userId {user_id}."
+            ),
         },
         "plan": {
             "title": "Plan proposé",
@@ -502,6 +531,16 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "connector_payload_invalid": (
                 "Paramètres invalides pour {connector_id} / {action} : {detail}"
             ),
+            "connector_user_resolution_failed": (
+                "Impossible de résoudre l'utilisateur Ihora avant confirmation pour "
+                "{connector_id}. Appelez list_users avec un fragment d'e-mail "
+                "(ex. prenom.nom) ou fournissez un e-mail explicite."
+            ),
+            "connector_user_id_email_conflict": (
+                "Conflit d'identité Ihora : userId {user_id} ne correspond pas à "
+                "{email} (résolu en userId {resolved_user_id}). "
+                "Corrigez les arguments puis réessayez."
+            ),
         },
         "preset": {
             "active": "Preset enterprise actif",
@@ -562,6 +601,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "version_before_modify": "Version automatique avant modification",
                 "no_network": "Aucun accès réseau",
                 "no_external_send": "Aucun envoi externe",
+                "user_unresolved": "Utilisateur non résolu avant confirmation",
             },
         },
         "work": {
@@ -731,6 +771,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "will": "I will call {tool_label} on {connector_id}",
                 "cannot": "I could not call {tool_label} on {connector_id}",
                 "done": "I called {tool_label} on {connector_id}",
+                "will_update_member_resolved": (
+                    "I will update member {display_name} "
+                    "({email}, userId {user_id}) on {connector_id}"
+                ),
             },
         },
         "loop": {
@@ -952,6 +996,30 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "managed_connectors_empty": (
                 "No managed connectors known for this organization."
             ),
+            "managed_connectors_ihora_users_hint": (
+                "Ihora: to resolve a user (email/name → numeric userId), call list_users "
+                "with a fragment (e.g. sylvain.meylan), then use the returned userId. "
+                "update_project_member accepts userId or email; get_project_team only "
+                "lists members already on the project."
+            ),
+            "cloud_current_user_identity": (
+                "Signed-in cloud user: {display_name} ({email})."
+            ),
+            "cloud_current_user_add_me_hint": (
+                "If the user says \"add me\" or similar on an Ihora project, target "
+                "{display_name} ({email}) unless they clearly mean someone else."
+            ),
+            "cloud_current_user_identity_username_only": (
+                "Signed-in cloud user: {display_name} (login {username}, no known email "
+                "address)."
+            ),
+            "cloud_current_user_username_only_hint": (
+                "To target this user on Ihora, call list_users with an explicit email or ask "
+                "the user for it; the login id alone is not enough."
+            ),
+            "cloud_current_user_ihora_id": (
+                "Known Ihora user id for this user: userId {user_id}."
+            ),
         },
         "plan": {
             "title": "Proposed plan",
@@ -1057,6 +1125,16 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "connector_payload_invalid": (
                 "Invalid parameters for {connector_id} / {action}: {detail}"
             ),
+            "connector_user_resolution_failed": (
+                "Could not resolve the Ihora user before confirmation for "
+                "{connector_id}. Call list_users with an email fragment (e.g. first.last) "
+                "or provide an explicit email."
+            ),
+            "connector_user_id_email_conflict": (
+                "Ihora identity conflict: userId {user_id} does not match "
+                "{email} (resolved to userId {resolved_user_id}). "
+                "Fix the arguments and try again."
+            ),
         },
         "preset": {
             "active": "Enterprise preset active",
@@ -1117,6 +1195,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "version_before_modify": "Automatic version before modification",
                 "no_network": "No network access",
                 "no_external_send": "No external send",
+                "user_unresolved": "User not resolved before confirmation",
             },
         },
         "work": {

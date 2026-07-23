@@ -1,13 +1,18 @@
 # Capacités activables
 
-> **Last updated:** 21/07/2026  
-> **Audience:** end users (mode guidé)
+> **Last updated:** 23/07/2026  
+> **Audience:** end users (mode guidé) + product/engineering overview
 
 ## What are capabilities?
 
 **Capabilities** are optional features you can turn on to extend Workproba. They are listed in the **Capabilities** hub (button in the title bar).
 
 You do not need to know about technical plugins or extensions to use them in guided mode.
+
+Activation has **two layers**:
+
+1. **Machine / org** — plugins enabled on this computer; managed connectors allowlisted by the organization (and not locally disabled under Workproba Cloud).
+2. **Per space** — each space stores a `wanted` profile in `{space}/.workproba/capabilities.json`. Space settings let you turn entitled capabilities on or off for that folder only.
 
 ### Local capabilities
 
@@ -22,13 +27,25 @@ You do not need to know about technical plugins or extensions to use them in gui
 | Sub-capability | Role |
 |---|---|
 | **Project management** (`projects`) | Local library + shared projects via Cloud (can open Library) |
-| **Managed** (e.g. **Ihora**) | Org-authorized via allowlist. On this computer: **Activate** / **Disable** only — no panel to open. Settings later. |
+| **Managed** (e.g. **Ihora**) | Org-authorized via allowlist. On this computer: **Activate** / **Disable** only — no panel to open. Per-space wanted toggles in Space settings. |
 
 The Capabilities hub lists **Workproba Cloud first**. Nested items live in a **collapsible** zone (compact cards, scrollable when many). Guided mode hides technical stubs (`echo`, `ihora.shaped`). Managed capabilities do **not** open a surface: they are toggled on/off locally (agent cannot invoke a locally disabled connector).
 
 **Cloud setup:** account login (`POST /devices/login` → User JWT, exchanged by the sidecar into a durable DeviceBearer `wp_dev_*`) and device enroll (`POST /devices/join` → DeviceBearer) both leave a `wp_dev_*` on disk. Both are available from the onboarding wizard and Settings → AI Models.
 
 | **Mount sync** (advanced) | Technical NAS bridge via `ProjectSyncPort` ; deprecated product path, **blocked when enrolled** | Advanced mode only ; not a Capabilities card |
+
+## Per-space profile
+
+| Concept | Detail |
+|---|---|
+| Storage | `{app_data}/spaces/{id}/.workproba/capabilities.json` (`wanted` map, versioned) |
+| UI | Space settings → capabilities panel (`SpaceCapabilitiesPanel`) |
+| Statuses | `active` (wanted + entitled), `available` (entitled but wanted off), `unavailable` (plugin off / cloud missing / not allowlisted) |
+| Defaults | `enableByDefaultInProjects` from local catalog + connector descriptors (Ihora on by default in new project spaces; web navigation off) |
+| Agent turn | Effective set is **frozen once per turn** (`TurnCapabilitiesSnapshot`); mid-turn toggles apply on the next turn |
+
+API: `GET` / `PUT /workspace/capabilities` (sidecar). See [architecture.md § Per-space capabilities](./architecture.md#per-space-capabilities-profile).
 
 ## Projects and sources of truth
 
@@ -41,18 +58,21 @@ The Capabilities hub lists **Workproba Cloud first**. Nested items live in a **c
 
 Solo projects stay **local SoT** (on the machine). Shared projects and **managed capabilities** require cloud enrollment (join org via `join_token` ; DeviceBearer stored locally). Once enrolled, mirror push/pull is refused ; use publish and republish instead.
 
-Managed capabilities use Improba Cloud Mode A. Each org-allowed connector exposes a `tools[]` catalog from the control plane (name, action, description, effect, visibility, input_schema). When a managed capability is **enabled on this computer**, the chat registers one agent tool per entry: `managed_{connector_id}_{tool_name}` (connector dots become underscores). The generic `invoke_managed_connector` remains a fallback. Validation of `action` and payload is **authoritative on the cloud** at invoke time. Human Approval Gate: `external_send`. The desktop does not send `device_id`, `subject_id` or `org_id` in the invoke body. Guided mode hides tools with `visibility: advanced`. Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
+Managed capabilities use Improba Cloud Mode A. Each org-allowed connector exposes a `tools[]` catalog from the control plane (`name`, `action`, `description`, `effect`, `visibility`, `input_schema`, plus connector-level `enableByDefaultInProjects` / `requiresSecrets`). `GET /connectors` also returns `catalogVersion`. When a managed capability is **enabled on this computer** and **wanted in the current space**, the chat registers one agent tool per entry: `managed_{connector_id}_{tool_name}` (connector dots become underscores). The generic `invoke_managed_connector` remains a fallback. Validation of `action` and payload is **authoritative on the cloud** at invoke time. Human Approval Gate: `external_send` (dedicated confirmation layout with human summary and args). The desktop does not send `device_id`, `subject_id` or `org_id` in the invoke body. Guided mode hides tools with `visibility: advanced`. Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
+
+**Ihora (example):** 15 tools including `list_users` (resolve email/name → numeric userId) before `create_project` / `update_project_member` (userId or email). The agent prompt includes the signed-in cloud user identity for « add me » flows.
 
 ## How to activate
 
 1. Click **Capabilities** in the title bar.
 2. **Workproba Cloud** appears first. Enable / configure it to enroll your organization.
 3. Open **Sub-capabilities** (collapsible) under Cloud: **Project management** (opens Library), then any org-managed items (e.g. **Ihora**). For Ihora-like items: **Activate** or **Disable** only — no Open.
-4. Other top-level cards: Regards métier, Navigation web.
+4. Open **Space settings** for the current folder and adjust per-space wanted toggles when needed.
+5. Other top-level cards: Regards métier, Navigation web.
 
 Managed items remain listed when the org allowlists them; local disable blocks agent invoke on this workstation. Disabling Workproba Cloud also turns off nested Project management (parent cascade).
 
-The agent system prompt reflects each managed connector's local enabled or disabled state. `invoke_managed_connector` refuses locally disabled connectors before human confirmation.
+The agent system prompt reflects each managed connector's local enabled or disabled state and the space profile. `invoke_managed_connector` and dedicated managed tools refuse connectors outside the turn's frozen allowlist before human confirmation.
 
 ## What is not a capability?
 

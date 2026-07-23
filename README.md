@@ -17,10 +17,10 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 - **Agent chat**: SSE streaming, model and reasoning per conversation, attachments, composite "+" menu
 - **Human approval**: effect-oriented confirmation before file writes, publishing, network access, or code execution
 - **Scoped memory**: global user memories + project memories, local RAG, agent `remember` tool
-- **Activatable capabilities**: **Workproba Cloud** first (collapsible sub-capabilities: **Project management**, managed services such as **Ihora**), Regards métier, web navigation. Technical API: `echo` / `ihora.shaped` / `ihora` via Improba Cloud Mode A. Integrated plugins; not a third-party extension marketplace in V2.
+- **Activatable capabilities**: **Workproba Cloud** first (collapsible sub-capabilities: **Project management**, managed services such as **Ihora**), Regards métier, web navigation. **Per-space** wanted profile (`capabilities.json`). Technical API: `echo` / `ihora.shaped` / `ihora` via Improba Cloud Mode A (dedicated `managed_*` agent tools). Integrated plugins; not a third-party extension marketplace in V2.
 - **Personas / Regards métier**: professional perspectives, simulated meetings, discussions (Improba builtin set)
-- **Spaces**: sidebar, right panel (files, preview, active capabilities), side chat for Regards
-- **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write; native PPTX generation (`write_pptx`)
+- **Spaces**: sidebar, right panel (files, preview, active capabilities), side chat for Regards, space settings for capabilities
+- **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write; native PPTX generation (`write_pptx`) with optional HTML/Chromium visual pipeline
 - **Branding**: `WorkprobaBrand` mark and logo assets in the shell
 - **Improba Cloud desktop auth**: first-run onboarding (`EngineOnboardingWizard`), cloud login (`POST /devices/login` → exchange to durable DeviceBearer `wp_dev_*`), device enroll (`join_token` → DeviceBearer)
 

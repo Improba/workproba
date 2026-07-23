@@ -83,13 +83,13 @@ const shortcuts = computed<ShortcutItem[]>(() => [
     description: t('shell.keyboardFilterFiles'),
   },
   {
-    keys: 'ctrl-enter',
-    keyParts: ['Ctrl', t('shell.keyboardKeyEnter')],
+    keys: 'enter',
+    keyParts: [t('shell.keyboardKeyEnter')],
     description: t('shell.keyboardSendMessage'),
   },
   {
-    keys: 'enter',
-    keyParts: [t('shell.keyboardKeyEnter')],
+    keys: 'ctrl-enter',
+    keyParts: ['Ctrl', t('shell.keyboardKeyEnter')],
     description: t('shell.keyboardNewline'),
   },
   {

@@ -25,7 +25,7 @@
         </div>
       </div>
       <div class="chat-page__header-actions">
-        <div v-if="streamError" class="chat-page__error" role="alert">
+        <div v-if="showStreamErrorBanner" class="chat-page__error" role="alert">
           <Lucide name="alert-circle" size="sm" color="danger" />
           <span class="chat-page__error-msg">{{ streamError.message }}</span>
           <button
@@ -110,7 +110,6 @@
         @personas-discuss="openDiscussionView"
         @personas-another="(card) => openOpinionPicker(card.question)"
         @personas-to-discussion="openDiscussionFromOpinion"
-        @edit="(id, text) => editAndResend(id, text)"
         @regenerate="(id) => regenerateFrom(id)"
       />
     </section>
@@ -295,7 +294,6 @@ const {
   confirm,
   approvePlan,
   retry,
-  editAndResend,
   regenerateFrom,
   abort,
   loadMessages,
@@ -316,6 +314,19 @@ const {
   },
   browserPilotagePaused: pilotagePaused,
 });
+
+const lastAssistantHasError = computed(() => {
+  for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+    if (messages.value[i].role === 'assistant') {
+      return Boolean(messages.value[i].error);
+    }
+  }
+  return false;
+});
+
+const showStreamErrorBanner = computed(
+  () => Boolean(streamError.value) && !lastAssistantHasError.value,
+);
 
 const streamErrorReconnectCta = computed<'login' | 'enroll' | null>(() => {
   const code = streamError.value?.code;
