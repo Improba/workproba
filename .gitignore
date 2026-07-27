@@ -65,6 +65,9 @@ api/.vitest-cache
 api/.jest-cache
 api/coverage/
 
+# Env backups (e.g. .env.bak.20260720100326)
+.env.bak*
+
 # Improba specific files
 .knowledge-base
 AGENTS.md
