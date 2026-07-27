@@ -399,7 +399,13 @@ async def agent_confirm(request: Request, payload: AgentConfirmRequest) -> dict[
     if not resolved:
         raise HTTPException(
             status_code=404,
-            detail=t(normalize_locale(payload.locale), "main.confirmation_not_found"),
+            detail={
+                "code": "confirmation_not_found",
+                "message": t(
+                    normalize_locale(payload.locale),
+                    "main.confirmation_not_found",
+                ),
+            },
         )
     return {"ok": True}
 

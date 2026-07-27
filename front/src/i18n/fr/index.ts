@@ -713,6 +713,8 @@ export default {
     sidecarUnreachableDetail: ' ({detail})',
     confirmFailed: 'Impossible d\'envoyer votre choix{detail}. Réessayez.',
     confirmFailedDetail: ' ({detail})',
+    confirmationNotFound: 'Confirmation introuvable ou expirée.',
+    streamEndedGate: 'La génération s\'est terminée avant validation.',
     agentMaxIterations: 'L\'agent a atteint sa limite d\'itérations sans réponse finale. Reformulez ou réessayez.',
     agentModelError: 'Le modèle a renvoyé une réponse inattendue. Réessayez.',
     agentTurnTimeout: 'Le tour a dépassé le délai imparti. Réessayez.',

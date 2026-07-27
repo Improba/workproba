@@ -594,6 +594,10 @@ function localizeAgentError(code: string, fallback: string): string {
       return t('errors.agentTurnTimeout');
     case 'confirmation_timeout':
       return t('errors.agentConfirmationTimeout');
+    case 'confirmation_not_found':
+      return t('errors.confirmationNotFound');
+    case 'stream_ended':
+      return t('errors.streamEndedGate');
     case 'idle_timeout':
       return t('errors.idleTimeout');
     case 'plan_timeout':
@@ -654,6 +658,7 @@ const NON_RETRYABLE_AGENT_CODES = new Set([
   'invalid_device_token',
   'device_organization_required',
   'org_id_required',
+  'confirmation_not_found',
 ]);
 
 function isChatErrorRetryable(code: string): boolean {
@@ -696,6 +701,20 @@ function withChatCorrelation(
     workId: err.workId ?? ctx?.workId ?? null,
     sessionId: err.sessionId ?? ctx?.sessionId ?? null,
   };
+}
+
+function isConfirmationNotFoundError(err: unknown): boolean {
+  if (!(err instanceof SidecarHttpError)) return false;
+  if (err.status === 404) return true;
+  if (err.code === 'confirmation_not_found') return true;
+  const normalized = err.message.toLowerCase();
+  return (
+    normalized.includes('confirmation') &&
+    (normalized.includes('introuvable') ||
+      normalized.includes('not found') ||
+      normalized.includes('expired') ||
+      normalized.includes('expir'))
+  );
 }
 
 function chatErrorFromSidecarHttp(
@@ -864,6 +883,7 @@ export function applyStreamEvent(
         connectorId: event.data.connectorId || undefined,
         action: event.data.action || undefined,
       };
+      onConfirmationRequest?.();
       break;
     }
     case 'confirmation_request': {
@@ -1758,8 +1778,15 @@ export function useChatStream(
           error.value = chatError;
         }
       } else if (name === 'AbortError') {
-        // Abort utilisateur (stop / navigation) : silencieux, le finally normalise.
-        // On conserve le contenu partiel déjà streamé, sans marquer d'erreur.
+        // Abort utilisateur (stop / navigation) ou gate morte (confirm 404) :
+        // silencieux. On conserve error.value terminal déjà posé (ex.
+        // confirmation_not_found) et le contenu partiel streamé.
+      } else if (
+        error.value &&
+        error.value.retryable === false &&
+        error.value.code === 'confirmation_not_found'
+      ) {
+        // Erreur terminale déjà exposée par confirm() : ne pas l'écraser.
       } else if (err instanceof SidecarHttpError) {
         const chatError = chatErrorFromSidecarHttp(err, correlationContext());
         const assistant = messages.value.find(
@@ -1800,6 +1827,20 @@ export function useChatStream(
       }
       flushPendingTokens();
       resetStreamingFlag();
+      // Fin de SSE = gate backend morte : nettoyer toute confirmation orpheline,
+      // même si idle était en pause (coupure pendant une attente humaine).
+      const streamEndedSummary = localizeAgentError('stream_ended', '');
+      for (const message of messages.value) {
+        if (message.role !== 'assistant') continue;
+        if (
+          message.pendingConfirmation ||
+          message.preparingConfirmation ||
+          message.pendingPlan?.status === 'pending'
+        ) {
+          finalizeIncompleteToolsOnMessage(message, 'stream_ended', streamEndedSummary);
+        }
+      }
+      setIdlePaused(false);
       currentAssistantId = null;
       streaming.value = false;
       abortController = null;
@@ -1936,8 +1977,29 @@ export function useChatStream(
         throw await SidecarHttpError.fromResponse(response);
       }
     } catch (err) {
-      if (err instanceof SidecarHttpError && err.code) {
-        error.value = chatErrorFromSidecarHttp(err, correlationContext());
+      const ctx = correlationContext();
+      if (isConfirmationNotFoundError(err)) {
+        const detail =
+          err instanceof SidecarHttpError ? err.message : err instanceof Error ? err.message : '';
+        const summary = localizeAgentError('confirmation_not_found', detail);
+        if (assistant) {
+          finalizeIncompleteToolsOnMessage(assistant, 'confirmation_not_found', summary);
+        }
+        error.value = withChatCorrelation(
+          {
+            code: 'confirmation_not_found',
+            message: summary,
+            retryable: false,
+          },
+          ctx,
+        );
+        // Gate morte côté backend : couper le SSE pour éviter des events
+        // contradictoires (ex. confirmation_timeout) après l'erreur terminale.
+        setIdlePaused(false);
+        abortController?.abort();
+        abortController = null;
+      } else if (err instanceof SidecarHttpError && err.code) {
+        error.value = chatErrorFromSidecarHttp(err, ctx);
       } else {
         const detail = err instanceof Error ? err.message : '';
         error.value = withChatCorrelation(
@@ -1948,7 +2010,7 @@ export function useChatStream(
             }),
             retryable: true,
           },
-          correlationContext(),
+          ctx,
         );
       }
     } finally {

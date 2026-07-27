@@ -296,6 +296,9 @@ def test_agent_confirm_unknown_returns_404(monkeypatch: pytest.MonkeyPatch) -> N
             headers={"X-Internal-Secret": "desktop-dev-secret"},
         )
     assert resp.status_code == 404
+    detail = resp.json()["detail"]
+    assert detail["code"] == "confirmation_not_found"
+    assert "confirmation" in detail["message"].lower()
 
 
 async def test_agent_confirm_resolves_pending_gate(monkeypatch: pytest.MonkeyPatch) -> None:

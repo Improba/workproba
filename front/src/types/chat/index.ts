@@ -46,6 +46,7 @@ export type ChatErrorCode =
   | 'sidecar_unreachable'
   | 'no_project'
   | 'confirm_failed'
+  | 'confirmation_not_found'
   | 'max_iterations_reached'
   | 'agent_model_error'
   | 'agent_error'
@@ -82,6 +83,7 @@ const KNOWN_CHAT_ERROR_CODES = new Set<string>([
   'sidecar_unreachable',
   'no_project',
   'confirm_failed',
+  'confirmation_not_found',
   'max_iterations_reached',
   'agent_model_error',
   'agent_error',

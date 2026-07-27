@@ -1,12 +1,24 @@
 # Workproba
 
-> **Status:** Desktop application (see scope amendment below)  
-> **Date:** 14/07/2026  
+> **Status:** Desktop application (see scope amendments below)  
+> **Date:** 14/07/2026 (amendments 17/07/2026 and 27/07/2026)  
 > **Decision maker:** Syl
 
 ## Scope amendment (17/07/2026)
 
 Product scope updated: Workproba = **desktop app** + **managed Improba Cloud** (auth, secrets, connector presets, transport relay). Agent loop stays on desktop. See [positionnement-cloud-regards.md](../../workproba-improba/roadmaps/positionnement-cloud-regards.md) and [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
+
+## Specialists / Regards amendment (27/07/2026)
+
+Many managed cloud tools will be on by default; dumping them all into the main assistant turn does not scale. Target model (canonical French note: [intention.md](../../workproba-improba/intention.md)):
+
+- **Assistant**: main chat; orchestrates.
+- **Specialist** (`Spécialiste`): bounded sub-agent with a tool panel (doctrine + allowlist + output contract).
+- **Regard**: user- or assistant-solicited **read-only** mode of a specialist (advice, not writes).
+- Crossed regards = several specialists in regard mode.
+- Writes stay behind an operative specialist and/or Human Approval Gate; not behind Regard.
+
+UI product vocabulary prefers Spécialiste / Regard; code may keep `personas`. See [glossaire.md](../../workproba-improba/roadmaps/glossaire.md).
 
 ## Intent
 
@@ -25,7 +37,7 @@ Imp calls **fixed, controlled tools** to transform documents. Workproba V2 **doe
 - Polished agent chat, human-language action cards, SSE streaming.
 - **Human approval**: effect-oriented confirmation gate before sensitive actions (writes, publish, network, code).
 - Local memory: RAG per space + explicit user (global) and project (per-space) memories; cross-session promotion from conversation summaries.
-- Personas plugin (UI: **Regards métier**): simulated professional perspectives (opinion, crossed perspectives, discussion)
+- Personas plugin evolving toward **Spécialistes** (tool panels) and **Regard** as read-only solicitation of a specialist (opinion, crossed perspectives, discussion)
 - Automatic versions before file modifications.
 - LLM sovereignty: Ollama, vLLM, Mistral cloud, changeable URLs.
 

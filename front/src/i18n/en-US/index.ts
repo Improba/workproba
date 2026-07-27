@@ -714,6 +714,8 @@ export default {
     sidecarUnreachableDetail: ' ({detail})',
     confirmFailed: 'Could not send your choice{detail}. Try again.',
     confirmFailedDetail: ' ({detail})',
+    confirmationNotFound: 'Confirmation not found or expired.',
+    streamEndedGate: 'Generation ended before validation.',
     agentMaxIterations: 'The agent reached its iteration limit without a final answer. Rephrase or try again.',
     agentModelError: 'The model returned an unexpected response. Try again.',
     agentTurnTimeout: 'The turn exceeded the time limit. Try again.',

@@ -80,6 +80,54 @@ function sseResponse(
   } as unknown as Response;
 }
 
+/**
+ * SSE qui émet les events puis reste ouvert (simule l'attente d'une
+ * confirmation humaine côté backend). Appeler `close()` après le test.
+ */
+function sseHangAfter(
+  events: Array<{ event: string; data: unknown }>,
+): { response: Response; close: () => void } {
+  const text = events
+    .map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`)
+    .join('');
+  let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+      controller.enqueue(new TextEncoder().encode(text));
+    },
+  });
+  return {
+    response: {
+      ok: true,
+      status: 200,
+      body,
+      headers: new Headers(),
+      text: async () => '',
+    } as unknown as Response,
+    close: () => {
+      try {
+        streamController?.close();
+      } catch {
+        /* déjà fermé */
+      }
+    },
+  };
+}
+
+async function waitForPendingConfirmation(
+  api: UseChatStreamReturn,
+  timeoutMs = 2000,
+): Promise<ChatMessage> {
+  const started = Date.now();
+  while (Date.now() - started < timeoutMs) {
+    const assistant = lastAssistant(api.messages.value);
+    if (assistant?.pendingConfirmation) return assistant;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  throw new Error('pendingConfirmation non reçu à temps');
+}
+
 function httpErrorResponse(
   status: number,
   body: string,
@@ -977,17 +1025,24 @@ describe('useChatStream — feedbacks', () => {
       },
     ];
 
-    applyStreamEvent(messages, 'a1', {
-      type: 'confirmation_preparing',
-      data: {
-        toolCallId: 'tc_1',
-        toolName: 'invoke_managed_connector',
-        connectorId: 'ihora',
-        action: 'send',
+    const onConfirmationRequest = vi.fn();
+    applyStreamEvent(
+      messages,
+      'a1',
+      {
+        type: 'confirmation_preparing',
+        data: {
+          toolCallId: 'tc_1',
+          toolName: 'invoke_managed_connector',
+          connectorId: 'ihora',
+          action: 'send',
+        },
       },
-    });
+      onConfirmationRequest,
+    );
     expect(messages[0].toolCalls?.[0]?.status).toBe('pending_confirmation');
     expect(messages[0].preparingConfirmation?.toolCallId).toBe('tc_1');
+    expect(onConfirmationRequest).toHaveBeenCalledTimes(1);
 
     applyStreamEvent(messages, 'a1', {
       type: 'confirmation_request',
@@ -1051,33 +1106,31 @@ describe('useChatStream — feedbacks', () => {
     expect(mapped.data.turnId).toBe('turn_abc');
 
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
-    fetchMock.mockResolvedValue(
-      sseResponse([
-        { event: 'turn_start', data: { turn_id: 'turn_abc' } },
-        {
-          event: 'tool_call_start',
-          data: { tool_call_id: 'tc_1', tool_name: 'generate_document' },
+    const hang = sseHangAfter([
+      { event: 'turn_start', data: { turn_id: 'turn_abc' } },
+      {
+        event: 'tool_call_start',
+        data: { tool_call_id: 'tc_1', tool_name: 'generate_document' },
+      },
+      {
+        event: 'confirmation_request',
+        data: {
+          confirmation_id: 'cf_1',
+          tool_call_id: 'tc_1',
+          tool_name: 'generate_document',
+          action: 'create',
+          proposed_path: 'contrat.docx',
+          human_summary: 'Je vais créer contrat.docx',
+          turn_id: 'turn_abc',
         },
-        {
-          event: 'confirmation_request',
-          data: {
-            confirmation_id: 'cf_1',
-            tool_call_id: 'tc_1',
-            tool_name: 'generate_document',
-            action: 'create',
-            proposed_path: 'contrat.docx',
-            human_summary: 'Je vais créer contrat.docx',
-            turn_id: 'turn_abc',
-          },
-        },
-      ]),
-    );
+      },
+    ]);
+    fetchMock.mockResolvedValueOnce(hang.response);
 
     const { api, unmount } = mountStream();
-    await api.send('hi');
-
-    const assistant = lastAssistant(api.messages.value);
-    expect(assistant?.pendingConfirmation?.turnId).toBe('turn_abc');
+    const sendPromise = api.send('hi');
+    const assistant = await waitForPendingConfirmation(api);
+    expect(assistant.pendingConfirmation?.turnId).toBe('turn_abc');
 
     // Second appel fetch = POST /agent/confirm.
     fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
@@ -1088,27 +1141,113 @@ describe('useChatStream — feedbacks', () => {
     expect(confirmBody.decision).toBe('approve');
     expect(confirmBody.turn_id).toBe('turn_abc');
     expect(confirmBody.locale).toBe('fr');
+    hang.close();
+    await sendPromise;
     unmount();
   });
 
   it('confirm approve_remaining envoie la bonne décision', async () => {
     const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const hang = sseHangAfter([
+      {
+        event: 'tool_call_start',
+        data: { tool_call_id: 'tc_1', tool_name: 'invoke_managed_connector' },
+      },
+      {
+        event: 'confirmation_request',
+        data: {
+          confirmation_id: 'cf_1',
+          tool_call_id: 'tc_1',
+          tool_name: 'invoke_managed_connector',
+          action: 'create',
+          proposed_path: '',
+          human_summary: 'Envoyer',
+          trust_key: 'connector:ihora',
+        },
+      },
+    ]);
+    fetchMock.mockResolvedValueOnce(hang.response);
+
+    const { api, unmount } = mountStream();
+    const sendPromise = api.send('hi');
+    await waitForPendingConfirmation(api);
+
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await api.confirm('approve_remaining');
+
+    const confirmBody = JSON.parse(fetchMock.mock.calls[1][1].body);
+    expect(confirmBody.decision).toBe('approve_remaining');
+    hang.close();
+    await sendPromise;
+    unmount();
+  });
+
+  it('confirm 404 efface pendingConfirmation et expose confirmation_not_found', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const hang = sseHangAfter([
+      {
+        event: 'tool_call_start',
+        data: { tool_call_id: 'tc_1', tool_name: 'write_docx' },
+      },
+      {
+        event: 'confirmation_request',
+        data: {
+          confirmation_id: 'cf_missing',
+          tool_call_id: 'tc_1',
+          tool_name: 'write_docx',
+          action: 'create',
+          proposed_path: 'out.docx',
+          human_summary: 'Créer',
+        },
+      },
+    ]);
+    fetchMock.mockResolvedValueOnce(hang.response);
+
+    const { api, unmount } = mountStream();
+    const sendPromise = api.send('hi');
+    const assistantBefore = await waitForPendingConfirmation(api);
+    expect(assistantBefore.pendingConfirmation?.confirmationId).toBe('cf_missing');
+
+    fetchMock.mockResolvedValueOnce(
+      httpErrorResponse(
+        404,
+        JSON.stringify({
+          detail: {
+            code: 'confirmation_not_found',
+            message: 'Confirmation introuvable ou expirée.',
+          },
+        }),
+      ),
+    );
+    await api.confirm('approve');
+
+    const assistantAfter = lastAssistant(api.messages.value);
+    expect(assistantAfter?.pendingConfirmation).toBeNull();
+    expect(api.error.value?.code).toBe('confirmation_not_found');
+    expect(api.error.value?.retryable).toBe(false);
+    hang.close();
+    await sendPromise;
+    expect(api.streaming.value).toBe(false);
+    unmount();
+  });
+
+  it('fin de SSE pendant confirmation efface la gate orpheline', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
     fetchMock.mockResolvedValue(
       sseResponse([
         {
           event: 'tool_call_start',
-          data: { tool_call_id: 'tc_1', tool_name: 'invoke_managed_connector' },
+          data: { tool_call_id: 'tc_1', tool_name: 'write_docx' },
         },
         {
           event: 'confirmation_request',
           data: {
-            confirmation_id: 'cf_1',
+            confirmation_id: 'cf_orphan',
             tool_call_id: 'tc_1',
-            tool_name: 'invoke_managed_connector',
+            tool_name: 'write_docx',
             action: 'create',
-            proposed_path: '',
-            human_summary: 'Envoyer',
-            trust_key: 'connector:ihora',
+            proposed_path: 'out.docx',
+            human_summary: 'Créer',
           },
         },
       ]),
@@ -1117,11 +1256,10 @@ describe('useChatStream — feedbacks', () => {
     const { api, unmount } = mountStream();
     await api.send('hi');
 
-    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
-    await api.confirm('approve_remaining');
-
-    const confirmBody = JSON.parse(fetchMock.mock.calls[1][1].body);
-    expect(confirmBody.decision).toBe('approve_remaining');
+    const assistant = lastAssistant(api.messages.value);
+    expect(assistant?.pendingConfirmation).toBeNull();
+    expect(assistant?.toolCalls?.[0]?.status).toBe('error');
+    expect(api.streaming.value).toBe(false);
     unmount();
   });
 
@@ -1198,45 +1336,45 @@ describe('useChatStream — feedbacks', () => {
   });
 
   it('seed filePath dès tool_call_start pour write_pptx', async () => {
-    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
-      sseResponse([
-        {
-          event: 'tool_call_start',
-          data: {
-            tool_call_id: 'tc_pptx',
-            tool_name: 'write_pptx',
-            arguments: {
-              path: 'decks/pitch.pptx',
-              slides: [{ layout: 'title', title: 'Hello' }],
-            },
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const hang = sseHangAfter([
+      {
+        event: 'tool_call_start',
+        data: {
+          tool_call_id: 'tc_pptx',
+          tool_name: 'write_pptx',
+          arguments: {
+            path: 'decks/pitch.pptx',
+            slides: [{ layout: 'title', title: 'Hello' }],
           },
         },
-        {
-          event: 'confirmation_request',
-          data: {
-            confirmation_id: 'cf_pptx',
-            tool_call_id: 'tc_pptx',
-            tool_name: 'write_pptx',
-            action: 'create',
-            proposed_path: 'decks/pitch.pptx',
-            human_summary: 'Je vais créer la présentation PowerPoint pitch.pptx',
-            headline: 'Je vais Créer : pitch.pptx',
-          },
+      },
+      {
+        event: 'confirmation_request',
+        data: {
+          confirmation_id: 'cf_pptx',
+          tool_call_id: 'tc_pptx',
+          tool_name: 'write_pptx',
+          action: 'create',
+          proposed_path: 'decks/pitch.pptx',
+          human_summary: 'Je vais créer la présentation PowerPoint pitch.pptx',
+          headline: 'Je vais Créer : pitch.pptx',
         },
-        { event: 'done', data: { content: '' } },
-      ]),
-    );
+      },
+    ]);
+    fetchMock.mockResolvedValueOnce(hang.response);
 
     const { api, unmount } = mountStream();
-    await api.send('fais un pptx');
-
-    const assistant = lastAssistant(api.messages.value);
-    const tool = assistant?.toolCalls?.[0];
+    const sendPromise = api.send('fais un pptx');
+    const assistant = await waitForPendingConfirmation(api);
+    const tool = assistant.toolCalls?.[0];
     expect(tool?.name).toBe('write_pptx');
     expect(tool?.filePath).toBe('decks/pitch.pptx');
     expect(tool?.status).toBe('awaiting_confirmation');
-    expect(assistant?.pendingConfirmation?.toolName).toBe('write_pptx');
-    expect(assistant?.pendingConfirmation?.proposedPath).toBe('decks/pitch.pptx');
+    expect(assistant.pendingConfirmation?.toolName).toBe('write_pptx');
+    expect(assistant.pendingConfirmation?.proposedPath).toBe('decks/pitch.pptx');
+    hang.close();
+    await sendPromise;
     unmount();
   });
 

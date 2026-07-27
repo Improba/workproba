@@ -35,6 +35,16 @@
     {{ t('chat.continuationPlaceholder') }}
   </p>
 
+  <p
+    v-if="showLiveGenerating"
+    class="chat-message__live-generating"
+    aria-live="polite"
+    :aria-busy="true"
+  >
+    <span class="chat-message__live-generating-dot" aria-hidden="true" />
+    {{ t('chat.page.generating') }}
+  </p>
+
   <PlanCard
     v-if="message.pendingPlan && message.role === 'assistant'"
     :plan="message.pendingPlan"
@@ -284,27 +294,11 @@ const allToolCallsTerminal = computed(() => {
   return toolCalls.every((tc) => tc.status === 'success' || tc.status === 'error');
 });
 
-const hasActiveToolCall = computed(() =>
-  (props.message.toolCalls ?? []).some(
-    (tc) =>
-      tc.status === 'running' ||
-      tc.status === 'pending_confirmation' ||
-      tc.status === 'awaiting_confirmation',
-  ),
-);
-
-const isThinkingDoneOrAbsent = computed(() => {
-  const parts = props.message.parts ?? [];
-  const thinkingParts = parts.filter(
-    (p): p is ChatThinkingPart => p.type === 'thinking',
-  );
-  if (thinkingParts.length === 0) return true;
-  return thinkingParts.every((part) => part.done);
-});
-
 /**
- * Indicateur « Suite de la génération… » affiché sous les outils terminés
- * tant que le tour stream encore sans texte assistant visible.
+ * Indicateur « Suite de la génération… » sous les outils terminés tant que
+ * le tour stream encore sans texte assistant visible. Affiché aussi pendant
+ * un raisonnement post-outil : le groupe d'activité est souvent replié et ne
+ * montre plus que « Utilisé N outils », sans spinner.
  */
 const showContinuationPlaceholder = computed(() => {
   if (props.message.role !== 'assistant') return false;
@@ -313,11 +307,29 @@ const showContinuationPlaceholder = computed(() => {
   if (showThinkingPlaceholder.value) return false;
   if (props.message.pendingConfirmation) return false;
   if (props.message.preparingConfirmation) return false;
+  if (props.message.pendingPlan?.status === 'pending') return false;
   if (hasVisibleAssistantText.value) return false;
-  if (hasActiveToolCall.value) return false;
-  if (!isThinkingDoneOrAbsent.value) return false;
   if (allToolCallsTerminal.value) return true;
   return (props.message.toolCalls ?? []).length === 0;
+});
+
+/**
+ * Indicateur « Génération… » quand le tour est actif sans texte visible ni
+ * gate humaine (outils encore running, trou avant le premier token, etc.).
+ * Ne dépend pas de `thinking.done` : le raisonnement vit dans un ActivityGroup
+ * souvent replié, donc invisible pour l'utilisateur.
+ */
+const showLiveGenerating = computed(() => {
+  if (props.message.role !== 'assistant') return false;
+  if (!props.message.streaming) return false;
+  if (props.message.error) return false;
+  if (showThinkingPlaceholder.value) return false;
+  if (showContinuationPlaceholder.value) return false;
+  if (props.message.pendingConfirmation) return false;
+  if (props.message.preparingConfirmation) return false;
+  if (props.message.pendingPlan?.status === 'pending') return false;
+  if (hasVisibleAssistantText.value) return false;
+  return true;
 });
 
 const seenToolCallPartIds = new Set<string>();
@@ -445,6 +457,24 @@ watch(
   border: 2px solid var(--wp-accent-soft);
   border-top-color: var(--wp-accent);
   animation: chat-message-continuation-spin 0.7s linear infinite;
+}
+
+.chat-message__live-generating {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0;
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-accent-high);
+  font-weight: 600;
+}
+
+.chat-message__live-generating-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-accent);
+  animation: wp-breathe 1.4s ease-in-out infinite;
 }
 
 @keyframes chat-message-continuation-spin {

@@ -3,7 +3,7 @@
     <header v-if="messages.length > 0" class="chat-page__header">
       <div class="chat-page__heading">
         <h1 class="chat-page__title">{{ sessionTitle }}</h1>
-        <div v-if="metaParts.length || streaming" class="chat-page__meta">
+        <div v-if="metaParts.length" class="chat-page__meta">
           <template v-for="(part, i) in metaParts" :key="i">
             <span v-if="i > 0" class="chat-page__meta-sep" aria-hidden="true">{{
               t('chat.page.metaSep')
@@ -18,10 +18,6 @@
               >{{ part.text }}</span
             >
           </template>
-          <span v-if="streaming" class="chat-page__meta-live">
-            <span class="chat-page__meta-dot" aria-hidden="true" />
-            {{ t('chat.page.generating') }}
-          </span>
         </div>
       </div>
     </header>
@@ -1089,23 +1085,6 @@ onUnmounted(() => {
 .chat-page__meta-sep {
   color: var(--wp-text-faint);
   flex: none;
-}
-
-.chat-page__meta-live {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  flex: none;
-  color: var(--wp-accent-high);
-  font-weight: 600;
-}
-
-.chat-page__meta-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--wp-r-pill);
-  background: var(--wp-accent);
-  animation: wp-breathe 1.4s ease-in-out infinite;
 }
 
 .chat-page__body {

@@ -655,12 +655,40 @@ describe('Message placeholder continuation', () => {
     wrapper.unmount();
   });
 
+  it('affiche la continuation pendant un raisonnement post-outil (groupe replié)', () => {
+    const wrapper = mountStreamingToolsMessage({
+      parts: [
+        {
+          type: 'thinking',
+          id: 'th-1',
+          thinkingId: 'th-1',
+          content: 'analyse budget…',
+          done: false,
+        },
+        { type: 'tool_call', id: 'tc-part', toolCallId: 'tc-1' },
+        {
+          type: 'thinking',
+          id: 'th-2',
+          thinkingId: 'th-2',
+          content: 'prépare la réponse…',
+          done: false,
+        },
+      ],
+    });
+
+    expect(wrapper.find('.chat-message__continuation').exists()).toBe(true);
+    expect(wrapper.find('.chat-message__live-generating').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('masque le placeholder continuation si un tool est encore running', () => {
     const wrapper = mountStreamingToolsMessage({
       toolCalls: [{ id: 'tc-1', name: 'list_files', status: 'running' }],
     });
 
     expect(wrapper.find('.chat-message__continuation').exists()).toBe(false);
+    expect(wrapper.find('.chat-message__live-generating').exists()).toBe(true);
+    expect(wrapper.find('.chat-message__live-generating').text()).toContain('Génération');
     wrapper.unmount();
   });
 
