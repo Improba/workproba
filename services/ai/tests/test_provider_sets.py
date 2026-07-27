@@ -22,6 +22,7 @@ from app.llm.provider_sets import (
     ocr_is_supported,
     resolve_chat_from_set,
     resolve_embeddings_from_set,
+    resolve_utility_from_set,
     resolve_vision_mode,
     set_capabilities,
     supported_reasoning_efforts_for_set,
@@ -89,6 +90,40 @@ def test_resolve_chat_from_set_maps_reasoning() -> None:
     assert cfg.reasoning_effort == "high"
     assert cfg.api_key is not None
     assert cfg.api_key.get_secret_value() == "k"
+
+
+def test_resolve_utility_from_set_uses_catalogue_small_without_reasoning() -> None:
+    base = MISTRAL_BUILTIN_SET.model_copy(deep=True)
+    base.chat = base.chat.model_copy(update={"reasoning": "high", "api_key": SecretStr("k")})
+    cfg = resolve_utility_from_set(base)
+    assert cfg.provider == "mistral"
+    assert cfg.model == "mistral-small-latest"
+    assert cfg.reasoning_effort is None
+    assert cfg.api_key is not None
+    assert cfg.api_key.get_secret_value() == "k"
+
+
+def test_resolve_utility_from_set_falls_back_to_chat_model_without_catalogue() -> None:
+    base = OLLAMA_BUILTIN_SET.model_copy(deep=True)
+    base.chat = base.chat.model_copy(update={"models": None})
+    cfg = resolve_utility_from_set(base)
+    assert cfg.provider == "ollama"
+    assert cfg.model == "llama3.2"
+    assert cfg.reasoning_effort is None
+
+
+def test_resolve_utility_from_set_mistral_without_catalogue_uses_small() -> None:
+    base = MISTRAL_BUILTIN_SET.model_copy(deep=True)
+    base.chat = base.chat.model_copy(
+        update={
+            "models": None,
+            "model": "mistral-medium-latest",
+            "api_key": SecretStr("k"),
+        }
+    )
+    cfg = resolve_utility_from_set(base)
+    assert cfg.model == "mistral-small-latest"
+    assert cfg.reasoning_effort is None
 
 
 def test_resolve_chat_auto_reasoning_is_none() -> None:

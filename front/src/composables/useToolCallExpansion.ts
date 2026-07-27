@@ -5,22 +5,20 @@ import { useAppSettings } from '@composables/useAppSettings';
  * État d'expansion des cartes d'appels d'outil, partagé entre les instances de
  * `ToolCallCard`.
  *
- * Pourquoi hors du composant : les cartes vivent dans un `DynamicScroller`
- * (vue-virtual-scroller) qui recycle (démonte) les items sortis de la fenêtre
- * active. Un `ref` local serait perdu à chaque recyclage -> la section
- * dépliée se replierait immédiatement (notamment pendant le streaming, où
- * `item.content` change toutes les ~50 ms et re-mesure le scroller). On stocke
- * donc l'état par id de tool call, côté données réactives.
+ * Pourquoi hors du composant : l'état doit survivre au démontage/remontage des
+ * messages dans la liste (scroll, changement de session). Un `ref` local dans
+ * la carte serait perdu et la section dépliée se replierait immédiatement.
+ * On stocke donc l'état par id de tool call, côté données réactives.
  *
- * `expansionEpoch` est incrémenté à chaque bascule ; il est consommé par les
- * `size-dependencies` du `DynamicScrollerItem` pour forcer un re-mesurage quand
- * une carte se déplie/replie (sinon la hauteur réservée par le virtual scroller
- * devient stale et la carte dépliée chevauche la suivante).
+ * `expansionEpoch` est incrémenté à chaque bascule (tests / coordination) ;
+ * la liste plate mesure les hauteurs via le DOM (`offsetHeight`).
  */
 
 const techViewOverrides = reactive(new Map<string, boolean>());
 const rawViewOverrides = reactive(new Map<string, boolean>());
 const thinkingExpandedOverrides = reactive(new Map<string, boolean>());
+const memoryCitationsExpandedOverrides = reactive(new Map<string, boolean>());
+const activityGroupExpandedOverrides = reactive(new Map<string, boolean>());
 
 const expansionEpoch = ref(0);
 
@@ -75,9 +73,7 @@ export function useToolCallExpansion(toolCallId: () => string) {
 
 /**
  * État déplié du bloc "Raisonnement" (`ThinkingCard`). Même raison que pour
- * les tool calls : la carte vit dans le `DynamicScroller` et un `ref` local
- * serait perdu au recyclage. Clé = id du segment `thinking` (stable pendant
- * toute la vie du message).
+ * les tool calls : l'état doit survivre au démontage des messages dans la liste.
  */
 export function useThinkingExpansion(thinkingId: () => string) {
   const expanded = computed<boolean>({
@@ -97,10 +93,76 @@ export function useThinkingExpansion(thinkingId: () => string) {
   return { expanded, toggle };
 }
 
+/**
+ * État déplié de `MemoryCitationsBar`. Même raison que thinking / tool calls :
+ * état partagé hors composant. Clé stable fournie par le parent (`message.id`,
+ * `card.id-personaId`, etc.).
+ */
+export function useMemoryCitationsExpansion(
+  key: () => string,
+  defaultExpanded?: () => boolean,
+) {
+  const expanded = computed<boolean>({
+    get() {
+      const id = key();
+      if (memoryCitationsExpandedOverrides.has(id)) {
+        return memoryCitationsExpandedOverrides.get(id) === true;
+      }
+      return defaultExpanded?.() ?? false;
+    },
+    set(value: boolean) {
+      memoryCitationsExpandedOverrides.set(key(), value);
+      bumpEpoch();
+    },
+  });
+
+  function toggle(): void {
+    expanded.value = !expanded.value;
+  }
+
+  return { expanded, toggle };
+}
+
+/**
+ * État déplié de `ActivityGroup`. Même raison que thinking / tool calls :
+ * état partagé hors composant. Clé = id de la première part du run.
+ */
+export function useActivityGroupExpansion(
+  key: () => string,
+  defaultExpanded?: () => boolean,
+) {
+  const expanded = computed<boolean>({
+    get() {
+      const id = key();
+      if (activityGroupExpandedOverrides.has(id)) {
+        return activityGroupExpandedOverrides.get(id) === true;
+      }
+      return defaultExpanded?.() ?? false;
+    },
+    set(value: boolean) {
+      activityGroupExpandedOverrides.set(key(), value);
+      bumpEpoch();
+    },
+  });
+
+  function toggle(): void {
+    expanded.value = !expanded.value;
+  }
+
+  return { expanded, toggle };
+}
+
 /** Replie un bloc raisonnement (ex. quand un tool_call suit). */
 export function collapseThinking(thinkingPartId: string): void {
   if (thinkingExpandedOverrides.get(thinkingPartId) !== true) return;
   thinkingExpandedOverrides.set(thinkingPartId, false);
+  bumpEpoch();
+}
+
+/** Replie un groupe d'activité (ex. quand un tool_call suit un thinking). */
+export function collapseActivityGroup(groupId: string): void {
+  if (activityGroupExpandedOverrides.get(groupId) !== true) return;
+  activityGroupExpandedOverrides.set(groupId, false);
   bumpEpoch();
 }
 
@@ -114,6 +176,8 @@ export function clearExpansionState(): void {
   techViewOverrides.clear();
   rawViewOverrides.clear();
   thinkingExpandedOverrides.clear();
+  memoryCitationsExpandedOverrides.clear();
+  activityGroupExpandedOverrides.clear();
   bumpEpoch();
 }
 

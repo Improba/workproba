@@ -48,6 +48,7 @@ from app.llm.provider_sets import (
     resolve_chat_from_set,
     resolve_embeddings_from_set,
     resolve_fallback_chat_config,
+    resolve_utility_from_set,
     vision_is_supported,
 )
 from app.llm.utility import generate_title, summarize_conversation
@@ -2296,7 +2297,10 @@ async def memory_promote_session(
                 payload.provider_set,
                 cloud_plugin_data_dir=payload.cloud_plugin_data_dir,
             )
-            utility_cfg = None
+            utility_cfg = resolve_utility_from_set(
+                payload.provider_set,
+                cloud_plugin_data_dir=payload.cloud_plugin_data_dir,
+            )
         result = await promote_session_summary(
             store,
             summary=summary,

@@ -164,4 +164,36 @@ describe('ThinkingCard', () => {
     expect(wrapper.find(`#${bodyId}`).exists()).toBe(true);
     wrapper.unmount();
   });
+
+  it('en mode embedded, affiche le corps sans header', () => {
+    thinkingDetailView.value = 'summary';
+
+    const wrapper = mount(ThinkingCard, {
+      props: {
+        thinking: {
+          type: 'thinking',
+          id: 'think-embedded',
+          thinkingId: 'think-0',
+          content: 'Contenu visible',
+          done: true,
+          summary: 'Résumé court',
+        },
+        streaming: false,
+        embedded: true,
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          'q-icon': true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.thinking-card__header').exists()).toBe(false);
+    expect(wrapper.find('.thinking-card--embedded').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="thinking-card__summary"]').exists()).toBe(true);
+    expect(wrapper.attributes('role')).toBe('region');
+    expect(wrapper.attributes('aria-label')).toBe('Raisonnement');
+    wrapper.unmount();
+  });
 });

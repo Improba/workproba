@@ -1,6 +1,7 @@
 import { mount } from '@vue/test-utils';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import MemoryCitationsBar from '@components/chat/MemoryCitationsBar.vue';
+import { clearExpansionState } from '@composables/useToolCallExpansion';
 import { resetMemoryPanelForTests } from '@composables/useMemoryPanel';
 
 const citations = [
@@ -19,8 +20,12 @@ const citations = [
 ];
 
 describe('MemoryCitationsBar', () => {
-  it('affiche une chip repliée par défaut, sans pastilles visibles', () => {
+  beforeEach(() => {
+    clearExpansionState();
     resetMemoryPanelForTests();
+  });
+
+  it('affiche une chip repliée par défaut, sans pastilles visibles', () => {
     const wrapper = mount(MemoryCitationsBar, {
       props: { citations },
       global: { stubs: { Lucide: true } },
@@ -35,7 +40,6 @@ describe('MemoryCitationsBar', () => {
   });
 
   it('déplie les pastilles au clic et ouvre le panneau mémoire sur une citation', async () => {
-    resetMemoryPanelForTests();
     const wrapper = mount(MemoryCitationsBar, {
       props: { citations },
       global: { stubs: { Lucide: true } },
@@ -55,7 +59,6 @@ describe('MemoryCitationsBar', () => {
   });
 
   it('respecte defaultExpanded', () => {
-    resetMemoryPanelForTests();
     const wrapper = mount(MemoryCitationsBar, {
       props: { citations: [citations[0]], defaultExpanded: true },
       global: { stubs: { Lucide: true } },

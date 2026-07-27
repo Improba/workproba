@@ -91,12 +91,21 @@ function toModelOption(entry: ProviderSetChatModel): ModelOption {
   };
 }
 
-/** Modèles suggérés pour le set (catalogue set ou legacy provider). */
+/** Modèles suggérés pour le set (catalogue persisté uniquement). */
 export function modelsForSet(set: ProviderSet | null | undefined): ModelOption[] {
   const list = setModels(set);
   if (list) return list.map(toModelOption);
-  const provider = providerForSet(set);
-  return provider ? legacyModelsForProvider(provider) : [];
+  const model = set?.chat.model?.trim();
+  if (!model) return [];
+  // Sans catalogue (set non enrichi) : une seule option = modèle chat,
+  // pour rester aligné avec l'utility (`models[0]` ou fallback chat.model).
+  return [
+    {
+      model,
+      label: model,
+      contextWindow: legacyContextWindow(set.chat.provider, model),
+    },
+  ];
 }
 
 /** Efforts de raisonnement supportés pour un modèle du set. */
@@ -192,7 +201,7 @@ export function isModelApplicableForSet(
 /** Indique si le set propose un choix de modèles dans le compositeur. */
 export function hasSetModelChoice(set: ProviderSet | null | undefined): boolean {
   const list = setModels(set);
-  if (list) return list.length > 0;
-  const provider = providerForSet(set);
-  return provider ? legacyModelsForProvider(provider).length > 0 : false;
+  if (list) return list.length > 1;
+  // Sans catalogue enrichi : pas de faux picker legacy (Small/Medium/Large).
+  return false;
 }

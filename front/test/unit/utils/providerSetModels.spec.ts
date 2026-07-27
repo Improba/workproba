@@ -54,4 +54,12 @@ describe('providerSetModels', () => {
     expect(supportedReasoningEffortsForSet(set, 'mistral-unknown')).toEqual(['none']);
     expect(supportsReasoningForSet(set, 'mistral-unknown')).toBe(false);
   });
+
+  it('sans catalogue n’expose que le modèle chat (pas le fallback legacy Mistral)', () => {
+    const bare = {
+      ...MISTRAL_BUILTIN_SET,
+      chat: { ...MISTRAL_BUILTIN_SET.chat, models: undefined, model: 'mistral-medium-latest' },
+    };
+    expect(modelsForSet(bare).map((m) => m.model)).toEqual(['mistral-medium-latest']);
+  });
 });

@@ -9,12 +9,12 @@
       class="memory-citations__toggle"
       :aria-expanded="expanded"
       :aria-controls="listId"
-      @click="expanded = !expanded"
+      @click="toggle"
     >
       <Lucide name="brain" size="12" color="wp-violet" />
       <span class="memory-citations__toggle-label">
         {{
-          t('memory.citationsToggle', citations.length, {
+          tCount('memory.citationsToggle', citations.length, {
             count: citations.length,
           })
         }}
@@ -56,10 +56,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useMemoryPanel } from '@composables/useMemoryPanel';
+import { useMemoryCitationsExpansion } from '@composables/useToolCallExpansion';
+import { t as tCount } from '@utils/i18nT';
 import type { MemoryCitation } from '#types';
 
 const props = withDefaults(
@@ -67,13 +69,25 @@ const props = withDefaults(
     citations: MemoryCitation[];
     /** Ouvert par défaut (ex. cartes déjà repliées ailleurs). */
     defaultExpanded?: boolean;
+    /** Clé stable pour l'état d'expansion (ex. id message). */
+    expansionKey?: string;
   }>(),
   { defaultExpanded: false },
 );
 
 const { t } = useI18n();
 const { openMemoryPanel } = useMemoryPanel();
-const expanded = ref(props.defaultExpanded);
+
+const effectiveExpansionKey = computed(
+  () =>
+    props.expansionKey ??
+    (props.citations.map((c) => c.id).join('|') || 'list'),
+);
+
+const { expanded, toggle } = useMemoryCitationsExpansion(
+  () => effectiveExpansionKey.value,
+  () => props.defaultExpanded,
+);
 const listId = computed(
   () => `memory-citations-${props.citations.map((c) => c.id).join('-').slice(0, 48) || 'list'}`,
 );

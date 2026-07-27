@@ -42,7 +42,7 @@ describe('ChatView Regards (menu +)', () => {
   it('émet personas-open, personas-meeting et personas-discuss depuis le menu +', async () => {
     const wrapper = mountChatView(true);
 
-    const items = wrapper.findAll('.chat-view__add-item');
+    const items = wrapper.findAll('.chat-composer__add-item');
     const regardsItems = items.filter(
       (item) =>
         item.text().includes('Demander un avis') ||

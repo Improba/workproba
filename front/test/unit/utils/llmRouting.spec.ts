@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MISTRAL_BUILTIN_SET, applySessionOverridesToSet, toChatLlmConfigFromSet, toUtilityLlmConfigFromSet } from '@utils/providerSets';
+import { MISTRAL_BUILTIN_SET, WORKPROBA_CLOUD_BUILTIN_SET, applySessionOverridesToSet, toChatLlmConfigFromSet, toUtilityLlmConfigFromSet } from '@utils/providerSets';
 import { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
 
 describe('llmRouting', () => {
@@ -60,7 +60,31 @@ describe('llmRouting', () => {
     expect(chat?.reasoning_effort).toBe('high');
 
     const utility = toUtilityLlmConfigFromSet(MISTRAL_BUILTIN_SET);
-    expect(utility?.model).toBe('mistral-medium-latest');
+    expect(utility?.model).toBe('mistral-small-latest');
+    expect(utility?.reasoning_effort).toBeUndefined();
+  });
+
+  it('toUtilityLlmConfigFromSet est null pour Improba Cloud (device_bearer)', () => {
+    expect(toUtilityLlmConfigFromSet(WORKPROBA_CLOUD_BUILTIN_SET)).toBeNull();
+  });
+
+  it('toUtilityLlmConfigFromSet sur custom mono-modèle utilise models[0]', () => {
+    const custom = {
+      ...MISTRAL_BUILTIN_SET,
+      id: 'custom-compat',
+      isBuiltin: false,
+      authMode: 'api_key' as const,
+      chat: {
+        provider: 'openai_compat' as const,
+        model: 'gpt-4o-mini',
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'k',
+        reasoning: 'none' as const,
+        models: [{ model: 'gpt-4o-mini', label: 'gpt-4o-mini', reasoningEfforts: ['none' as const] }],
+      },
+    };
+    const utility = toUtilityLlmConfigFromSet(custom);
+    expect(utility?.model).toBe('gpt-4o-mini');
     expect(utility?.reasoning_effort).toBeUndefined();
   });
 

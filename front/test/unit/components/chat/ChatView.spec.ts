@@ -79,8 +79,8 @@ describe('ChatView accessibilité', () => {
       },
     });
 
-    expect(wrapper.find('.chat-view__engine-banner').exists()).toBe(true);
-    expect(wrapper.find('.chat-view__engine-banner-action').exists()).toBe(true);
+    expect(wrapper.find('.chat-composer__engine-banner').exists()).toBe(true);
+    expect(wrapper.find('.chat-composer__engine-banner-action').exists()).toBe(true);
   });
 
   it('masque la bannière moteur si settings verrouillés', () => {
@@ -100,7 +100,7 @@ describe('ChatView accessibilité', () => {
       },
     });
 
-    expect(wrapper.find('.chat-view__engine-banner').exists()).toBe(false);
+    expect(wrapper.find('.chat-composer__engine-banner').exists()).toBe(false);
   });
 });
 
@@ -153,7 +153,7 @@ describe('ChatView erreurs stream', () => {
       global: { stubs: defaultStubs },
     });
 
-    const banner = wrapper.find('.chat-view__stream-error');
+    const banner = wrapper.find('.chat-composer__stream-error');
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('Erreur réseau');
 
@@ -184,7 +184,7 @@ describe('ChatView erreurs stream', () => {
       global: { stubs: defaultStubs },
     });
 
-    const banner = wrapper.find('.chat-view__stream-error');
+    const banner = wrapper.find('.chat-composer__stream-error');
     const reportBtn = banner
       .findAll('button')
       .find((btn) => btn.text().includes('Voir le rapport'));
@@ -217,7 +217,7 @@ describe('ChatView erreurs stream', () => {
       global: { stubs: defaultStubs },
     });
 
-    const banner = wrapper.find('.chat-view__stream-error');
+    const banner = wrapper.find('.chat-composer__stream-error');
     const reconnectBtn = banner
       .findAll('button')
       .find((btn) => btn.text().includes('Se reconnecter'));
@@ -253,7 +253,7 @@ describe('ChatView erreurs stream', () => {
       global: { stubs: defaultStubs },
     });
 
-    const banner = wrapper.find('.chat-view__stream-error');
+    const banner = wrapper.find('.chat-composer__stream-error');
     expect(banner.exists()).toBe(true);
     expect(banner.text()).toContain('Erreur fatale');
     const retryBtn = banner
@@ -292,7 +292,7 @@ describe('ChatView erreurs stream', () => {
       global: { stubs: defaultStubs },
     });
 
-    expect(wrapper.find('.chat-view__stream-error').exists()).toBe(false);
+    expect(wrapper.find('.chat-composer__stream-error').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -326,7 +326,7 @@ describe('ChatView erreurs stream', () => {
       },
       global: { stubs: defaultStubs },
     });
-    expect(differentTurn.find('.chat-view__stream-error').exists()).toBe(true);
+    expect(differentTurn.find('.chat-composer__stream-error').exists()).toBe(true);
     differentTurn.unmount();
 
     const noStreamTurnId = mount(ChatView, {
@@ -337,7 +337,7 @@ describe('ChatView erreurs stream', () => {
       },
       global: { stubs: defaultStubs },
     });
-    expect(noStreamTurnId.find('.chat-view__stream-error').exists()).toBe(true);
+    expect(noStreamTurnId.find('.chat-composer__stream-error').exists()).toBe(true);
     noStreamTurnId.unmount();
   });
 });

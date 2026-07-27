@@ -52,7 +52,7 @@ import { useCloud } from '@composables/useCloud';
 import type { ProviderSet } from '@composables/useDesktop.types';
 import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
 import { chatErrorMessageForReadiness } from '@utils/providerSetNotify';
-import { emptyCustomSet, newCustomSetId } from '@utils/providerSets';
+import { emptyCustomSet, newCustomSetId, singleModelCatalogue } from '@utils/providerSets';
 
 const emit = defineEmits<{
   activated: [setId: string];
@@ -76,18 +76,21 @@ const canSubmit = computed(
 function buildSet(): ProviderSet {
   const id = newCustomSetId();
   const template = emptyCustomSet();
+  const chatModel = model.value.trim();
   return {
     ...template,
     id,
     name: t('settings.engine.manualName'),
     description: t('settings.engine.manualDescription'),
     badges: [],
+    authMode: 'api_key',
     chat: {
       provider: 'openai_compat',
-      model: model.value.trim(),
+      model: chatModel,
       baseUrl: baseUrl.value.trim(),
       apiKey: apiKey.value.trim(),
       reasoning: 'auto',
+      models: singleModelCatalogue(chatModel),
     },
     embeddings: null,
     ocr: null,

@@ -28,7 +28,7 @@ describe('providerSets enrichSetFromBuiltin', () => {
     expect(resolved[0]?.chat.models?.length).toBe(3);
   });
 
-  it('ne modifie pas un set custom sans template builtin', () => {
+  it('injecte le catalogue Mistral sur un set custom mistral sans models', () => {
     const custom = {
       ...MISTRAL_BUILTIN_SET,
       id: 'custom-set',
@@ -36,7 +36,39 @@ describe('providerSets enrichSetFromBuiltin', () => {
       chat: { ...MISTRAL_BUILTIN_SET.chat, models: undefined },
     };
     const enriched = enrichSetFromBuiltin(custom);
-    expect(enriched.chat.models).toBeUndefined();
+    expect(enriched.chat.models?.map((m) => m.model)).toEqual([
+      'mistral-small-latest',
+      'mistral-medium-latest',
+      'mistral-large-latest',
+    ]);
+  });
+
+  it('injecte un catalogue mono-modèle sur un set openai_compat sans models', () => {
+    const custom = {
+      id: 'custom-openai',
+      name: 'Compat',
+      description: '',
+      badges: [] as string[],
+      chat: {
+        provider: 'openai_compat' as const,
+        model: 'gpt-4o-mini',
+        baseUrl: 'https://api.example.com/v1',
+        reasoning: 'none' as const,
+      },
+      embeddings: null,
+      ocr: null,
+      vision: { mode: 'none' as const },
+      capabilities: {
+        reasoning: 'low' as const,
+        vision: false,
+        tools: true,
+        webSearch: false,
+      },
+      isDefault: false,
+      isBuiltin: false,
+    };
+    const enriched = enrichSetFromBuiltin(custom);
+    expect(enriched.chat.models?.map((m) => m.model)).toEqual(['gpt-4o-mini']);
   });
 
   it('migre small+auto vers medium+high sur les builtins Mistral', () => {

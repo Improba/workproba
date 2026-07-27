@@ -254,6 +254,20 @@ def _resolve_api_key(
     return None
 
 
+def _utility_model_from_chat(chat: ProviderSetChat) -> str:
+    """Petit modèle du catalogue (`models[0]`), sinon repli provider-aware.
+
+    Sans catalogue : Mistral → ``mistral-small-latest`` ; sinon ``chat.model``.
+    """
+    if chat.models:
+        first = chat.models[0].model.strip()
+        if first:
+            return first
+    if chat.provider == "mistral":
+        return "mistral-small-latest"
+    return chat.model
+
+
 def resolve_chat_from_set(
     provider_set: ProviderSet,
     *,
@@ -282,6 +296,41 @@ def resolve_chat_from_set(
             cloud_plugin_data_dir=cloud_dir,
         ),
         reasoning_effort=_chat_reasoning_to_effort(chat.reasoning),
+    )
+
+
+def resolve_utility_from_set(
+    provider_set: ProviderSet,
+    *,
+    cloud_plugin_data_dir: Path | str | None = None,
+    plugin_data_dir: Path | str | None = None,
+) -> LLMProviderConfig:
+    """Config utilitaire (titre, résumé, mémoire) : petit modèle, sans raisonnement.
+
+    Auth / base_url identiques au chat (DeviceBearer cloud inclus). Le modèle
+    est ``chat.models[0]`` quand le catalogue est présent, sinon ``chat.model``.
+    """
+    chat = provider_set.chat
+    if chat is None:
+        raise ValueError("Provider set sans configuration chat")
+    cloud_dir = resolve_cloud_plugin_data_dir(
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+        plugin_data_dir=plugin_data_dir,
+    )
+    return LLMProviderConfig(
+        provider=chat.provider,
+        model=_utility_model_from_chat(chat),
+        base_url=_resolve_base_url(
+            chat,
+            provider_set=provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+        ),
+        api_key=_resolve_api_key(
+            chat,
+            provider_set=provider_set,
+            cloud_plugin_data_dir=cloud_dir,
+        ),
+        reasoning_effort=None,
     )
 
 

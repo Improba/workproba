@@ -14,7 +14,7 @@ interface SessionLlmContext {
 const contexts = new Map<string, SessionLlmContext>();
 const activeSessionId = ref<string | null>(null);
 
-/** Publie les overrides LLM de la conversation (personas, PJ, utility). */
+/** Publie les overrides LLM de la conversation (personas, PJ). Pas l'utility. */
 export function setLlmSessionContext(
   sessionId: string,
   model: string | null,

@@ -1149,14 +1149,15 @@ async def invoke_managed_connector_impl(
         requires_user_resolution = _user_resolution_candidate(payload) is not None
         skip_gate = _is_managed_read_action(cloud_dir, connector_id, action)
         gate = deps.confirmation_gate
-        if gate is not None and not skip_gate:
+        will_preresolve = _should_preresolve_ihora_user(connector_id, action, payload)
+        if gate is not None and not skip_gate and will_preresolve:
             await gate.notify_preparing(
                 tool_call_id=ctx.tool_call_id or "",
                 tool_name=gate_tool_name,
                 connector_id=connector_id,
                 action=action or "",
             )
-        if _should_preresolve_ihora_user(connector_id, action, payload):
+        if will_preresolve:
             preresolve_gateway = open_remote_capability_gateway(
                 caller_plugin_id=PLUGIN_WORKPROBA_CLOUD,
                 caller_permissions=frozenset(

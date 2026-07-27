@@ -7,66 +7,49 @@
       :aria-live="ariaLiveMode"
       aria-relevant="additions"
     >
-      <DynamicScroller
+      <div
         v-if="messages.length"
-        ref="dynamicScrollerRef"
-        class="message-list__virtual"
-        :items="messages"
-        :min-item-size="72"
-        key-field="id"
+        ref="contentRef"
+        class="message-list__content"
       >
-        <template #default="{ item, active, index }">
-          <DynamicScrollerItem
-            :item="item"
-            :active="active"
-            :data-index="index"
-            :size-dependencies="[
-              item.streaming ? (item._contentRev ?? 0) : item.content,
-              item.toolCalls?.length,
-              item.parts?.length,
-              item.streaming,
-              item.error?.code,
-              item.pendingConfirmation?.confirmationId,
-              item.preparingConfirmation?.toolCallId,
-              item.pendingPlan?.planId,
-              expansionEpoch,
-            ]"
-          >
-            <Message
-              :message="item"
-              :project-path="projectPath"
-              :session-id="sessionId"
-              :workspace-data-dir="workspaceDataDir"
-              :confirming="confirming"
-              :approving-plan="approvingPlan"
-              :attachment-statuses="attachmentStatuses"
-              :settings-locked="settingsLocked"
-              :chat-streaming="streaming"
-              :interaction-locked="interactionLocked"
-              class="message-list__item"
-              @open-file="(path) => emit('open-file', path)"
-              @restored="(path) => emit('restored', path)"
-              @confirm-approve="emit('confirm-approve')"
-              @confirm-approve-remaining="emit('confirm-approve-remaining')"
-              @confirm-deny="emit('confirm-deny')"
-              @plan-approve="emit('plan-approve')"
-              @plan-reject="emit('plan-reject')"
-              @personas-another="(card) => emit('personas-another', card)"
-              @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
-              @regenerate="(id) => emit('regenerate', id)"
-              @error-reconnect="(cta) => emit('error-reconnect', cta)"
-            />
-          </DynamicScrollerItem>
-        </template>
-        <template #after>
-          <div
-            v-if="spacerHeight > 0"
-            class="message-list__reply-spacer"
-            :style="{ height: spacerHeight + 'px' }"
-            aria-hidden="true"
+        <div
+          v-for="(item, index) in messages"
+          :key="item.id"
+          :data-index="index"
+          class="message-list__item-wrapper"
+        >
+          <Message
+            :message="item"
+            :project-path="projectPath"
+            :session-id="sessionId"
+            :workspace-data-dir="workspaceDataDir"
+            :confirming="confirming"
+            :approving-plan="approvingPlan"
+            :attachment-statuses="attachmentStatuses"
+            :settings-locked="settingsLocked"
+            :chat-streaming="streaming"
+            :interaction-locked="interactionLocked"
+            class="message-list__item"
+            @open-file="(path) => emit('open-file', path)"
+            @restored="(path) => emit('restored', path)"
+            @confirm-approve="emit('confirm-approve')"
+            @confirm-approve-remaining="emit('confirm-approve-remaining')"
+            @confirm-deny="emit('confirm-deny')"
+            @plan-approve="emit('plan-approve')"
+            @plan-reject="emit('plan-reject')"
+            @personas-another="(card) => emit('personas-another', card)"
+            @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
+            @regenerate="(id) => emit('regenerate', id)"
+            @error-reconnect="(cta) => emit('error-reconnect', cta)"
           />
-        </template>
-      </DynamicScroller>
+        </div>
+        <div
+          v-if="spacerHeight > 0"
+          class="message-list__reply-spacer"
+          :style="{ height: spacerHeight + 'px' }"
+          aria-hidden="true"
+        />
+      </div>
 
       <div v-else class="message-list__empty">
         <Lucide name="messages-square" size="lg" color="neutral-medium" />
@@ -87,14 +70,8 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
-import {
-  DynamicScroller,
-  DynamicScrollerItem,
-} from 'vue-virtual-scroller';
-import 'vue-virtual-scroller/dist/vue-virtual-scroller.css';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import Message from '@components/chat/Message.vue';
-import { expansionEpoch } from '@composables/useToolCallExpansion';
 import type { ChatMessage } from '#types';
 import type { QScrollArea } from 'quasar';
 
@@ -102,13 +79,6 @@ type ScrollToOptions = {
   align?: 'start' | 'center' | 'end' | 'nearest';
   smooth?: boolean;
   offset?: number;
-};
-
-type DynamicScrollerExposed = {
-  scrollToItem: (index: number, options?: ScrollToOptions) => void;
-  scrollToPosition: (position: number, options?: ScrollToOptions) => void;
-  getItemOffset: (index: number) => number;
-  getItemSize: (itemOrIndex: number | ChatMessage) => number;
 };
 
 const props = withDefaults(
@@ -184,22 +154,30 @@ onUnmounted(() => {
 });
 
 const scrollAreaRef = ref<QScrollArea | null>(null);
-const dynamicScrollerRef = ref<DynamicScrollerExposed | null>(null);
+const contentRef = ref<HTMLElement | null>(null);
 
-function getScroller(): DynamicScrollerExposed | null {
-  return dynamicScrollerRef.value;
+function getMessageElement(index: number): HTMLElement | null {
+  const content = contentRef.value;
+  if (!content) return null;
+  return content.querySelector<HTMLElement>(`[data-index="${index}"]`);
+}
+
+function getScrollTarget(): HTMLElement | null {
+  const area = scrollAreaRef.value;
+  if (!area) return null;
+  if (typeof area.getScrollTarget === 'function') {
+    const target = area.getScrollTarget();
+    return target instanceof HTMLElement ? target : null;
+  }
+  const root = area.$el as HTMLElement | null;
+  if (!root) return null;
+  return root.querySelector<HTMLElement>('.q-scrollarea__container') ?? null;
 }
 
 function scrollToItem(index: number, options?: ScrollToOptions): void {
   const target = getScrollTarget();
-  const scroller = dynamicScrollerRef.value;
-  if (!target || !scroller) {
-    dynamicScrollerRef.value?.scrollToItem(index, options);
-    return;
-  }
-  // Scroller = q-scroll-area ; DynamicScroller n'a pas de viewport propre.
-  // On positionne le container Quasar via les offsets mesurés.
-  const itemOffset = scroller.getItemOffset(index);
+  if (!target) return;
+  const itemOffset = getItemOffset(index);
   const itemSize = getItemSize(index);
   const align = options?.align ?? 'start';
   const extra = options?.offset ?? 0;
@@ -217,10 +195,7 @@ function scrollToItem(index: number, options?: ScrollToOptions): void {
 
 function scrollToPosition(position: number, options?: ScrollToOptions): void {
   const target = getScrollTarget();
-  if (!target) {
-    dynamicScrollerRef.value?.scrollToPosition(position, options);
-    return;
-  }
+  if (!target) return;
   target.scrollTo({
     top: Math.max(0, position),
     behavior: options?.smooth ? 'smooth' : 'auto',
@@ -228,33 +203,18 @@ function scrollToPosition(position: number, options?: ScrollToOptions): void {
 }
 
 function getItemOffset(index: number): number {
-  return dynamicScrollerRef.value?.getItemOffset(index) ?? 0;
+  return getMessageElement(index)?.offsetTop ?? 0;
 }
 
 function getItemSize(itemOrIndex: number | ChatMessage): number {
-  const scroller = dynamicScrollerRef.value;
-  if (!scroller) return 0;
-  // DynamicScroller indexe les tailles par `id` (key-field), pas par index.
+  let index: number;
   if (typeof itemOrIndex === 'number') {
-    const item = props.messages[itemOrIndex];
-    if (!item) return 0;
-    return scroller.getItemSize(item, itemOrIndex);
+    index = itemOrIndex;
+  } else {
+    index = props.messages.findIndex((m) => m.id === itemOrIndex.id);
+    if (index < 0) return 0;
   }
-  return scroller.getItemSize(itemOrIndex);
-}
-
-// Pendant le streaming, `_contentRev` remplace `item.content` dans size-dependencies
-// pour limiter les re-mesures du virtual scroller à chaque flush de tokens.
-
-/**
- * Cible de scroll = container Quasar (vrai viewport).
- * Le `.vue-recycle-scroller` sans height:100% s'étend avec le contenu et
- * n'est pas le scrollport : scroller dessus laissait scrollTop coincé à 0.
- */
-function getScrollTarget(): HTMLElement | null {
-  const root = scrollAreaRef.value?.$el as HTMLElement | null;
-  if (!root) return null;
-  return root.querySelector<HTMLElement>('.q-scrollarea__container') ?? null;
+  return getMessageElement(index)?.offsetHeight ?? 0;
 }
 
 function scrollToBottom(smooth = false): void {
@@ -267,14 +227,19 @@ function scrollToBottom(smooth = false): void {
   }
 }
 
+/** Legacy no-op : pré-virtualisation, les tests appelaient getScroller sur le DynamicScroller. */
+function getScroller(): null {
+  return null;
+}
+
 defineExpose({
   scrollToBottom: (smooth = false) => scrollToBottom(smooth),
   getScrollTarget,
+  getScroller,
   scrollToItem,
   scrollToPosition,
   getItemOffset,
   getItemSize,
-  getScroller,
 });
 </script>
 
@@ -292,11 +257,15 @@ defineExpose({
   min-height: 0;
 }
 
-.message-list__virtual {
+.message-list__content {
   width: 100%;
   max-width: 46rem;
   margin: 0 auto;
   padding: var(--wp-space-3) var(--wp-space-4) var(--wp-space-4);
+}
+
+.message-list__item-wrapper {
+  width: 100%;
 }
 
 .message-list__item {

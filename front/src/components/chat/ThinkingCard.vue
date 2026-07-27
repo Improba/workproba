@@ -1,6 +1,13 @@
 <template>
-  <div class="thinking-card" data-testid="thinking-card">
+  <div
+    class="thinking-card"
+    :class="{ 'thinking-card--embedded': embedded }"
+    data-testid="thinking-card"
+    :role="embedded ? 'region' : undefined"
+    :aria-label="embedded ? t('chat.reasoning') : undefined"
+  >
     <button
+      v-if="!embedded"
       type="button"
       class="thinking-card__header"
       :aria-expanded="expanded"
@@ -48,11 +55,11 @@
     </button>
 
     <div
-      v-if="expanded"
+      v-if="embedded || expanded"
       :id="bodyRegionId"
       class="thinking-card__body"
-      role="region"
-      :aria-label="t('chat.reasoning')"
+      :role="embedded ? undefined : 'region'"
+      :aria-label="embedded ? undefined : t('chat.reasoning')"
     >
       <div
         class="thinking-card__view-toggle"
@@ -114,10 +121,16 @@ import { useThinkingExpansion } from '@composables/useToolCallExpansion';
 import type { ChatThinkingPart } from '#types';
 import type { ThinkingDetailViewMode } from '@composables/useDesktop.types';
 
-const props = defineProps<{
-  thinking: ChatThinkingPart;
-  streaming: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    thinking: ChatThinkingPart;
+    streaming: boolean;
+    embedded?: boolean;
+  }>(),
+  {
+    embedded: false,
+  },
+);
 
 const { t } = useI18n();
 const { thinkingDetailView, setThinkingDetailView } = useAppSettings();
@@ -210,6 +223,13 @@ function setDetailView(view: ThinkingDetailViewMode): void {
   background: var(--wp-surface);
   box-shadow: var(--wp-shadow-1);
   overflow: hidden;
+
+  &--embedded {
+    border: none;
+    border-radius: var(--wp-r-sm);
+    background: var(--wp-surface-2);
+    box-shadow: none;
+  }
 }
 
 .thinking-card__header {
@@ -314,6 +334,12 @@ function setDetailView(view: ThinkingDetailViewMode): void {
   background: var(--wp-surface-2);
   max-height: 320px;
   overflow-y: auto;
+
+  .thinking-card--embedded & {
+    border-top: none;
+    padding: 0.65rem 0.75rem;
+    background: transparent;
+  }
 }
 
 .thinking-card__view-toggle {

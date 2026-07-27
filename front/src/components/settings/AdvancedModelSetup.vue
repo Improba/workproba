@@ -198,6 +198,7 @@ import { ProviderSetNotReadyError } from '@utils/providerSetErrors';
 import { chatErrorMessageForReadiness } from '@utils/providerSetNotify';
 import {
   capabilityLabels,
+  catalogueForProvider,
   cloneProviderSet,
   emptyCustomSet,
   localizedSetDescription,
@@ -350,7 +351,12 @@ interface SetForm {
   };
   ocr: { provider: 'mistral' | 'docling'; mode: 'auto' | 'none' };
   vision: { mode: 'chat' | 'none' };
-  capabilities: { reasoning: 'low' | 'medium' | 'high'; vision: boolean; tools: boolean };
+  capabilities: {
+    reasoning: 'low' | 'medium' | 'high';
+    vision: boolean;
+    tools: boolean;
+    webSearch: boolean;
+  };
   isBuiltin: boolean;
 }
 
@@ -378,23 +384,38 @@ function formFromSet(set: ProviderSet): SetForm {
       mode: set.ocr?.mode ?? 'auto',
     },
     vision: { mode: set.vision.mode },
-    capabilities: { ...set.capabilities },
+    capabilities: {
+      reasoning: set.capabilities.reasoning,
+      vision: set.capabilities.vision,
+      tools: set.capabilities.tools,
+      webSearch: set.capabilities.webSearch,
+    },
     isBuiltin: set.isBuiltin,
   };
 }
 
 function formToSet(): ProviderSet {
+  const source = editing.value;
+  const chatModel = form.chat.model.trim();
   return {
     id: form.id,
     name: form.name.trim(),
     description: form.description.trim(),
-    badges: editing.value?.badges ?? [],
+    badges: source?.badges ?? [],
+    authMode: source?.authMode ?? 'api_key',
+    uiModeLocked: source?.uiModeLocked ?? false,
     chat: {
       provider: form.chat.provider,
-      model: form.chat.model.trim(),
+      model: chatModel,
       baseUrl: form.chat.baseUrl.trim() || null,
       apiKey: form.chat.apiKey.trim() || null,
+      apiKeyRef: source?.chat.apiKeyRef ?? null,
       reasoning: form.chat.reasoning as ProviderSet['chat']['reasoning'],
+      models: catalogueForProvider(
+        form.chat.provider,
+        chatModel,
+        source?.chat.provider === form.chat.provider ? source.chat.models : null,
+      ),
     },
     embeddings: form.embeddings.model.trim()
       ? {
@@ -402,12 +423,18 @@ function formToSet(): ProviderSet {
           model: form.embeddings.model.trim(),
           baseUrl: form.embeddings.baseUrl.trim() || null,
           apiKey: form.chat.apiKey.trim() || null,
+          apiKeyRef: source?.embeddings?.apiKeyRef ?? null,
         }
       : null,
     ocr: { provider: form.ocr.provider, mode: form.ocr.mode },
     vision: { mode: form.vision.mode },
-    capabilities: { ...form.capabilities },
-    isDefault: editing.value?.isDefault ?? false,
+    capabilities: {
+      reasoning: form.capabilities.reasoning,
+      vision: form.capabilities.vision,
+      tools: form.capabilities.tools,
+      webSearch: form.capabilities.webSearch,
+    },
+    isDefault: source?.isDefault ?? false,
     isBuiltin: form.isBuiltin,
   };
 }

@@ -123,9 +123,8 @@ const emit = defineEmits<{
 // sert qu'à semer la valeur initiale (un utilisateur ayant choisi "tech" par
 // défaut conserve ce comportement, sans verrouiller toutes les cartes ensemble).
 //
-// L'état est porté par `useToolCallExpansion` (hors du composant) : il survit
-// au recyclage du `DynamicScroller` qui héberge les messages, sinon la section
-// dépliée se replierait immédiatement lors du re-mesurage du virtual scroller.
+// L'état est porté par `useToolCallExpansion` (hors du composant) pour que les
+// sections dépliées survivent aux re-rendus de la liste de messages.
 const { isTechView, showRaw, toggleTechView, toggleRaw } = useToolCallExpansion(
   () => props.toolCall.id,
 );

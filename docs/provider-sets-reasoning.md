@@ -225,9 +225,10 @@ Custom sets (`isBuiltin: false`) without a catalogue keep legacy heuristics.
 
 | Path | Behaviour |
 |---|---|
-| Utility title / summary (front) | `toUtilityLlmConfigFromSet` strips `reasoning_effort` |
+| Utility title / summary (front) | `toUtilityLlmConfigFromSet` picks `chat.models[0]` (small) and strips `reasoning_effort` ; `ensureChatCatalogue` garantit un catalogue sur sets custom / manuels |
+| Utility title / summary (sidecar) | `resolve_utility_from_set` → catalogue small model, `reasoning_effort=None` (Mistral sans catalogue → `mistral-small-latest`) |
 | Compaction summarize (sidecar) | `chat_config` copied with `reasoning_effort=None` before summarize |
-| Memory consolidation | Uses utility config when available |
+| Memory consolidation | Uses utility config when available (`resolve_utility_from_set` when `provider_set` is set) |
 
 ## Secondary sidecar paths (`cloud_plugin_data_dir`)
 

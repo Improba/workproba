@@ -276,8 +276,7 @@ settings.
 - **Message chrome**: role avatars and visible role headers removed (sr-only labels remain).
 - **Send**: the field clears, the user message appears immediately
   (pushed synchronously in `useChatStream.send`) and the view scrolls to the bottom.
-  `MessageList.getScrollTarget` detects the actually scrollable container
-  (double `q-scroll-area` + `DynamicScroller` container) to target the right one.
+  `MessageList.getScrollTarget` returns the `q-scroll-area` scroll container.
 - **Reasoning in progress**: a **spinner** plus label "Reasoning in
   progress…" appears in the reasoning zone (`ThinkingCard`) during
   streaming. The thinking icon aligns with the first line of the subject.
@@ -289,20 +288,20 @@ settings.
 
 ### Message list and streaming performance
 
-- **Virtualized list** (`MessageList.vue` + `vue-virtual-scroller`): long
-  conversations stay responsive. During streaming, `_contentRev` on
-  `ChatMessage` throttles re-measurement (~50 ms token flush in
-  `useChatStream`, ~80 ms markdown throttle in `MessageTextPart`).
+- **Flat message list** (`MessageList.vue`): messages render in a single
+  `q-scroll-area` with DOM-based `getItemSize` / `getItemOffset`. During
+  streaming, `_contentRev` on `ChatMessage` throttles re-measurement (~50 ms
+  token flush in `useChatStream`, ~80 ms markdown throttle in `MessageTextPart`).
 - **Scroll pinning** (`ChatView.vue` + `chatScrollAnchor.ts`): turn-anchor
   on new user messages (question near the top, dynamic spacer that shrinks as
   the reply grows); promote to sticky bottom-follow once the reply fills the
   viewport. Spacer is cleared when streaming ends (no leftover empty space
   under short replies). Wheel/touch-up detaches until the user returns or taps
   the scroll-down FAB. `scrollToBottomStable()` retries until `scrollHeight`
-  stabilizes (virtual scroller layout).
+  stabilizes.
 - **Expansion state** (`useToolCallExpansion.ts`): tool-call and reasoning
-  card expand/collapse survives `DynamicScroller` item recycling via module-level
-  maps + `expansionEpoch` in scroller `size-dependencies`.
+  card expand/collapse via module-level maps + `expansionEpoch` (watched by
+  `useChatScroll` for anchor re-layout).
 
 ### Markdown rendering
 
@@ -354,9 +353,11 @@ are not replayed on resend).
 front/src/
 ├── assets/brand/                  # mark + logo (light/dark SVG)
 ├── components/chat/
-│   ├── ChatView.vue               # composer, turn-anchor scroll, drag-drop
-│   ├── MessageList.vue            # virtual scroller, a11y live region
-│   ├── Message.vue                # interleaved parts, edit/regenerate actions
+│   ├── ChatView.vue               # shell messages + ChatComposer + useChatScroll
+│   ├── ChatComposer.vue           # draft, attachments, model menu, send/stop
+│   ├── MessageList.vue            # flat list in q-scroll-area, a11y live region
+│   ├── Message.vue                # shell + MessagePartRenderer + footer
+│   ├── MessagePartRenderer.vue    # text / activity / plan / citations / errors
 │   ├── MessageTextPart.vue        # markdown (incremental + final)
 │   ├── ThinkingCard.vue           # reasoning block
 │   ├── ToolCallCard.vue           # tool call human/tech views

@@ -11,7 +11,7 @@ from pydantic_ai import Agent
 from app.config import ProviderName
 from app.i18n import DEFAULT_LOCALE, t
 from app.llm.config import build_model, build_model_settings
-from app.llm.provider_sets import resolve_chat_from_set
+from app.llm.provider_sets import resolve_utility_from_set
 from app.schemas import (
     ChatMessage,
     LLMProviderConfig,
@@ -46,10 +46,11 @@ def resolve_utility_config(
     """Résout la config utilitaire.
 
     Si ``provider_set`` est fourni (ex. Improba Cloud), on résout via le set
-    pour injecter DeviceBearer + base URL du proxy — jamais l'API publique.
+    (petit modèle du catalogue, sans raisonnement) pour injecter DeviceBearer
+    + base URL du proxy — jamais l'API publique.
     """
     if provider_set is not None:
-        return resolve_chat_from_set(
+        return resolve_utility_from_set(
             provider_set,
             cloud_plugin_data_dir=cloud_plugin_data_dir,
         )

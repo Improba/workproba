@@ -59,6 +59,7 @@
           v-else-if="opinion.memoryCitations?.length"
           class="personas-opinion-card__citations"
           :citations="opinion.memoryCitations"
+          :expansion-key="`${card.id}-${opinion.personaId}`"
         />
       </section>
 

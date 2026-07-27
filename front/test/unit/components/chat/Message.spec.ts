@@ -4,6 +4,19 @@ import { describe, expect, it, vi } from 'vitest';
 import Message from '@components/chat/Message.vue';
 import * as expansion from '@composables/useToolCallExpansion';
 
+const defaultStubsWithActivity = {
+  Lucide: true,
+  MessageTextPart: { template: '<div class="text-part" />' },
+  ThinkingCard: true,
+  ActivityGroup: {
+    name: 'ActivityGroup',
+    props: ['group', 'toolCalls', 'pendingConfirmation', 'preparingConfirmation'],
+    template: '<div class="activity-group-stub" />',
+  },
+  ToolCallCard: true,
+  ConfirmationCard: true,
+};
+
 describe('Message accessibilité', () => {
   it('affiche un libellé de rôle sr-only pour le message user', () => {
     const user = mount(Message, {
@@ -17,11 +30,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -45,11 +54,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -73,11 +78,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -101,11 +102,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -135,11 +132,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -164,11 +157,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -191,11 +180,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -217,11 +202,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -230,7 +211,7 @@ describe('Message accessibilité', () => {
     wrapper.unmount();
   });
 
-  it('utilise ThinkingCard comme placeholder de raisonnement initial', () => {
+  it('utilise ActivityGroup comme placeholder de raisonnement initial', () => {
     const wrapper = mount(Message, {
       props: {
         message: {
@@ -246,9 +227,10 @@ describe('Message accessibilité', () => {
         stubs: {
           Lucide: true,
           MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: {
-            props: ['thinking', 'streaming'],
-            template: '<div class="thinking-card-stub" />',
+          ThinkingCard: true,
+          ActivityGroup: {
+            props: ['group', 'toolCalls', 'streaming'],
+            template: '<div class="activity-group-stub" />',
           },
           ToolCallCard: true,
           ConfirmationCard: true,
@@ -256,8 +238,8 @@ describe('Message accessibilité', () => {
       },
     });
 
-    expect(wrapper.find('.thinking-card-stub').exists()).toBe(true);
-    expect(wrapper.find('.chat-message__thinking-placeholder').exists()).toBe(false);
+    expect(wrapper.find('.activity-group-stub').exists()).toBe(true);
+    expect(wrapper.find('.thinking-card-stub').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -286,9 +268,10 @@ describe('Message accessibilité', () => {
         stubs: {
           Lucide: true,
           MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: {
-            props: ['thinking', 'streaming'],
-            template: '<div class="thinking-card-stub" />',
+          ThinkingCard: true,
+          ActivityGroup: {
+            props: ['group', 'toolCalls', 'streaming'],
+            template: '<div class="activity-group-stub" />',
           },
           ToolCallCard: true,
           ConfirmationCard: true,
@@ -297,7 +280,7 @@ describe('Message accessibilité', () => {
     });
 
     expect(wrapper.find('.text-part').exists()).toBe(false);
-    expect(wrapper.find('.thinking-card-stub').exists()).toBe(true);
+    expect(wrapper.find('.activity-group-stub').exists()).toBe(true);
     wrapper.unmount();
   });
 
@@ -324,6 +307,7 @@ describe('Message accessibilité', () => {
           Lucide: true,
           MessageTextPart: { template: '<div class="text-part" />' },
           ThinkingCard: true,
+          ActivityGroup: true,
           ToolCallCard: true,
           ConfirmationCard: true,
           MemoryCitationsBar: {
@@ -370,6 +354,7 @@ describe('Message accessibilité', () => {
           Lucide: true,
           MessageTextPart: { template: '<div class="text-part" />' },
           ThinkingCard: true,
+          ActivityGroup: true,
           ToolCallCard: true,
           ConfirmationCard: true,
           MemoryCitationsBar: true,
@@ -386,7 +371,7 @@ describe('Message accessibilité', () => {
   });
 
   it('replie le raisonnement quand un tool_call suit immédiatement', async () => {
-    const collapseSpy = vi.spyOn(expansion, 'collapseThinking');
+    const collapseSpy = vi.spyOn(expansion, 'collapseActivityGroup');
 
     const wrapper = mount(Message, {
       props: {
@@ -409,11 +394,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -452,7 +433,7 @@ describe('Message accessibilité', () => {
   });
 
   it('replie le raisonnement quand un tool_call est ajouté in-place sur parts', async () => {
-    const collapseSpy = vi.spyOn(expansion, 'collapseThinking');
+    const collapseSpy = vi.spyOn(expansion, 'collapseActivityGroup');
     const message = reactive({
       id: 'a-inplace',
       role: 'assistant' as const,
@@ -474,11 +455,7 @@ describe('Message accessibilité', () => {
       props: { message },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -496,8 +473,57 @@ describe('Message accessibilité', () => {
     wrapper.unmount();
   });
 
+  it('replie le groupe via l id de la première part si plusieurs thinking', async () => {
+    const collapseSpy = vi.spyOn(expansion, 'collapseActivityGroup');
+    const message = reactive({
+      id: 'a-multi-think',
+      role: 'assistant' as const,
+      content: '',
+      streaming: true,
+      parts: [
+        {
+          type: 'thinking' as const,
+          id: 'think-A',
+          thinkingId: 'a',
+          content: 'A',
+          done: true,
+        },
+        {
+          type: 'thinking' as const,
+          id: 'think-B',
+          thinkingId: 'b',
+          content: 'B',
+          done: false,
+        },
+      ],
+      createdAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const wrapper = mount(Message, {
+      props: { message },
+      global: {
+        stubs: {
+          ...defaultStubsWithActivity,
+        },
+      },
+    });
+
+    collapseSpy.mockClear();
+    message.parts.push({
+      type: 'tool_call',
+      id: 'tc-part',
+      toolCallId: 'tc-1',
+    });
+    await nextTick();
+
+    expect(collapseSpy).toHaveBeenCalledWith('think-A');
+    expect(collapseSpy).not.toHaveBeenCalledWith('think-B');
+    collapseSpy.mockRestore();
+    wrapper.unmount();
+  });
+
   it('ne replie pas le raisonnement si un texte sépare thinking et tool_call', async () => {
-    const collapseSpy = vi.spyOn(expansion, 'collapseThinking');
+    const collapseSpy = vi.spyOn(expansion, 'collapseActivityGroup');
 
     const wrapper = mount(Message, {
       props: {
@@ -525,11 +551,7 @@ describe('Message accessibilité', () => {
       },
       global: {
         stubs: {
-          Lucide: true,
-          MessageTextPart: { template: '<div class="text-part" />' },
-          ThinkingCard: true,
-          ToolCallCard: true,
-          ConfirmationCard: true,
+          ...defaultStubsWithActivity,
         },
       },
     });
@@ -574,13 +596,7 @@ describe('Message accessibilité', () => {
 });
 
 describe('Message erreur inline', () => {
-  const defaultStubs = {
-    Lucide: true,
-    MessageTextPart: { template: '<div class="text-part" />' },
-    ThinkingCard: true,
-    ToolCallCard: true,
-    ConfirmationCard: true,
-  };
+  const defaultStubs = defaultStubsWithActivity;
 
   it('affiche le bouton reconnect sur invalid_user_jwt et émet error-reconnect', async () => {
     const wrapper = mount(Message, {
@@ -610,13 +626,7 @@ describe('Message erreur inline', () => {
 });
 
 describe('Message placeholder continuation', () => {
-  const defaultStubs = {
-    Lucide: true,
-    MessageTextPart: { template: '<div class="text-part" />' },
-    ThinkingCard: true,
-    ToolCallCard: true,
-    ConfirmationCard: true,
-  };
+  const defaultStubs = defaultStubsWithActivity;
 
   function mountStreamingToolsMessage(overrides: Record<string, unknown> = {}) {
     return mount(Message, {
@@ -687,6 +697,98 @@ describe('Message placeholder continuation', () => {
     });
 
     expect(wrapper.find('.chat-message__continuation').exists()).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+describe('Message activity group', () => {
+  it('affiche ActivityGroup pour thinking + tool_call consécutifs', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-group',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          toolCalls: [{ id: 'tc-1', name: 'list_files', status: 'running' }],
+          parts: [
+            {
+              type: 'thinking',
+              id: 'think-part',
+              thinkingId: 'think-0',
+              content: 'Analyse',
+              done: false,
+            },
+            { type: 'tool_call', id: 'tc-part', toolCallId: 'tc-1' },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: { stubs: defaultStubsWithActivity },
+    });
+
+    expect(wrapper.find('.activity-group-stub').exists()).toBe(true);
+    expect(wrapper.find('.thinking-card-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('affiche ActivityGroup seul sans tool_call dans le run', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-think-only',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          parts: [
+            {
+              type: 'thinking',
+              id: 'think-part',
+              thinkingId: 'think-0',
+              content: 'Je réfléchis',
+              done: false,
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: { stubs: defaultStubsWithActivity },
+    });
+
+    expect(wrapper.find('.activity-group-stub').exists()).toBe(true);
+    expect(wrapper.find('.thinking-card-stub').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('passe la confirmation pending à ActivityGroup', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-confirm',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          toolCalls: [{ id: 'tc-1', name: 'write_docx', status: 'pending_confirmation' }],
+          pendingConfirmation: {
+            confirmationId: 'cf-1',
+            toolCallId: 'tc-1',
+            toolName: 'write_docx',
+            action: 'create',
+            proposedPath: 'out.docx',
+            humanSummary: 'Créer',
+          },
+          parts: [{ type: 'tool_call', id: 'tc-part', toolCallId: 'tc-1' }],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: { stubs: defaultStubsWithActivity },
+    });
+
+    const group = wrapper.findComponent({ name: 'ActivityGroup' });
+    expect(group.exists()).toBe(true);
+    expect(group.props('pendingConfirmation')).toMatchObject({
+      toolCallId: 'tc-1',
+    });
     wrapper.unmount();
   });
 });

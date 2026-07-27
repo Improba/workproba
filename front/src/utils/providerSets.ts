@@ -41,6 +41,64 @@ const MISTRAL_CHAT_MODELS: ProviderSetChatModel[] = [
   },
 ];
 
+/** Catalogue chat Mistral (small → medium → large). Utility = ``models[0]``. */
+export { MISTRAL_CHAT_MODELS };
+
+/** Catalogue mono-modèle : utility = ce modèle (sans raisonnement côté utilitaire). */
+export function singleModelCatalogue(
+  model: string,
+  reasoningEfforts: ReasoningEffort[] = ['none'],
+): ProviderSetChatModel[] {
+  const trimmed = model.trim() || 'model';
+  return [
+    {
+      model: trimmed,
+      label: trimmed,
+      reasoningEfforts,
+    },
+  ];
+}
+
+/**
+ * Garantit un ``chat.models`` non vide pour aligner picker UI et utility.
+ * - mistral : catalogue Small/Medium/Large
+ * - autres : une entrée = ``chat.model``
+ */
+export function ensureChatCatalogue(set: ProviderSet): ProviderSet {
+  if (set.chat.models?.length) return set;
+  if (set.chat.provider === 'mistral') {
+    return {
+      ...set,
+      chat: { ...set.chat, models: MISTRAL_CHAT_MODELS },
+    };
+  }
+  return {
+    ...set,
+    chat: {
+      ...set.chat,
+      models: singleModelCatalogue(set.chat.model),
+    },
+  };
+}
+
+/** Catalogue à persister pour un provider + modèle chat donné. */
+export function catalogueForProvider(
+  provider: LlmProviderName,
+  chatModel: string,
+  existing?: ProviderSetChatModel[] | null,
+): ProviderSetChatModel[] {
+  if (provider === 'mistral') {
+    if (existing?.length && existing.some((m) => m.model.includes('mistral'))) {
+      return existing;
+    }
+    return MISTRAL_CHAT_MODELS;
+  }
+  if (existing?.length === 1 && existing[0]?.model === chatModel.trim()) {
+    return existing;
+  }
+  return singleModelCatalogue(chatModel);
+}
+
 export const MISTRAL_BUILTIN_SET: ProviderSet = {
   id: 'mistral-default',
   name: 'Mistral',
@@ -110,6 +168,7 @@ export const OLLAMA_BUILTIN_SET: ProviderSet = {
     model: 'llama3.2',
     baseUrl: OLLAMA_BASE_URL,
     reasoning: 'none',
+    models: singleModelCatalogue('llama3.2'),
   },
   embeddings: {
     provider: 'ollama',
@@ -235,7 +294,7 @@ export function enrichSetFromBuiltin(set: ProviderSet): ProviderSet {
     }
   }
 
-  return enriched;
+  return ensureChatCatalogue(enriched);
 }
 
 export function resolveActiveSet(
@@ -312,7 +371,7 @@ export function toEmbeddingLlmConfigFromSet(set: ProviderSet | null): LlmConfigP
   };
 }
 
-/** Config LLM utilitaire (titre, résumé) : preset sans override session ni raisonnement.
+/** Config LLM utilitaire (titre, résumé) : petit modèle du catalogue, sans raisonnement.
  *  Pour ``device_bearer`` (Improba Cloud), retourne null : le sidecar doit recevoir
  *  le provider_set + cloud_plugin_data_dir pour injecter le DeviceBearer.
  */
@@ -320,9 +379,13 @@ export function toUtilityLlmConfigFromSet(set: ProviderSet | null): LlmConfigPay
   if (!set) return null;
   if (set.authMode === 'device_bearer') return null;
   const chat = set.chat;
+  const catalogueModel = chat.models?.[0]?.model?.trim();
+  const model =
+    catalogueModel
+    || (chat.provider === 'mistral' ? 'mistral-small-latest' : chat.model);
   return {
     provider: chat.provider,
-    model: chat.model,
+    model,
     base_url: chat.baseUrl ?? null,
     api_key: chat.apiKey ?? null,
     extra_headers: {},
@@ -347,12 +410,14 @@ export function applyOllamaOverrides(
 ): ProviderSet {
   const next = cloneProviderSet(set);
   const normalizedBase = baseUrl.trim() || 'http://127.0.0.1:11434/v1';
+  const nextModel = model.trim() || next.chat.model;
   next.chat = {
     ...next.chat,
     baseUrl: normalizedBase.endsWith('/v1')
       ? normalizedBase
       : `${normalizedBase.replace(/\/$/, '')}/v1`,
-    model: model.trim() || next.chat.model,
+    model: nextModel,
+    models: catalogueForProvider('ollama', nextModel, next.chat.models),
   };
   if (next.embeddings) {
     next.embeddings = {
@@ -477,6 +542,7 @@ export function emptyCustomSet(): ProviderSet {
       model: 'mistral-medium-latest',
       baseUrl: MISTRAL_BASE_URL,
       reasoning: 'high',
+      models: MISTRAL_CHAT_MODELS,
     },
     embeddings: {
       provider: 'mistral',
@@ -488,6 +554,7 @@ export function emptyCustomSet(): ProviderSet {
     capabilities: { reasoning: 'medium', vision: true, tools: true, webSearch: true },
     isDefault: false,
     isBuiltin: false,
+    authMode: 'api_key',
   };
 }
 

@@ -1637,11 +1637,14 @@ async def test_write_managed_tool_calls_confirmation_gate(
 
     from conftest import FakeProjectClient
 
-    gate_called = {"value": False}
+    gate_calls: list[str] = []
 
     class CaptureGate(ConfirmationGate):
+        async def notify_preparing(self, **kwargs):  # type: ignore[no-untyped-def]
+            gate_calls.append("notify_preparing")
+
         async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
-            gate_called["value"] = True
+            gate_calls.append("request_effect")
             return "approved"
 
     cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
@@ -1706,7 +1709,142 @@ async def test_write_managed_tool_calls_confirmation_gate(
         hours=8,
         employeeId=1,
     )
-    assert gate_called["value"] is True
+    assert gate_calls == ["request_effect"]
+
+
+@pytest.mark.asyncio
+async def test_preresolve_update_project_member_calls_notify_preparing_before_gate(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.confirmation import ConfirmationGate
+    from app.agent.tools import ToolContext, ToolDeps
+    from app.limits import DEFAULT_LIMITS
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
+    from app.sandbox.runner import SandboxRunner
+
+    from conftest import FakeProjectClient
+
+    gate_calls: list[str] = []
+
+    class CaptureGate(ConfirmationGate):
+        async def notify_preparing(self, **kwargs):  # type: ignore[no-untyped-def]
+            gate_calls.append("notify_preparing")
+
+        async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
+            gate_calls.append("request_effect")
+            return "approved"
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
+    cloud_storage.save_known_managed_connectors(
+        cloud_dir,
+        [
+            {
+                "id": "ihora",
+                "name": "Ihora",
+                "tools": [
+                    {
+                        "name": "update_project_member",
+                        "action": "update_project_member",
+                        "description": "Mettre a jour un membre",
+                        "effect": "write",
+                        "visibility": "guided",
+                        "input_schema": {
+                            "type": "object",
+                            "properties": {
+                                "projectId": {"type": ["string", "number"]},
+                                "userId": {"type": ["string", "number"]},
+                                "email": {"type": "string"},
+                                "role": {"type": "string"},
+                            },
+                            "required": ["projectId"],
+                            "additionalProperties": False,
+                        },
+                    }
+                ],
+            }
+        ],
+    )
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.test",
+        plugin_data_dir=cloud_dir,
+    )
+    client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
+
+    async def fake_allowed(self: CloudControlPlaneClient) -> set[str]:
+        return {"ihora"}
+
+    async def fake_invoke_remote(self, connector_id, payload, identity):  # type: ignore[no-untyped-def]
+        if payload.get("action") == "list_users":
+            return {
+                "ok": True,
+                "result": {
+                    "users": [
+                        {
+                            "userId": 7,
+                            "email": "sylvain.meylan@improba.ch",
+                            "firstname": "Sylvain",
+                            "lastname": "Meylan",
+                        }
+                    ],
+                    "action": "list_users",
+                },
+            }
+        return {"ok": True, "result": {"action": "update_project_member"}}
+
+    monkeypatch.setattr(CloudControlPlaneClient, "fetch_allowed_connector_ids", fake_allowed)
+    monkeypatch.setattr(
+        "app.plugins.workproba_cloud.plugin.open_remote_capability_gateway",
+        lambda **kwargs: type("GW", (), {"invoke_remote": fake_invoke_remote})(),
+    )
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugins_root,
+            locale="fr",
+            permissions_network=True,
+            managed_allowed_connector_ids=frozenset({"ihora"}),
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=CaptureGate(session_id="s1", turn_id="t1"),
+    )
+    ctx = RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id="tc-preresolve-preparing",
+    )
+
+    await invoke_managed_connector_impl(
+        ctx,
+        connector_id="ihora",
+        payload={
+            "action": "update_project_member",
+            "projectId": 42,
+            "email": "sylvain.meylan@improba.ch",
+            "role": "manager",
+        },
+        gate_tool_name="managed__ihora__update_project_member",
+    )
+
+    assert gate_calls == ["notify_preparing", "request_effect"]
 
 
 @pytest.mark.asyncio
