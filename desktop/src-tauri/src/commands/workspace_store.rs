@@ -28,6 +28,8 @@ pub struct WorkspaceInfo {
     pub title: String,
     pub created_at: String,
     pub last_opened_at: String,
+    #[serde(default)]
+    pub archived: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -64,6 +66,8 @@ struct RegistryEntry {
     title: String,
     created_at: String,
     last_opened_at: String,
+    #[serde(default)]
+    archived: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -390,6 +394,7 @@ fn entry_to_info(app: &AppHandle, entry: &RegistryEntry) -> Result<WorkspaceInfo
         title: entry.title.clone(),
         created_at: entry.created_at.clone(),
         last_opened_at: entry.last_opened_at.clone(),
+        archived: entry.archived,
     })
 }
 
@@ -417,6 +422,7 @@ pub fn lookup_workspace(
 pub fn open_or_create_workspace(
     app: &AppHandle,
     folder_path: &Path,
+    unarchive: bool,
 ) -> Result<WorkspaceInfo, String> {
     if !folder_path.is_dir() {
         return Err(format!(
@@ -437,6 +443,9 @@ pub fn open_or_create_workspace(
     {
         entry.folder_path = folder_path_string.clone();
         entry.last_opened_at = now.clone();
+        if unarchive {
+            entry.archived = false;
+        }
         let entry_snapshot = entry.clone();
         let data_dir = ensure_workspace_layout(app, &entry_snapshot.id)?;
         save_registry(app, &registry)?;
@@ -458,6 +467,7 @@ pub fn open_or_create_workspace(
         title: workspace_title(folder_path),
         created_at: now.clone(),
         last_opened_at: now,
+        archived: false,
     };
 
     let data_dir = ensure_workspace_layout(app, &entry.id)?;
@@ -469,15 +479,53 @@ pub fn open_or_create_workspace(
     entry_to_info(app, &entry)
 }
 
-pub fn list_workspaces(app: &AppHandle) -> Result<Vec<WorkspaceInfo>, String> {
+pub fn list_workspaces(app: &AppHandle, include_archived: bool) -> Result<Vec<WorkspaceInfo>, String> {
     let registry = load_registry(app)?;
-    let mut workspaces: Vec<WorkspaceInfo> = registry
-        .workspaces
-        .iter()
-        .filter_map(|entry| entry_to_info(app, entry).ok())
-        .collect();
+    let mut workspaces = Vec::new();
+    for entry in &registry.workspaces {
+        if !include_archived && entry.archived {
+            continue;
+        }
+        match entry_to_info(app, entry) {
+            Ok(info) => workspaces.push(info),
+            Err(error) => {
+                log::warn!(
+                    "list_workspaces: espace {} ignoré ({})",
+                    entry.id,
+                    error
+                );
+            }
+        }
+    }
     workspaces.sort_by(|left, right| right.last_opened_at.cmp(&left.last_opened_at));
     Ok(workspaces)
+}
+
+pub fn set_workspace_archived(
+    app: &AppHandle,
+    workspace_id: &str,
+    archived: bool,
+) -> Result<WorkspaceInfo, String> {
+    validate_workspace_id(workspace_id)?;
+    let mut registry = load_registry(app)?;
+    let entry = registry
+        .workspaces
+        .iter_mut()
+        .find(|entry| entry.id == workspace_id)
+        .ok_or_else(|| format!("Espace inconnu : {workspace_id}"))?;
+    if !archived {
+        let folder = PathBuf::from(&entry.folder_path);
+        if !folder.is_dir() {
+            return Err(format!(
+                "Le dossier de l'espace n'existe plus : {}",
+                entry.folder_path
+            ));
+        }
+    }
+    entry.archived = archived;
+    let entry_snapshot = entry.clone();
+    save_registry(app, &registry)?;
+    entry_to_info(app, &entry_snapshot)
 }
 
 pub fn update_workspace_title(
@@ -715,6 +763,7 @@ mod workspace_store_tests {
             title: "Test Space".to_string(),
             created_at: "2026-01-01T00:00:00Z".to_string(),
             last_opened_at: "2026-01-02T00:00:00Z".to_string(),
+            archived: false,
         }
     }
 
@@ -1006,5 +1055,19 @@ mod workspace_store_tests {
 
         let _ = fs::remove_dir_all(app_data);
         let _ = fs::remove_dir_all(client);
+    }
+
+    #[test]
+    fn registry_entry_archived_defaults_to_false() {
+        let json = r#"{
+            "id": "ws_a",
+            "folderPath": "/tmp/a",
+            "folderPathNormalized": "/tmp/a",
+            "title": "A",
+            "createdAt": "2026-01-01T00:00:00Z",
+            "lastOpenedAt": "2026-01-02T00:00:00Z"
+        }"#;
+        let entry: RegistryEntry = serde_json::from_str(json).expect("deserialize");
+        assert!(!entry.archived);
     }
 }

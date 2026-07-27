@@ -40,6 +40,8 @@ vi.mock('@composables/useSpace', () => ({
 vi.mock('@composables/useAppSettings', () => ({
   useAppSettings: () => ({
     onboardingDone,
+    settings: ref({ version: 1, providers: [], workspaceSidebarOrder: [] }),
+    setWorkspaceSidebarOrder: vi.fn(async () => ({})),
   }),
 }));
 
@@ -70,6 +72,7 @@ vi.mock('@composables/useSessionSync', () => ({
 
 vi.mock('@services/workspaceSession', () => ({
   createSession: vi.fn(),
+  getSession: vi.fn(async () => null),
   listSessions: vi.fn(async () => []),
 }));
 

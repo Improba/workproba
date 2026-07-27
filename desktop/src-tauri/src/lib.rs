@@ -9,8 +9,9 @@ use commands::{
     get_workspace_info, install_local_plugin, is_preset_active, list_conversations,
     list_dir_entries, list_documents, list_plugins, list_workspaces, open_external_url,
     open_path, pick_project_folder, restore_last_project_path, retry_fs_watch, reveal_in_os,
-    save_app_settings, save_conversation, set_active_project_path, uninstall_local_plugin,
-    update_workspace_title, FsWatchState, ProjectState,
+    save_app_settings, save_conversation, set_active_project_path, set_workspace_archived,
+    clear_active_project_path, uninstall_local_plugin, update_workspace_title, FsWatchState,
+    ProjectState,
 };
 use sidecar::{ai_sidecar_status, spawn_packaged_sidecar, start_ai_sidecar, try_spawn_dev_uvicorn};
 
@@ -52,6 +53,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             pick_project_folder,
             set_active_project_path,
+            clear_active_project_path,
             get_active_project_path,
             restore_last_project_path,
             get_workproba_dir,
@@ -59,6 +61,7 @@ pub fn run() {
             get_workspace_info,
             get_workspace_data_dir,
             list_workspaces,
+            set_workspace_archived,
             update_workspace_title,
             list_conversations,
             get_conversation,

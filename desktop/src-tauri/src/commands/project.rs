@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
-use super::fs_watch::{start_fs_watch, FsWatchStatus};
+use super::fs_watch::{start_fs_watch, stop_fs_watch, FsWatchStatus};
 use super::settings_store::get_app_settings;
 use super::workspace_store::{self, ConversationSession, WorkspaceInfo, WORKPROBA_DIR_NAME};
 use crate::commands::atomic_io::atomic_write;
@@ -139,8 +139,17 @@ fn activate_workspace(
     app: &AppHandle,
     state: &State<'_, ProjectState>,
     path: &Path,
+    unarchive: bool,
 ) -> Result<WorkspaceInfo, String> {
-    let workspace = workspace_store::open_or_create_workspace(app, path)?;
+    if let Some(existing) = workspace_store::lookup_workspace(app, path)? {
+        if existing.archived && !unarchive {
+            return Err(
+                "Cet espace est archivé. Restaurez-le depuis la barre latérale.".to_string(),
+            );
+        }
+    }
+
+    let workspace = workspace_store::open_or_create_workspace(app, path, unarchive)?;
     persist_last_project_path(app, &workspace)?;
 
     let mut active_path = state
@@ -199,9 +208,33 @@ pub fn set_active_project_path(
     app: AppHandle,
     state: State<'_, ProjectState>,
     project_path: String,
+    unarchive: Option<bool>,
 ) -> Result<WorkspaceInfo, String> {
     let path = PathBuf::from(&project_path);
-    activate_workspace(&app, &state, &path)
+    activate_workspace(&app, &state, &path, unarchive.unwrap_or(false))
+}
+
+#[tauri::command]
+pub fn clear_active_project_path(
+    app: AppHandle,
+    state: State<'_, ProjectState>,
+) -> Result<(), String> {
+    {
+        let mut active_path = state
+            .active_path
+            .lock()
+            .map_err(|_| "Impossible de verrouiller l'état de l'espace".to_string())?;
+        *active_path = None;
+    }
+    {
+        let mut active_workspace_id = state
+            .active_workspace_id
+            .lock()
+            .map_err(|_| "Impossible de verrouiller l'état workspace".to_string())?;
+        *active_workspace_id = None;
+    }
+    stop_fs_watch(&app.state::<super::fs_watch::FsWatchState>());
+    Ok(())
 }
 
 #[tauri::command]
@@ -234,8 +267,24 @@ pub fn get_workspace_data_dir(
 }
 
 #[tauri::command]
-pub fn list_workspaces(app: AppHandle) -> Result<Vec<WorkspaceInfo>, String> {
-    workspace_store::list_workspaces(&app)
+pub fn list_workspaces(
+    app: AppHandle,
+    include_archived: Option<bool>,
+) -> Result<Vec<WorkspaceInfo>, String> {
+    workspace_store::list_workspaces(&app, include_archived.unwrap_or(false))
+}
+
+#[tauri::command]
+pub fn set_workspace_archived(
+    app: AppHandle,
+    workspace_id: String,
+    archived: bool,
+) -> Result<WorkspaceInfo, String> {
+    let workspace = workspace_store::set_workspace_archived(&app, &workspace_id, archived)?;
+    if archived {
+        clear_last_project_if_workspace(&app, &workspace_id)?;
+    }
+    Ok(workspace)
 }
 
 #[tauri::command]
@@ -463,7 +512,7 @@ fn ensure_path_in_allowed_roots(app: &AppHandle, path: &Path) -> Result<PathBuf,
         }
     }
 
-    let workspaces = workspace_store::list_workspaces(app)?;
+    let workspaces = workspace_store::list_workspaces(app, true)?;
     for workspace in workspaces {
         let folder = PathBuf::from(&workspace.folder_path);
         if let Ok(folder_canonical) = folder.canonicalize() {
@@ -620,6 +669,22 @@ fn persist_last_project_path(app: &AppHandle, workspace: &WorkspaceInfo) -> Resu
     atomic_write(&file_path, &json)
 }
 
+fn clear_last_project_if_workspace(app: &AppHandle, workspace_id: &str) -> Result<(), String> {
+    let file_path = last_project_file_path(app)?;
+    if !file_path.is_file() {
+        return Ok(());
+    }
+
+    let raw = fs::read_to_string(&file_path).map_err(|error| error.to_string())?;
+    let config: LastProjectConfig =
+        serde_json::from_str(&raw).map_err(|error| error.to_string())?;
+    if config.workspace_id.as_deref() != Some(workspace_id) {
+        return Ok(());
+    }
+
+    fs::remove_file(&file_path).map_err(|error| error.to_string())
+}
+
 fn last_project_file_path(app: &AppHandle) -> Result<PathBuf, String> {
     app.path()
         .app_data_dir()
@@ -645,7 +710,13 @@ pub fn restore_last_project_path(
         return Ok(None);
     }
 
-    Ok(Some(activate_workspace(&app, &state, &path)?))
+    if let Some(workspace) = workspace_store::lookup_workspace(&app, &path)? {
+        if workspace.archived {
+            return Ok(None);
+        }
+    }
+
+    Ok(Some(activate_workspace(&app, &state, &path, false)?))
 }
 
 // Compatibilité ascendante pour d'anciens appels front.
@@ -657,7 +728,7 @@ pub fn get_workproba_dir(app: AppHandle, project_path: String) -> Result<String,
     }
 
     let path = PathBuf::from(&project_path);
-    let workspace = workspace_store::open_or_create_workspace(&app, &path)?;
+    let workspace = workspace_store::open_or_create_workspace(&app, &path, false)?;
     Ok(workspace.data_dir)
 }
 

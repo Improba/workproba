@@ -18,6 +18,7 @@ export interface WorkspaceInfo {
   title: string;
   createdAt: string;
   lastOpenedAt: string;
+  archived?: boolean;
 }
 
 export type LlmProviderName =
@@ -228,4 +229,6 @@ export interface AppSettings {
   allowedProviderSetIds?: string[] | null;
   /** Adresse e-mail du support pour les rapports d'erreur. */
   supportEmail?: string | null;
+  /** Ordre personnalisé des espaces dans la barre latérale. */
+  workspaceSidebarOrder?: string[] | null;
 }

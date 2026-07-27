@@ -35,11 +35,27 @@ export async function pickProjectFolder(): Promise<string | null> {
   return tauriInvoke<string | null>('pick_project_folder');
 }
 
-export async function setActiveProjectPath(projectPath: string): Promise<WorkspaceInfo> {
+export async function getWorkspaceInfo(projectPath: string): Promise<WorkspaceInfo | null> {
+  if (!isDesktopApp()) return null;
+  return tauriInvoke<WorkspaceInfo | null>('get_workspace_info', { projectPath });
+}
+
+export async function clearActiveProjectPath(): Promise<void> {
+  if (!isDesktopApp()) return;
+  await tauriInvoke<void>('clear_active_project_path');
+}
+
+export async function setActiveProjectPath(
+  projectPath: string,
+  options?: { unarchive?: boolean },
+): Promise<WorkspaceInfo> {
   if (!isDesktopApp()) {
     throw new Error('setActiveProjectPath nécessite l’application bureau Tauri');
   }
-  return tauriInvoke<WorkspaceInfo>('set_active_project_path', { projectPath });
+  return tauriInvoke<WorkspaceInfo>('set_active_project_path', {
+    projectPath,
+    unarchive: options?.unarchive ?? false,
+  });
 }
 
 export async function getActiveProjectPath(): Promise<string | null> {
@@ -57,9 +73,19 @@ export async function restoreLastProjectPath(): Promise<WorkspaceInfo | null> {
   return tauriInvoke<WorkspaceInfo | null>('restore_last_project_path');
 }
 
-export async function listWorkspaces(): Promise<WorkspaceInfo[]> {
+export async function listWorkspaces(includeArchived = false): Promise<WorkspaceInfo[]> {
   if (!isDesktopApp()) return [];
-  return tauriInvoke<WorkspaceInfo[]>('list_workspaces');
+  return tauriInvoke<WorkspaceInfo[]>('list_workspaces', { includeArchived });
+}
+
+export async function setWorkspaceArchived(
+  workspaceId: string,
+  archived: boolean,
+): Promise<WorkspaceInfo> {
+  if (!isDesktopApp()) {
+    throw new Error('setWorkspaceArchived nécessite l’application bureau Tauri');
+  }
+  return tauriInvoke<WorkspaceInfo>('set_workspace_archived', { workspaceId, archived });
 }
 
 export async function updateWorkspaceTitle(

@@ -16,7 +16,7 @@
 
       <!-- Arbre espaces / sessions -->
       <div class="wp-sidebar__tree">
-        <div v-if="recentWorkspaces.length === 0" class="wp-sidebar__empty">
+        <div v-if="orderedWorkspaces.length === 0 && archivedWorkspaces.length === 0" class="wp-sidebar__empty">
           <p>{{ t('shell.noSpaces') }}</p>
           <button type="button" class="wp-sidebar__new-cta" @click="onOpenSpace">
             <Lucide name="plus" size="16" color="text-invert" />
@@ -25,12 +25,31 @@
         </div>
 
         <section
-          v-for="ws in recentWorkspaces"
+          v-for="ws in orderedWorkspaces"
           :key="ws.id"
           class="wp-space"
-          :class="{ 'wp-space--active': ws.id === activeSpaceId }"
+          :class="{
+            'wp-space--active': ws.id === activeSpaceId,
+            'wp-space--drag-over': dragOverSpaceId === ws.id,
+          }"
+          @dragover.prevent="onSpaceDragOver(ws.id)"
+          @dragleave="onSpaceDragLeave(ws.id)"
+          @drop.prevent="onSpaceDrop(ws.id)"
         >
           <div class="wp-space__row">
+            <button
+              v-if="orderedWorkspaces.length > 1"
+              type="button"
+              class="wp-space__drag-handle"
+              draggable="true"
+              :title="t('shell.reorderSpace')"
+              @click.stop
+              @dragstart="onSpaceDragStart(ws.id, $event)"
+              @dragend="onSpaceDragEnd"
+            >
+              <Lucide name="grip-vertical" size="14" color="text-faint" />
+            </button>
+
             <button
               type="button"
               class="wp-space__chevron"
@@ -66,13 +85,12 @@
             </button>
 
             <button
-              v-if="ws.id === activeSpaceId"
               type="button"
-              class="wp-space__action"
+              class="wp-space__action wp-space__action--new"
               :title="t('common.newConversation')"
-              @click.stop="onNewConversation"
+              @click.stop="onNewConversation(ws)"
             >
-              <Lucide name="message-square-plus" size="14" color="wp-text-muted" />
+              <Lucide name="plus" size="15" color="wp-text-muted" />
             </button>
           </div>
 
@@ -81,15 +99,13 @@
 
             <div v-else-if="sessionsFor(ws.id).length === 0" class="wp-space__hint">
               <button
-                v-if="ws.id === activeSpaceId"
                 type="button"
                 class="wp-space__inline-cta"
-                @click="onNewConversation"
+                @click="onNewConversation(ws)"
               >
                 <Lucide name="plus" size="13" color="text-invert" />
                 {{ t('common.newConversation') }}
               </button>
-              <template v-else>{{ t('shell.noConversations') }}</template>
             </div>
 
             <div v-else class="wp-space__convos">
@@ -120,12 +136,49 @@
             </div>
           </div>
         </section>
+
+        <div v-if="archivedWorkspaces.length > 0" class="wp-sidebar__archived">
+          <button
+            type="button"
+            class="wp-sidebar__archived-toggle"
+            :aria-expanded="archivedExpanded"
+            @click="archivedExpanded = !archivedExpanded"
+          >
+            <Lucide
+              :name="archivedExpanded ? 'chevron-down' : 'chevron-right'"
+              size="14"
+              color="text-faint"
+            />
+            <span>{{ t('shell.archivedSpaces', { count: archivedWorkspaces.length }) }}</span>
+          </button>
+
+          <div v-if="archivedExpanded" class="wp-sidebar__archived-list">
+            <div
+              v-for="ws in archivedWorkspaces"
+              :key="ws.id"
+              class="wp-space wp-space--archived"
+            >
+              <div class="wp-space__row wp-space__row--archived">
+                <span class="wp-space__archived-name">{{ ws.title || basename(ws.folderPath) }}</span>
+                <button
+                  type="button"
+                  class="wp-space__action wp-space__action--new"
+                  :title="t('shell.unarchiveSpace')"
+                  @click="onUnarchive(ws)"
+                >
+                  <Lucide name="archive-restore" size="14" color="wp-text-muted" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       <SpaceSettingsDialog
         v-model="settingsDialogOpen"
         :workspace="settingsTarget"
         @saved="onSpaceSaved"
+        @archived="onSpaceArchived"
       />
 
       <!-- Pied : profil (bas gauche) + mémoire partagée + réglages -->
@@ -244,7 +297,7 @@
         :disabled="!activeSpaceId"
         @click="onNewConversation"
       >
-        <Lucide name="message-square-plus" size="18" color="wp-text-muted" />
+        <Lucide name="plus" size="18" color="wp-text-muted" />
       </button>
       <div class="wp-sidebar__rail-spacer" />
       <button
@@ -275,11 +328,16 @@ import { useSpace } from '@composables/useSpace';
 import { useUserProfile } from '@composables/useUserProfile';
 import { useAppSettings } from '@composables/useAppSettings';
 import { useCloud } from '@composables/useCloud';
-import { listWorkspaces } from '@composables/useDesktop';
+import { listWorkspaces, setWorkspaceArchived } from '@composables/useDesktop';
 import type { WorkspaceInfo } from '@composables/useDesktop.types';
-import { createSession, listSessions, type LocalSession } from '@services/workspaceSession';
+import { createSession, getSession, listSessions, type LocalSession } from '@services/workspaceSession';
 import { bumpSessions, useSessionSync } from '@composables/useSessionSync';
 import { HOME_ROUTE } from '@router/meta';
+import {
+  applySidebarOrder,
+  orderIdsFromWorkspaces,
+  removeFromSidebarOrder,
+} from '@utils/workspaceSidebarOrder';
 import MemoryPanel from '@components/memory/MemoryPanel.vue';
 import SpaceSettingsDialog from '@components/workproba/SpaceSettingsDialog.vue';
 import CloudLoginModal from '@components/cloud/CloudLoginModal.vue';
@@ -305,10 +363,15 @@ const {
   activeDataDir,
   openSpace,
   switchSpace,
+  clearActiveSpace,
   initFromStoredPath,
 } = useSpace();
 
 const recentWorkspaces = ref<WorkspaceInfo[]>([]);
+const archivedWorkspaces = ref<WorkspaceInfo[]>([]);
+const archivedExpanded = ref(false);
+const dragSpaceId = ref<string | null>(null);
+const dragOverSpaceId = ref<string | null>(null);
 const expanded = reactive<Record<string, boolean>>({});
 const expandedConvos = reactive<Record<string, boolean>>({});
 const sessionsByWs = reactive<Record<string, LocalSession[]>>({});
@@ -316,10 +379,14 @@ const loadingByWs = reactive<Record<string, boolean>>({});
 
 const PREVIEW_COUNT = 4;
 
+const orderedWorkspaces = computed(() =>
+  applySidebarOrder(recentWorkspaces.value, settings.value.workspaceSidebarOrder),
+);
+
 const currentSessionId = computed(() => String(route.params.id ?? ''));
 
 const { profile, initials, save: saveProfile } = useUserProfile();
-const { onboardingDone } = useAppSettings();
+const { onboardingDone, settings, setWorkspaceSidebarOrder } = useAppSettings();
 const { status, isEnrolled, init: initCloud } = useCloud();
 
 type SidebarIdentityMode = 'guest' | 'cloud' | 'local';
@@ -471,9 +538,128 @@ function formatRelative(iso: string): string {
 
 async function refreshWorkspaces(): Promise<void> {
   try {
-    recentWorkspaces.value = await listWorkspaces();
-  } catch {
-    recentWorkspaces.value = [];
+    const all = await listWorkspaces(true);
+    recentWorkspaces.value = all.filter((workspace) => !workspace.archived);
+    archivedWorkspaces.value = all
+      .filter((workspace) => workspace.archived)
+      .sort((left, right) => right.lastOpenedAt.localeCompare(left.lastOpenedAt));
+  } catch (err) {
+    Notify.create({
+      message: err instanceof Error ? err.message : t('shell.spacesLoadFailed'),
+      classes: 'bg-danger text-white',
+    });
+  }
+}
+
+function onSpaceDragLeave(wsId: string): void {
+  if (dragOverSpaceId.value === wsId) {
+    dragOverSpaceId.value = null;
+  }
+}
+
+function onSpaceDragStart(wsId: string, event: DragEvent): void {
+  if (orderedWorkspaces.value.length < 2) {
+    event.preventDefault();
+    return;
+  }
+  dragSpaceId.value = wsId;
+  event.dataTransfer?.setData('text/plain', wsId);
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'move';
+  }
+}
+
+function onSpaceDragOver(wsId: string): void {
+  if (dragSpaceId.value && dragSpaceId.value !== wsId) {
+    dragOverSpaceId.value = wsId;
+  }
+}
+
+async function onSpaceDrop(targetId: string): Promise<void> {
+  const sourceId = dragSpaceId.value;
+  dragOverSpaceId.value = null;
+  if (!sourceId || sourceId === targetId) return;
+
+  const list = [...orderedWorkspaces.value];
+  const fromIndex = list.findIndex((workspace) => workspace.id === sourceId);
+  const toIndex = list.findIndex((workspace) => workspace.id === targetId);
+  if (fromIndex < 0 || toIndex < 0) return;
+
+  const [moved] = list.splice(fromIndex, 1);
+  list.splice(toIndex, 0, moved);
+  try {
+    await setWorkspaceSidebarOrder(orderIdsFromWorkspaces(list));
+  } catch (err) {
+    Notify.create({
+      message: err instanceof Error ? err.message : t('shell.reorderSpaceFailed'),
+      classes: 'bg-danger text-white',
+    });
+  }
+}
+
+function onSpaceDragEnd(): void {
+  dragSpaceId.value = null;
+  dragOverSpaceId.value = null;
+}
+
+async function onSpaceArchived(workspace: WorkspaceInfo): Promise<void> {
+  const wasActive = activeSpaceId.value === workspace.id;
+  let viewingArchivedSession = false;
+  if (route.name === 'chat_session' && currentSessionId.value) {
+    if (sessionsFor(workspace.id).some((session) => session.id === currentSessionId.value)) {
+      viewingArchivedSession = true;
+    } else {
+      const current = await getSession(currentSessionId.value);
+      viewingArchivedSession = current?.workspaceId === workspace.id;
+    }
+  }
+
+  const nextOrder = removeFromSidebarOrder(settings.value.workspaceSidebarOrder, workspace.id);
+  if (nextOrder.length !== (settings.value.workspaceSidebarOrder ?? []).length) {
+    await setWorkspaceSidebarOrder(nextOrder);
+  }
+  await refreshWorkspaces();
+
+  if (wasActive) {
+    const next = orderedWorkspaces.value[0];
+    if (next) {
+      try {
+        await switchSpace(next.folderPath);
+      } catch {
+        clearActiveSpace();
+      }
+    } else {
+      clearActiveSpace();
+    }
+  }
+
+  if (route.name === 'chat_session' && (wasActive || viewingArchivedSession)) {
+    await router.push({ name: HOME_ROUTE });
+  }
+}
+
+async function onUnarchive(workspace: WorkspaceInfo): Promise<void> {
+  try {
+    await setWorkspaceArchived(workspace.id, false);
+    const currentOrder = settings.value.workspaceSidebarOrder ?? [];
+    if (!currentOrder.includes(workspace.id)) {
+      await setWorkspaceSidebarOrder([...currentOrder, workspace.id]);
+    }
+    await refreshWorkspaces();
+    archivedExpanded.value = true;
+    Notify.create({
+      message: t('shell.unarchiveSpaceDone'),
+      color: 'dark',
+      timeout: 1500,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : t('shell.unarchiveSpaceFailed');
+    Notify.create({
+      message: message.includes("n'existe plus")
+        ? t('shell.unarchiveSpaceFolderMissing')
+        : message,
+      classes: 'bg-danger text-white',
+    });
   }
 }
 
@@ -490,6 +676,7 @@ async function ensureSessionsLoaded(ws: WorkspaceInfo): Promise<void> {
 }
 
 const refreshInFlight = new Map<string, Promise<void>>();
+const refreshPending = new Set<string>();
 
 async function refreshActiveSessions(): Promise<void> {
   const id = activeSpaceId.value;
@@ -497,7 +684,10 @@ async function refreshActiveSessions(): Promise<void> {
   if (!id || !path) return;
 
   const existing = refreshInFlight.get(id);
-  if (existing) return existing;
+  if (existing) {
+    refreshPending.add(id);
+    return existing;
+  }
 
   const promise = (async () => {
     loadingByWs[id] = true;
@@ -508,6 +698,9 @@ async function refreshActiveSessions(): Promise<void> {
     } finally {
       loadingByWs[id] = false;
       refreshInFlight.delete(id);
+      if (refreshPending.delete(id)) {
+        void refreshActiveSessions();
+      }
     }
   })();
 
@@ -517,7 +710,13 @@ async function refreshActiveSessions(): Promise<void> {
 
 function prependSession(wsId: string, session: LocalSession): void {
   const existing = sessionsByWs[wsId] ?? [];
-  if (existing.some((s) => s.id === session.id)) return;
+  const index = existing.findIndex((s) => s.id === session.id);
+  if (index >= 0) {
+    const updated = [...existing];
+    updated[index] = { ...updated[index], ...session };
+    sessionsByWs[wsId] = updated;
+    return;
+  }
   sessionsByWs[wsId] = [session, ...existing];
 }
 
@@ -555,8 +754,10 @@ function onSpaceSaved(updated: WorkspaceInfo): void {
   }
 }
 
-async function onNewConversation(): Promise<void> {
-  if (!activeSpaceId.value || !activePath.value) {
+async function onNewConversation(ws?: WorkspaceInfo): Promise<void> {
+  const target =
+    ws ?? recentWorkspaces.value.find((item) => item.id === activeSpaceId.value) ?? null;
+  if (!target) {
     Notify.create({
       message: t('shell.conversationCreateFailed'),
       classes: 'bg-danger text-white',
@@ -564,10 +765,13 @@ async function onNewConversation(): Promise<void> {
     return;
   }
   try {
-    const session = await createSession(activeSpaceId.value, activePath.value);
-    prependSession(activeSpaceId.value, session);
+    if (target.id !== activeSpaceId.value) {
+      await switchSpace(target.folderPath);
+    }
+    const session = await createSession(target.id, target.folderPath);
+    prependSession(target.id, session);
     bumpSessions();
-    expanded[activeSpaceId.value] = true;
+    expanded[target.id] = true;
     await router.push({
       name: 'chat_session',
       params: { id: session.id },
@@ -768,6 +972,84 @@ onMounted(async () => {
   background: var(--wp-selection-soft);
 }
 
+.wp-space--drag-over > .wp-space__row {
+  outline: 1px dashed var(--wp-accent);
+  outline-offset: -1px;
+}
+
+.wp-space__drag-handle {
+  flex: none;
+  width: 18px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: var(--wp-r-sm);
+  cursor: grab;
+  color: var(--wp-text-faint);
+  opacity: 0;
+  transition: opacity 120ms var(--wp-ease), background 120ms var(--wp-ease);
+
+  &:active {
+    cursor: grabbing;
+  }
+
+  .wp-space__row:hover &,
+  .wp-space--active & {
+    opacity: 1;
+  }
+
+  &:hover {
+    background: var(--wp-surface-2);
+  }
+}
+
+.wp-sidebar__archived {
+  margin-top: var(--wp-space-3);
+  padding-top: var(--wp-space-2);
+  border-top: 1px solid var(--wp-border);
+}
+
+.wp-sidebar__archived-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  width: 100%;
+  padding: var(--wp-space-2) var(--wp-space-1);
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
+  text-align: left;
+
+  &:hover {
+    color: var(--wp-text-muted);
+  }
+}
+
+.wp-sidebar__archived-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wp-space__row--archived {
+  padding-left: var(--wp-space-2);
+}
+
+.wp-space__archived-name {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .wp-space__chevron {
   flex: none;
   width: 22px;
@@ -840,6 +1122,17 @@ onMounted(async () => {
 
   &:hover {
     background: var(--wp-surface-2);
+    color: var(--wp-accent);
+  }
+}
+
+.wp-space__action--new {
+  opacity: 1;
+  width: 24px;
+  height: 24px;
+
+  &:hover {
+    background: var(--wp-accent-soft, var(--wp-surface-2));
     color: var(--wp-accent);
   }
 }

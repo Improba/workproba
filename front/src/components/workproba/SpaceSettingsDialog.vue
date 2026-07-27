@@ -39,6 +39,35 @@
         @open-setup="onOpenSetup"
       />
 
+      <div class="wp-space-settings-dialog__danger">
+        <p class="wp-space-settings-dialog__danger-hint">{{ t('shell.archiveSpaceHint') }}</p>
+        <div v-if="archiveConfirming" class="wp-space-settings-dialog__confirm">
+          <span>{{ t('shell.archiveSpaceConfirm') }}</span>
+          <div class="wp-space-settings-dialog__confirm-actions">
+            <button type="button" class="wp-space-settings-dialog__btn" @click="archiveConfirming = false">
+              {{ t('common.cancel') }}
+            </button>
+            <button
+              type="button"
+              class="wp-space-settings-dialog__btn wp-space-settings-dialog__btn--danger"
+              :disabled="archiving"
+              @click="onArchive"
+            >
+              {{ t('shell.archiveSpace') }}
+            </button>
+          </div>
+        </div>
+        <button
+          v-else
+          type="button"
+          class="wp-space-settings-dialog__btn wp-space-settings-dialog__btn--danger-outline"
+          @click="archiveConfirming = true"
+        >
+          <Lucide name="archive" size="14" color="wp-danger" />
+          {{ t('shell.archiveSpace') }}
+        </button>
+      </div>
+
       <footer class="wp-space-settings-dialog__foot">
         <button type="button" class="wp-space-settings-dialog__btn" @click="close">
           {{ t('common.cancel') }}
@@ -63,6 +92,7 @@ import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import SpaceCapabilitiesPanel from '@components/capabilities/SpaceCapabilitiesPanel.vue';
 import { useSpace } from '@composables/useSpace';
+import { setWorkspaceArchived } from '@composables/useDesktop';
 import { useShellSurfaces } from '@composables/useShellSurfaces';
 import type { WorkspaceInfo } from '@composables/useDesktop.types';
 import type { SpaceCapabilityItem } from '@services/aiSidecar';
@@ -75,6 +105,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:modelValue', value: boolean): void;
   (e: 'saved', workspace: WorkspaceInfo): void;
+  (e: 'archived', workspace: WorkspaceInfo): void;
 }>();
 
 const { t } = useI18n();
@@ -83,6 +114,8 @@ const { openCapabilities } = useShellSurfaces();
 
 const titleDraft = ref('');
 const saving = ref(false);
+const archiving = ref(false);
+const archiveConfirming = ref(false);
 
 function basename(path: string): string {
   const parts = path.replace(/\\/g, '/').split('/').filter(Boolean);
@@ -94,6 +127,7 @@ watch(
   ([open, workspace]) => {
     if (!open || !workspace) return;
     titleDraft.value = workspace.title || basename(workspace.folderPath);
+    archiveConfirming.value = false;
   },
 );
 
@@ -129,6 +163,27 @@ async function onSave(): Promise<void> {
     });
   } finally {
     saving.value = false;
+  }
+}
+
+async function onArchive(): Promise<void> {
+  const workspace = props.workspace;
+  if (!workspace) return;
+
+  archiving.value = true;
+  try {
+    const updated = await setWorkspaceArchived(workspace.id, true);
+    emit('archived', updated);
+    archiveConfirming.value = false;
+    close();
+    Notify.create({ message: t('shell.archiveSpaceDone'), color: 'dark', timeout: 1500 });
+  } catch (err) {
+    Notify.create({
+      message: err instanceof Error ? err.message : t('shell.archiveSpaceFailed'),
+      classes: 'bg-danger text-white',
+    });
+  } finally {
+    archiving.value = false;
   }
 }
 </script>
@@ -248,5 +303,47 @@ async function onSave(): Promise<void> {
       background: var(--wp-accent-strong);
     }
   }
+
+  &--danger {
+    background: var(--wp-danger);
+    color: var(--wp-on-accent);
+    border-color: var(--wp-danger);
+  }
+
+  &--danger-outline {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--wp-space-2);
+    color: var(--wp-danger);
+    border-color: color-mix(in srgb, var(--wp-danger) 35%, var(--wp-border));
+  }
+}
+
+.wp-space-settings-dialog__danger {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-2);
+  padding-top: var(--wp-space-2);
+  border-top: 1px solid var(--wp-border);
+}
+
+.wp-space-settings-dialog__danger-hint {
+  margin: 0;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
+}
+
+.wp-space-settings-dialog__confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-2);
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-text);
+}
+
+.wp-space-settings-dialog__confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--wp-space-2);
 }
 </style>

@@ -416,6 +416,7 @@ export interface UseAppSettingsReturn {
   setDensity: (mode: DensityMode) => Promise<AppSettings>;
   setUiTheme: (themeId: UiThemeId) => Promise<AppSettings>;
   setLocale: (nextLocale: AppLocale) => Promise<AppSettings>;
+  setWorkspaceSidebarOrder: (ids: string[]) => Promise<AppSettings>;
 }
 
 export function useAppSettings(): UseAppSettingsReturn {
@@ -574,6 +575,10 @@ export function useAppSettings(): UseAppSettingsReturn {
     return save({ ...settings.value, locale: nextLocale });
   }
 
+  async function setWorkspaceSidebarOrder(ids: string[]): Promise<AppSettings> {
+    return save({ ...settings.value, workspaceSidebarOrder: ids });
+  }
+
   async function setOnboardingDone(done: boolean): Promise<void> {
     persistOnboardingDone(done);
     settings.value = { ...settings.value, onboardingDone: done };
@@ -619,6 +624,7 @@ export function useAppSettings(): UseAppSettingsReturn {
     setDensity,
     setUiTheme,
     setLocale,
+    setWorkspaceSidebarOrder,
   };
 }
 

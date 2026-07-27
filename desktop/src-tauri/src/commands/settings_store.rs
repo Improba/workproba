@@ -409,6 +409,9 @@ pub struct AppSettings {
     /// Adresse e-mail du support (mailto des rapports d'erreur).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub support_email: Option<String>,
+    /// Ordre personnalisé des espaces dans la barre latérale.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub workspace_sidebar_order: Option<Vec<String>>,
 }
 
 impl Default for AppSettings {
@@ -446,6 +449,7 @@ impl Default for AppSettings {
             provider_sets_locked: None,
             allowed_provider_set_ids: None,
             support_email: None,
+            workspace_sidebar_order: None,
         }
     }
 }
@@ -710,6 +714,7 @@ mod settings_tests {
             provider_sets_locked: None,
             allowed_provider_set_ids: None,
             support_email: None,
+            workspace_sidebar_order: None,
         };
         let json = serde_json::to_string(&settings).expect("serialize");
         let parsed: AppSettings = serde_json::from_str(&json).expect("deserialize");
@@ -871,6 +876,7 @@ pub fn save_app_settings(app: AppHandle, settings: AppSettings) -> Result<AppSet
         provider_sets_locked: settings.provider_sets_locked,
         allowed_provider_set_ids: settings.allowed_provider_set_ids,
         support_email: settings.support_email,
+        workspace_sidebar_order: settings.workspace_sidebar_order,
     };
     save_settings(&app, &to_persist)?;
     Ok(to_persist)

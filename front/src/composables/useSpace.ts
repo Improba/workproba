@@ -1,6 +1,8 @@
 import { ref, type Ref } from 'vue';
 import {
+  clearActiveProjectPath,
   getActiveProjectPath,
+  getWorkspaceInfo,
   listLocalDocuments,
   pickProjectFolder,
   restoreLastProjectPath,
@@ -49,11 +51,14 @@ function applySpace(workspace: WorkspaceInfo): void {
 
 /**
  * Best-effort rollback when `set_active_project_path` succeeded but front activation failed.
- * No Rust command clears the active project; re-activate the previous path when known.
  */
 async function rollbackRustActiveProject(previousPath: string | null): Promise<void> {
   if (!previousPath) {
-    // TODO: no IPC to clear Rust active project when there was no prior space.
+    try {
+      await clearActiveProjectPath();
+    } catch {
+      // Front state is already unchanged; Rust may stay on the failed activation.
+    }
     return;
   }
   try {
@@ -74,6 +79,7 @@ export interface UseSpaceReturn {
   openSpace: () => Promise<void>;
   switchSpace: (folderPath: string) => Promise<void>;
   renameSpace: (spaceId: string, title: string) => Promise<WorkspaceInfo>;
+  clearActiveSpace: () => void;
   refreshDocuments: () => Promise<void>;
   initFromStoredPath: () => Promise<void>;
 }
@@ -114,7 +120,7 @@ export function useSpace(): UseSpaceReturn {
       const picked = await pickProjectFolder();
       if (!picked) return;
 
-      const workspace = await setActiveProjectPath(picked);
+      const workspace = await setActiveProjectPath(picked, { unarchive: true });
       try {
         await activateSpace(workspace);
       } catch (err) {
@@ -157,6 +163,18 @@ export function useSpace(): UseSpaceReturn {
     return updated;
   }
 
+  function clearActiveSpace(): void {
+    activePath.value = null;
+    activeSpaceId.value = null;
+    activeDataDir.value = null;
+    spaceTitle.value = null;
+    documents.value = [];
+    persistSpaceState(null);
+    void clearActiveProjectPath().catch(() => {
+      // Best-effort : le front reste cohérent même si le backend refuse.
+    });
+  }
+
   async function initFromStoredPath(): Promise<void> {
     loading.value = true;
     error.value = null;
@@ -165,6 +183,10 @@ export function useSpace(): UseSpaceReturn {
     try {
       const restored = await restoreLastProjectPath();
       if (restored) {
+        if (restored.archived) {
+          clearActiveSpace();
+          return;
+        }
         try {
           await activateSpace(restored);
         } catch (err) {
@@ -181,6 +203,12 @@ export function useSpace(): UseSpaceReturn {
 
       const path = storedPath ?? (await getActiveProjectPath());
       if (!path) return;
+
+      const known = await getWorkspaceInfo(path);
+      if (known?.archived) {
+        clearActiveSpace();
+        return;
+      }
 
       const workspace = await setActiveProjectPath(path);
       try {
@@ -210,6 +238,7 @@ export function useSpace(): UseSpaceReturn {
     openSpace,
     switchSpace,
     renameSpace,
+    clearActiveSpace,
     refreshDocuments,
     initFromStoredPath,
   };
