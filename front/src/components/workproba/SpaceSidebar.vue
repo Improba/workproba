@@ -47,7 +47,7 @@
               @dragstart="onSpaceDragStart(ws.id, $event)"
               @dragend="onSpaceDragEnd"
             >
-              <Lucide name="grip-vertical" size="14" color="text-faint" />
+              <Lucide name="grip-vertical" size="16" color="wp-text-muted" />
             </button>
 
             <button
@@ -109,22 +109,36 @@
             </div>
 
             <div v-else class="wp-space__convos">
-              <button
+              <div
                 v-for="session in visibleSessions(ws.id)"
                 :key="session.id"
-                type="button"
-                class="wp-convo"
-                :class="{ 'wp-convo--active': session.id === currentSessionId }"
-                @click="onOpenSession(session)"
+                class="wp-convo-row"
+                :class="{ 'wp-convo-row--active': session.id === currentSessionId }"
               >
-                <span
-                  class="wp-convo__dot"
-                  :class="`wp-convo__dot--${convoStatus(session)}`"
-                  :title="convoStatusLabel(session)"
-                />
-                <span class="wp-convo__title">{{ session.title || t('common.noTitle') }}</span>
-                <span class="wp-convo__date">{{ formatRelative(session.updatedAt) }}</span>
-              </button>
+                <button
+                  type="button"
+                  class="wp-convo"
+                  @click="onOpenSession(session)"
+                >
+                  <span
+                    class="wp-convo__dot"
+                    :class="`wp-convo__dot--${convoStatus(session)}`"
+                    :title="convoStatusLabel(session)"
+                  />
+                  <span class="wp-convo__title">{{ session.title || t('common.noTitle') }}</span>
+                  <span class="wp-convo__date">{{ formatRelative(session.updatedAt) }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="wp-convo__remove"
+                  :title="t('shell.deleteConversation')"
+                  :aria-label="t('shell.deleteConversationAria', { title: session.title || t('common.noTitle') })"
+                  :disabled="isDeleting(session.id)"
+                  @click="onDeleteSession(ws, session)"
+                >
+                  <Lucide name="x" size="12" color="text-faint" />
+                </button>
+              </div>
               <button
                 v-if="sessionsFor(ws.id).length > PREVIEW_COUNT"
                 type="button"
@@ -332,6 +346,7 @@ import { listWorkspaces, setWorkspaceArchived } from '@composables/useDesktop';
 import type { WorkspaceInfo } from '@composables/useDesktop.types';
 import { createSession, getSession, listSessions, type LocalSession } from '@services/workspaceSession';
 import { bumpSessions, useSessionSync } from '@composables/useSessionSync';
+import { useDeleteConversation } from '@composables/useDeleteConversation';
 import { HOME_ROUTE } from '@router/meta';
 import {
   applySidebarOrder,
@@ -356,6 +371,7 @@ defineEmits<{
 const router = useRouter();
 const route = useRoute();
 const { t, locale } = useI18n();
+const { removeConversation, isDeleting } = useDeleteConversation();
 
 const {
   activePath,
@@ -801,6 +817,12 @@ function onOpenSession(session: LocalSession): void {
   void router.push({ name: 'chat_session', params: { id: session.id } });
 }
 
+async function onDeleteSession(ws: WorkspaceInfo, session: LocalSession): Promise<void> {
+  await removeConversation(ws.id, session.id, () => {
+    sessionsByWs[ws.id] = sessionsFor(ws.id).filter((item) => item.id !== session.id);
+  });
+}
+
 function onOpenSettings(): void {
   void router.push({ name: 'settings_models' });
 }
@@ -979,8 +1001,8 @@ onMounted(async () => {
 
 .wp-space__drag-handle {
   flex: none;
-  width: 18px;
-  height: 22px;
+  width: 22px;
+  height: 24px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -988,9 +1010,9 @@ onMounted(async () => {
   background: transparent;
   border-radius: var(--wp-r-sm);
   cursor: grab;
-  color: var(--wp-text-faint);
-  opacity: 0;
-  transition: opacity 120ms var(--wp-ease), background 120ms var(--wp-ease);
+  color: var(--wp-text-muted);
+  opacity: 0.55;
+  transition: opacity 120ms var(--wp-ease), background 120ms var(--wp-ease), color 120ms var(--wp-ease);
 
   &:active {
     cursor: grabbing;
@@ -1003,6 +1025,7 @@ onMounted(async () => {
 
   &:hover {
     background: var(--wp-surface-2);
+    color: var(--wp-text);
   }
 }
 
@@ -1166,8 +1189,42 @@ onMounted(async () => {
   }
 }
 
+.wp-convo-row {
+  display: flex;
+  align-items: stretch;
+  border-radius: var(--wp-r-sm);
+  transition: background 120ms var(--wp-ease);
+
+  &:hover,
+  &:focus-within {
+    background: var(--wp-surface-2);
+
+    .wp-convo__remove {
+      opacity: 1;
+    }
+  }
+
+  &--active {
+    background: var(--wp-selection-soft);
+
+    .wp-convo {
+      border-left-color: var(--wp-selection);
+    }
+
+    .wp-convo__title {
+      color: var(--wp-text);
+    }
+  }
+
+  &--active:hover,
+  &--active:focus-within {
+    background: var(--wp-selection-soft);
+  }
+}
+
 .wp-convo {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: var(--wp-space-2);
@@ -1178,19 +1235,43 @@ onMounted(async () => {
   border-radius: var(--wp-r-sm);
   cursor: pointer;
   text-align: left;
-  transition: background 120ms var(--wp-ease);
 
   &:hover {
-    background: var(--wp-surface-2);
+    background: transparent;
   }
 }
 
-.wp-convo--active {
-  background: var(--wp-selection-soft);
-  border-left-color: var(--wp-selection);
+.wp-convo__remove {
+  flex: none;
+  width: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  border-radius: var(--wp-r-sm);
+  cursor: pointer;
+  opacity: 0.45;
+  transition:
+    opacity 120ms var(--wp-ease),
+    background 120ms var(--wp-ease);
 
-  .wp-convo__title {
-    color: var(--wp-text);
+  @media (hover: hover) {
+    opacity: 0;
+  }
+
+  &:focus-visible {
+    opacity: 1;
+    outline: none;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--wp-danger-soft);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.25;
   }
 }
 

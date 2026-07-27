@@ -6,6 +6,7 @@ import ErrorNotFoundPage from '../../../src/pages/ErrorNotFound.vue';
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push: vi.fn() }),
+  useRoute: () => ({ name: 'home', params: {} }),
 }));
 
 vi.mock('@composables/useSpace', () => ({

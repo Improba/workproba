@@ -53,29 +53,41 @@
               :key="session.id"
               class="home-page__history-row"
             >
-              <button
-                type="button"
-                class="home-page__history-item"
-                :aria-label="t('home.openSessionAria', { title: session.title })"
-                @click="openSession(session.id)"
-              >
-                <span class="home-page__history-icon" aria-hidden="true">
-                  <Lucide name="messages-square" size="15" color="text-faint" />
-                </span>
-                <span class="home-page__history-label">{{ session.title }}</span>
-                <time
-                  class="home-page__history-time"
-                  :datetime="session.updatedAt"
+              <div class="home-page__history-row-inner">
+                <button
+                  type="button"
+                  class="home-page__history-item"
+                  :aria-label="t('home.openSessionAria', { title: session.title })"
+                  @click="openSession(session.id)"
                 >
-                  {{ formatRelative(session.updatedAt) }}
-                </time>
-                <Lucide
-                  name="chevron-right"
-                  size="14"
-                  color="text-faint"
-                  class="home-page__history-chevron"
-                />
-              </button>
+                  <span class="home-page__history-icon" aria-hidden="true">
+                    <Lucide name="messages-square" size="15" color="text-faint" />
+                  </span>
+                  <span class="home-page__history-label">{{ session.title }}</span>
+                  <time
+                    class="home-page__history-time"
+                    :datetime="session.updatedAt"
+                  >
+                    {{ formatRelative(session.updatedAt) }}
+                  </time>
+                  <Lucide
+                    name="chevron-right"
+                    size="14"
+                    color="text-faint"
+                    class="home-page__history-chevron"
+                  />
+                </button>
+                <button
+                  type="button"
+                  class="home-page__history-remove"
+                  :title="t('shell.deleteConversation')"
+                  :aria-label="t('shell.deleteConversationAria', { title: session.title || t('common.noTitle') })"
+                  :disabled="isDeleting(session.id)"
+                  @click="onDeleteSession(session)"
+                >
+                  <Lucide name="x" size="14" color="text-faint" />
+                </button>
+              </div>
             </li>
           </ul>
         </footer>
@@ -99,7 +111,12 @@ import { useSpace } from '@composables/useSpace';
 import { useAppSettings } from '@composables/useAppSettings';
 import { usePlugins } from '@composables/usePlugins';
 import { setPendingChatLaunch } from '@composables/usePendingChatLaunch';
-import { createSession, listSessions, type LocalSession } from '@services/workspaceSession';
+import { useDeleteConversation } from '@composables/useDeleteConversation';
+import {
+  createSession,
+  listSessions,
+  type LocalSession,
+} from '@services/workspaceSession';
 import { bumpSessions, useSessionSync } from '@composables/useSessionSync';
 import { effectiveReasoningEffortFromSet } from '@utils/providerSets';
 import { defaultReasoningEffort } from '@utils/reasoningSupport';
@@ -107,6 +124,7 @@ import type { ChatAttachment, ReasoningEffort } from '#types';
 
 const router = useRouter();
 const { t, locale } = useI18n();
+const { removeConversation, isDeleting } = useDeleteConversation();
 
 const { activePath, activeSpaceId, activeDataDir, loading, error, openSpace } = useSpace();
 const {
@@ -214,6 +232,13 @@ function formatRelative(iso: string): string {
 
 function openSession(sessionId: string): void {
   void router.push({ name: 'chat_session', params: { id: sessionId } });
+}
+
+async function onDeleteSession(session: LocalSession): Promise<void> {
+  if (!activeSpaceId.value) return;
+  await removeConversation(activeSpaceId.value, session.id, () => {
+    recentSessions.value = recentSessions.value.filter((item) => item.id !== session.id);
+  });
 }
 
 function startConversationFromComposer(
@@ -386,13 +411,29 @@ function startConversationFromComposer(
 .home-page__history-row {
   margin: 0;
 
-  &:not(:last-child) .home-page__history-item {
+  &:not(:last-child) .home-page__history-row-inner {
     border-bottom: 1px solid var(--wp-border);
   }
 }
 
+.home-page__history-row-inner {
+  display: flex;
+  align-items: stretch;
+  transition: background var(--wp-dur) var(--wp-ease);
+
+  &:hover,
+  &:focus-within {
+    background: var(--wp-surface-2);
+
+    .home-page__history-remove {
+      opacity: 1;
+    }
+  }
+}
+
 .home-page__history-item {
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
@@ -413,7 +454,6 @@ function startConversationFromComposer(
 
   &:hover,
   &:focus-visible {
-    background: var(--wp-surface-2);
     outline: none;
 
     .home-page__history-chevron {
@@ -456,6 +496,41 @@ function startConversationFromComposer(
 
   @media (max-width: 520px) {
     display: none;
+  }
+}
+
+.home-page__history-remove {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.45;
+  border-radius: 0 var(--wp-r-md) var(--wp-r-md) 0;
+  transition:
+    opacity var(--wp-dur) var(--wp-ease),
+    background var(--wp-dur) var(--wp-ease),
+    color var(--wp-dur) var(--wp-ease);
+
+  @media (hover: hover) {
+    opacity: 0;
+  }
+
+  &:focus-visible {
+    opacity: 1;
+    outline: none;
+  }
+
+  &:hover:not(:disabled) {
+    background: var(--wp-danger-soft);
+  }
+
+  &:disabled {
+    cursor: default;
+    opacity: 0.25;
   }
 }
 
