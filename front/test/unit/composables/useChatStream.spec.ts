@@ -2129,7 +2129,7 @@ describe('useChatStream — browser tool results', () => {
         name: 'summon_specialist',
         result: {
           specialist_id: 'rh',
-          specialist_name: 'Agent RH',
+          specialist_name: 'Gestionnaire',
           mode: 'regard',
           content: 'Synthèse',
         },
@@ -2137,7 +2137,7 @@ describe('useChatStream — browser tool results', () => {
     });
 
     expect(messages[0].specialistHandoff).toMatchObject({
-      specialistName: 'Agent RH',
+      specialistName: 'Gestionnaire',
       content: 'Synthèse',
       status: 'done',
     });
@@ -2268,7 +2268,7 @@ describe('useChatStream — browser tool results', () => {
         name: 'summon_specialist',
         result: {
           specialist_id: 'rh',
-          specialist_name: 'Agent RH',
+          specialist_name: 'Gestionnaire',
           mode: 'regard',
           content: 'Synthèse finale',
         },
@@ -2686,7 +2686,7 @@ describe('useChatStream — browser tool results', () => {
             args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
             result: {
               specialist_id: 'rh',
-              specialist_name: 'Agent RH',
+              specialist_name: 'Gestionnaire',
               content: 'Synthèse',
             },
           },
@@ -2695,7 +2695,7 @@ describe('useChatStream — browser tool results', () => {
     ]);
 
     expect(api.messages.value[0]?.specialistHandoff).toMatchObject({
-      specialistName: 'Agent RH',
+      specialistName: 'Gestionnaire',
       status: 'done',
     });
     unmount();

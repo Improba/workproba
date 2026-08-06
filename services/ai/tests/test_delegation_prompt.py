@@ -9,8 +9,8 @@ from app.plugins.workproba_personas.delegation_prompt import (
 
 def _sample_rh_specialist() -> dict[str, object]:
     return {
-        "id": "org.rh",
-        "name": "Agent RH",
+        "id": "org.gestionnaire",
+        "name": "Gestionnaire",
         "role": "RH",
         "description": "Gestion RH et saisie de temps Ihora.",
         "tools": {
@@ -25,8 +25,8 @@ def _sample_rh_specialist() -> dict[str, object]:
 
 def test_build_business_agents_delegation_prompt_lists_specialist() -> None:
     text = build_business_agents_delegation_prompt("fr", [_sample_rh_specialist()])
-    assert "org.rh" in text
-    assert "Agent RH" in text
+    assert "org.gestionnaire" in text
+    assert "Gestionnaire" in text
     assert "ihora" in text
     assert "summon_specialist" in text
     assert "regard" in text
@@ -47,8 +47,8 @@ def test_build_business_agents_delegation_prompt_empty() -> None:
 
 def test_build_business_agents_delegation_prompt_uses_doctrine_mission() -> None:
     specialist = {
-        "id": "org.rh",
-        "name": "Agent RH",
+        "id": "org.gestionnaire",
+        "name": "Gestionnaire",
         "doctrine": {"mission": "Piloter la saisie de temps et les absences."},
         "tools": {"allowed": [{"connector_id": "ihora", "tool": "list_users"}]},
     }

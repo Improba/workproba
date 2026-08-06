@@ -179,7 +179,7 @@ describe('chatMessageNormalize', () => {
           args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
           result: {
             specialist_id: 'rh',
-            specialist_name: 'Agent RH',
+            specialist_name: 'Gestionnaire',
             content: 'Synthèse',
           },
         },
@@ -187,7 +187,7 @@ describe('chatMessageNormalize', () => {
     });
 
     expect(normalized?.specialistHandoff).toMatchObject({
-      specialistName: 'Agent RH',
+      specialistName: 'Gestionnaire',
       status: 'done',
     });
   });

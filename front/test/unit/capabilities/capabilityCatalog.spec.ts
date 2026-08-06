@@ -84,6 +84,7 @@ describe('capabilityCatalog', () => {
       echo: false,
       'ihora.shaped': false,
       ihora: true,
+      pennylane: true,
     });
     for (const cap of CAPABILITY_CATALOG) {
       expect(typeof cap.enableByDefaultInProjects).toBe('boolean');

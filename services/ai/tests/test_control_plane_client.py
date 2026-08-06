@@ -577,6 +577,72 @@ async def test_pull_and_install_regards(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_pull_and_install_regards_activates_highest_version_only(
+    tmp_path: Path,
+) -> None:
+    cloud_dir, personas_dir, _ = _layout(tmp_path)
+    low = sign_bundle_for_tests(
+        catalog_id="legacy-cat",
+        version="1.0.0",
+        name="Legacy",
+        personas=[
+            {
+                "id": "old",
+                "name": "Old",
+                "role": "R",
+                "description": "d",
+                "system_prompt": "s",
+                "avatar_color": "#000",
+                "avatar_icon": "x",
+            }
+        ],
+    ).to_dict()
+    high = sign_bundle_for_tests(
+        catalog_id="new-cat",
+        version="3.0.0",
+        name="New",
+        personas=[
+            {
+                "id": "new",
+                "name": "New",
+                "role": "R",
+                "description": "d",
+                "system_prompt": "s",
+                "avatar_color": "#000",
+                "avatar_icon": "x",
+            }
+        ],
+    ).to_dict()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/catalogs/regards":
+            return httpx.Response(200, json={"bundles": [low, high]})
+        return httpx.Response(404)
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(
+        base_url="https://cloud.example.test",
+        transport=transport,
+    ) as http_client:
+        client = CloudControlPlaneClient(
+            base_url="https://cloud.example.test",
+            plugin_data_dir=cloud_dir,
+            http_client=http_client,
+        )
+        await client.authenticate(bearer_token="abc")
+        port = create_personas_managed_port(personas_dir)
+        result = await client.pull_and_install_regards(port)
+
+    assert result["count"] == 2
+    assert result["activated"]["catalog_id"] == "new-cat"
+    assert result["activated"]["version"] == "3.0.0"
+    status = port.get_catalog_status()
+    assert status["catalog_id"] == "new-cat"
+    assert (personas_dir / "managed" / "legacy-cat" / "1.0.0").exists()
+    assert (personas_dir / "managed" / "new-cat" / "3.0.0").exists()
+
+
+@pytest.mark.asyncio
 async def test_join_with_token_persists_tokens(tmp_path: Path) -> None:
     cloud_dir, _, _ = _layout(tmp_path)
 

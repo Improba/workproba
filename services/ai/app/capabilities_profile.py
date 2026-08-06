@@ -35,6 +35,7 @@ MANAGED_CONNECTOR_ENABLE_BY_DEFAULT_IN_PROJECTS: dict[str, bool] = {
     "echo": False,
     "ihora.shaped": False,
     "ihora": True,
+    "pennylane": True,
 }
 
 InitializedFrom = Literal["defaults", "migration", "user"]

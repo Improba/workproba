@@ -254,20 +254,62 @@ def enrich_catalog_entry_for_ui(entry: JsonDict, *, from_specialists: bool) -> J
     return enriched
 
 
+def is_specialist_enabled(entry: JsonDict) -> bool:
+    """Dual-read : absent ou true → actif ; seul false explicite désactive."""
+    return entry.get("enabled") is not False
+
+
+def _filter_enabled_entries(entries: list[Any]) -> list[JsonDict]:
+    filtered: list[JsonDict] = []
+    for entry in entries:
+        if isinstance(entry, dict) and is_specialist_enabled(entry):
+            filtered.append(entry)
+    return filtered
+
+
 def dual_read_catalog_entries(catalog: JsonDict) -> list[JsonDict]:
     """Dual-read P0 : specialists non vide, sinon fallback personas."""
     if catalog_has_specialists(catalog):
-        return list(catalog["specialists"])
+        specialists = catalog.get("specialists") or []
+        if not isinstance(specialists, list):
+            return []
+        return _filter_enabled_entries(specialists)
     personas = catalog.get("personas") or []
-    return list(personas) if isinstance(personas, list) else []
+    if not isinstance(personas, list):
+        return []
+    return _filter_enabled_entries(personas)
 
 
 def specialist_count_for_catalog(catalog: JsonDict) -> int:
-    if catalog_has_specialists(catalog):
-        specialists = catalog.get("specialists") or []
-        return len(specialists) if isinstance(specialists, list) else 0
-    personas = catalog.get("personas") or []
-    return len(personas) if isinstance(personas, list) else 0
+    return len(dual_read_catalog_entries(catalog))
+
+
+def _version_sort_key(version: str) -> tuple[tuple[int, str], ...]:
+    parts: list[tuple[int, str]] = []
+    for segment in version.split("."):
+        try:
+            parts.append((0, str(int(segment))))
+        except ValueError:
+            parts.append((1, segment))
+    return tuple(parts)
+
+
+def _bundle_activation_rank(bundle: JsonDict) -> tuple:
+    """Clé de tri déterministe : version semver, puis published/updated, puis catalog_id."""
+    version = str(bundle.get("version") or "")
+    published = str(
+        bundle.get("published_at") or bundle.get("updated_at") or ""
+    )
+    catalog_id = str(bundle.get("catalog_id") or "")
+    return (_version_sort_key(version), published, catalog_id)
+
+
+def pick_bundle_to_activate(bundles: list[JsonDict]) -> JsonDict | None:
+    """Mono-catalogue : un seul bundle actif — le plus récent (version / metadata)."""
+    candidates = [item for item in bundles if isinstance(item, dict)]
+    if not candidates:
+        return None
+    return max(candidates, key=_bundle_activation_rank)
 
 
 class FilesystemManagedRegardsPort:
@@ -520,14 +562,24 @@ class FilesystemManagedRegardsPort:
         catalog = self._read_catalog(catalog_id, version)
         if catalog is None:
             return None
-        specialists = catalog.get("specialists") or []
-        personas = catalog.get("personas") or []
+        specialists_raw = catalog.get("specialists") or []
+        personas_raw = catalog.get("personas") or []
+        specialists = (
+            _filter_enabled_entries(specialists_raw)
+            if isinstance(specialists_raw, list)
+            else []
+        )
+        personas = (
+            _filter_enabled_entries(personas_raw)
+            if isinstance(personas_raw, list)
+            else []
+        )
         effective = dual_read_catalog_entries(catalog)
         return {
             "id": f"managed_{catalog_id}",
             "name": str(catalog.get("name") or catalog_id),
-            "specialists": list(specialists) if isinstance(specialists, list) else [],
-            "personas": list(personas) if isinstance(personas, list) else [],
+            "specialists": specialists,
+            "personas": personas,
             "effective_entries": list(effective),
             "provenance": str(catalog.get("provenance") or "managed"),
             "managed_catalog_id": catalog_id,

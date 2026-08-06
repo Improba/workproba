@@ -59,7 +59,7 @@ function runningCard(): SpecialistHandoffCardType {
     id: 'h1',
     toolCallId: 'tc1',
     specialistId: 'rh',
-    specialistName: 'Agent RH',
+    specialistName: 'Gestionnaire',
     mode: 'regard',
     task: 'Analyser le contrat',
     content: '',
@@ -120,10 +120,10 @@ describe('SpecialistHandoffCard', () => {
       props: { card: runningCard() },
       global: { stubs: globalStubs },
     });
-    expect(wrapper.text()).toContain('Agent RH prend le relais…');
+    expect(wrapper.text()).toContain('Gestionnaire prend le relais…');
     expect(wrapper.text()).toContain('Agent métier · Regard');
     expect(wrapper.text()).toContain('Analyser le contrat');
-    expect(wrapper.text()).toContain('Agent RH analyse…');
+    expect(wrapper.text()).toContain('Gestionnaire analyse…');
     expect(wrapper.find('.specialist-handoff-preview__spinner').exists()).toBe(true);
     expect(wrapper.find('[role="status"].wp-sr-only').exists()).toBe(true);
   });
@@ -149,7 +149,7 @@ describe('SpecialistHandoffCard', () => {
       },
       global: { stubs: globalStubs },
     });
-    expect(wrapper.text()).toContain('Réponse de Agent RH');
+    expect(wrapper.text()).toContain('Réponse de Gestionnaire');
     expect(wrapper.text()).toContain('Voir le détail');
     expect(wrapper.find('.stub-text').exists()).toBe(false);
     expect(wrapper.find('[data-testid="thinking-card"]').exists()).toBe(false);
@@ -250,7 +250,7 @@ describe('SpecialistHandoffCard', () => {
       props: { card: errorCard() },
       global: { stubs: globalStubs },
     });
-    expect(wrapper.text()).toContain('La délégation à Agent RH a échoué');
+    expect(wrapper.text()).toContain('La délégation à Gestionnaire a échoué');
     expect(wrapper.text()).toContain('Échec');
     expect(wrapper.text()).toContain('La délégation à l\'agent métier a échoué.');
     expect(wrapper.find('[role="alert"]').exists()).toBe(true);

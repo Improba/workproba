@@ -257,8 +257,8 @@ async def test_ask_personas_tool_returns_opinions(plugin_dir: Path) -> None:
 
 def _sample_managed_specialist() -> dict[str, object]:
     return {
-        "id": "org.rh",
-        "name": "Agent RH",
+        "id": "org.gestionnaire",
+        "name": "Gestionnaire",
         "role": "RH",
         "system_prompt": "Tu es RH.",
         "is_business_agent": True,
@@ -281,6 +281,39 @@ def _install_managed_specialist_catalog(plugin_dir: Path) -> None:
     )
     port.install_catalog_version(bundle)
     port.activate_catalog("spec-summon")
+
+
+def test_list_managed_specialists_excludes_disabled(plugin_dir: Path) -> None:
+    port = create_personas_managed_port(plugin_dir)
+    active = _sample_managed_specialist()
+    disabled = {**_sample_managed_specialist(), "id": "org.disabled", "enabled": False}
+    bundle = sign_bundle_for_tests(
+        catalog_id="spec-enabled",
+        version="1.0.0",
+        name="Enabled filter",
+        specialists=[active, disabled],
+    )
+    port.install_catalog_version(bundle)
+    port.activate_catalog("spec-enabled")
+
+    listed = storage.list_managed_specialists(plugin_dir)
+    assert len(listed) == 1
+    assert listed[0]["id"] == "org.gestionnaire"
+    assert storage.resolve_specialists(plugin_dir, ["org.disabled"]) == []
+    assert storage.resolve_specialists(plugin_dir, ["org.gestionnaire"])[0]["id"] == "org.gestionnaire"
+
+
+def test_list_managed_specialists_includes_missing_enabled(plugin_dir: Path) -> None:
+    port = create_personas_managed_port(plugin_dir)
+    bundle = sign_bundle_for_tests(
+        catalog_id="spec-default-enabled",
+        version="1.0.0",
+        name="Default enabled",
+        specialists=[_sample_managed_specialist()],
+    )
+    port.install_catalog_version(bundle)
+    port.activate_catalog("spec-default-enabled")
+    assert len(storage.list_managed_specialists(plugin_dir)) == 1
 
 
 @pytest.mark.asyncio
@@ -314,7 +347,7 @@ async def test_summon_specialist_regard_returns_content(
     ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc3")
     result = await tool.function(
         ctx,
-        specialist_id="org.rh",
+        specialist_id="org.gestionnaire",
         task="Qui est absent ?",
         mode="regard",
     )
@@ -352,7 +385,7 @@ async def test_summon_specialist_operative_uses_operative_runner(
     ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc4")
     result = await tool.function(
         ctx,
-        specialist_id="org.rh",
+        specialist_id="org.gestionnaire",
         task="Creer une saisie",
         mode="operative",
     )
@@ -386,7 +419,7 @@ async def test_summon_specialist_unknown_id_refused(plugin_dir: Path) -> None:
         await tool.function(ctx, specialist_id="org.unknown", task="Test")
     message = str(exc_info.value)
     assert "org.unknown" in message
-    assert "org.rh" in message
+    assert "org.gestionnaire" in message
 
 
 @pytest.mark.asyncio
@@ -410,7 +443,7 @@ async def test_summon_specialist_empty_catalog_returns_structured_error(
     agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
     tool = agent._function_toolset.tools["summon_specialist"]
     ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc5b")
-    result = await tool.function(ctx, specialist_id="org.rh", task="Test")
+    result = await tool.function(ctx, specialist_id="org.gestionnaire", task="Test")
     assert result["error"] == "no_business_agents_synced"
     assert result["display"] == "specialist_handoff_card"
     assert result["content"]
@@ -425,7 +458,7 @@ async def test_summon_specialist_connector_alias_resolves_unique_match(
     _install_managed_specialist_catalog(plugin_dir)
 
     async def fake_run_specialist(**kwargs: Any) -> tuple[str, list[dict[str, object]]]:
-        assert kwargs.get("specialist", {}).get("id") == "org.rh"
+        assert kwargs.get("specialist", {}).get("id") == "org.gestionnaire"
         return "Via alias ihora.", []
 
     monkeypatch.setattr(specialist_run, "run_regard", fake_run_specialist)
@@ -447,7 +480,7 @@ async def test_summon_specialist_connector_alias_resolves_unique_match(
     tool = agent._function_toolset.tools["summon_specialist"]
     ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc5c")
     result = await tool.function(ctx, specialist_id="ihora", task="Lister absences", mode="regard")
-    assert result["specialist_id"] == "org.rh"
+    assert result["specialist_id"] == "org.gestionnaire"
     assert result["content"] == "Via alias ihora."
 
 
@@ -455,7 +488,7 @@ def test_resolve_specialist_by_connector(plugin_dir: Path) -> None:
     _install_managed_specialist_catalog(plugin_dir)
     matched = storage.resolve_specialist_by_connector(plugin_dir, "ihora")
     assert len(matched) == 1
-    assert matched[0]["id"] == "org.rh"
+    assert matched[0]["id"] == "org.gestionnaire"
     assert storage.resolve_specialist_by_connector(plugin_dir, "unknown") == []
 
 
@@ -484,7 +517,7 @@ async def test_summon_specialist_rejects_invalid_mode(plugin_dir: Path) -> None:
     with pytest.raises(ModelRetry, match="Mode de délégation invalide"):
         await tool.function(
             ctx,
-            specialist_id="org.rh",
+            specialist_id="org.gestionnaire",
             task="Test",
             mode="invalid",
         )
@@ -501,7 +534,7 @@ async def test_resolve_specialists_registry_fail_closed(
         raise RuntimeError("registry unavailable")
 
     monkeypatch.setattr(personas_storage, "_specialist_index", boom)
-    assert personas_storage.resolve_specialists(plugin_dir, ["org.rh"]) == []
+    assert personas_storage.resolve_specialists(plugin_dir, ["org.gestionnaire"]) == []
 
 
 @pytest.mark.asyncio

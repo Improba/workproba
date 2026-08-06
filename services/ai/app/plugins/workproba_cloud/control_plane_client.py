@@ -519,18 +519,22 @@ class CloudControlPlaneClient:
         if not isinstance(bundles_raw, list):
             raise ValueError("invalid_regards_catalog")
 
+        from app.plugins.ports.managed_regards import pick_bundle_to_activate
+
         installed: list[JsonDict] = []
         activated: JsonDict | None = None
-        for item in bundles_raw:
-            if not isinstance(item, dict):
-                continue
+        bundle_items = [item for item in bundles_raw if isinstance(item, dict)]
+        for item in bundle_items:
             bundle = SignedBundle.from_dict(item)
             record = managed_regards_port.install_catalog_version(bundle)
             installed.append(record)
-            if activate:
+        if activate and bundle_items:
+            winner = pick_bundle_to_activate(bundle_items)
+            if winner is not None:
+                winner_bundle = SignedBundle.from_dict(winner)
                 activated = managed_regards_port.activate_catalog(
-                    bundle.catalog_id,
-                    bundle.version,
+                    winner_bundle.catalog_id,
+                    winner_bundle.version,
                 )
 
         return {

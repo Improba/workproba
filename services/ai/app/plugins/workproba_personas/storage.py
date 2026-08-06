@@ -265,7 +265,10 @@ def resolve_personas(plugin_data_dir: Path, persona_ids: list[str]) -> list[Json
 def _specialist_index(plugin_data_dir: Path) -> dict[str, JsonDict]:
     """Index des agents métier du catalogue managé actif (registry only)."""
     try:
-        from app.plugins.ports.managed_regards import create_personas_managed_port
+        from app.plugins.ports.managed_regards import (
+            create_personas_managed_port,
+            is_specialist_enabled,
+        )
 
         active = create_personas_managed_port(plugin_data_dir).active_specialist_set()
     except Exception:  # noqa: BLE001
@@ -278,6 +281,8 @@ def _specialist_index(plugin_data_dir: Path) -> dict[str, JsonDict]:
         return {}
     for entry in specialists:
         if not isinstance(entry, dict):
+            continue
+        if not is_specialist_enabled(entry):
             continue
         specialist_id = entry.get("id")
         if isinstance(specialist_id, str) and specialist_id:

@@ -45,7 +45,7 @@ describe('specialistTools', () => {
 
   it('extrait les tools allowed d\'un persona', () => {
     const persona = {
-      id: 'org.rh',
+      id: 'org.gestionnaire',
       tools: {
         allowed: [{ connector_id: 'ihora', tool: 'get_timesheet' }],
       },

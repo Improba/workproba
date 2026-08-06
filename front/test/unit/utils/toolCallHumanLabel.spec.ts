@@ -34,10 +34,10 @@ describe('fallbackHumanLabel', () => {
     ).toBe("Délégation à l'agent rh (Regard)");
     expect(
       fallbackHumanLabel('summon_specialist', {
-        specialist_id: 'org.rh',
+        specialist_id: 'org.gestionnaire',
         mode: 'operative',
       }),
-    ).toBe("Délégation à l'agent org.rh (Action)");
+    ).toBe("Délégation à l'agent org.gestionnaire (Action)");
     expect(fallbackHumanLabel('list_files')).toBe("J'ai listé les fichiers");
     expect(fallbackHumanLabel('run_code')).toBe("J'ai exécuté un calcul");
   });

@@ -216,8 +216,8 @@ Les **domaines** (`rh.read`, etc.) : hors contrat P0 ; presets UX admin éventue
 
 ```yaml
 specialists:
-  - id: org.rh
-    name: Agent RH
+  - id: org.gestionnaire
+    name: Gestionnaire
     # champs UI hérités personas : role, description, avatar_*
     doctrine:
       mission: ...
@@ -230,11 +230,17 @@ specialists:
         - { connector_id: ihora, tool: list_users }
         - { connector_id: ihora, tool: get_timesheet }
         - { connector_id: ihora, tool: list_absences }
+        - { connector_id: pennylane, tool: list_customers }
+        - { connector_id: pennylane, tool: list_customer_invoices }
+        - { connector_id: pennylane, tool: get_trial_balance }
+        - { connector_id: pennylane, tool: create_customer_invoice }
       forbidden: []
     modes:
       regard: { tool_filter: pure_read }
       operative: { tool_filter: allowlist }
 ```
+
+Les connecteurs `ihora` et `pennylane` sont **séparés** ; la composition dans l'allowlist d'un agent métier est au choix du tenant (exemple ci-dessus : RH/temps + facturation). Catalogue **pennylane** curated (~40 tools, Company API v2) ; hors V1 : imports multipart.
 
 Règles de publication :
 
@@ -291,11 +297,12 @@ Pas d'exécution d'outils Regard avant le runner.
 
 - [x] Schéma catalogue réellement signé + signer : `specialists[]` (`specialist-catalog.schema.json` ; tools `{connector_id, tool}`).
 - [x] Dual-read `personas[]` (cloud signer + desktop `SignedBundle` / port `ManagedRegardsPort`).
-- [x] Éditeur admin + picker tools (create-only ; escape hatch JSON ; pas d'edit brouillon).
+- [x] Éditeur admin + picker tools (create-only P0).
+- [x] **Post-P0 admin agents (06/08/2026)** : liste plate agents, toggle `enabled` immédiat sur catalogue publié, create/edit agent (PATCH), capacités groupées + tools fins, 1 catalogue published / org, sync desktop filtre `enabled !== false`.
 - [x] Validation publish vs allowlist org (allowed = allowlist+exists ; forbidden = exists).
 - [x] `regard-enterprise.schema.json` = doc/archive (README schemas).
 - [x] Tests : signature, refus ref invalide, dual-read, clés test bloquées en prod.
-- Hors P0 reporté : édition brouillon existant ; champs avatar/`output_contract` dans le form (via JSON avancé).
+- Hors P0 reporté (toujours ouvert) : champs avatar/`output_contract` dans le form (via JSON avancé) ; sync auto ; table d'audit `regard_events`.
 
 ### P1 — Sync + UI Workproba (affichage) · **livré** (06/08/2026)
 
@@ -421,4 +428,4 @@ Pas d'exécution d'outils Regard avant le runner.
 
 > Chaque tenant administre ses agents métier (paramètres + panel d'outils managed) dans Improba Cloud, à partir des connecteurs qu'il a autorisés. Workproba enrollé tire le catalogue signé et met à jour listes, fiches, regards et délégation. En cible, l'assistant ne voit plus le catalogue `managed__*` en vrac : il mobilise des agents métier bornés. Le Regard est le mode read-only du même objet.
 
-Prochaine étape : smoke E2E (sync → Regard → summon operative → HAG) ; édition brouillon admin ; sync auto optionnelle. Le streaming handoff (détail replié, ordre encart / texte Imp) est **livré**.
+Prochaine étape : smoke E2E (sync → Regard → summon operative → HAG) ; sync auto optionnelle. L’admin agents (liste / toggle / edit / capacités+tools) et le streaming handoff sont **livrés**.

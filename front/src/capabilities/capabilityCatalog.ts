@@ -78,6 +78,7 @@ export const MANAGED_CONNECTOR_ENABLE_BY_DEFAULT_IN_PROJECTS: Readonly<
   echo: false,
   'ihora.shaped': false,
   ihora: true,
+  pennylane: true,
 };
 
 /**

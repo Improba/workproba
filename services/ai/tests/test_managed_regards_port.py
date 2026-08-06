@@ -16,8 +16,10 @@ from app.plugins.ports.managed_regards import (
     clear_managed_audit_log,
     create_personas_managed_port,
     dual_read_catalog_entries,
+    is_specialist_enabled,
     managed_audit_log,
     open_managed_regards_port,
+    pick_bundle_to_activate,
     sign_bundle_for_tests,
 )
 from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD, PLUGIN_WORKPROBA_PERSONAS
@@ -41,8 +43,8 @@ def _sample_personas() -> list[dict[str, str]]:
 def _sample_specialists() -> list[dict[str, str]]:
     return [
         {
-            "id": "org.rh",
-            "name": "Agent RH",
+            "id": "org.gestionnaire",
+            "name": "Gestionnaire",
             "role": "RH",
             "description": "Regard RH",
             "system_prompt": "Tu es RH.",
@@ -335,7 +337,7 @@ def test_specialists_only_dual_read(tmp_path: Path) -> None:
     assert len(active["specialists"]) == 1
     assert active["personas"] == []
     assert len(active["effective_entries"]) == 1
-    assert active["effective_entries"][0]["id"] == "org.rh"
+    assert active["effective_entries"][0]["id"] == "org.gestionnaire"
 
 
 def test_dual_read_prefers_specialists_over_personas() -> None:
@@ -344,7 +346,7 @@ def test_dual_read_prefers_specialists_over_personas() -> None:
         "specialists": _sample_specialists(),
     }
     entries = dual_read_catalog_entries(catalog)
-    assert entries[0]["id"] == "org.rh"
+    assert entries[0]["id"] == "org.gestionnaire"
 
 
 def test_personas_only_bundle_with_empty_specialists_array(tmp_path: Path) -> None:
@@ -401,8 +403,8 @@ def test_install_strips_hmac_secret_from_catalog_file(tmp_path: Path) -> None:
 def _sample_specialists_with_tools() -> list[dict[str, object]]:
     return [
         {
-            "id": "org.rh",
-            "name": "Agent RH",
+            "id": "org.gestionnaire",
+            "name": "Gestionnaire",
             "role": "RH",
             "description": "Regard RH",
             "system_prompt": "Tu es RH.",
@@ -438,7 +440,7 @@ def test_active_persona_set_marks_business_agents_with_tools(tmp_path: Path) -> 
     assert len(active["personas"]) == 1
     agent = active["personas"][0]
     assert agent["is_business_agent"] is True
-    assert agent["id"] == "org.rh"
+    assert agent["id"] == "org.gestionnaire"
     tools = agent.get("tools") or {}
     allowed = tools.get("allowed") or []
     assert len(allowed) == 2
@@ -477,3 +479,73 @@ def test_from_dict_rejects_specialists_null() -> None:
                 "signature": "sig",
             }
         )
+
+
+def test_is_specialist_enabled_dual_read() -> None:
+    assert is_specialist_enabled({"id": "a"}) is True
+    assert is_specialist_enabled({"id": "a", "enabled": True}) is True
+    assert is_specialist_enabled({"id": "a", "enabled": False}) is False
+
+
+def test_dual_read_excludes_disabled_specialists() -> None:
+    catalog = {
+        "personas": _sample_personas(),
+        "specialists": [
+            {**_sample_specialists()[0], "enabled": False},
+            {
+                "id": "org.active",
+                "name": "Active",
+                "role": "Ops",
+                "description": "Actif",
+                "system_prompt": "Tu es actif.",
+                "avatar_color": "#111111",
+                "avatar_icon": "check",
+            },
+        ],
+    }
+    entries = dual_read_catalog_entries(catalog)
+    assert len(entries) == 1
+    assert entries[0]["id"] == "org.active"
+
+
+def test_active_persona_set_excludes_disabled_specialists(tmp_path: Path) -> None:
+    _, personas_dir = _personas_layout(tmp_path)
+    port = create_personas_managed_port(personas_dir)
+    disabled = {**_sample_specialists_with_tools()[0], "enabled": False}
+    bundle = sign_bundle_for_tests(
+        catalog_id="spec-disabled",
+        version="1.0.0",
+        name="Disabled agent",
+        specialists=[disabled],
+    )
+    port.install_catalog_version(bundle)
+    port.activate_catalog("spec-disabled")
+    active = port.active_persona_set()
+    assert active is not None
+    assert active["personas"] == []
+    assert personas_storage.list_managed_specialists(personas_dir) == []
+
+
+def test_pick_bundle_to_activate_prefers_highest_version() -> None:
+    low = sign_bundle_for_tests(
+        catalog_id="cat-a",
+        version="1.0.0",
+        name="A",
+        personas=_sample_personas(),
+    ).to_dict()
+    high = sign_bundle_for_tests(
+        catalog_id="cat-b",
+        version="2.1.0",
+        name="B",
+        personas=_sample_personas(),
+    ).to_dict()
+    older_patch = sign_bundle_for_tests(
+        catalog_id="cat-c",
+        version="2.0.9",
+        name="C",
+        personas=_sample_personas(),
+    ).to_dict()
+    winner = pick_bundle_to_activate([low, high, older_patch])
+    assert winner is not None
+    assert winner["catalog_id"] == "cat-b"
+    assert winner["version"] == "2.1.0"

@@ -4,8 +4,8 @@ import SpecialistToolsPanel from '@components/personas/SpecialistToolsPanel.vue'
 import type { PersonaInfo } from '@services/aiSidecar';
 
 const businessAgent: PersonaInfo = {
-  id: 'org.rh',
-  name: 'Agent RH',
+  id: 'org.gestionnaire',
+  name: 'Gestionnaire',
   role: 'RH',
   description: 'Regard RH',
   avatar_color: '#336699',

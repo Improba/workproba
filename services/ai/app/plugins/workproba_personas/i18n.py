@@ -160,7 +160,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "rule_connector_actions": (
                     "Pour toute action connecteur (Ihora, saisie de temps, absences, etc.) : "
                     "`summon_specialist(specialist_id, task, mode=...)` avec l'id catalogue "
-                    "(ex. org.rh), JAMAIS l'id connecteur ni le persona builtin « 01 »."
+                    "(ex. org.gestionnaire), JAMAIS l'id connecteur ni le persona builtin « 01 »."
                 ),
                 "rule_modes": (
                     "Lecture seule : mode `regard` ; écriture / saisie / modification : "
@@ -181,7 +181,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "connectors_suffix": "[connecteurs: {connectors}]",
                 "empty": (
                     "Aucun agent métier synchronisé dans cet espace. Ne pas appeler "
-                    "`summon_specialist` avec un id inventé (org.rh, ihora, …). Indiquer à "
+                    "`summon_specialist` avec un id inventé (org.gestionnaire, ihora, …). Indiquer à "
                     "l'utilisateur de synchroniser le catalogue agents métier (Cloud / "
                     "Capacités Regards)."
                 ),
@@ -343,7 +343,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "rule_connector_actions": (
                     "For any connector action (Ihora, timesheets, absences, etc.): use "
                     "`summon_specialist(specialist_id, task, mode=...)` with the catalog id "
-                    "(e.g. org.rh), NEVER the connector id or builtin persona \"01\"."
+                    "(e.g. org.gestionnaire), NEVER the connector id or builtin persona \"01\"."
                 ),
                 "rule_modes": (
                     "Read-only: `regard` mode; writes / data entry / edits: `operative` mode."
@@ -363,7 +363,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "connectors_suffix": "[connectors: {connectors}]",
                 "empty": (
                     "No business agents synced in this space. Do not call `summon_specialist` "
-                    "with a made-up id (org.rh, ihora, …). Tell the user to sync the business "
+                    "with a made-up id (org.gestionnaire, ihora, …). Tell the user to sync the business "
                     "agent catalog (Cloud / Regards Capabilities)."
                 ),
             },

@@ -130,8 +130,8 @@ describe('PersonasCentralPanel', () => {
   it('affiche le panel d\'outils sur la fiche agent métier', async () => {
     personas.value = [
       {
-        id: 'org.rh',
-        name: 'Agent RH',
+        id: 'org.gestionnaire',
+        name: 'Gestionnaire',
         role: 'RH',
         avatar_color: '#336699',
         is_business_agent: true,

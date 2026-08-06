@@ -86,8 +86,8 @@ IHORA_TOOLS = [
 
 def _sample_specialist_with_tools() -> dict[str, object]:
     return {
-        "id": "org.rh",
-        "name": "Agent RH",
+        "id": "org.gestionnaire",
+        "name": "Gestionnaire",
         "role": "RH",
         "system_prompt": "Tu es RH.",
         "is_business_agent": True,
@@ -309,9 +309,9 @@ def test_dual_read_prefers_specialists_for_regard_resolution(tmp_path: Path) -> 
             "specialists": catalog["specialists"],
         }
     )
-    assert entries[0]["id"] == "org.rh"
+    assert entries[0]["id"] == "org.gestionnaire"
 
-    resolved = personas_storage.resolve_personas(personas_dir, ["org.rh"])
+    resolved = personas_storage.resolve_personas(personas_dir, ["org.gestionnaire"])
     assert len(resolved) == 1
     assert specialist_run.specialist_has_panel_tools(resolved[0]) is True
 

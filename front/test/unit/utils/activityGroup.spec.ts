@@ -216,8 +216,8 @@ describe('insertPerspectiveCardsInBlocks', () => {
     const handoff = {
       id: 'h1',
       toolCallId: 'tc-summon',
-      specialistId: 'org.rh',
-      specialistName: 'Agent RH',
+      specialistId: 'org.gestionnaire',
+      specialistName: 'Gestionnaire',
       mode: 'operative' as const,
       task: 'Saisie',
       content: 'OK',

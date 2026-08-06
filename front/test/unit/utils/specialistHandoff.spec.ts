@@ -104,14 +104,14 @@ describe('specialistHandoff utils', () => {
       { specialist_id: 'rh', task: 'Analyser', mode: 'operative' },
       {
         specialist_id: 'rh',
-        specialist_name: 'Agent RH',
+        specialist_name: 'Gestionnaire',
         mode: 'operative',
         content: 'Synthèse RH',
         degraded_tools: ['managed__x__y'],
       },
     );
     expect(card).toMatchObject({
-      specialistName: 'Agent RH',
+      specialistName: 'Gestionnaire',
       mode: 'operative',
       content: 'Synthèse RH',
       status: 'done',
@@ -136,17 +136,17 @@ describe('specialistHandoff utils', () => {
   it('convertit un résultat structuré avec error en carte erreur', () => {
     const card = toolResultToSpecialistHandoff(
       'tc1',
-      { specialist_id: 'org.rh', task: 'Analyser', mode: 'regard' },
+      { specialist_id: 'org.gestionnaire', task: 'Analyser', mode: 'regard' },
       {
-        specialist_id: 'org.rh',
-        specialist_name: 'org.rh',
+        specialist_id: 'org.gestionnaire',
+        specialist_name: 'org.gestionnaire',
         mode: 'regard',
         content: 'Aucun agent métier synchronisé.',
         error: 'no_business_agents_synced',
       },
     );
     expect(card).toMatchObject({
-      specialistId: 'org.rh',
+      specialistId: 'org.gestionnaire',
       status: 'error',
       content: 'Aucun agent métier synchronisé.',
       streaming: false,
@@ -310,7 +310,7 @@ describe('specialistHandoff utils', () => {
           args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
           result: {
             specialist_id: 'rh',
-            specialist_name: 'Agent RH',
+            specialist_name: 'Gestionnaire',
             content: 'Synthèse',
           },
         },
@@ -319,7 +319,7 @@ describe('specialistHandoff utils', () => {
     };
     rehydratePerspectiveCards(message);
     expect(message.specialistHandoff).toMatchObject({
-      specialistName: 'Agent RH',
+      specialistName: 'Gestionnaire',
       content: 'Synthèse',
       status: 'done',
     });
