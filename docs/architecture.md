@@ -1,6 +1,6 @@
 # Workproba architecture
 
-> **Last updated:** 23/07/2026 (confirmation trust / approve_remaining, chat UX polish, auto-title on first user message, Ihora budget tools)
+> **Last updated:** 06/08/2026 (specialist streaming handoff, confirmation trust / approve_remaining, chat UX polish)
 
 ## Overview
 
@@ -76,6 +76,10 @@ Read-only tools (`read_document`, `list_files`, `remember`, `propose_plan`, pers
 6. Optional audit: `approval.requested` / `approval.resolved` in `{app_data}/audit/`.
 
 Protections shown on the card include: preview available, automatic version before modify, no network, no external send, and (when relevant) user unresolved before confirmation.
+
+### Specialist delegation streaming
+
+When Imp calls **`summon_specialist`**, the nested **SpecialistRun** (`specialist_run.py`) uses **`agent.iter`**. Tokens, thinking deltas, and nested tool events are pushed on `ToolDeps.event_queue` and drained into the parent `/agent/turn` SSE with optional **`parent_tool_call_id`** (the summon tool call id). The front routes those events into `SpecialistHandoffCard` instead of the parent message body. The card stays compact by default (detail toggle) ; write tools nested under the specialist use the same HAG, with an **orphan `ConfirmationCard`** when the nested `tool_call_id` is not in parent `toolCalls`. Message ordering: `insertPerspectiveCardsInBlocks` places the handoff at the summon tool position so Imp’s post-delegation text renders **below** the card.
 
 ### Work Event Bus (`work_*`)
 
@@ -357,12 +361,14 @@ front/src/
 │   ├── ChatComposer.vue           # draft, attachments, model menu, send/stop
 │   ├── MessageList.vue            # flat list in q-scroll-area, a11y live region
 │   ├── Message.vue                # shell + MessagePartRenderer + footer
-│   ├── MessagePartRenderer.vue    # text / activity / plan / citations / errors
+│   ├── MessagePartRenderer.vue    # text / activity / handoff / opinions / plan / citations
 │   ├── MessageTextPart.vue        # markdown (incremental + final)
 │   ├── ThinkingCard.vue           # reasoning block
 │   ├── ToolCallCard.vue           # tool call human/tech views
 │   ├── ConfirmationCard.vue       # human approval gate UI (managed layout)
 │   └── PlanCard.vue               # multi-step plan approval
+├── components/personas/
+│   └── SpecialistHandoffCard.vue  # compact specialist delegation card
 ├── components/capabilities/
 │   ├── CapabilitiesDrawer.vue     # hub Capacités
 │   ├── SpaceCapabilitiesPanel.vue # per-space wanted toggles
@@ -376,12 +382,14 @@ front/src/
 │   ├── WorkprobaBrand.vue         # shell brand mark/logo
 │   └── SpaceSettingsDialog.vue    # space title + capabilities
 ├── composables/
-│   ├── useChatStream.ts           # SSE, send, edit, regenerate, retry
+│   ├── useChatStream.ts           # SSE, send, edit, regenerate, retry, handoff routing
 │   ├── chatScrollAnchor.ts        # turn-anchor / sticky promote
 │   └── useSpaceCapabilities.ts    # GET/PUT /workspace/capabilities
 ├── services/cloudDesktopAuth.ts   # POST /devices/login client
 └── utils/
     ├── cloudWebUrls.ts            # VITE_CLOUD_WEB_URL helpers
+    ├── specialistHandoff.ts       # handoff card helpers / rehydrate
+    ├── activityGroup.ts           # activity groups + insertPerspectiveCardsInBlocks
     ├── markdownRender.ts          # shared markdown pipeline
     └── markdownStreaming.ts       # block split for streaming
 

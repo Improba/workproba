@@ -1,6 +1,6 @@
 # Plan : Agents métier, Regard et config par tenant
 
-> **Statut :** plan d'action agents métier — **P0–P4 livrés** (06/08/2026)  
+> **Statut :** plan d'action agents métier — **P0–P4 livrés** + polish streaming handoff (06/08/2026)
 > **Date :** 06/08/2026 (vocabulaire Agent métier ; amendement 27/07 ; impl P0–P4)  
 > **Décideur :** Syl  
 > **Rôle :** SoT du **prochain chantier** (panels d'outils, runner, sync catalogue enrichi). Complète [roadmap-v2.md](../../workproba-improba/roadmaps/roadmap-v2.md) (Mode A / ports / H0–H1), ne le remplace pas.  
@@ -323,7 +323,14 @@ Pas d'exécution d'outils Regard avant le runner.
 - [x] Sync auto : manuel (`sync_managed_regards`) ; indicateurs dégradés partiels OK.
 - [x] Meeting / croisés : pas de branchement tools (hors scope trivial).
 
-**Ordre :** P0 → P1 → P2 → P3 → P4.
+### Post-P4 — Streaming handoff · **livré** (06/08/2026)
+
+- [x] SpecialistRun via `agent.iter` ; events SSE parent scopés (`parent_tool_call_id`).
+- [x] Handoff compact (détail replié) ; ordre encart puis texte Imp post-délégation.
+- [x] HAG nested (carte confirmation orpheline) ; normalisation thinking Mistral non-stream.
+- [x] Tests : `test_specialist_run`, `test_mistral_stream`, handoff / `useChatStream` / `activityGroup`.
+
+**Ordre :** P0 → P1 → P2 → P3 → P4 → polish streaming.
 
 ---
 
@@ -414,4 +421,4 @@ Pas d'exécution d'outils Regard avant le runner.
 
 > Chaque tenant administre ses agents métier (paramètres + panel d'outils managed) dans Improba Cloud, à partir des connecteurs qu'il a autorisés. Workproba enrollé tire le catalogue signé et met à jour listes, fiches, regards et délégation. En cible, l'assistant ne voit plus le catalogue `managed__*` en vrac : il mobilise des agents métier bornés. Le Regard est le mode read-only du même objet.
 
-Prochaine étape : smoke E2E (sync → Regard → summon operative → HAG) ; édition brouillon admin ; sync auto optionnelle.
+Prochaine étape : smoke E2E (sync → Regard → summon operative → HAG) ; édition brouillon admin ; sync auto optionnelle. Le streaming handoff (détail replié, ordre encart / texte Imp) est **livré**.

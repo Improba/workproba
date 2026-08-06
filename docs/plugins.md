@@ -1,6 +1,6 @@
 # Workproba plugins
 
-> **Last updated:** 06/08/2026 (agents métier P0–P4, `summon_specialist`, handoff UX)
+> **Last updated:** 06/08/2026 (agents métier P0–P4, streaming handoff `summon_specialist`)
 
 Workproba extends the agent core with a **plugin system** (technical layer): agent tools, HTTP endpoints, UI slots, and namespaced storage. User-facing discovery uses **activatable capabilities** (hub « Capacités », V2.2) — see [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
@@ -101,7 +101,9 @@ See [personas-ui.md](../../workproba-improba/roadmaps/personas-ui.md).
 
 If active: `ask_personas`, `simulate_meeting`.
 
-The main assistant (**Imp**) delegates to an org agent via **`summon_specialist`** (not direct `managed_*` / `invoke_managed_connector` on the parent turn). Runs a bounded **SpecialistRun** (`specialist_run.py`) with doctrine + tool allowlist from the catalog. Front: inline **handoff card** in chat (`SpecialistHandoffCard`, rehydrated on reload); Human Approval Gate when the specialist invokes a write/external tool.
+The main assistant (**Imp**) delegates to an org agent via **`summon_specialist`** (not direct `managed_*` / `invoke_managed_connector` on the parent turn). Runs a bounded **SpecialistRun** (`specialist_run.py`) with doctrine + tool allowlist from the catalog.
+
+**Streaming (06/08/2026):** SpecialistRun uses **`agent.iter`** (not a blocking `agent.run`). Nested model tokens, thinking, and tool events are forwarded on the parent `/agent/turn` SSE via `ToolDeps.event_queue`, scoped with **`parent_tool_call_id`** = the `summon_specialist` tool call id. Front: compact inline **handoff card** (`SpecialistHandoffCard`, rehydrated on reload) ; thinking, nested tools, and the specialist answer stay behind **« Voir le détail »** by default. The card is inserted **at the `summon_specialist` position** in the message flow (`insertPerspectiveCardsInBlocks`) so Imp’s follow-up text appears **below** the card. Human Approval Gate when the specialist invokes a write/external tool ; nested managed confirmations without a parent tool row use an **orphan `ConfirmationCard`** on the assistant message.
 
 ### ManagedAgentsPort (enterprise catalogs)
 

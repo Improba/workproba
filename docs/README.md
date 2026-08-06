@@ -21,7 +21,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 ## Product framing
 
 - **[intention.md](./intention.md)**: Product intent, desktop pivot, Improba Cloud scope (see roadmaps)
-- **[plan.md](./plan.md)**: Plan agents métier / Regard, config par tenant, sync cloud → UI, phasage P0–P4
+- **[plan.md](./plan.md)**: Plan agents métier / Regard, config par tenant, sync cloud → UI, phasage P0–P4 + streaming handoff
 - **[desktop.md](./desktop.md)**: Desktop architecture, phasing, message flow, phase validation
 
 ## Technical architecture

@@ -64,7 +64,9 @@ Sensitive agent tools pause until the user approves via `POST /agent/confirm`.
 2. The front displays `ConfirmationCard` and posts `{ session_id, turn_id, confirmation_id, decision }` to `/agent/confirm`.
 3. On deny or timeout (300 s), the tool is not executed; the model receives `ModelRetry` with `workproba:approval_denied` or `workproba:approval_timeout`.
 
-Effect classification: `app/agent/effects.py` (`classify_effect`). Gate: `app/agent/confirmation.py` (`ConfirmationGate.request_effect`). Gated tools include file writes, `publish_artifact`, `web_search`, `browser_*`, `run_code`, `sync_to_cloud`, **`invoke_managed_connector`**. Read-only tools are not gated.
+Effect classification: `app/agent/effects.py` (`classify_effect`). Gate: `app/agent/confirmation.py` (`ConfirmationGate.request_effect`). Gated tools include file writes, `publish_artifact`, `web_search`, `browser_*`, `run_code`, `sync_to_cloud`, **`invoke_managed_connector`** (including nested specialist writes). Read-only tools are not gated.
+
+**Specialist delegation:** `summon_specialist` runs `SpecialistRun` (`plugins/workproba_personas/specialist_run.py`) via **`agent.iter`**. Nested SSE events (`token`, `thinking_*`, `tool_call_*`) carry optional **`parent_tool_call_id`** and are forwarded on the parent turn through `ToolDeps.event_queue`. See [docs/plugins.md](../../docs/plugins.md) and [docs/architecture.md](../../docs/architecture.md#specialist-delegation-streaming).
 
 Work events (`work_started`, `work_contribution`, `work_completed`, `work_failed`) are emitted alongside tool events; see `app/agent/work_events.py` and [docs/architecture.md](../../docs/architecture.md#human-approval-and-work-events).
 
