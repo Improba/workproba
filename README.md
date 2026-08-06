@@ -17,9 +17,9 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 - **Agent chat**: SSE streaming, model and reasoning per conversation, attachments, composite "+" menu
 - **Human approval**: effect-oriented confirmation before file writes, publishing, network access, or code execution; **approve remaining** trusts the same `trust_key` for the rest of the turn
 - **Scoped memory**: global user memories + project memories, local RAG, agent `remember` tool
-- **Activatable capabilities**: **Workproba Cloud** first (collapsible sub-capabilities: **Project management**, managed services such as **Ihora**), Regards métier, web navigation. **Per-space** wanted profile (`capabilities.json`). Technical API: `echo` / `ihora.shaped` / `ihora` via Improba Cloud Mode A (dedicated `managed_*` agent tools). Integrated plugins; not a third-party extension marketplace in V2.
-- **Personas / Regards métier**: professional perspectives, simulated meetings, discussions (Improba builtin set)
-- **Spaces**: sidebar, right panel (files, preview, active capabilities), side chat for Regards, space settings for capabilities
+- **Activatable capabilities**: **Workproba Cloud** first (collapsible sub-capabilities: **Project management**, managed services such as **Ihora**), Regards métier, web navigation. **Per-space** wanted profile (`capabilities.json`). Managed connectors via Improba Cloud Mode A (`managed_*` tools in operative runs). Integrated plugins; not a third-party extension marketplace in V2.
+- **Agents métier & Regards**: builtin perspectives plus **org-published catalogs** synced from Workproba Cloud (`specialists[]`, signed bundle). UI: opinions, meetings, discussions; **Regard** = read-only consultative mode. The main assistant (**Imp**) delegates via `summon_specialist` (inline handoff card, Human Approval Gate when needed).
+- **Spaces**: sidebar, right panel (files, preview, active capabilities, CloudPanel), side chat for Regards, space settings for capabilities
 - **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write; native PPTX generation (`write_pptx`) with optional HTML/Chromium visual pipeline
 - **Branding**: `WorkprobaBrand` mark and logo assets in the shell
 - **Improba Cloud desktop auth**: first-run onboarding (`EngineOnboardingWizard`), cloud login (`POST /devices/login` → exchange to durable DeviceBearer `wp_dev_*`), device enroll (`join_token` → DeviceBearer)
@@ -40,10 +40,11 @@ Step-by-step guide (SmartScreen, Gatekeeper, `.deb`, AppImage, uninstall): **[do
 
 - [docs/installateurs.md](./docs/installateurs.md): installation (end users)
 - [docs/intention.md](./docs/intention.md): product framing
+- [docs/plan.md](./docs/plan.md): agents métier / Regard, tenant config, cloud sync (P0–P4)
 - [docs/desktop.md](./docs/desktop.md): desktop architecture
 - [docs/architecture.md](./docs/architecture.md): technical overview
 - [docs/memory.md](./docs/memory.md): user/project memory and RAG
-- [docs/plugins.md](./docs/plugins.md): plugins (personas, project, …)
+- [docs/plugins.md](./docs/plugins.md): plugins (Regards métier, cloud, project, …)
 - [docs/workspace-storage.md](./docs/workspace-storage.md): per-space storage
 - [docs/README.md](./docs/README.md): full documentation index
 - [desktop/README.md](./desktop/README.md): Tauri development
@@ -71,7 +72,18 @@ workproba/
 
 ### Development
 
-#### Single command (recommended)
+#### Full stack with Workproba Cloud (recommended when using managed capabilities)
+
+From the parent workspace `imp-work` (sibling repos `workproba` + `workproba-cloud`):
+
+```bash
+make dev          # starts cloud (Docker) if needed, waits for API health, then desktop
+./dev.sh --help   # --cloud-only, --no-cloud, --skip-wait
+```
+
+Default cloud URLs: API `http://localhost:3336`, admin console `http://localhost:8482`.
+
+#### Desktop only
 
 Starts the Python sidecar, waits until it is healthy (`/health`), then launches Tauri which starts Quasar itself. A single `Ctrl+C` cleanly stops both.
 

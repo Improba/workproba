@@ -1,6 +1,6 @@
 # Workproba technical stack
 
-> **Last updated:** 20/07/2026
+> **Last updated:** 06/08/2026
 
 ## Desktop application
 
@@ -30,7 +30,11 @@
 ```bash
 make dev              # sidecar + wait for /health + Tauri/Quasar (recommended)
 yarn dev              # same via scripts/dev-all.sh
+```
 
+**With Workproba Cloud** (managed capabilities, org agents): from parent workspace `imp-work`, run `make dev` — starts cloud Docker stack if needed (API `:3336`, admin `:8482`), waits for `/health`, then launches this repo's desktop stack. See [README.md](../README.md#getting-started).
+
+```bash
 make dev-ai           # Python sidecar only
 make dev-desktop      # Tauri + Quasar (sidecar already running elsewhere)
 yarn dev:ai-only      # sidecar only

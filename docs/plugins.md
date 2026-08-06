@@ -1,6 +1,6 @@
 # Workproba plugins
 
-> **Last updated:** 23/07/2026 (V2.2 + per-space capabilities + managed tools catalog + DeviceBearer durable)
+> **Last updated:** 06/08/2026 (agents métier P0–P4, `summon_specialist`, handoff UX)
 
 Workproba extends the agent core with a **plugin system** (technical layer): agent tools, HTTP endpoints, UI slots, and namespaced storage. User-facing discovery uses **activatable capabilities** (hub « Capacités », V2.2) — see [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
@@ -68,7 +68,9 @@ Useful shortcuts: `Ctrl+B` (right panel), `Ctrl+Shift+L` (side chat).
 
 ### Concept
 
-Simulate **complementary professional perspectives** (HR, legal, CFO, engineer, etc.). Guided UI vocabulary: « Regards métier », « Demander un avis », « Croiser plusieurs regards » — not « Personas » or « Consult experts ».
+Simulate **complementary professional perspectives** (HR, legal, CFO, engineer, etc.) — product vocabulary: **Agent métier** (object), **Regard** (read-only consultative mode). Guided UI: « Regards métier », « Demander un avis », « Croiser plusieurs regards » — not « Personas » or « Consult experts ».
+
+**Sources:** builtin integrated set; **org catalogs** published on Workproba Cloud (`specialists[]` in signed `RegardEnterprise`, synced manually via CloudPanel → `POST /plugins/cloud/sync-regards`). Dual-read legacy `personas[]` in catalog payloads.
 
 LLM calls use the same **active provider set** as chat. With **Improba Cloud** (`device_bearer`), personas SSE endpoints receive `provider_set` + `cloud_plugin_data_dir`; the front runs `initCloud()` before launch (fail-closed on readiness errors).
 
@@ -99,7 +101,9 @@ See [personas-ui.md](../../workproba-improba/roadmaps/personas-ui.md).
 
 If active: `ask_personas`, `simulate_meeting`.
 
-### ManagedAgentsPort (V3 scaffold)
+The main assistant (**Imp**) delegates to an org agent via **`summon_specialist`** (not direct `managed_*` / `invoke_managed_connector` on the parent turn). Runs a bounded **SpecialistRun** (`specialist_run.py`) with doctrine + tool allowlist from the catalog. Front: inline **handoff card** in chat (`SpecialistHandoffCard`, rehydrated on reload); Human Approval Gate when the specialist invokes a write/external tool.
+
+### ManagedAgentsPort (enterprise catalogs)
 
 > **Alias produit :** `ManagedAgentsPort`. **Code actuel :** `ManagedRegardsPort` jusqu'au renommage.
 
@@ -112,7 +116,9 @@ Enterprise agents catalogs are installed in the **personas plugin namespace only
 | Activate catalog | `POST /plugins/personas/managed/{id}/activate` | `managed/state.json` |
 | Remove revoked version | `DELETE /plugins/personas/managed/{id}/{version}` | deletes version dir |
 
-Active managed catalogs appear in `GET /plugins/personas/sets` with `provenance: "managed"` (UI badge: administré). Builtin set uses `integrated`; custom sets use `personal`.
+Active managed catalogs appear in `GET /plugins/personas/sets` with `provenance: "managed"` (UI badge: administré). Builtin set uses `integrated`; custom sets use `personal`. Catalog entries expose `specialists[]` (preferred) or legacy `personas[]`.
+
+See [plan.md](./plan.md) for the full agents métier / Regard product model and phasing.
 
 ## Project plugin (`workproba.projet`)
 
@@ -132,7 +138,7 @@ Standard path for managed capabilities (MVP 20/07/2026 ; hub hierarchy 21/07 ; s
 
 - **Desktop auth UX**: `CloudLoginModal` + `cloudDesktopAuth.ts` (`POST /devices/login` → User JWT → exchange `POST /devices/desktop-bearer` → DeviceBearer `wp_dev_*`); `EnrollCloudModal` / `EnrollCloudJoinForm` (`join_token` → DeviceBearer). First-run: `EngineOnboardingWizard`. Cloud web links: `cloudWebUrls.ts` (`VITE_CLOUD_WEB_URL`).
 - **`CloudControlPlaneClient`** : join via `join_token`, or login bearer JWT exchanged to durable `wp_dev_*` (`ensure_durable_device_bearer` on status) ; catalogs, regards (`/plugins/cloud/enroll`, `/plugins/cloud/sync-regards`)
-- **`RemoteCapabilityGateway`** : relay to org-allowed services (`echo`, `ihora.shaped` stub, `ihora` HTTP) via `POST /connectors/{id}/invoke` (payload only ; no client `subject_id` / `org_id`). **`tools[]` contract** (cloud authoritative): each connector in `GET /connectors` may list tools with `name`, `action`, `description`, `effect`, `visibility`, `input_schema`, plus connector fields `enableByDefaultInProjects` and `requiresSecrets`. List response includes `catalogVersion`. The front catalog mirrors defaults for local capabilities (`workproba_cloud`, `projects`, `regards`, `web_navigation`) and managed ones (`managed:{connectorId}`). Sidecar `GET /plugins/cloud/connectors` caches id/name/tools for the agent. For each connector effective in the space, chat registers dedicated tools `managed_{connector_id}_{name}` (`.` → `_` in connector id). **`invoke_managed_connector`** is the generic fallback. Cloud re-validates `payload.action` and schema at invoke. Human Approval Gate (`external_send`) with managed confirmation layout + human summaries; `confirmation_preparing` before pre-resolution; **approve remaining** (`trust_key` turn-scoped). Unknown catalog actions trigger `ModelRetry` (inventory guard). Guided mode skips `visibility: advanced` tools. Product UI: managed capabilities under Workproba Cloud ; CloudPanel lists tool names and descriptions (not schemas). Ihora example: **17 tools** incl. `list_users`, `create_project_budget`, `update_project_budget` ; then `update_project_member` / `create_project` with numeric userIds (or email resolved server-side / pre-confirm).
+- **`RemoteCapabilityGateway`** : relay to org-allowed services (`echo`, `ihora.shaped` stub, `ihora` HTTP) via `POST /connectors/{id}/invoke` (payload only ; no client `subject_id` / `org_id`). Used by **SpecialistRun** and operative connector tools — the parent assistant does not call `managed_*` directly when delegating to an agent métier (`summon_specialist`). **`tools[]` contract** (cloud authoritative): each connector in `GET /connectors` may list tools with `name`, `action`, `description`, `effect`, `visibility`, `input_schema`, plus connector fields `enableByDefaultInProjects` and `requiresSecrets`. List response includes `catalogVersion`. The front catalog mirrors defaults for local capabilities (`workproba_cloud`, `projects`, `regards`, `web_navigation`) and managed ones (`managed:{connectorId}`). Sidecar `GET /plugins/cloud/connectors` caches id/name/tools for the agent. For each connector effective in the space, operative runs may register dedicated tools `managed_{connector_id}_{name}` (`.` → `_` in connector id). **`invoke_managed_connector`** remains the generic fallback inside SpecialistRun. Cloud re-validates `payload.action` and schema at invoke. Human Approval Gate (`external_send`) with managed confirmation layout + human summaries; `confirmation_preparing` before pre-resolution; **approve remaining** (`trust_key` turn-scoped). Unknown catalog actions trigger `ModelRetry` (inventory guard). Guided mode skips `visibility: advanced` tools. Product UI: managed capabilities under Workproba Cloud ; CloudPanel lists tool names and descriptions (not schemas). Ihora example: **17 tools** incl. `list_users`, `create_project_budget`, `update_project_budget` ; then `update_project_member` / `create_project` with numeric userIds (or email resolved server-side / pre-confirm).
 - **`ManagedAgentsPort`** for enterprise agents (code current: `ManagedRegardsPort`)
 - **`ProjectSyncPort`** mount sync = technical NAS only, deprecated product path, **rejected when enrolled**
 - Shared project SoT = cloud (list/publish/open/republish via API + S3, local = disposable cache)
