@@ -63,6 +63,16 @@ export function fallbackHumanLabel(
       return t('toolCalls.searchKb');
     case 'web_search':
       return t('toolCalls.webSearchGeneric');
+    case 'ask_personas':
+      return t('toolCalls.askPersonas');
+    case 'summon_specialist': {
+      const mode = args?.mode;
+      const specialistName = String(args?.specialist_id ?? '').trim();
+      if (mode === 'operative') {
+        return t('toolCalls.summonSpecialistOperative', { name: specialistName });
+      }
+      return t('toolCalls.summonSpecialistRegard', { name: specialistName });
+    }
     case 'list_files':
       return t('toolCalls.listFiles');
     case 'run_code':

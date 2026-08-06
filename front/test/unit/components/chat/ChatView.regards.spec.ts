@@ -26,7 +26,7 @@ describe('ChatView Regards (menu +)', () => {
     const wrapper = mountChatView(false);
 
     expect(wrapper.find('.chat-view__regards').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Demander un avis');
+    expect(wrapper.text()).not.toContain('Demander un regard');
     expect(wrapper.text()).not.toContain('Croiser plusieurs regards');
   });
 
@@ -35,7 +35,7 @@ describe('ChatView Regards (menu +)', () => {
 
     expect(wrapper.find('.chat-view__regards').exists()).toBe(false);
     expect(wrapper.text()).toContain('Regards');
-    expect(wrapper.text()).toContain('Demander un avis');
+    expect(wrapper.text()).toContain('Demander un regard');
     expect(wrapper.text()).toContain('Croiser plusieurs regards');
   });
 
@@ -45,7 +45,7 @@ describe('ChatView Regards (menu +)', () => {
     const items = wrapper.findAll('.chat-composer__add-item');
     const regardsItems = items.filter(
       (item) =>
-        item.text().includes('Demander un avis') ||
+        item.text().includes('Demander un regard') ||
         item.text().includes('Croiser plusieurs regards') ||
         item.text().includes('Discuter avec un regard'),
     );

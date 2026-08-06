@@ -267,8 +267,10 @@ export interface ChatMessage {
   /** Pièces jointes au message (côté user). Snapshots métadonnées après envoi. */
   attachments?: ChatMessageAttachment[];
   streaming?: boolean;
-  /** Carte d'avis personas (mode 1, distincte du message assistant). */
+  /** Carte d'avis personas inline sur le message assistant. */
   personasOpinion?: PersonasOpinionCard | null;
+  /** Carte de délégation à un agent métier (summon_specialist). */
+  specialistHandoff?: SpecialistHandoffCard | null;
   /** Souvenirs cités lors de la génération (injection mémoire agent). */
   memoryCitations?: MemoryCitation[];
   /** Compteur interne pour le virtual scroller pendant le streaming. */
@@ -507,5 +509,26 @@ export interface PersonasOpinionCard {
   id: string;
   question: string;
   opinions: PersonasOpinionBlock[];
+  streaming?: boolean;
+  error?: boolean;
+}
+
+export type SpecialistHandoffMode = 'regard' | 'operative';
+
+export type SpecialistHandoffStatus = 'running' | 'pending' | 'done' | 'error';
+
+/** Carte de restitution après délégation à un agent métier. */
+export interface SpecialistHandoffCard {
+  id: string;
+  toolCallId: string;
+  specialistId: string;
+  specialistName: string;
+  avatarColor?: string;
+  avatarIcon?: string;
+  mode: SpecialistHandoffMode;
+  task: string;
+  content: string;
+  degradedTools?: string[];
+  status: SpecialistHandoffStatus;
   streaming?: boolean;
 }

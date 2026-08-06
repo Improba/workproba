@@ -1,9 +1,11 @@
-# Plan : Spécialistes, Regards et config par tenant
+# Plan : Agents métier, Regard et config par tenant
 
-> **Statut :** plan d'intention / architecture (pas d'implémentation)  
-> **Date :** 27/07/2026 (revues solo ×2)  
+> **Statut :** plan d'action agents métier — **P0–P4 livrés** (06/08/2026)  
+> **Date :** 06/08/2026 (vocabulaire Agent métier ; amendement 27/07 ; impl P0–P4)  
 > **Décideur :** Syl  
-> **Liens :** [intention.md](./intention.md) · [intention Improba](../../workproba-improba/intention.md) (amendement 27/07) · [glossaire](../../workproba-improba/roadmaps/glossaire.md) · [positionnement cloud / regards](../../workproba-improba/roadmaps/positionnement-cloud-regards.md) · [architecture cloud](../../workproba-improba/roadmaps/architecture-cloud.md) · [capacites.md](./capacites.md) · [plugins.md](./plugins.md)
+> **Rôle :** SoT du **prochain chantier** (panels d'outils, runner, sync catalogue enrichi). Complète [roadmap-v2.md](../../workproba-improba/roadmaps/roadmap-v2.md) (Mode A / ports / H0–H1), ne le remplace pas.  
+> **Noms de code :** `SpecialistRun`, `SpecialistRegistry`, `specialists[]`, `summon_specialist` = jargon technique provisoire ; vocabulaire produit = Agent métier / Regard / Agent d'entreprise.  
+> **Liens :** [intention.md](./intention.md) · [intention Improba](../../workproba-improba/intention.md) (amendement 06/08 Agents métier) · [glossaire](../../workproba-improba/roadmaps/glossaire.md) · [positionnement cloud / agents métier](../../workproba-improba/roadmaps/positionnement-cloud-regards.md) · [architecture cloud](../../workproba-improba/roadmaps/architecture-cloud.md) · [capacites.md](./capacites.md) · [plugins.md](./plugins.md)
 
 ---
 
@@ -23,43 +25,43 @@ Le filtre « capacité on/off » par espace ne suffit plus si le tenant active v
 ## 2. Intention produit (rappel)
 
 ```text
-User ↔ Assistant (chat principal)
-         ├─ mobilise des Spécialistes (panels d'outils selon profil)
-         └─ User peut solliciter le regard d'un Spécialiste
-               = même spécialiste, mode lecture / avis
+User ↔ Assistant / Imp (chat principal)
+         ├─ mobilise des Agents métier (panels d'outils selon profil)
+         └─ User peut solliciter le Regard d'un Agent métier
+               = même agent, mode lecture / avis
 ```
 
 | Concept | Rôle | Outils |
 |---|---|---|
 | **Assistant** (Imp) | Face à l'utilisateur ; orchestre | fichiers, mémoire, délégation |
-| **Spécialiste** | Profil métier (RH, juridique, …) avec panel d'outils | lecture, et éventuellement écriture selon profil |
-| **Regard** | Mode consultatif d'un spécialiste (UI ou via l'assistant) | **read-only** : consulter, expliquer, recommander |
+| **Agent métier** | Profil métier (RH, juridique, …) avec panel d'outils | lecture, et éventuellement écriture selon profil |
+| **Regard** | Mode consultatif d'un agent métier (UI ou via l'assistant) | **read-only** : consulter, expliquer, recommander |
 
 Principes :
 
-- Spécialiste = sous-agent borné (doctrine + allowlist + contrat de sortie), pas un second chatbot généraliste ;
-- capacités cloud = **inventaire** ; le spécialiste **sélectionne et discipline** un sous-ensemble ;
-- pas « 1 app cloud = 1 spécialiste » ;
-- regards croisés = plusieurs spécialistes en mode Regard ;
-- écritures : spécialiste opératoire et/ou assistant + Human Approval Gate ; **jamais** via le bouton Regard ;
-- code interne peut rester `personas` ; UI produit : Spécialiste / Regard.
+- Agent métier = sous-agent borné (doctrine + allowlist + contrat de sortie), pas un second chatbot généraliste ;
+- capacités cloud = **inventaire** ; l'agent métier **sélectionne et discipline** un sous-ensemble ;
+- pas « 1 app cloud = 1 agent métier » ;
+- regards croisés = plusieurs agents métier en mode Regard ;
+- écritures : agent métier opératoire et/ou assistant + Human Approval Gate ; **jamais** via le bouton Regard ;
+- code interne peut rester `personas` ; UI produit : Agent métier / Regard / Agent d'entreprise (gouvernance).
 
 ---
 
 ## 3. Source de vérité : config par tenant
 
-Le tenant (organisation) configure ses spécialistes. Workproba desktop **consomme** et met l'UI à jour.
+Le tenant (organisation) configure ses agents métier. Workproba desktop **consomme** et met l'UI à jour.
 
 | Acteur | Où | Quoi |
 |---|---|---|
-| **Org admin** | Console Improba Cloud (`/adminspace`) | Spécialistes : doctrine / consignes, contrat de sortie, **panel d'outils** |
+| **Org admin** | Console Improba Cloud (`/adminspace`) | Agents métier : doctrine / consignes, contrat de sortie, **panel d'outils** |
 | **Org admin** | `/adminspace/connectors` (déjà là) | Inventaire : quels connecteurs l'org autorise |
-| **User desktop** | Workproba | Reçoit le catalogue org, voit, mobilise (regard / assistant). Ne définit pas les spécialistes d'entreprise. |
+| **User desktop** | Workproba | Reçoit le catalogue org, voit, mobilise (Regard / assistant). Ne définit pas les agents d'entreprise. |
 
 ```text
 Tenant (org)
   1. Allowlist connecteurs (existant, fail-closed si vide)
-  2. Définit Spécialiste RH :
+  2. Définit Agent métier RH :
        - paramètres (nom, doctrine, format, modes regard / opératoire)
        - outils cochés parmi tools[] des connecteurs autorisés
   3. Publie une version signée
@@ -67,7 +69,7 @@ Tenant (org)
 Poste Workproba (enrollé)
   ← pull catalogue (sync regards)
   → capacité locale « Regards » / plugin personas active (sinon catalogue non mobilisable)
-  → UI spécialistes / regards se met à jour
+  → UI agents métier / regards se met à jour
   → runtime n'expose que le panel au SpecialistRun
 ```
 
@@ -76,9 +78,9 @@ Prérequis desktop : compte cloud connecté **et** capacité / plugin regards ac
 ### Deux couches à ne pas fusionner
 
 1. **Inventaire org** (existant) : quels connecteurs existent pour cette org.  
-2. **Profil spécialiste** (à ajouter) : pour *ce* spécialiste, quels tools + quelle doctrine.
+2. **Profil agent métier** (à ajouter) : pour *cet* agent, quels tools + quelle doctrine.
 
-Hub Capacités ≠ liste des spécialistes : capacités = tuyaux ; spécialistes = profils métier paramétrés par le tenant.
+Hub Capacités ≠ liste des agents métier : capacités = tuyaux ; agents métier = profils métier paramétrés par le tenant.
 
 ### Couches d'autorisation effectives
 
@@ -87,7 +89,7 @@ Hub Capacités ≠ liste des spécialistes : capacités = tuyaux ; spécialistes
 **Au runtime (desktop),** un tool managed n'est enregistré / appelable par un `SpecialistRun` que s'il passe :
 
 1. connecteur dans le snapshot de tour (`managed_allowed_connector_ids` : déjà le résultat de allowlist org ∩ overrides user ∩ wanted espace ∩ enable local ∩ entitlements cloud plugin) ;
-2. tool présent dans le panel du spécialiste (allowed − forbidden) ;
+2. tool présent dans le panel de l'agent métier (allowed − forbidden) ;
 3. filtre de mode (Regard → uniquement tools du cache avec `effect: read`) ;
 4. filtre `visibility` selon `ui_mode` (guided / standard / advanced), comme aujourd'hui pour `managed__*`.
 
@@ -101,15 +103,15 @@ La couche org n'est pas re-vérifiée ad hoc dans le runner : elle est déjà ma
 |---|---|---|
 | Personas / Regards desktop | avis LLM **sans outils managed**, UI SSE (`ask` / meeting / discuss), mémoire projet optionnelle, sets locaux + catalogues signés (`personas[]`) | panel d'outils managed, doctrine structurée consommée |
 | Managed tools | cache, snapshot tour, noms `managed__{connector}__{tool}`, HAG sauf `effect: read`, fallback `invoke_managed_connector` | exposition progressive, allowlist par profil |
-| Cloud connectors | allowlist org + overrides user, `GET /connectors` avec `tools[]` (`effect`, `visibility`, `input_schema`) | lien vers spécialistes |
-| Cloud regards | draft / publish / revoke ; payload peu validé ; `SignedBundle` | signer n'embarque que `personas[]` ; admin = JSON brut ; pas de picker tools |
-| Schéma `regard-enterprise.schema.json` | `doctrine`, `tools.allowed/forbidden` en **string[]** (outils « locaux » type search_kb), `output_contract` au niveau **d'un** regard | non branché au signer/runtime ; format string[] **incompatible** avec les refs managed ciblées ; pas de `specialists[]` |
-| Lien regards ↔ tools | aucun | allowlist par spécialiste |
+| Cloud connectors | allowlist org + overrides user, `GET /connectors` avec `tools[]` (`effect`, `visibility`, `input_schema`) | lien vers agents métier |
+| Cloud agents d'entreprise | draft / publish / revoke ; payload peu validé ; `SignedBundle` | signer n'embarque que `personas[]` ; admin = JSON brut ; pas de picker tools |
+| Schéma `regard-enterprise.schema.json` | `doctrine`, `tools.allowed/forbidden` en **string[]** (outils « locaux » type search_kb), `output_contract` au niveau **d'un** regard | non branché au signer/runtime ; format string[] **incompatible** avec les refs managed ciblées ; pas de `specialists[]` / `agents[]` |
+| Lien agents ↔ tools | aucun | allowlist par agent métier |
 | Desktop SignedBundle | dataclass avec `personas` obligatoire | champ `specialists` à ajouter (dual-read) |
 
 Surfaces utiles :
 
-- Desktop : `workproba_personas/`, `workproba_cloud/plugin.py` (`sync_managed_regards`), `capabilities_turn.py`, `ManagedRegardsPort`, `POST /plugins/cloud/sync-regards`, CloudPanel
+- Desktop : `workproba_personas/`, `workproba_cloud/plugin.py` (`sync_managed_regards`), `capabilities_turn.py`, `ManagedAgentsPort` (code actuel : `ManagedRegardsPort`), `POST /plugins/cloud/sync-regards`, CloudPanel
 - Cloud : `/adminspace/regards`, `/adminspace/connectors`, `GET /catalogs/regards`, `regard-bundle.signer.ts`
 
 Outils agent personas actuels : `ask_personas`, `simulate_meeting` (pas de `summon_*`).
@@ -122,10 +124,11 @@ Outils agent personas actuels : `ask_personas`, `simulate_meeting` (pas de `summ
 workproba-cloud (par org)
   connectors[]     → inventaire tools (effect, visibility, input_schema)
   specialists[]    → profils dans le bundle signé (doctrine + allowlist + output_contract)
+       │            (cible produit : agents métier ; clé JSON peut évoluer specialists[] / agents[])
        │
        ▼ pull / sync (DeviceBearer)
 Desktop
-  ManagedRegardsPort (étendu) + cache connectors
+  ManagedAgentsPort (code actuel : ManagedRegardsPort, étendu) + cache connectors
        │
 User ↔ Assistant
        │  tools cibles: summon_specialist (+ locaux fichiers / mémoire)
@@ -141,7 +144,7 @@ RemoteCapabilityGateway → POST /connectors/:id/invoke
 
 ### Composants desktop
 
-1. **SpecialistRegistry** : sets locaux + catalogues managés enrichis (évolution de la résolution personas / `ManagedRegardsPort`)  
+1. **SpecialistRegistry** : sets locaux + catalogues managés enrichis (évolution de la résolution personas / `ManagedAgentsPort`)  
 2. **ToolAllowlistResolver** : refs `{connector_id, tool}` → `managed__…` ; intersection runtime §3  
 3. **SpecialistRun** : un runner, deux modes  
 
@@ -180,11 +183,11 @@ Pendant P1–P3, le dump `managed__*` (et le fallback) peuvent rester sur le par
 
 Aujourd'hui : un `RegardEnterprise` publié → `SignedBundle` avec `personas[]` seulement (cloud et desktop).
 
-**Décision retenue (ferme) :** un catalogue versionné = **N spécialistes** via `specialists[]` dans payload + bundle ; dual-read `personas[]` pour les vieux clients / bundles.
+**Décision retenue (ferme) :** un catalogue versionné = **N agents métier** via `specialists[]` (ou évolution `agents[]`) dans payload + bundle ; dual-read `personas[]` pour les vieux clients / bundles.
 
 Le schéma `regard-enterprise.schema.json` (un document = un regard riche, `tools.allowed: string[]`) est une **cible doc / T-V3-RG-1 non câblée**. En P0 :
 
-- soit on le remplace / scinde par un schéma « catalogue de spécialistes » aligné sur le bundle ;
+- soit on le remplace / scinde par un schéma « catalogue d'agents métier » aligné sur le bundle ;
 - soit on le laisse comme aspiration et on versionne un schéma `specialist-catalog` réellement signé.
 
 Ne pas prétendre que le schéma enterprise actuel est le contrat runtime.
@@ -209,12 +212,12 @@ Le desktop résout vers `managed__{connector_id}__{tool}` à l'enregistrement (d
 
 Les **domaines** (`rh.read`, etc.) : hors contrat P0 ; presets UX admin éventuels en P4 (expansés en refs atomiques à la publication).
 
-### Exemple de spécialiste (illustratif)
+### Exemple d'agent métier (illustratif)
 
 ```yaml
 specialists:
   - id: org.rh
-    name: Spécialiste RH
+    name: Agent RH
     # champs UI hérités personas : role, description, avatar_*
     doctrine:
       mission: ...
@@ -237,7 +240,7 @@ Règles de publication :
 
 - chaque ref ∈ `tools[]` d'un connecteur allowlisté org ;
 - sinon refus ;
-- dual-read desktop : bundles `personas[]` seuls → spécialistes sans panel jusqu'à resync.
+- dual-read desktop : bundles `personas[]` seuls → agents métier sans panel jusqu'à resync.
 
 ---
 
@@ -246,12 +249,12 @@ Règles de publication :
 Évolution de `/adminspace/regards` (aujourd'hui JSON brut, create + publish, pas d'edit) :
 
 - liste versionnée (draft → publish → revoke) ;
-- fiche spécialiste : identité, doctrine, output contract, modes, champs UI (avatar, …) ;
+- fiche agent métier : identité, doctrine, output contract, modes, champs UI (avatar, …) ;
 - **picker d'outils** : arbre connecteur → `tools[]`, filtré par allowlist org ; badges `read` / `write` ;
 - nouvelle version plutôt qu'édition opaque in-place ;
 - overrides user sur connecteurs orthogonaux (deny → `degraded_tools` desktop).
 
-**Décision retenue :** édition des spécialistes d'entreprise **uniquement** en console cloud. Desktop = consommation. Sets personnels locaux = hors gouvernance tenant (hors scope).
+**Décision retenue :** édition des agents d'entreprise **uniquement** en console cloud. Desktop = consommation. Sets personnels locaux = hors gouvernance tenant (hors scope).
 
 ---
 
@@ -261,7 +264,7 @@ Règles de publication :
 Publish org
   → SignedBundle { catalog_id, version, personas? , specialists?, signature, … }
   → GET /catalogs/regards
-  → ManagedRegardsPort.install / activate (étendu : lire specialists[])
+  → ManagedAgentsPort.install / activate (code actuel : ManagedRegardsPort ; étendu : lire specialists[])
   → refresh UI desktop
 ```
 
@@ -271,7 +274,7 @@ Après sync (manuel CloudPanel / `sync_managed_regards` d'abord ; auto en P4) :
 
 | Surface | Comportement |
 |---|---|
-| Liste spécialistes | Catalogue org (noms, avatars, provenance **Administré** / `managed`) |
+| Liste agents métier | Catalogue org (noms, avatars, provenance **Administré** / `managed`) |
 | Fiche détail | Panel d'outils **affiché** (read vs write) |
 | Solliciter un regard | Mode read-only ; exécution tools read **à partir de P2** |
 | Assistant | Délégation bornée **à partir de P3** ; retrait dump parent en **P4** |
@@ -284,39 +287,41 @@ Après sync (manuel CloudPanel / `sync_managed_regards` d'abord ; auto en P4) :
 
 Pas d'exécution d'outils Regard avant le runner.
 
-### P0 — Admin tenant + contrat (débloquant)
+### P0 — Admin tenant + contrat (débloquant) · **livré** (06/08/2026)
 
-- Schéma catalogue réellement signé + signer : `specialists[]` (doctrine, tools `{connector_id, tool}`, output_contract, modes, champs UI).
-- Dual-read `personas[]` (cloud signer + desktop `SignedBundle` / `ManagedRegardsPort`).
-- Éditeur admin + picker tools.
-- Validation publish vs allowlist org.
-- Clarifier le sort du schéma `regard-enterprise.schema.json` (remplacé, scindé, ou doc only).
-- Tests : org A / org B ; signature ; refus ref invalide.
+- [x] Schéma catalogue réellement signé + signer : `specialists[]` (`specialist-catalog.schema.json` ; tools `{connector_id, tool}`).
+- [x] Dual-read `personas[]` (cloud signer + desktop `SignedBundle` / port `ManagedRegardsPort`).
+- [x] Éditeur admin + picker tools (create-only ; escape hatch JSON ; pas d'edit brouillon).
+- [x] Validation publish vs allowlist org (allowed = allowlist+exists ; forbidden = exists).
+- [x] `regard-enterprise.schema.json` = doc/archive (README schemas).
+- [x] Tests : signature, refus ref invalide, dual-read, clés test bloquées en prod.
+- Hors P0 reporté : édition brouillon existant ; champs avatar/`output_contract` dans le form (via JSON avancé).
 
-### P1 — Sync + UI Workproba (affichage)
+### P1 — Sync + UI Workproba (affichage) · **livré** (06/08/2026)
 
-- Pull → liste / fiche ; **afficher** le panel.
-- Libellés Spécialiste / Regard (i18n + glossaire).
-- Pas d'exécution tools Regard ; dump `managed__*` parent inchangé.
+- [x] Pull → liste / fiche ; **afficher** le panel.
+- [x] Libellés Agent métier / Regard (i18n FR/EN + fiche agent).
+- [x] Pas d'exécution tools Regard ; dump `managed__*` parent inchangé.
 
-### P2 — Runtime Regard (lecture)
+### P2 — Runtime Regard (lecture) · **livré** (06/08/2026)
 
-- `SpecialistRun` mode `regard` + `ToolAllowlistResolver`.
-- Brancher UI ask + chemin regard de `ask_personas` sur ce runner (tools `effect: read` only).
-- Tests : lecture timesheet / absences ; impossibilité d'enregistrer un write ; `degraded_tools`.
+- [x] `SpecialistRun` mode `regard` + `ToolAllowlistResolver` (`specialist_run.py`, `tool_allowlist.py`).
+- [x] Brancher UI ask + `ask_personas` sur ce runner (tools `effect: read` only).
+- [x] Tests : lecture ; impossibilité write enregistré ; `degraded_tools` ; legacy personas.
 
-### P3 — Runtime opératoire + délégation
+### P3 — Runtime opératoire + délégation · **livré** (06/08/2026)
 
-- Mode `operative` + HAG via invoke existant.
-- `summon_specialist(specialist_id, task, mode=regard|operative)` comme **outil unique de délégation** ; `ask_personas` devient un thin wrapper ou est déprécié vers ce contrat (éviter deux sémantiques).
-- Parent peut encore exposer `managed__*` (transition).
-- Tests : write approval / deny ; TOCTOU enable local.
+- [x] Mode `operative` + HAG via invoke existant.
+- [x] `summon_specialist(specialist_id, task, mode=regard|operative)` outil de délégation parent.
+- [x] Parent peut encore exposer `managed__*` (transition ; retrait = P4).
+- [x] Tests : write approval/deny ; id inconnu ; Regard read-only durci.
 
-### P4 — Retrait dump parent + polish
+### P4 — Retrait dump parent + polish · **livré** (06/08/2026)
 
-- Retirer `register_managed_connector_tools` **et** `invoke_managed_connector` de l'agent **parent** (zéro contournement).
-- Sync auto ; indicateurs dégradés ; presets domaines admin optionnels.
-- Meeting / croisés : brancher sur runner Regard si on veut des tools en lecture ; sinon laisser texte.
+- [x] Retirer `register_managed_connector_tools` **et** `invoke_managed_connector` de l'agent **parent** (zéro contournement).
+- [x] Managed tools accessibles via SpecialistRun (regard/operative) / `summon_specialist` uniquement.
+- [x] Sync auto : manuel (`sync_managed_regards`) ; indicateurs dégradés partiels OK.
+- [x] Meeting / croisés : pas de branchement tools (hors scope trivial).
 
 **Ordre :** P0 → P1 → P2 → P3 → P4.
 
@@ -349,8 +354,8 @@ Pas d'exécution d'outils Regard avant le runner.
 
 - Exécution de l'agent dans le cloud / `agent-gateway`.
 - MCP comme bus d'outils produit.
-- Édition des spécialistes d'entreprise depuis le desktop.
-- Remplacer le hub Capacités par la liste des spécialistes.
+- Édition des agents d'entreprise depuis le desktop.
+- Remplacer le hub Capacités par la liste des agents métier.
 - Toucher au modèle projet partagé / sync artefacts (hors sujet).
 
 ---
@@ -362,7 +367,7 @@ Pas d'exécution d'outils Regard avant le runner.
 3. Intersection runtime §3 obligatoire.  
 4. Après P4 : ni `managed__*` plat ni `invoke_managed_connector` sur le parent.  
 5. Dual-read `personas[]` / `specialists[]`.  
-6. Ids spécialistes = registry only (fail-closed).  
+6. Ids agents métier = registry only (fail-closed).  
 7. Revue catalogue : `effect: read` mensonger = risque processus.  
 8. Panel signé = tools managed seulement (pas les tools locaux du sidecar).
 
@@ -387,9 +392,9 @@ Pas d'exécution d'outils Regard avant le runner.
 
 ### Retenues
 
-1. Édition spécialistes d'entreprise = console cloud uniquement.  
+1. Édition agents d'entreprise = console cloud uniquement.  
 2. Allowlist P0 = tool atomique `{connector_id, tool}`.  
-3. Catalogue versionné = **N spécialistes** (`specialists[]`).  
+3. Catalogue versionné = **N agents métier** (`specialists[]` ; évolution possible `agents[]`).  
 4. Refresh : manuel d'abord, auto en P4.  
 5. Sets personnels locaux hors gouvernance tenant.  
 6. Endpoint device : garder `GET /catalogs/regards`.  
@@ -407,6 +412,6 @@ Pas d'exécution d'outils Regard avant le runner.
 
 ## 15. Synthèse
 
-> Chaque tenant administre ses Spécialistes (paramètres + panel d'outils managed) dans Improba Cloud, à partir des connecteurs qu'il a autorisés. Workproba enrollé tire le catalogue signé et met à jour listes, fiches, regards et délégation. En cible, l'assistant ne voit plus le catalogue `managed__*` en vrac : il mobilise des spécialistes bornés. Le Regard est le mode read-only du même objet.
+> Chaque tenant administre ses agents métier (paramètres + panel d'outils managed) dans Improba Cloud, à partir des connecteurs qu'il a autorisés. Workproba enrollé tire le catalogue signé et met à jour listes, fiches, regards et délégation. En cible, l'assistant ne voit plus le catalogue `managed__*` en vrac : il mobilise des agents métier bornés. Le Regard est le mode read-only du même objet.
 
-Prochaine étape : ticket **P0** (schéma catalogue signé + signer + éditeur admin + validation allowlist + dual-read desktop + fixture multi-org).
+Prochaine étape : smoke E2E (sync → Regard → summon operative → HAG) ; édition brouillon admin ; sync auto optionnelle.

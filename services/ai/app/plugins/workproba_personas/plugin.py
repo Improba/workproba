@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic_ai import Agent, RunContext
 from pydantic_ai.exceptions import ModelRetry
@@ -11,9 +11,12 @@ from pydantic_ai.exceptions import ModelRetry
 from app.agent.human import build_human_summary
 from app.config import get_settings
 from app.i18n import t
+from app.agent.tools import ToolDeps
 from app.plugins.registry import PLUGIN_WORKPROBA_PERSONAS, resolve_plugin_data_dir
-from app.plugins.workproba_personas import manifest, orchestrator, storage
+from app.plugins.workproba_personas import manifest, orchestrator, specialist_run, storage
 from app.plugins.workproba_personas.storage import JsonDict
+
+SpecialistDelegationMode = Literal["regard", "operative"]
 
 
 def _plugin_data_dir(ctx: RunContext[Any]) -> Path:
@@ -30,7 +33,124 @@ def _persona_label(personas: list[JsonDict]) -> str:
     return ", ".join(str(p.get("name") or p.get("id") or "") for p in personas)
 
 
+def _normalize_specialist_mode(mode: str, *, locale: str) -> SpecialistDelegationMode:
+    normalized = (mode or "regard").strip().lower()
+    if normalized in {"regard", "operative"}:
+        return normalized  # type: ignore[return-value]
+    raise ModelRetry(t(locale, "errors.invalid_specialist_mode", mode=mode))
+
+
+async def _delegate_specialist(
+    ctx: RunContext[Any],
+    *,
+    specialist: JsonDict,
+    task: str,
+    context: str,
+    mode: SpecialistDelegationMode,
+) -> dict[str, Any]:
+    locale = ctx.deps.context.locale
+    plugin_data_dir = _plugin_data_dir(ctx)
+    cloud_dir = specialist_run.resolve_cloud_plugin_data_dir(plugin_data_dir)
+    tool_deps: ToolDeps | None = None
+    if isinstance(ctx.deps, ToolDeps):
+        tool_deps = ctx.deps
+
+    rag_store = getattr(ctx.deps.project_client, "_rag_store", None)
+    memory_text = ""
+    if rag_store is not None and task.strip():
+        memory_text, _ = await orchestrator._memory_context(  # noqa: SLF001
+            rag_store,
+            f"{task}\n{context}",
+            locale=locale,
+        )
+
+    plugins_root = plugin_data_dir.parent
+    try:
+        if mode == "operative":
+            content, degraded_tools = await specialist_run.run_operative(
+                specialist=specialist,
+                task=task,
+                context=context,
+                settings=get_settings(),
+                provider_set=ctx.deps.context.provider_set,
+                locale=locale,
+                cloud_plugin_data_dir=cloud_dir,
+                memory_text=memory_text,
+                tool_deps=tool_deps,
+                ui_mode=getattr(ctx.deps.context, "ui_mode", "agent"),
+                plugins_root=plugins_root,
+            )
+        else:
+            content, degraded_tools = await specialist_run.run_regard(
+                specialist=specialist,
+                question=task,
+                context=context,
+                settings=get_settings(),
+                provider_set=ctx.deps.context.provider_set,
+                locale=locale,
+                cloud_plugin_data_dir=cloud_dir,
+                memory_text=memory_text,
+                tool_deps=tool_deps,
+                ui_mode=getattr(ctx.deps.context, "ui_mode", "agent"),
+                plugins_root=plugins_root,
+            )
+    except ValueError as exc:
+        code = str(exc)
+        detail = t(locale, f"errors.{code}")
+        if detail == f"errors.{code}":
+            detail = code
+        raise ModelRetry(detail) from exc
+    except Exception as exc:  # noqa: BLE001
+        raise ModelRetry(f"{type(exc).__name__}: {exc}") from exc
+
+    name = str(specialist.get("name") or specialist.get("id") or "")
+    return {
+        "specialist_id": specialist.get("id"),
+        "specialist_name": name,
+        "mode": mode,
+        "content": content,
+        "degraded_tools": degraded_tools,
+        "display": "specialist_handoff_card",
+        "human_summary": build_human_summary(
+            "summon_specialist",
+            {"name": name, "mode": mode, "task": task},
+            result={"content": content},
+            locale=locale,
+        ),
+    }
+
+
 def register_personas_tools(agent: Agent[Any, str]) -> None:
+    @agent.tool
+    async def summon_specialist(
+        ctx: RunContext[Any],
+        specialist_id: str,
+        task: str,
+        mode: str = "regard",
+        context: str = "",
+    ) -> dict[str, Any]:
+        """Delegate a task to a business agent (Regard or operative mode).
+
+        Args:
+            specialist_id: Managed business agent identifier (registry only).
+            task: Task or question for the specialist.
+            mode: ``regard`` (read-only tools) or ``operative`` (panel tools, writes via approval).
+            context: Relevant excerpt from the current conversation.
+        """
+        locale = ctx.deps.context.locale
+        plugin_data_dir = _plugin_data_dir(ctx)
+        delegation_mode = _normalize_specialist_mode(mode, locale=locale)
+        specialists = storage.resolve_specialists(plugin_data_dir, [specialist_id])
+        if not specialists:
+            raise ModelRetry(t(locale, "errors.specialist_not_found", id=specialist_id))
+        return await _delegate_specialist(
+            ctx,
+            specialist=specialists[0],
+            task=task,
+            context=context,
+            mode=delegation_mode,
+        )
+
     @agent.tool
     async def ask_personas(
         ctx: RunContext[Any],
@@ -57,9 +177,14 @@ def register_personas_tools(agent: Agent[Any, str]) -> None:
         if not personas:
             raise ModelRetry(t(locale, "errors.personas_not_found", ids=", ".join(persona_ids)))
 
+        cloud_dir = specialist_run.resolve_cloud_plugin_data_dir(plugin_data_dir)
+        tool_deps: ToolDeps | None = None
+        if isinstance(ctx.deps, ToolDeps):
+            tool_deps = ctx.deps
+
         rag_store = getattr(ctx.deps.project_client, "_rag_store", None)
         try:
-            opinions, warnings = await orchestrator.generate_opinions(
+            opinions, warnings, degraded_tools = await orchestrator.generate_opinions(
                 plugin_data_dir=plugin_data_dir,
                 persona_ids=clamped_ids,
                 question=question,
@@ -68,6 +193,9 @@ def register_personas_tools(agent: Agent[Any, str]) -> None:
                 provider_set=ctx.deps.context.provider_set,
                 locale=locale,
                 rag_store=rag_store,
+                cloud_plugin_data_dir=cloud_dir,
+                tool_deps=tool_deps,
+                ui_mode=getattr(ctx.deps.context, "ui_mode", "agent"),
             )
         except ValueError as exc:
             code = str(exc)
@@ -81,6 +209,7 @@ def register_personas_tools(agent: Agent[Any, str]) -> None:
         return {
             "opinions": opinions,
             "warnings": warnings,
+            "degraded_tools": degraded_tools,
             "display": "persona_opinion_card",
             "human_summary": build_human_summary(
                 "ask_personas",

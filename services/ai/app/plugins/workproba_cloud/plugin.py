@@ -345,6 +345,10 @@ def register_managed_connector_tools(
     ui_mode: UiMode,
     managed_allowed_connector_ids: frozenset[str] | None = None,
 ) -> None:
+    """Enregistre les outils managed sur un agent SpecialistRun uniquement.
+
+    SpecialistRun only ; ne pas réenregistrer sur l'agent parent (délégation via summon_specialist).
+    """
     for connector in cloud_storage.get_known_managed_connectors(cloud_dir):
         connector_id = str(connector.get("id") or "")
         if not connector_id or not cloud_storage.is_managed_connector_enabled(
@@ -622,14 +626,7 @@ def register_cloud_tools(
     ui_mode: UiMode = "agent",
     managed_allowed_connector_ids: frozenset[str] | None = None,
 ) -> None:
-    cloud_dir = resolve_plugin_data_dir(PLUGIN_WORKPROBA_CLOUD, plugin_data_dir)
-    if cloud_dir is not None:
-        register_managed_connector_tools(
-            agent,
-            cloud_dir,
-            ui_mode=ui_mode,
-            managed_allowed_connector_ids=managed_allowed_connector_ids,
-        )
+    _ = (ui_mode, managed_allowed_connector_ids)
 
     @agent.system_prompt
     async def managed_connectors_prompt(ctx: RunContext[ToolDeps]) -> str:
@@ -974,40 +971,6 @@ def register_cloud_tools(
         )
         return {**result, "human_summary": human_summary}
 
-    @agent.tool
-    async def invoke_managed_connector(
-        ctx: RunContext[ToolDeps],
-        connector_id: str,
-        payload_json: str = "{}",
-    ) -> dict[str, Any]:
-        """Invoke a managed Improba Cloud connector (Mode A transport relay).
-        Prefer the dedicated managed_* tools when available. This generic tool is a fallback.
-
-        Args:
-            connector_id: Managed connector id (e.g. ihora, echo, ihora.shaped).
-            payload_json: JSON object string passed as connector payload.
-        """
-        import json
-
-        locale = ctx.deps.context.locale
-        try:
-            payload = json.loads(payload_json) if payload_json.strip() else {}
-            if not isinstance(payload, dict):
-                raise ValueError("payload_must_be_object")
-        except json.JSONDecodeError as exc:
-            raise ModelRetry(f"invalid_payload_json: {exc}") from exc
-        except ValueError as exc:
-            raise ModelRetry(str(exc)) from exc
-
-        return await invoke_managed_connector_impl(
-            ctx,
-            connector_id=connector_id,
-            payload=payload,
-            gate_tool_name="invoke_managed_connector",
-            human_connector_id=connector_id,
-            locale=locale,
-        )
-
 
 async def invoke_managed_connector_impl(
     ctx: RunContext[ToolDeps],
@@ -1149,6 +1112,8 @@ async def invoke_managed_connector_impl(
         requires_user_resolution = _user_resolution_candidate(payload) is not None
         skip_gate = _is_managed_read_action(cloud_dir, connector_id, action)
         gate = deps.confirmation_gate
+        if not skip_gate and gate is None:
+            raise ModelRetry(t(locale, "cloud.gate_required_for_write"))
         will_preresolve = _should_preresolve_ihora_user(connector_id, action, payload)
         if gate is not None and not skip_gate and will_preresolve:
             await gate.notify_preparing(

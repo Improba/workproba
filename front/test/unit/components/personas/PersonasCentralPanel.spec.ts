@@ -36,6 +36,14 @@ vi.mock('@composables/useAppSettings', () => ({
   }),
 }));
 
+vi.mock('@composables/useCloud', () => ({
+  useCloud: () => ({
+    connectors: ref([]),
+    init: vi.fn().mockResolvedValue(undefined),
+    refreshConnectors: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+
 vi.mock('@composables/usePersonas', () => ({
   usePersonas: () => ({
     sets,
@@ -84,7 +92,7 @@ describe('PersonasCentralPanel', () => {
     await flushPromises();
 
     expect(wrapper.text()).toContain('Nathalie');
-    expect(wrapper.text()).not.toContain('Jeux de personas');
+    expect(wrapper.find('.personas-central__list').exists()).toBe(true);
 
     await wrapper.find('.personas-central__card-main').trigger('click');
 
@@ -97,7 +105,7 @@ describe('PersonasCentralPanel', () => {
 
     const opinionBtn = wrapper
       .findAll('.personas-central__card-secondary')
-      .find((b) => b.text().includes('Son avis'));
+      .find((b) => b.text().includes('Son regard') || b.text().includes('Their regard'));
     await opinionBtn!.trigger('click');
 
     expect(wrapper.emitted('ask-opinion')?.[0]).toEqual([['p1']]);
@@ -117,5 +125,31 @@ describe('PersonasCentralPanel', () => {
 
     expect(wrapper.find('.personas-central__advanced').exists()).toBe(true);
     expect(wrapper.text()).toContain('Personnaliser');
+  });
+
+  it('affiche le panel d\'outils sur la fiche agent métier', async () => {
+    personas.value = [
+      {
+        id: 'org.rh',
+        name: 'Agent RH',
+        role: 'RH',
+        avatar_color: '#336699',
+        is_business_agent: true,
+        tools: {
+          allowed: [{ connector_id: 'ihora', tool: 'list_absences' }],
+        },
+      },
+    ];
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    const profileBtn = wrapper
+      .findAll('.personas-central__card-secondary')
+      .find((b) => b.text().includes('Fiche agent') || b.text().includes('Agent profile'));
+    expect(profileBtn).toBeTruthy();
+    await profileBtn!.trigger('click');
+    await flushPromises();
+
+    expect(wrapper.text()).toContain('list_absences');
   });
 });

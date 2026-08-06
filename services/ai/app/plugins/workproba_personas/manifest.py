@@ -14,7 +14,7 @@ PERMISSIONS = [
     "memory:forget",
 ]
 
-TOOLS = ["ask_personas", "simulate_meeting"]
+TOOLS = ["ask_personas", "simulate_meeting", "summon_specialist"]
 
 HOOKS: list[str] = []
 

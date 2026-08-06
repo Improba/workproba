@@ -25,7 +25,7 @@ _OFFICE_TOOLS = frozenset(
 _PUBLISHING_TOOLS = frozenset(
     {"publish_artifact", "create_project", "list_projects", "sync_to_cloud"}
 )
-_PERSPECTIVE_TOOLS = frozenset({"ask_personas", "simulate_meeting"})
+_PERSPECTIVE_TOOLS = frozenset({"ask_personas", "summon_specialist", "simulate_meeting"})
 _PLANNING_TOOLS = frozenset({"propose_plan", "remember"})
 
 

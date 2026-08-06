@@ -1234,6 +1234,16 @@ export async function purgeFileVersions(opts: {
 
 // --- Personas (Vague 9) ---
 
+export interface SpecialistToolRef {
+  connector_id: string;
+  tool: string;
+}
+
+export interface SpecialistToolsConfig {
+  allowed?: SpecialistToolRef[];
+  forbidden?: SpecialistToolRef[];
+}
+
 export interface PersonaInfo {
   id: string;
   name: string;
@@ -1242,6 +1252,8 @@ export interface PersonaInfo {
   system_prompt?: string;
   avatar_color: string;
   avatar_icon?: string;
+  is_business_agent?: boolean;
+  tools?: SpecialistToolsConfig;
 }
 
 export type PersonaSetProvenance = 'managed' | 'personal' | 'integrated';
@@ -1253,6 +1265,7 @@ export interface PersonaSet {
   provenance?: PersonaSetProvenance;
   managed_catalog_id?: string;
   managed_version?: string;
+  has_specialists?: boolean;
 }
 
 function parseSseEvents(buffer: string): {

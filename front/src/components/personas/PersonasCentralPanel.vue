@@ -37,7 +37,15 @@
                   :icon="persona.avatar_icon"
                 />
                 <span class="personas-central__card-text">
-                  <span class="personas-central__card-name">{{ persona.name }}</span>
+                  <span class="personas-central__card-name">
+                    {{ persona.name }}
+                    <span
+                      v-if="isBusinessAgent(persona)"
+                      class="personas-central__badge"
+                    >
+                      {{ t('personas.panel.businessAgentBadge') }}
+                    </span>
+                  </span>
                   <span class="personas-central__card-role">{{ persona.role }}</span>
                 </span>
                 <Lucide
@@ -55,7 +63,7 @@
                 {{ t('personas.panel.askTheirOpinion') }}
               </button>
               <button
-                v-if="showAdvanced"
+                v-if="showAdvanced || isBusinessAgent(persona)"
                 type="button"
                 class="personas-central__card-secondary personas-central__card-secondary--ghost"
                 @click="openPersonaDetail(persona)"
@@ -118,7 +126,11 @@
                   {{ personaSetProvenanceLabel(set.provenance) }}
                 </span>
                 <span class="personas-central__set-count">
-                  {{ t('personas.panel.personaCount', { count: set.personas.length }) }}
+                  {{
+                    set.has_specialists
+                      ? t('personas.panel.businessAgentCount', { count: set.personas.length })
+                      : t('personas.panel.personaCount', { count: set.personas.length })
+                  }}
                 </span>
               </button>
               <button
@@ -153,10 +165,17 @@
     <q-dialog v-model="personaDetailOpen">
       <div v-if="selectedPersona" class="personas-central__detail">
         <h3>{{ selectedPersona.name }}</h3>
+        <p v-if="isBusinessAgent(selectedPersona)" class="personas-central__detail-badge">
+          {{ t('personas.panel.businessAgentBadge') }}
+        </p>
         <p class="personas-central__detail-role">{{ selectedPersona.role }}</p>
         <p v-if="selectedPersona.description" class="personas-central__detail-desc">
           {{ selectedPersona.description }}
         </p>
+        <SpecialistToolsPanel
+          :persona="selectedPersona"
+          :connectors="connectors"
+        />
         <pre v-if="selectedPersona.system_prompt" class="personas-central__detail-prompt">{{
           truncatePrompt(selectedPersona.system_prompt)
         }}</pre>
@@ -208,7 +227,9 @@ import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
 import PersonasConfidentialityHint from '@components/personas/PersonasConfidentialityHint.vue';
 import PersonasHistoryPanel from '@components/personas/PersonasHistoryPanel.vue';
 import PersonaCustomEditorDialog from '@components/personas/PersonaCustomEditorDialog.vue';
+import SpecialistToolsPanel from '@components/personas/SpecialistToolsPanel.vue';
 import { useAppSettings } from '@composables/useAppSettings';
+import { useCloud } from '@composables/useCloud';
 import {
   estimateSessionCalls,
   personaSetProvenanceLabel,
@@ -216,6 +237,7 @@ import {
   type DiscussionMessage,
 } from '@composables/usePersonas';
 import type { PersonaInfo, PersonaSet } from '@services/aiSidecar';
+import { isBusinessAgent, specialistAllowedTools } from '@utils/specialistTools';
 
 const props = defineProps<{
   pluginActive: boolean;
@@ -236,6 +258,7 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const { settingsLocked } = useAppSettings();
+const { connectors, init: initCloud, refreshConnectors } = useCloud();
 const {
   sets,
   activeSet,
@@ -295,6 +318,9 @@ function isCustomSet(setId: string): boolean {
 function openPersonaDetail(persona: PersonaInfo): void {
   selectedPersona.value = persona;
   personaDetailOpen.value = true;
+  if (isBusinessAgent(persona) && specialistAllowedTools(persona).length > 0) {
+    void initCloud().then(() => refreshConnectors());
+  }
 }
 
 function truncatePrompt(prompt: string, max = 280): string {
@@ -477,6 +503,21 @@ defineExpose({
   font-size: var(--wp-fs-sm);
   font-weight: 600;
   color: var(--wp-text);
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--wp-space-1);
+}
+
+.personas-central__badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  color: var(--wp-gold);
+  background: rgba(255, 204, 73, 0.12);
 }
 
 .personas-central__card-role {
@@ -725,6 +766,13 @@ defineExpose({
 .personas-central__detail-role {
   color: var(--wp-text-muted);
   font-size: var(--wp-fs-sm);
+}
+
+.personas-central__detail-badge {
+  margin: 0 0 var(--wp-space-1);
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  color: var(--wp-gold);
 }
 
 .personas-central__detail-desc {

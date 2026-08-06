@@ -325,6 +325,15 @@ def build_human_summary(
             )
         return t(locale, "human.ask_personas.will", names=names)
 
+    if tool_name == "summon_specialist":
+        name = str(arguments.get("name") or arguments.get("specialist_id") or "")
+        mode = str(arguments.get("mode") or "regard")
+        if is_result:
+            if is_error:
+                return t(locale, "human.summon_specialist.cannot")
+            return t(locale, "human.summon_specialist.done", name=name, mode=mode)
+        return t(locale, "human.summon_specialist.will", name=name, mode=mode)
+
     if tool_name == "simulate_meeting":
         names = str(arguments.get("names") or "")
         topic = str(arguments.get("topic") or "")

@@ -61,6 +61,18 @@ import {
   deriveThinkingSubjectDone,
   deriveThinkingSummary,
 } from '@utils/thinkingPresentation';
+import {
+  applyPersonasOpinionFromToolResult,
+  createRunningSpecialistHandoff,
+  initStreamingPersonasOpinion,
+  markPersonasOpinionAsError,
+  markRunningSpecialistHandoffAsError,
+  markSpecialistHandoffAsPending,
+  markSpecialistHandoffAsRunning,
+  toolResultToSpecialistHandoff,
+  type SpecialistMeta,
+} from '@utils/specialistHandoff';
+import { usePersonas } from '@composables/usePersonas';
 import { useCloud } from '@composables/useCloud';
 import {
   usesDeviceBearerAuth,
@@ -672,6 +684,7 @@ interface ChatCorrelationContext {
   turnId?: string | null;
   workId?: string | null;
   sessionId?: string | null;
+  resolveSpecialistMeta?: (id: string) => SpecialistMeta | null;
 }
 
 function buildStreamChatError(
@@ -824,6 +837,7 @@ export function finalizeIncompleteToolsOnMessage(
   if (message.pendingPlan?.status === 'pending') {
     message.pendingPlan = null;
   }
+  markRunningSpecialistHandoffAsError(message);
 }
 
 /** Efface les human gates orphelines après un abort utilisateur. */
@@ -869,6 +883,17 @@ export function applyStreamEvent(
         id: createPartId(),
         toolCallId: toolCall.id,
       });
+      if (event.data.name === 'summon_specialist') {
+        assistant.specialistHandoff = createRunningSpecialistHandoff(
+          toolCall.id,
+          args,
+          ctx?.resolveSpecialistMeta,
+        );
+      } else if (event.data.name === 'ask_personas') {
+        assistant.personasOpinion = initStreamingPersonasOpinion(
+          String(args.question ?? ''),
+        );
+      }
       break;
     }
     case 'confirmation_preparing': {
@@ -876,6 +901,9 @@ export function applyStreamEvent(
       const tool = assistant.toolCalls?.find((t) => t.id === toolId);
       if (tool) {
         tool.status = 'pending_confirmation';
+        if (tool.name === 'summon_specialist') {
+          markSpecialistHandoffAsPending(assistant);
+        }
       }
       assistant.preparingConfirmation = {
         toolCallId: toolId,
@@ -893,6 +921,9 @@ export function applyStreamEvent(
         tool.status = 'awaiting_confirmation';
         if (!tool.filePath && event.data.proposedPath) {
           tool.filePath = event.data.proposedPath;
+        }
+        if (tool.name === 'summon_specialist') {
+          markSpecialistHandoffAsPending(assistant);
         }
       }
       if (assistant.preparingConfirmation?.toolCallId === toolId) {
@@ -924,6 +955,9 @@ export function applyStreamEvent(
           tool.status = 'running';
         }
         tool.autoApproved = true;
+        if (tool.name === 'summon_specialist') {
+          markSpecialistHandoffAsRunning(assistant);
+        }
       }
       if (assistant.preparingConfirmation?.toolCallId === toolId) {
         assistant.preparingConfirmation = null;
@@ -960,6 +994,33 @@ export function applyStreamEvent(
         }
         if (assistant.preparingConfirmation?.toolCallId === toolId) {
           assistant.preparingConfirmation = null;
+        }
+        if (tool.name === 'summon_specialist') {
+          const toolFailed =
+            event.data.error != null || event.data.status === 'error';
+          const handoff = toolResultToSpecialistHandoff(
+            tool.id,
+            tool.args ?? {},
+            event.data.result,
+            toolFailed ? (event.data.error ?? event.data.result ?? true) : undefined,
+            ctx?.resolveSpecialistMeta,
+          );
+          if (handoff) {
+            assistant.specialistHandoff = {
+              ...handoff,
+              id: assistant.specialistHandoff?.id ?? handoff.id,
+            };
+          } else {
+            markRunningSpecialistHandoffAsError(assistant);
+          }
+        } else if (tool.name === 'ask_personas' && event.data.error == null) {
+          applyPersonasOpinionFromToolResult(
+            assistant,
+            tool.args ?? {},
+            event.data.result,
+          );
+        } else if (tool.name === 'ask_personas' && event.data.error != null) {
+          markPersonasOpinionAsError(assistant);
         }
       }
       break;
@@ -1185,10 +1246,10 @@ export interface UseChatStreamOptions {
   reasoningEffort?: Ref<ReasoningEffort | null | undefined>;
   /** Override du modèle pour la conversation active (persisté par session). */
   sessionModel?: Ref<string | null | undefined>;
-  /** Callback outils personas (ask_personas, simulate_meeting) après résultat. */
+  /** Callback outils personas après résultat (simulate_meeting ouverture vue). */
   onPersonasToolCall?: (
-    toolName: 'ask_personas' | 'simulate_meeting',
-    payload: { args: Record<string, unknown>; result: unknown },
+    toolName: 'ask_personas' | 'simulate_meeting' | 'summon_specialist',
+    payload: { args: Record<string, unknown>; result: unknown; toolCallId?: string },
   ) => void;
   /** Callback outils browser après résultat. */
   onBrowserToolCall?: (
@@ -1277,6 +1338,7 @@ export function useChatStream(
     auditEnabled,
   } = useAppSettings();
   const { activePluginIds, getPluginDataDir } = usePlugins();
+  const { findPersona } = usePersonas();
   const { providerReadiness, init: initCloud, refreshQuota } = useCloud();
   // ref (profond) : les objets messages sont réactifs, donc muter
   // `assistant.content` déclenche directement le rendu. Pas de clonage du
@@ -1318,6 +1380,15 @@ export function useChatStream(
       turnId: currentTurnId,
       workId: currentWorkId,
       sessionId: options.sessionId.value,
+      resolveSpecialistMeta: (id: string): SpecialistMeta | null => {
+        const persona = findPersona(id);
+        if (!persona) return null;
+        return {
+          name: persona.name,
+          avatarColor: persona.avatar_color,
+          avatarIcon: persona.avatar_icon,
+        };
+      },
     };
   }
 
@@ -1395,13 +1466,14 @@ export function useChatStream(
     flushPendingTokens();
     if (event.type === 'tool_call_result') {
       const toolName = event.data.name;
-      if (toolName === 'ask_personas' || toolName === 'simulate_meeting') {
+      if (toolName === 'simulate_meeting') {
         const tool = messages.value
           .find((m) => m.id === currentAssistantId)
           ?.toolCalls?.find((t) => t.id === event.data.id);
         options.onPersonasToolCall?.(toolName, {
           args: tool?.args ?? {},
           result: event.data.result,
+          toolCallId: event.data.id,
         });
       }
       if (isBrowserAgentTool(toolName) && event.data.error == null && event.data.status !== 'error') {
@@ -1975,6 +2047,12 @@ export function useChatStream(
       });
       if (!response.ok) {
         throw await SidecarHttpError.fromResponse(response);
+      }
+      if (assistant && decision !== 'deny') {
+        const tool = assistant.toolCalls?.find((t) => t.id === pending.toolCallId);
+        if (tool?.name === 'summon_specialist') {
+          markSpecialistHandoffAsRunning(assistant);
+        }
       }
     } catch (err) {
       const ctx = correlationContext();

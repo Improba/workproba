@@ -28,6 +28,10 @@ describe('fallbackHumanLabel', () => {
     expect(fallbackHumanLabel('managed__malformed')).toBe('managed__malformed');
     expect(fallbackHumanLabel('search_kb')).toBe("J'ai cherché dans la mémoire");
     expect(fallbackHumanLabel('web_search')).toBe('Recherche sur le web');
+    expect(fallbackHumanLabel('ask_personas')).toBe('Consultation de regards métier');
+    expect(
+      fallbackHumanLabel('summon_specialist', { specialist_id: 'rh', mode: 'regard' }),
+    ).toBe("Délégation à l'agent rh (Regard)");
     expect(fallbackHumanLabel('list_files')).toBe("J'ai listé les fichiers");
     expect(fallbackHumanLabel('run_code')).toBe("J'ai exécuté un calcul");
   });

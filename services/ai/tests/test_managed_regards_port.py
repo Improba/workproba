@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -11,8 +12,10 @@ from app.plugins.ports.managed_regards import (
     CATALOG_FILE,
     FilesystemManagedRegardsPort,
     SignatureVerifier,
+    SignedBundle,
     clear_managed_audit_log,
     create_personas_managed_port,
+    dual_read_catalog_entries,
     managed_audit_log,
     open_managed_regards_port,
     sign_bundle_for_tests,
@@ -31,6 +34,20 @@ def _sample_personas() -> list[dict[str, str]]:
             "system_prompt": "Tu es conformité.",
             "avatar_color": "#336699",
             "avatar_icon": "shield",
+        }
+    ]
+
+
+def _sample_specialists() -> list[dict[str, str]]:
+    return [
+        {
+            "id": "org.rh",
+            "name": "Agent RH",
+            "role": "RH",
+            "description": "Regard RH",
+            "system_prompt": "Tu es RH.",
+            "avatar_color": "#336699",
+            "avatar_icon": "people",
         }
     ]
 
@@ -242,3 +259,221 @@ def test_hmac_verify_ignores_embedded_payload_secret(
     payload["hmac_secret_b64"] = secret
     assert verifier.verify(payload) is False
     assert "hmac_secret_b64" not in bundle.to_dict()
+
+
+def test_signed_bundle_always_includes_specialists_array() -> None:
+    bundle = sign_bundle_for_tests(
+        catalog_id="spec-cat",
+        version="1.0.0",
+        name="Specialists",
+        specialists=_sample_specialists(),
+    )
+    payload = bundle.to_dict()
+    assert payload["specialists"] == _sample_specialists()
+    assert payload["personas"] == []
+    assert "specialists" in payload
+
+
+def test_personas_only_bundle_backward_compatible(tmp_path: Path) -> None:
+    """T2: ancien bundle sans specialists reste vérifiable."""
+    import base64
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from app.plugins.ports.managed_regards import (
+        TEST_SIGNING_PRIVATE_KEY_B64,
+        canonical_signing_bytes,
+    )
+
+    _, personas_dir = _personas_layout(tmp_path)
+    port = create_personas_managed_port(personas_dir)
+    legacy_body = {
+        "catalog_id": "legacy-cat",
+        "version": "1.0.0",
+        "name": "Legacy",
+        "personas": _sample_personas(),
+        "algorithm": "ed25519",
+        "provenance": "managed",
+    }
+    message = canonical_signing_bytes(legacy_body)
+    private_key = Ed25519PrivateKey.from_private_bytes(
+        base64.b64decode(TEST_SIGNING_PRIVATE_KEY_B64)
+    )
+    legacy_payload = {
+        **legacy_body,
+        "signature": base64.b64encode(private_key.sign(message)).decode("ascii"),
+    }
+    assert port.verify_signature(legacy_payload) is True
+    port.install_catalog_version(legacy_payload)
+    port.activate_catalog("legacy-cat")
+    active = port.active_persona_set()
+    assert active is not None
+    assert len(active["personas"]) == 1
+    specialist_set = port.active_specialist_set()
+    assert specialist_set is not None
+    assert specialist_set["specialists"] == []
+    assert len(specialist_set["effective_entries"]) == 1
+
+
+def test_specialists_only_dual_read(tmp_path: Path) -> None:
+    """T3: bundle specialists-only, dual-read utilise specialists."""
+    _, personas_dir = _personas_layout(tmp_path)
+    port = create_personas_managed_port(personas_dir)
+    bundle = sign_bundle_for_tests(
+        catalog_id="spec-only",
+        version="1.0.0",
+        name="Spec only",
+        specialists=_sample_specialists(),
+    )
+    port.install_catalog_version(bundle)
+    port.activate_catalog("spec-only")
+    status = port.get_catalog_status()
+    assert status["specialist_count"] == 1
+    assert status["persona_count"] == 0
+    active = port.active_specialist_set()
+    assert active is not None
+    assert len(active["specialists"]) == 1
+    assert active["personas"] == []
+    assert len(active["effective_entries"]) == 1
+    assert active["effective_entries"][0]["id"] == "org.rh"
+
+
+def test_dual_read_prefers_specialists_over_personas() -> None:
+    catalog = {
+        "personas": _sample_personas(),
+        "specialists": _sample_specialists(),
+    }
+    entries = dual_read_catalog_entries(catalog)
+    assert entries[0]["id"] == "org.rh"
+
+
+def test_personas_only_bundle_with_empty_specialists_array(tmp_path: Path) -> None:
+    """Cloud format: personas-only bundle signed with specialists: []."""
+    _, personas_dir = _personas_layout(tmp_path)
+    port = create_personas_managed_port(personas_dir)
+    bundle = sign_bundle_for_tests(
+        catalog_id="cloud-personas",
+        version="1.0.0",
+        name="Cloud personas",
+        personas=_sample_personas(),
+        specialists=[],
+    )
+    payload = bundle.to_dict()
+    assert payload["specialists"] == []
+    assert port.verify_signature(payload) is True
+    port.install_catalog_version(bundle)
+    catalog_path = personas_dir / "managed" / "cloud-personas" / "1.0.0" / CATALOG_FILE
+    with catalog_path.open("r", encoding="utf-8") as handle:
+        installed = json.load(handle)
+    assert installed["specialists"] == []
+    assert len(installed["personas"]) == 1
+
+
+def test_install_strips_hmac_secret_from_catalog_file(tmp_path: Path) -> None:
+    """M3: hmac_secret_b64 must not be persisted in catalog.json."""
+    _, personas_dir = _personas_layout(tmp_path)
+    secret = "dGVzdC1zZWNyZXQ="
+    verifier = SignatureVerifier(hmac_secret_b64=secret)
+    port = FilesystemManagedRegardsPort(
+        personas_data_dir=personas_dir,
+        caller_plugin_id=PLUGIN_WORKPROBA_PERSONAS,
+        app_data_dir=tmp_path / "app_data",
+        verifier=verifier,
+    )
+    bundle = sign_bundle_for_tests(
+        catalog_id="hmac-strip",
+        version="0.1.0",
+        name="HMAC strip",
+        personas=_sample_personas(),
+        algorithm="hmac-sha256",
+        hmac_secret_b64=secret,
+    )
+    payload = bundle.to_dict()
+    payload["hmac_secret_b64"] = secret
+    assert port.verify_signature(payload) is True
+    port.install_catalog_version(payload)
+    catalog_path = personas_dir / "managed" / "hmac-strip" / "0.1.0" / CATALOG_FILE
+    with catalog_path.open("r", encoding="utf-8") as handle:
+        installed = json.load(handle)
+    assert "hmac_secret_b64" not in installed
+
+
+def _sample_specialists_with_tools() -> list[dict[str, object]]:
+    return [
+        {
+            "id": "org.rh",
+            "name": "Agent RH",
+            "role": "RH",
+            "description": "Regard RH",
+            "system_prompt": "Tu es RH.",
+            "avatar_color": "#336699",
+            "avatar_icon": "people",
+            "tools": {
+                "allowed": [
+                    {"connector_id": "ihora", "tool": "list_absences"},
+                    {"connector_id": "ihora", "tool": "get_timesheet"},
+                ],
+                "forbidden": [],
+            },
+        }
+    ]
+
+
+def test_active_persona_set_marks_business_agents_with_tools(tmp_path: Path) -> None:
+    """P1: dual-read specialists expose is_business_agent et tools pour l'UI."""
+    _, personas_dir = _personas_layout(tmp_path)
+    port = create_personas_managed_port(personas_dir)
+    bundle = sign_bundle_for_tests(
+        catalog_id="spec-tools",
+        version="1.0.0",
+        name="Agents outils",
+        specialists=_sample_specialists_with_tools(),
+    )
+    port.install_catalog_version(bundle)
+    port.activate_catalog("spec-tools")
+
+    active = port.active_persona_set()
+    assert active is not None
+    assert active["has_specialists"] is True
+    assert len(active["personas"]) == 1
+    agent = active["personas"][0]
+    assert agent["is_business_agent"] is True
+    assert agent["id"] == "org.rh"
+    tools = agent.get("tools") or {}
+    allowed = tools.get("allowed") or []
+    assert len(allowed) == 2
+    assert allowed[0]["connector_id"] == "ihora"
+
+
+def test_list_sets_includes_business_agents_from_specialists(tmp_path: Path) -> None:
+    """P1: list_sets desktop retourne les agents métier dual-read."""
+    _, personas_dir = _personas_layout(tmp_path)
+    port = create_personas_managed_port(personas_dir)
+    bundle = sign_bundle_for_tests(
+        catalog_id="spec-list",
+        version="1.0.0",
+        name="Liste agents",
+        specialists=_sample_specialists_with_tools(),
+    )
+    port.install_catalog_version(bundle)
+    port.activate_catalog("spec-list")
+
+    sets = personas_storage.list_sets(personas_dir)
+    managed = next(s for s in sets if s.get("id") == "managed_spec-list")
+    assert managed.get("has_specialists") is True
+    assert managed["personas"][0]["is_business_agent"] is True
+    assert managed["personas"][0]["tools"]["allowed"][0]["tool"] == "list_absences"
+
+
+def test_from_dict_rejects_specialists_null() -> None:
+    with pytest.raises(ValueError, match="invalid_signed_bundle"):
+        SignedBundle.from_dict(
+            {
+                "catalog_id": "x",
+                "version": "1.0.0",
+                "name": "x",
+                "personas": [],
+                "specialists": None,
+                "signature": "sig",
+            }
+        )

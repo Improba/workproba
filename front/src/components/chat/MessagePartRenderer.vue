@@ -62,6 +62,12 @@
     @publish="openOpinionPublish"
   />
 
+  <SpecialistHandoffCard
+    v-if="message.specialistHandoff"
+    :card="message.specialistHandoff"
+    @discuss="emit('specialist-to-discussion', message.specialistHandoff!)"
+  />
+
   <MemoryCitationsBar
     v-if="message.role === 'assistant' && message.memoryCitations?.length"
     :citations="message.memoryCitations"
@@ -115,6 +121,7 @@ import MessageTextPart from '@components/chat/MessageTextPart.vue';
 import ActivityGroup from '@components/chat/ActivityGroup.vue';
 import PlanCard from '@components/chat/PlanCard.vue';
 import PersonasOpinionCard from '@components/personas/PersonasOpinionCard.vue';
+import SpecialistHandoffCard from '@components/personas/SpecialistHandoffCard.vue';
 import MemoryCitationsBar from '@components/chat/MemoryCitationsBar.vue';
 import WebSearchCitationsBar from '@components/chat/WebSearchCitationsBar.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
@@ -127,8 +134,10 @@ import { extractWebSearchCitations } from '@utils/webSearchCitations';
 import {
   activityGroupIdAt,
   groupMessageParts,
+  type ActivityGroupData,
   type MessageRenderBlock,
 } from '@utils/activityGroup';
+import { filterPartsHidingPerspectiveTools } from '@utils/specialistHandoff';
 import {
   deriveThinkingSubjectDone,
   deriveThinkingSummary,
@@ -154,6 +163,7 @@ const emit = defineEmits<{
   'plan-reject': [];
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
+  'specialist-to-discussion': [card: import('#types').SpecialistHandoffCard];
   'error-reconnect': [cta: 'login' | 'enroll'];
 }>();
 
@@ -264,7 +274,33 @@ const renderParts = computed<ChatMessagePart[]>(() => {
   return fallback;
 });
 
-const groupedRenderBlocks = computed(() => groupMessageParts(renderParts.value));
+const partsForRender = computed(() =>
+  filterPartsHidingPerspectiveTools(renderParts.value, props.message),
+);
+
+function compactActivityGroup(group: ActivityGroupData): ActivityGroupData | null {
+  if (group.parts.length === 0) return null;
+  const toolCallIds = group.parts
+    .filter((part) => part.type === 'tool_call')
+    .map((part) => part.toolCallId);
+  return { ...group, toolCallIds };
+}
+
+const groupedRenderBlocks = computed(() => {
+  const blocks = groupMessageParts(partsForRender.value);
+  const compacted: MessageRenderBlock[] = [];
+  for (const block of blocks) {
+    if (block.kind === 'text') {
+      compacted.push(block);
+      continue;
+    }
+    const group = compactActivityGroup(block.group);
+    if (group) {
+      compacted.push({ kind: 'activity_group', group });
+    }
+  }
+  return compacted;
+});
 
 function renderBlockKey(block: MessageRenderBlock): string {
   if (block.kind === 'activity_group') return block.group.id;

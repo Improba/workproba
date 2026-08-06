@@ -81,6 +81,7 @@
         @personas-discuss="openDiscussionView"
         @personas-another="(card) => openOpinionPicker(card.question)"
         @personas-to-discussion="openDiscussionFromOpinion"
+        @specialist-to-discussion="openDiscussionFromHandoff"
         @regenerate="(id) => regenerateFrom(id)"
       />
     </section>
@@ -133,12 +134,11 @@ import {
 } from '@utils/providerSetModels';
 import { effectiveReasoningEffortFromSet } from '@utils/providerSets';
 import { defaultReasoningEffort, supportsReasoning } from '@utils/reasoningSupport';
-import type { ChatMessage, PersonasOpinionCard, ReasoningEffort } from '#types';
+import type { ChatMessage, PersonasOpinionCard, ReasoningEffort, SpecialistHandoffCard } from '#types';
 import { CLOUD_PLUGIN_ID, PERSONAS_PLUGIN_ID, usePlugins } from '@composables/usePlugins';
 import { useCloud } from '@composables/useCloud';
 import { usePersonasNavigation } from '@composables/usePersonasNavigation';
 import {
-  toolResultToOpinionCard,
   usePersonas,
   meetingStateToStored,
   type MeetingState,
@@ -865,19 +865,20 @@ function openDiscussionFromOpinion(card: PersonasOpinionCard): void {
   });
 }
 
+function openDiscussionFromHandoff(card: SpecialistHandoffCard): void {
+  void loadPersonasIfNeeded().then(() => {
+    openSideChat(PERSONAS_PLUGIN_ID, {
+      mode: 'discussion',
+      personaIds: [card.specialistId],
+      discussionSeed: card.task,
+      conversationContext: buildConversationContext(),
+    });
+  });
+}
+
 function openDiscussionFromMeeting(): void {
   const ids = meetingState.value?.personaIds ?? [];
   openDiscussionView(ids);
-}
-
-function createOpinionMessage(card: PersonasOpinionCard): ChatMessage {
-  return {
-    id: `msg_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-    role: 'assistant',
-    content: '',
-    personasOpinion: card,
-    createdAt: new Date().toISOString(),
-  };
 }
 
 async function onMeetingStart(payload: {
@@ -958,9 +959,11 @@ async function onMeetingStart(payload: {
 }
 
 async function handlePersonasToolCall(
-  toolName: 'ask_personas' | 'simulate_meeting',
+  toolName: 'ask_personas' | 'simulate_meeting' | 'summon_specialist',
   payload: { args: Record<string, unknown>; result: unknown },
 ): Promise<void> {
+  if (toolName !== 'simulate_meeting') return;
+
   await loadPersonasIfNeeded();
   const dir = await ensurePersonasDataDir();
   if (!dir) {
@@ -968,37 +971,30 @@ async function handlePersonasToolCall(
     return;
   }
 
-  if (toolName === 'ask_personas') {
-    const question = String(payload.args.question ?? '');
-    const card = toolResultToOpinionCard(question, payload.result);
-    if (!card) return;
-    messages.value.push(createOpinionMessage(card));
-  } else if (toolName === 'simulate_meeting') {
-    const result =
-      payload.result && typeof payload.result === 'object'
-        ? (payload.result as Record<string, unknown>)
-        : null;
-    if (result?.action !== 'open_meeting_view') return;
-    const personaIds = Array.isArray(result.persona_ids)
-      ? result.persona_ids.map(String)
-      : Array.isArray(payload.args.persona_ids)
-        ? payload.args.persona_ids.map(String)
-        : [];
-    const topic = String(result.topic ?? payload.args.topic ?? '');
-    const rounds = Math.min(Number(result.rounds ?? payload.args.rounds ?? 3) || 3, 5);
-    const meetingId =
-      typeof result.meeting_id === 'string' && result.meeting_id
-        ? result.meeting_id
-        : null;
-    personasView.value = 'meeting';
-    await onMeetingStart({
-      personaIds,
-      topic,
-      rounds,
-      includeMemory: false,
-      meetingId,
-    });
-  }
+  const result =
+    payload.result && typeof payload.result === 'object'
+      ? (payload.result as Record<string, unknown>)
+      : null;
+  if (result?.action !== 'open_meeting_view') return;
+  const personaIds = Array.isArray(result.persona_ids)
+    ? result.persona_ids.map(String)
+    : Array.isArray(payload.args.persona_ids)
+      ? payload.args.persona_ids.map(String)
+      : [];
+  const topic = String(result.topic ?? payload.args.topic ?? '');
+  const rounds = Math.min(Number(result.rounds ?? payload.args.rounds ?? 3) || 3, 5);
+  const meetingId =
+    typeof result.meeting_id === 'string' && result.meeting_id
+      ? result.meeting_id
+      : null;
+  personasView.value = 'meeting';
+  await onMeetingStart({
+    personaIds,
+    topic,
+    rounds,
+    includeMemory: false,
+    meetingId,
+  });
 }
 
 onUnmounted(() => {

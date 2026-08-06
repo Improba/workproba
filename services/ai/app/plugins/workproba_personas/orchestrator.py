@@ -12,7 +12,7 @@ from pydantic_ai import Agent
 
 from app.i18n import t
 from app.llm.config import build_model, build_model_settings, resolve_llm_config
-from app.plugins.workproba_personas import manifest, prompts, storage
+from app.plugins.workproba_personas import manifest, prompts, specialist_run, storage
 from app.plugins.workproba_personas.storage import JsonDict, now_iso
 from app.rag.store import RagStore
 from app.schemas import ProviderSet
@@ -135,9 +135,10 @@ def _persona_opinion_entry(
     content: str,
     *,
     memory_citations: list[JsonDict],
+    degraded_tools: list[JsonDict] | None = None,
 ) -> JsonDict:
     name = str(persona.get("name") or persona.get("id") or "")
-    return {
+    entry: JsonDict = {
         "persona_id": persona.get("id"),
         "persona_name": name,
         "role": persona.get("role"),
@@ -147,6 +148,63 @@ def _persona_opinion_entry(
         "memory_citations": memory_citations,
         "memory_cited": bool(memory_citations),
     }
+    if degraded_tools:
+        entry["degraded_tools"] = degraded_tools
+    return entry
+
+
+async def _run_single_persona_opinion(
+    persona: JsonDict,
+    *,
+    settings: Any,
+    provider_set: ProviderSet | None,
+    question: str,
+    context: str,
+    memory_text: str,
+    locale: str,
+    cloud_plugin_data_dir: Path | str | None = None,
+    tool_deps: Any = None,
+    ui_mode: str = "agent",
+    plugins_root: Path | None = None,
+) -> tuple[JsonDict, str, list[JsonDict]]:
+    if specialist_run.specialist_has_panel_tools(persona):
+        cloud_dir = (
+            Path(cloud_plugin_data_dir).expanduser().resolve()
+            if cloud_plugin_data_dir is not None
+            else None
+        )
+        content, degraded_tools = await specialist_run.run_specialist(
+            specialist=persona,
+            task=question,
+            context=context,
+            settings=settings,
+            provider_set=provider_set,
+            locale=locale,
+            mode="regard",
+            cloud_plugin_data_dir=cloud_dir,
+            memory_text=memory_text,
+            tool_deps=tool_deps,
+            ui_mode=ui_mode,
+            plugins_root=plugins_root,
+        )
+        return persona, content, degraded_tools
+
+    user_prompt = prompts.build_opinion_user_prompt(
+        question=question,
+        context=context,
+        memory_text=memory_text,
+        locale=locale,
+    )
+    system_prompt = str(persona.get("system_prompt") or "")
+    content = await _run_persona_prompt(
+        settings=settings,
+        provider_set=provider_set,
+        system_prompt=system_prompt,
+        user_prompt=user_prompt,
+        locale=locale,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+    )
+    return persona, content, []
 
 
 async def _run_personas_parallel(
@@ -154,23 +212,31 @@ async def _run_personas_parallel(
     *,
     settings: Any,
     provider_set: ProviderSet | None,
-    user_prompt: str,
+    question: str,
+    context: str,
+    memory_text: str,
     locale: str,
     cloud_plugin_data_dir: Path | str | None = None,
-) -> list[tuple[JsonDict, str]]:
+    tool_deps: Any = None,
+    ui_mode: str = "agent",
+    plugins_root: Path | None = None,
+) -> list[tuple[JsonDict, str, list[JsonDict]]]:
     """Exécute les appels persona indépendants en parallèle (ordre préservé à la sortie)."""
 
-    async def _one(persona: JsonDict) -> tuple[JsonDict, str]:
-        system_prompt = str(persona.get("system_prompt") or "")
-        content = await _run_persona_prompt(
+    async def _one(persona: JsonDict) -> tuple[JsonDict, str, list[JsonDict]]:
+        return await _run_single_persona_opinion(
+            persona,
             settings=settings,
             provider_set=provider_set,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+            question=question,
+            context=context,
+            memory_text=memory_text,
             locale=locale,
             cloud_plugin_data_dir=cloud_plugin_data_dir,
+            tool_deps=tool_deps,
+            ui_mode=ui_mode,
+            plugins_root=plugins_root,
         )
-        return persona, content
 
     async with asyncio.TaskGroup() as group:
         tasks = [group.create_task(_one(persona)) for persona in personas]
@@ -182,23 +248,31 @@ async def _stream_personas_parallel(
     *,
     settings: Any,
     provider_set: ProviderSet | None,
-    user_prompt: str,
+    question: str,
+    context: str,
+    memory_text: str,
     locale: str,
     cloud_plugin_data_dir: Path | str | None = None,
-) -> AsyncIterator[tuple[JsonDict, str]]:
+    tool_deps: Any = None,
+    ui_mode: str = "agent",
+    plugins_root: Path | None = None,
+) -> AsyncIterator[tuple[JsonDict, str, list[JsonDict]]]:
     """Exécute les personas en parallèle et yield au fur et à mesure des réponses."""
 
-    async def _one(persona: JsonDict) -> tuple[JsonDict, str]:
-        system_prompt = str(persona.get("system_prompt") or "")
-        content = await _run_persona_prompt(
+    async def _one(persona: JsonDict) -> tuple[JsonDict, str, list[JsonDict]]:
+        return await _run_single_persona_opinion(
+            persona,
             settings=settings,
             provider_set=provider_set,
-            system_prompt=system_prompt,
-            user_prompt=user_prompt,
+            question=question,
+            context=context,
+            memory_text=memory_text,
             locale=locale,
             cloud_plugin_data_dir=cloud_plugin_data_dir,
+            tool_deps=tool_deps,
+            ui_mode=ui_mode,
+            plugins_root=plugins_root,
         )
-        return persona, content
 
     tasks = [asyncio.create_task(_one(persona)) for persona in personas]
     try:
@@ -244,7 +318,9 @@ async def generate_opinions(
     locale: str,
     rag_store: RagStore | None = None,
     cloud_plugin_data_dir: Path | str | None = None,
-) -> tuple[list[JsonDict], list[str]]:
+    tool_deps: Any = None,
+    ui_mode: str = "agent",
+) -> tuple[list[JsonDict], list[str], list[JsonDict]]:
     clamped_ids, warnings = clamp_persona_ids(persona_ids, locale=locale)
     personas = storage.resolve_personas(plugin_data_dir, clamped_ids)
     if not personas:
@@ -253,26 +329,34 @@ async def generate_opinions(
     memory_text, memory_citations = await _memory_context(
         rag_store, f"{question}\n{context}", locale=locale
     )
-    user_prompt = prompts.build_opinion_user_prompt(
-        question=question,
-        context=context,
-        memory_text=memory_text,
-        locale=locale,
-    )
+    plugins_root = Path(plugin_data_dir).expanduser().resolve().parent
     opinions: list[JsonDict] = []
+    all_degraded: list[JsonDict] = []
     parallel_results = await _run_personas_parallel(
         personas,
         settings=settings,
         provider_set=provider_set,
-        user_prompt=user_prompt,
+        question=question,
+        context=context,
+        memory_text=memory_text,
         locale=locale,
         cloud_plugin_data_dir=cloud_plugin_data_dir,
+        tool_deps=tool_deps,
+        ui_mode=ui_mode,
+        plugins_root=plugins_root,
     )
-    for persona, content in parallel_results:
+    for persona, content, degraded_tools in parallel_results:
+        if degraded_tools:
+            all_degraded.extend(degraded_tools)
         opinions.append(
-            _persona_opinion_entry(persona, content, memory_citations=memory_citations)
+            _persona_opinion_entry(
+                persona,
+                content,
+                memory_citations=memory_citations,
+                degraded_tools=degraded_tools or None,
+            )
         )
-    return opinions, warnings
+    return opinions, warnings, all_degraded
 
 
 async def stream_ask(
@@ -286,6 +370,8 @@ async def stream_ask(
     locale: str,
     rag_store: RagStore | None = None,
     cloud_plugin_data_dir: Path | str | None = None,
+    tool_deps: Any = None,
+    ui_mode: str = "agent",
 ) -> AsyncIterator[JsonDict]:
     clamped_ids, warnings = clamp_persona_ids(persona_ids, locale=locale)
     if warnings:
@@ -299,23 +385,28 @@ async def stream_ask(
     memory_text, memory_citations = await _memory_context(
         rag_store, f"{question}\n{context}", locale=locale
     )
-    user_prompt = prompts.build_opinion_user_prompt(
+    plugins_root = Path(plugin_data_dir).expanduser().resolve().parent
+    async for persona, content, degraded_tools in _stream_personas_parallel(
+        personas,
+        settings=settings,
+        provider_set=provider_set,
         question=question,
         context=context,
         memory_text=memory_text,
         locale=locale,
-    )
-    async for persona, content in _stream_personas_parallel(
-        personas,
-        settings=settings,
-        provider_set=provider_set,
-        user_prompt=user_prompt,
-        locale=locale,
         cloud_plugin_data_dir=cloud_plugin_data_dir,
+        tool_deps=tool_deps,
+        ui_mode=ui_mode,
+        plugins_root=plugins_root,
     ):
         yield {
             "type": "persona_opinion",
-            **_persona_opinion_entry(persona, content, memory_citations=memory_citations),
+            **_persona_opinion_entry(
+                persona,
+                content,
+                memory_citations=memory_citations,
+                degraded_tools=degraded_tools or None,
+            ),
         }
     yield {"type": "done"}
 

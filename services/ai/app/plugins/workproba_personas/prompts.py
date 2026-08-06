@@ -5,6 +5,49 @@ from __future__ import annotations
 from app.i18n import t
 
 
+def build_panel_tools_notice(
+    *,
+    available_tools: list[str],
+    degraded_tools: list[dict[str, object]],
+    locale: str,
+) -> str:
+    """Notice des tools panel disponibles et dégradés (anti-hallucination)."""
+    lines: list[str] = []
+    header = t(locale, "personas.prompt.panel_tools.header")
+    if header and not header.startswith("personas."):
+        lines.append(header)
+    if available_tools:
+        available_line = t(
+            locale,
+            "personas.prompt.panel_tools.available",
+            tools=", ".join(sorted(available_tools)),
+        )
+        if available_line and not available_line.startswith("personas."):
+            lines.append(available_line)
+    else:
+        none_line = t(locale, "personas.prompt.panel_tools.none")
+        if none_line and not none_line.startswith("personas."):
+            lines.append(none_line)
+    if degraded_tools:
+        degraded_items: list[str] = []
+        for entry in degraded_tools:
+            connector_id = str(entry.get("connector_id") or "")
+            tool = str(entry.get("tool") or "")
+            reason = str(entry.get("reason") or "")
+            degraded_items.append(f"{connector_id}/{tool} ({reason})")
+        degraded_line = t(
+            locale,
+            "personas.prompt.panel_tools.degraded",
+            items="; ".join(degraded_items),
+        )
+        if degraded_line and not degraded_line.startswith("personas."):
+            lines.append(degraded_line)
+    hallucination = t(locale, "personas.prompt.panel_tools.hallucination")
+    if hallucination and not hallucination.startswith("personas."):
+        lines.append(hallucination)
+    return "\n".join(lines)
+
+
 def build_persona_system_prompt(base_prompt: str, *, locale: str) -> str:
     """Identité persona + règles stables dans le message system."""
     parts = [base_prompt.strip()]

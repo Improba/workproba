@@ -1,9 +1,18 @@
 <template>
   <article
-    class="personas-opinion-card wp-fade-in"
+    class="personas-opinion-card"
     role="region"
     :aria-label="t('personas.opinion.cardLabel', { topic: card.question })"
   >
+    <span
+      class="wp-sr-only"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {{ liveStatusMessage }}
+    </span>
+
     <header class="personas-opinion-card__header">
       <button
         type="button"
@@ -22,69 +31,92 @@
           :class="expanded ? 'personas-opinion-card__chevron personas-opinion-card__chevron--up' : 'personas-opinion-card__chevron'"
         />
       </button>
-      <span v-if="card.streaming" class="personas-opinion-card__status">
+      <span
+        v-if="card.streaming && !card.error"
+        class="personas-opinion-card__status"
+        aria-hidden="true"
+      >
         {{ t('common.inProgress') }}
       </span>
     </header>
 
     <div v-if="expanded" class="personas-opinion-card__body">
-      <section
-        v-for="opinion in card.opinions"
-        :key="opinion.personaId"
-        class="personas-opinion-card__block"
+      <p
+        v-if="card.error"
+        class="personas-opinion-card__error"
+        role="alert"
       >
-        <header class="personas-opinion-card__block-head">
-          <PersonaAvatar :name="opinion.personaName" :color="opinion.avatarColor" :icon="opinion.avatarIcon" />
-          <div class="personas-opinion-card__block-meta">
-            <span class="personas-opinion-card__persona-name">{{ opinion.personaName }} :</span>
-            <span v-if="opinion.personaRole" class="personas-opinion-card__role">
-              {{ opinion.personaRole }}
-            </span>
-          </div>
-        </header>
-        <MessageTextPart
-          v-if="opinion.content || opinion.streaming"
-          class="personas-opinion-card__content"
-          :content="opinion.content || (opinion.streaming ? t('personas.opinion.waiting') : '')"
-          :streaming="!!opinion.streaming"
-        />
-        <p
-          v-if="opinion.memoryCited && !opinion.memoryCitations?.length"
-          class="personas-opinion-card__memory"
-        >
-          <Lucide name="brain" size="12" color="wp-violet" />
-          <span>{{ t('personas.opinion.memoryCited') }}</span>
-        </p>
-        <MemoryCitationsBar
-          v-else-if="opinion.memoryCitations?.length"
-          class="personas-opinion-card__citations"
-          :citations="opinion.memoryCitations"
-          :expansion-key="`${card.id}-${opinion.personaId}`"
-        />
-      </section>
+        {{ t('personas.opinion.error') }}
+      </p>
 
-      <footer v-if="!card.streaming" class="personas-opinion-card__actions">
-        <button type="button" class="personas-opinion-card__action" @click="emit('another')">
-          {{ t('personas.opinion.another') }}
-        </button>
-        <button type="button" class="personas-opinion-card__action" @click="emit('toDiscussion')">
-          {{ t('personas.opinion.toDiscussion') }}
-        </button>
-        <button
-          v-if="showPublish"
-          type="button"
-          class="personas-opinion-card__action personas-opinion-card__action--publish"
-          @click="emit('publish')"
+      <div
+        v-else-if="card.streaming && !card.opinions.length"
+        class="personas-opinion-card__preview"
+        aria-hidden="true"
+      >
+        <span class="personas-opinion-card__preview-spinner" aria-hidden="true" />
+        <span>{{ t('personas.opinion.analysing') }}</span>
+      </div>
+
+      <template v-else-if="!card.error">
+        <section
+          v-for="opinion in card.opinions"
+          :key="opinion.personaId"
+          class="personas-opinion-card__block"
         >
-          {{ t('personas.publishToProject') }}
-        </button>
-      </footer>
+          <header class="personas-opinion-card__block-head">
+            <PersonaAvatar :name="opinion.personaName" :color="opinion.avatarColor" :icon="opinion.avatarIcon" />
+            <div class="personas-opinion-card__block-meta">
+              <span class="personas-opinion-card__persona-name">{{ opinion.personaName }} :</span>
+              <span v-if="opinion.personaRole" class="personas-opinion-card__role">
+                {{ opinion.personaRole }}
+              </span>
+            </div>
+          </header>
+          <MessageTextPart
+            v-if="opinion.content || opinion.streaming"
+            class="personas-opinion-card__content"
+            :content="opinion.content || (opinion.streaming ? t('personas.opinion.waiting') : '')"
+            :streaming="!!opinion.streaming"
+          />
+          <p
+            v-if="opinion.memoryCited && !opinion.memoryCitations?.length"
+            class="personas-opinion-card__memory"
+          >
+            <Lucide name="brain" size="12" color="wp-violet" />
+            <span>{{ t('personas.opinion.memoryCited') }}</span>
+          </p>
+          <MemoryCitationsBar
+            v-else-if="opinion.memoryCitations?.length"
+            class="personas-opinion-card__citations"
+            :citations="opinion.memoryCitations"
+            :expansion-key="`${card.id}-${opinion.personaId}`"
+          />
+        </section>
+
+        <footer v-if="!card.streaming" class="personas-opinion-card__actions">
+          <button type="button" class="personas-opinion-card__action" @click="emit('another')">
+            {{ t('personas.opinion.another') }}
+          </button>
+          <button type="button" class="personas-opinion-card__action" @click="emit('toDiscussion')">
+            {{ t('personas.opinion.toDiscussion') }}
+          </button>
+          <button
+            v-if="showPublish"
+            type="button"
+            class="personas-opinion-card__action personas-opinion-card__action--publish"
+            @click="emit('publish')"
+          >
+            {{ t('personas.publishToProject') }}
+          </button>
+        </footer>
+      </template>
     </div>
   </article>
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useI18n } from 'vue-i18n';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
@@ -92,7 +124,7 @@ import MessageTextPart from '@components/chat/MessageTextPart.vue';
 import MemoryCitationsBar from '@components/chat/MemoryCitationsBar.vue';
 import type { PersonasOpinionCard } from '#types';
 
-defineProps<{
+const props = defineProps<{
   card: PersonasOpinionCard;
   showPublish?: boolean;
 }>();
@@ -105,6 +137,16 @@ const emit = defineEmits<{
 
 const { t } = useI18n();
 const expanded = ref(true);
+
+const liveStatusMessage = computed(() => {
+  if (props.card.error) {
+    return t('personas.opinion.error');
+  }
+  if (props.card.streaming) {
+    return t('personas.opinion.analysing');
+  }
+  return t('personas.opinion.header', { topic: props.card.question });
+});
 </script>
 
 <style scoped lang="scss">
@@ -116,6 +158,32 @@ const expanded = ref(true);
   border-radius: var(--wp-r-md);
   background: var(--wp-surface);
   box-shadow: var(--wp-shadow-1);
+  animation: personas-opinion-slide-in 240ms var(--wp-ease) both;
+}
+
+@keyframes personas-opinion-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .personas-opinion-card {
+    animation: none;
+  }
+
+  .personas-opinion-card__preview-spinner {
+    animation: none;
+  }
+
+  .personas-opinion-card__chevron {
+    transition: none;
+  }
 }
 
 .personas-opinion-card__header {
@@ -162,6 +230,43 @@ const expanded = ref(true);
 
 .personas-opinion-card__body {
   padding: var(--wp-space-3);
+}
+
+.personas-opinion-card__error {
+  margin: 0;
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border-radius: var(--wp-r-sm);
+  font-size: var(--wp-fs-sm);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-danger);
+  background: color-mix(in srgb, var(--wp-danger) 8%, var(--wp-surface));
+  border: 1px solid color-mix(in srgb, var(--wp-danger) 25%, transparent);
+}
+
+.personas-opinion-card__preview {
+  display: flex;
+  align-items: center;
+  gap: var(--wp-space-2);
+  margin-bottom: var(--wp-space-2);
+  font-size: var(--wp-fs-sm);
+  color: var(--wp-text-muted);
+  font-style: italic;
+}
+
+.personas-opinion-card__preview-spinner {
+  flex: 0 0 auto;
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--wp-gold) 35%, transparent);
+  border-top-color: var(--wp-gold);
+  animation: personas-opinion-spin 0.7s linear infinite;
+}
+
+@keyframes personas-opinion-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .personas-opinion-card__block {

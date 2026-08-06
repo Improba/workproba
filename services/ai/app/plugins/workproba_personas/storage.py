@@ -262,6 +262,43 @@ def resolve_personas(plugin_data_dir: Path, persona_ids: list[str]) -> list[Json
     return resolved
 
 
+def _specialist_index(plugin_data_dir: Path) -> dict[str, JsonDict]:
+    """Index des agents métier du catalogue managé actif (registry only)."""
+    try:
+        from app.plugins.ports.managed_regards import create_personas_managed_port
+
+        active = create_personas_managed_port(plugin_data_dir).active_specialist_set()
+    except Exception:  # noqa: BLE001
+        return {}
+    if active is None:
+        return {}
+    index: dict[str, JsonDict] = {}
+    specialists = active.get("specialists") or []
+    if not isinstance(specialists, list):
+        return {}
+    for entry in specialists:
+        if not isinstance(entry, dict):
+            continue
+        specialist_id = entry.get("id")
+        if isinstance(specialist_id, str) and specialist_id:
+            index[specialist_id] = entry
+    return index
+
+
+def resolve_specialists(plugin_data_dir: Path, specialist_ids: list[str]) -> list[JsonDict]:
+    """Résout des ids agents métier depuis le registry managé uniquement."""
+    try:
+        index = _specialist_index(plugin_data_dir)
+        resolved: list[JsonDict] = []
+        for specialist_id in specialist_ids:
+            specialist = index.get(specialist_id)
+            if specialist is not None:
+                resolved.append(specialist)
+        return resolved
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def _safe_object_id(object_id: str) -> bool:
     if not object_id or object_id in {".", ".."}:
         return False

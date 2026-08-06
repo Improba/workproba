@@ -30,6 +30,7 @@ _NO_EFFECT_TOOLS = frozenset(
         "remember",
         "propose_plan",
         "ask_personas",
+        "summon_specialist",
         "simulate_meeting",
         "create_project",
         "list_projects",

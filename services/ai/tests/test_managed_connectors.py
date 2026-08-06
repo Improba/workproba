@@ -454,10 +454,11 @@ async def test_invoke_managed_connector_disabled_skips_gate(
     from pydantic_ai.models.test import TestModel
 
     from app.agent.confirmation import ConfirmationGate
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
     from app.sandbox.runner import SandboxRunner
 
     from conftest import FakeProjectClient
@@ -492,8 +493,6 @@ async def test_invoke_managed_connector_disabled_skips_gate(
         limits=DEFAULT_LIMITS,
         confirmation_gate=FailGate(session_id="s1", turn_id="t1"),
     )
-    agent = build_agent(TestModel(), active_plugins=[PLUGIN_WORKPROBA_CLOUD])
-    tool = agent._function_toolset.tools["invoke_managed_connector"]
     ctx = RunContext(
         deps=deps,
         model=TestModel(),
@@ -503,7 +502,12 @@ async def test_invoke_managed_connector_disabled_skips_gate(
     )
 
     with pytest.raises(ModelRetry, match="désactivé"):
-        await tool.function(ctx, connector_id="echo", payload_json="{}")
+        await invoke_managed_connector_impl(
+            ctx,
+            connector_id="echo",
+            payload={},
+            gate_tool_name="invoke_managed_connector",
+        )
 
 
 def test_cloud_list_connectors_enabled_flag(
@@ -669,10 +673,11 @@ async def test_invoke_managed_connector_not_auth_skips_gate(
     from pydantic_ai.models.test import TestModel
 
     from app.agent.confirmation import ConfirmationGate
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
     from app.sandbox.runner import SandboxRunner
 
     from conftest import FakeProjectClient
@@ -702,8 +707,6 @@ async def test_invoke_managed_connector_not_auth_skips_gate(
         limits=DEFAULT_LIMITS,
         confirmation_gate=FailGate(session_id="s1", turn_id="t1"),
     )
-    agent = build_agent(TestModel(), active_plugins=[PLUGIN_WORKPROBA_CLOUD])
-    tool = agent._function_toolset.tools["invoke_managed_connector"]
     ctx = RunContext(
         deps=deps,
         model=TestModel(),
@@ -713,7 +716,12 @@ async def test_invoke_managed_connector_not_auth_skips_gate(
     )
 
     with pytest.raises(ModelRetry, match="authentifi"):
-        await tool.function(ctx, connector_id="ihora", payload_json="{}")
+        await invoke_managed_connector_impl(
+            ctx,
+            connector_id="ihora",
+            payload={},
+            gate_tool_name="invoke_managed_connector",
+        )
 
 
 IHORA_TOOLS = [
@@ -804,6 +812,38 @@ def _seed_ihora_connectors_cache(cloud_dir: Path) -> None:
     )
 
 
+def _agent_with_managed_tools(
+    tmp_path: Path,
+    *,
+    ui_mode: str = "agent",
+    managed_allowed_connector_ids: frozenset[str] | None = None,
+    seed_ihora: bool = True,
+):
+    from pydantic_ai import Agent
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.tools import ToolDeps
+    from app.plugins.workproba_cloud.plugin import register_managed_connector_tools
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    if seed_ihora:
+        _seed_ihora_connectors_cache(cloud_dir)
+    agent: Agent[ToolDeps, str] = Agent(
+        TestModel(),
+        deps_type=ToolDeps,
+        output_type=str,
+    )
+    register_managed_connector_tools(
+        agent,
+        cloud_dir,
+        ui_mode=ui_mode,  # type: ignore[arg-type]
+        managed_allowed_connector_ids=managed_allowed_connector_ids,
+    )
+    return agent, cloud_dir, plugins_root
+
+
 def test_managed_tool_name_uses_lossless_format() -> None:
     from app.plugins.workproba_cloud.plugin import (
         managed_tool_name,
@@ -851,10 +891,11 @@ async def test_invoke_managed_connector_locked_refuses_standard_only_connector(
     from pydantic_ai.exceptions import ModelRetry
     from pydantic_ai.models.test import TestModel
 
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
     from app.sandbox.runner import SandboxRunner
 
     from conftest import FakeProjectClient
@@ -898,8 +939,6 @@ async def test_invoke_managed_connector_locked_refuses_standard_only_connector(
         limits=DEFAULT_LIMITS,
         confirmation_gate=None,
     )
-    agent = build_agent(TestModel(), active_plugins=[PLUGIN_WORKPROBA_CLOUD])
-    tool = agent._function_toolset.tools["invoke_managed_connector"]
     ctx = RunContext(
         deps=deps,
         model=TestModel(),
@@ -909,7 +948,12 @@ async def test_invoke_managed_connector_locked_refuses_standard_only_connector(
     )
 
     with pytest.raises(ModelRetry, match="réglages verrouillés"):
-        await tool.function(ctx, connector_id="echo", payload_json="{}")
+        await invoke_managed_connector_impl(
+            ctx,
+            connector_id="echo",
+            payload={},
+            gate_tool_name="invoke_managed_connector",
+        )
 
 
 def test_classify_managed_tool_is_external_send() -> None:
@@ -923,7 +967,7 @@ def test_classify_managed_tool_is_external_send() -> None:
     assert proposal.targets == ["ihora"]
 
 
-def test_build_agent_registers_managed_ihora_tool(tmp_path: Path) -> None:
+def test_build_agent_parent_has_no_managed_tools(tmp_path: Path) -> None:
     from pydantic_ai.models.test import TestModel
 
     from app.agent.tools import build_agent
@@ -938,46 +982,32 @@ def test_build_agent_registers_managed_ihora_tool(tmp_path: Path) -> None:
         active_plugins=[PLUGIN_WORKPROBA_CLOUD],
         plugin_data_dir=cloud_dir.parent,
     )
-    assert "managed__ihora__list_absences" in agent._function_toolset.tools
-    assert "invoke_managed_connector" in agent._function_toolset.tools
+    names = set(agent._function_toolset.tools.keys())
+    assert not any(name.startswith("managed__") for name in names)
+    assert "invoke_managed_connector" not in names
 
 
-def test_build_agent_skips_disabled_managed_tool(tmp_path: Path) -> None:
+def test_register_managed_tools_skips_disabled_connector(tmp_path: Path) -> None:
+    from pydantic_ai import Agent
     from pydantic_ai.models.test import TestModel
 
-    from app.agent.tools import build_agent
-    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.agent.tools import ToolDeps
     from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.plugin import register_managed_connector_tools
 
-    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
-    cloud_dir.mkdir(parents=True)
-    _seed_ihora_connectors_cache(cloud_dir)
+    _, cloud_dir, _ = _agent_with_managed_tools(tmp_path)
     cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=False)
-
-    agent = build_agent(
+    disabled_agent: Agent[ToolDeps, str] = Agent(
         TestModel(),
-        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
-        plugin_data_dir=cloud_dir.parent,
+        deps_type=ToolDeps,
+        output_type=str,
     )
-    assert "managed__ihora__list_absences" not in agent._function_toolset.tools
+    register_managed_connector_tools(disabled_agent, cloud_dir, ui_mode="agent")
+    assert "managed__ihora__list_absences" not in disabled_agent._function_toolset.tools
 
 
-def test_build_agent_agent_registers_standard_managed_tools(tmp_path: Path) -> None:
-    from pydantic_ai.models.test import TestModel
-
-    from app.agent.tools import build_agent
-    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
-
-    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
-    cloud_dir.mkdir(parents=True)
-    _seed_ihora_connectors_cache(cloud_dir)
-
-    agent = build_agent(
-        TestModel(),
-        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
-        plugin_data_dir=cloud_dir.parent,
-        ui_mode="agent",
-    )
+def test_register_managed_connector_tools_registers_standard_tools(tmp_path: Path) -> None:
+    agent, _, _ = _agent_with_managed_tools(tmp_path, ui_mode="agent")
     assert "managed__ihora__list_absences" in agent._function_toolset.tools
     assert "managed__ihora__get_timesheet" in agent._function_toolset.tools
     assert "managed__ihora__create_timesheet" in agent._function_toolset.tools
@@ -991,10 +1021,11 @@ async def test_managed_tool_shim_builds_payload_with_action(
     from pydantic_ai import RunContext
     from pydantic_ai.models.test import TestModel
 
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
     from app.sandbox.runner import SandboxRunner
 
     from conftest import FakeProjectClient
@@ -1012,16 +1043,13 @@ async def test_managed_tool_shim_builds_payload_with_action(
         fake_impl,
     )
 
-    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
-    cloud_dir.mkdir(parents=True)
-    plugins_root = cloud_dir.parent
+    agent, cloud_dir, plugins_root = _agent_with_managed_tools(tmp_path)
     cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
     client = CloudControlPlaneClient(
         base_url="https://cloud.test",
         plugin_data_dir=cloud_dir,
     )
     client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
-    _seed_ihora_connectors_cache(cloud_dir)
 
     deps = ToolDeps(
         context=ToolContext(
@@ -1037,11 +1065,6 @@ async def test_managed_tool_shim_builds_payload_with_action(
         sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
         limits=DEFAULT_LIMITS,
         confirmation_gate=None,
-    )
-    agent = build_agent(
-        TestModel(),
-        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
-        plugin_data_dir=plugins_root,
     )
     tool = agent._function_toolset.tools["managed__ihora__list_absences"]
     ctx = RunContext(
@@ -1108,22 +1131,8 @@ def test_cloud_list_connectors_returns_tools(
         assert body["connectors"][0]["tools"][0]["name"] == "list_absences"
 
 
-def test_build_agent_locked_hides_standard_managed_tool(tmp_path: Path) -> None:
-    from pydantic_ai.models.test import TestModel
-
-    from app.agent.tools import build_agent
-    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
-
-    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
-    cloud_dir.mkdir(parents=True)
-    _seed_ihora_connectors_cache(cloud_dir)
-
-    agent = build_agent(
-        TestModel(),
-        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
-        plugin_data_dir=cloud_dir.parent,
-        ui_mode="locked",
-    )
+def test_register_managed_tools_locked_hides_standard_tool(tmp_path: Path) -> None:
+    agent, _, _ = _agent_with_managed_tools(tmp_path, ui_mode="locked")
     assert "managed__ihora__list_absences" in agent._function_toolset.tools
     assert "managed__ihora__create_timesheet" not in agent._function_toolset.tools
 
@@ -1136,10 +1145,11 @@ async def test_invoke_managed_connector_locked_refuses_standard_action(
     from pydantic_ai.exceptions import ModelRetry
     from pydantic_ai.models.test import TestModel
 
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
     from app.sandbox.runner import SandboxRunner
 
     from conftest import FakeProjectClient
@@ -1172,13 +1182,6 @@ async def test_invoke_managed_connector_locked_refuses_standard_action(
         limits=DEFAULT_LIMITS,
         confirmation_gate=None,
     )
-    agent = build_agent(
-        TestModel(),
-        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
-        plugin_data_dir=plugins_root,
-        ui_mode="locked",
-    )
-    tool = agent._function_toolset.tools["invoke_managed_connector"]
     ctx = RunContext(
         deps=deps,
         model=TestModel(),
@@ -1188,10 +1191,16 @@ async def test_invoke_managed_connector_locked_refuses_standard_action(
     )
 
     with pytest.raises(ModelRetry, match="réglages verrouillés"):
-        await tool.function(
+        await invoke_managed_connector_impl(
             ctx,
             connector_id="ihora",
-            payload_json='{"action":"create_timesheet","date":"2026-07-03","hours":8,"employeeId":1}',
+            payload={
+                "action": "create_timesheet",
+                "date": "2026-07-03",
+                "hours": 8,
+                "employeeId": 1,
+            },
+            gate_tool_name="invoke_managed_connector",
         )
 
 
@@ -1381,11 +1390,12 @@ async def test_invoke_managed_connector_validates_payload_before_gate(
     from pydantic_ai.models.test import TestModel
 
     from app.agent.confirmation import ConfirmationGate
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
     from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
     from app.sandbox.runner import SandboxRunner
 
     from conftest import FakeProjectClient
@@ -1427,13 +1437,6 @@ async def test_invoke_managed_connector_validates_payload_before_gate(
         limits=DEFAULT_LIMITS,
         confirmation_gate=ExplodingGate(session_id="s1", turn_id="t1"),
     )
-    agent = build_agent(
-        TestModel(),
-        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
-        plugin_data_dir=plugins_root,
-        ui_mode="agent",
-    )
-    tool = agent._function_toolset.tools["invoke_managed_connector"]
     ctx = RunContext(
         deps=deps,
         model=TestModel(),
@@ -1443,10 +1446,11 @@ async def test_invoke_managed_connector_validates_payload_before_gate(
     )
 
     with pytest.raises(ModelRetry, match="Paramètres invalides"):
-        await tool.function(
+        await invoke_managed_connector_impl(
             ctx,
             connector_id="ihora",
-            payload_json='{"action":"create_timesheet","date":"2026-07-03"}',
+            payload={"action": "create_timesheet", "date": "2026-07-03"},
+            gate_tool_name="invoke_managed_connector",
         )
 
 
@@ -1541,7 +1545,7 @@ async def test_read_managed_tool_skips_confirmation_gate(
     from pydantic_ai.models.test import TestModel
 
     from app.agent.confirmation import ConfirmationGate
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
@@ -1554,12 +1558,9 @@ async def test_read_managed_tool_skips_confirmation_gate(
         async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
             raise AssertionError("gate must not run for read managed tools")
 
-    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
-    cloud_dir.mkdir(parents=True)
-    plugins_root = cloud_dir.parent
+    agent, cloud_dir, plugins_root = _agent_with_managed_tools(tmp_path)
     cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
     cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
-    _seed_ihora_connectors_cache(cloud_dir)
     client = CloudControlPlaneClient(
         base_url="https://cloud.test",
         plugin_data_dir=cloud_dir,
@@ -1598,11 +1599,6 @@ async def test_read_managed_tool_skips_confirmation_gate(
         limits=DEFAULT_LIMITS,
         confirmation_gate=FailGate(session_id="s1", turn_id="t1"),
     )
-    agent = build_agent(
-        TestModel(),
-        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
-        plugin_data_dir=plugins_root,
-    )
     tool = agent._function_toolset.tools["managed__ihora__list_absences"]
     ctx = RunContext(
         deps=deps,
@@ -1628,7 +1624,7 @@ async def test_write_managed_tool_calls_confirmation_gate(
     from pydantic_ai.models.test import TestModel
 
     from app.agent.confirmation import ConfirmationGate
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
@@ -1647,12 +1643,9 @@ async def test_write_managed_tool_calls_confirmation_gate(
             gate_calls.append("request_effect")
             return "approved"
 
-    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
-    cloud_dir.mkdir(parents=True)
-    plugins_root = cloud_dir.parent
+    agent, cloud_dir, plugins_root = _agent_with_managed_tools(tmp_path)
     cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
     cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
-    _seed_ihora_connectors_cache(cloud_dir)
     client = CloudControlPlaneClient(
         base_url="https://cloud.test",
         plugin_data_dir=cloud_dir,
@@ -1687,12 +1680,6 @@ async def test_write_managed_tool_calls_confirmation_gate(
         sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
         limits=DEFAULT_LIMITS,
         confirmation_gate=CaptureGate(session_id="s1", turn_id="t1"),
-    )
-    agent = build_agent(
-        TestModel(),
-        active_plugins=[PLUGIN_WORKPROBA_CLOUD],
-        plugin_data_dir=plugins_root,
-        ui_mode="agent",
     )
     tool = agent._function_toolset.tools["managed__ihora__create_timesheet"]
     ctx = RunContext(
@@ -1857,11 +1844,12 @@ async def test_invoke_generic_unknown_action_rejects_before_gate(
     from pydantic_ai.models.test import TestModel
 
     from app.agent.confirmation import ConfirmationGate
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
     from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
     from app.sandbox.runner import SandboxRunner
 
     from conftest import FakeProjectClient
@@ -1916,8 +1904,6 @@ async def test_invoke_generic_unknown_action_rejects_before_gate(
         limits=DEFAULT_LIMITS,
         confirmation_gate=CaptureGate(session_id="s1", turn_id="t1"),
     )
-    agent = build_agent(TestModel(), active_plugins=[PLUGIN_WORKPROBA_CLOUD])
-    tool = agent._function_toolset.tools["invoke_managed_connector"]
     ctx = RunContext(
         deps=deps,
         model=TestModel(),
@@ -1927,10 +1913,11 @@ async def test_invoke_generic_unknown_action_rejects_before_gate(
     )
 
     with pytest.raises(ModelRetry, match="inconnue") as exc_info:
-        await tool.function(
+        await invoke_managed_connector_impl(
             ctx,
             connector_id="ihora",
-            payload_json='{"action":"unknown_action"}',
+            payload={"action": "unknown_action"},
+            gate_tool_name="invoke_managed_connector",
         )
     assert gate_called["value"] is False
     message = str(exc_info.value)
@@ -1948,11 +1935,12 @@ async def test_invoke_generic_missing_action_rejects_before_gate(
     from pydantic_ai.models.test import TestModel
 
     from app.agent.confirmation import ConfirmationGate
-    from app.agent.tools import ToolContext, ToolDeps, build_agent
+    from app.agent.tools import ToolContext, ToolDeps
     from app.limits import DEFAULT_LIMITS
     from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
     from app.plugins.workproba_cloud import storage as cloud_storage
     from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
     from app.sandbox.runner import SandboxRunner
 
     from conftest import FakeProjectClient
@@ -2007,8 +1995,6 @@ async def test_invoke_generic_missing_action_rejects_before_gate(
         limits=DEFAULT_LIMITS,
         confirmation_gate=CaptureGate(session_id="s1", turn_id="t1"),
     )
-    agent = build_agent(TestModel(), active_plugins=[PLUGIN_WORKPROBA_CLOUD])
-    tool = agent._function_toolset.tools["invoke_managed_connector"]
     ctx = RunContext(
         deps=deps,
         model=TestModel(),
@@ -2018,12 +2004,81 @@ async def test_invoke_generic_missing_action_rejects_before_gate(
     )
 
     with pytest.raises(ModelRetry, match="Action requise") as exc_info:
-        await tool.function(
+        await invoke_managed_connector_impl(
             ctx,
             connector_id="ihora",
-            payload_json='{"foo": 1}',
+            payload={"foo": 1},
+            gate_tool_name="invoke_managed_connector",
         )
     assert gate_called["value"] is False
     message = str(exc_info.value)
     assert "Actions disponibles" in message
     assert "list_absences" in message
+
+
+@pytest.mark.asyncio
+async def test_write_without_gate_raises_model_retry(tmp_path: Path) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.exceptions import ModelRetry
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.tools import ToolContext, ToolDeps
+    from app.limits import DEFAULT_LIMITS
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
+    from app.sandbox.runner import SandboxRunner
+
+    from conftest import FakeProjectClient
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
+    _seed_ihora_connectors_cache(cloud_dir)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.test",
+        plugin_data_dir=cloud_dir,
+    )
+    client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugins_root,
+            locale="fr",
+            permissions_network=True,
+            managed_allowed_connector_ids=frozenset({"ihora"}),
+            ui_mode="agent",
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=None,
+    )
+    ctx = RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id="tc-write-no-gate",
+    )
+
+    with pytest.raises(ModelRetry, match="confirmation humaine"):
+        await invoke_managed_connector_impl(
+            ctx,
+            connector_id="ihora",
+            payload={
+                "action": "create_timesheet",
+                "date": "2026-07-03",
+                "hours": 8,
+                "employeeId": 1,
+            },
+            gate_tool_name="managed__ihora__create_timesheet",
+        )
+

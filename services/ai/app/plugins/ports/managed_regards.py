@@ -60,6 +60,7 @@ class SignedBundle:
     version: str
     name: str
     personas: list[JsonDict]
+    specialists: list[JsonDict]
     signature: str
     algorithm: str = "ed25519"
     provenance: str = "managed"
@@ -71,6 +72,7 @@ class SignedBundle:
             "version": self.version,
             "name": self.name,
             "personas": self.personas,
+            "specialists": self.specialists,
             "signature": self.signature,
             "algorithm": self.algorithm,
             "provenance": self.provenance,
@@ -85,6 +87,15 @@ class SignedBundle:
         version = str(raw.get("version") or "")
         name = str(raw.get("name") or "")
         personas = list(raw.get("personas") or [])
+        if "specialists" in raw:
+            specialists_raw = raw["specialists"]
+            if specialists_raw is None:
+                raise ValueError("invalid_signed_bundle")
+            if not isinstance(specialists_raw, list):
+                raise ValueError("invalid_signed_bundle")
+            specialists = list(specialists_raw)
+        else:
+            specialists = []
         signature = str(raw.get("signature") or "")
         algorithm = str(raw.get("algorithm") or "ed25519")
         provenance = str(raw.get("provenance") or "managed")
@@ -97,6 +108,7 @@ class SignedBundle:
             version=version,
             name=name,
             personas=personas,
+            specialists=specialists,
             signature=signature,
             algorithm=algorithm,
             provenance=provenance,
@@ -195,7 +207,8 @@ def sign_bundle_for_tests(
     catalog_id: str,
     version: str,
     name: str,
-    personas: list[JsonDict],
+    personas: list[JsonDict] | None = None,
+    specialists: list[JsonDict] | None = None,
     algorithm: str = "ed25519",
     private_key_b64: str | None = None,
     hmac_secret_b64: str | None = None,
@@ -205,7 +218,8 @@ def sign_bundle_for_tests(
         "catalog_id": catalog_id,
         "version": version,
         "name": name,
-        "personas": personas,
+        "personas": personas or [],
+        "specialists": specialists or [],
         "algorithm": algorithm,
         "provenance": "managed",
     }
@@ -225,6 +239,35 @@ def sign_bundle_for_tests(
         raise ValueError("unsupported_algorithm")
     body["signature"] = signature
     return SignedBundle.from_dict(body)
+
+
+def catalog_has_specialists(catalog: JsonDict) -> bool:
+    specialists = catalog.get("specialists") or []
+    return isinstance(specialists, list) and bool(specialists)
+
+
+def enrich_catalog_entry_for_ui(entry: JsonDict, *, from_specialists: bool) -> JsonDict:
+    """Marque un agent métier et conserve tools pour l'UI desktop (P1)."""
+    enriched = dict(entry)
+    if from_specialists:
+        enriched["is_business_agent"] = True
+    return enriched
+
+
+def dual_read_catalog_entries(catalog: JsonDict) -> list[JsonDict]:
+    """Dual-read P0 : specialists non vide, sinon fallback personas."""
+    if catalog_has_specialists(catalog):
+        return list(catalog["specialists"])
+    personas = catalog.get("personas") or []
+    return list(personas) if isinstance(personas, list) else []
+
+
+def specialist_count_for_catalog(catalog: JsonDict) -> int:
+    if catalog_has_specialists(catalog):
+        specialists = catalog.get("specialists") or []
+        return len(specialists) if isinstance(specialists, list) else 0
+    personas = catalog.get("personas") or []
+    return len(personas) if isinstance(personas, list) else 0
 
 
 class FilesystemManagedRegardsPort:
@@ -312,6 +355,7 @@ class FilesystemManagedRegardsPort:
                         "name": catalog.get("name", ""),
                         "provenance": catalog.get("provenance", "managed"),
                         "persona_count": len(catalog.get("personas") or []),
+                        "specialist_count": specialist_count_for_catalog(catalog),
                         "active": catalog_id == active_id and version_dir.name == active_version,
                         "installed_at": catalog.get("installed_at"),
                     }
@@ -331,14 +375,19 @@ class FilesystemManagedRegardsPort:
         return self._verifier.verify(payload)
 
     def install_catalog_version(self, signed_bundle: SignedBundle | JsonDict) -> JsonDict:
+        verify_payload = (
+            dict(signed_bundle)
+            if isinstance(signed_bundle, dict)
+            else signed_bundle.to_dict()
+        )
+        if not self.verify_signature(verify_payload):
+            raise ValueError("invalid_signature")
         bundle = (
             signed_bundle
             if isinstance(signed_bundle, SignedBundle)
             else SignedBundle.from_dict(signed_bundle)
         )
         payload = bundle.to_dict()
-        if not self.verify_signature(payload):
-            raise ValueError("invalid_signature")
         self._audit(
             "install_catalog_version",
             {"catalog_id": bundle.catalog_id, "version": bundle.version},
@@ -348,9 +397,9 @@ class FilesystemManagedRegardsPort:
         from app.plugins.workproba_personas.storage import now_iso
 
         catalog_record: JsonDict = {
-            **payload,
-            "installed_at": now_iso(),
+            key: value for key, value in payload.items() if key != "hmac_secret_b64"
         }
+        catalog_record["installed_at"] = now_iso()
         with (version_dir / CATALOG_FILE).open("w", encoding="utf-8") as handle:
             json.dump(catalog_record, handle, ensure_ascii=False, indent=2)
         return {
@@ -431,11 +480,12 @@ class FilesystemManagedRegardsPort:
             "name": catalog.get("name", ""),
             "provenance": catalog.get("provenance", "managed"),
             "persona_count": len(catalog.get("personas") or []),
+            "specialist_count": specialist_count_for_catalog(catalog),
             "installed_at": catalog.get("installed_at"),
         }
 
     def active_persona_set(self) -> JsonDict | None:
-        """Expose le catalogue actif au format set personas."""
+        """Expose le catalogue actif au format set personas (dual-read)."""
         status = self.get_catalog_status()
         if not status.get("active"):
             return None
@@ -444,11 +494,41 @@ class FilesystemManagedRegardsPort:
         catalog = self._read_catalog(catalog_id, version)
         if catalog is None:
             return None
-        personas = catalog.get("personas") or []
+        from_specialists = catalog_has_specialists(catalog)
+        entries = dual_read_catalog_entries(catalog)
         return {
             "id": f"managed_{catalog_id}",
             "name": str(catalog.get("name") or catalog_id),
-            "personas": list(personas),
+            "personas": [
+                enrich_catalog_entry_for_ui(entry, from_specialists=from_specialists)
+                for entry in entries
+                if isinstance(entry, dict)
+            ],
+            "has_specialists": from_specialists,
+            "provenance": str(catalog.get("provenance") or "managed"),
+            "managed_catalog_id": catalog_id,
+            "managed_version": version,
+        }
+
+    def active_specialist_set(self) -> JsonDict | None:
+        """Expose le catalogue actif avec specialists explicites (dual-read)."""
+        status = self.get_catalog_status()
+        if not status.get("active"):
+            return None
+        catalog_id = str(status.get("catalog_id") or "")
+        version = str(status.get("version") or "")
+        catalog = self._read_catalog(catalog_id, version)
+        if catalog is None:
+            return None
+        specialists = catalog.get("specialists") or []
+        personas = catalog.get("personas") or []
+        effective = dual_read_catalog_entries(catalog)
+        return {
+            "id": f"managed_{catalog_id}",
+            "name": str(catalog.get("name") or catalog_id),
+            "specialists": list(specialists) if isinstance(specialists, list) else [],
+            "personas": list(personas) if isinstance(personas, list) else [],
+            "effective_entries": list(effective),
             "provenance": str(catalog.get("provenance") or "managed"),
             "managed_catalog_id": catalog_id,
             "managed_version": version,

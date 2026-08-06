@@ -558,6 +558,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "{connector_id}. Appelez list_users avec un fragment d'e-mail "
                 "(ex. prenom.nom) ou fournissez un e-mail explicite."
             ),
+            "gate_required_for_write": (
+                "Une confirmation humaine est requise pour cette action d'écriture."
+            ),
             "connector_user_id_email_conflict": (
                 "Conflit d'identité Ihora : userId {user_id} ne correspond pas à "
                 "{email} (résolu en userId {resolved_user_id}). "
@@ -1172,6 +1175,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Could not resolve the Ihora user before confirmation for "
                 "{connector_id}. Call list_users with an email fragment (e.g. first.last) "
                 "or provide an explicit email."
+            ),
+            "gate_required_for_write": (
+                "Human confirmation is required for this write action."
             ),
             "connector_user_id_email_conflict": (
                 "Ihora identity conflict: userId {user_id} does not match "

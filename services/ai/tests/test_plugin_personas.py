@@ -13,7 +13,9 @@ from pydantic_ai.models.test import TestModel
 
 from app.agent.tools import ToolDeps, ToolContext, build_agent
 from app.limits import DEFAULT_LIMITS
-from app.plugins.workproba_personas import PLUGIN_ID, manifest, orchestrator, storage
+from app.plugins.workproba_personas import PLUGIN_ID, manifest, orchestrator, specialist_run, storage
+from app.plugins.workproba_personas.tool_allowlist import ResolvedReadTool
+from app.plugins.ports.managed_regards import create_personas_managed_port, sign_bundle_for_tests
 from app.sandbox.runner import SandboxRunner
 
 from conftest import FakeProjectClient
@@ -62,7 +64,7 @@ def test_resolve_personas_from_builtin(plugin_dir: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_generate_opinions(plugin_dir: Path) -> None:
-    opinions, warnings = await orchestrator.generate_opinions(
+    opinions, warnings, degraded_tools = await orchestrator.generate_opinions(
         plugin_data_dir=plugin_dir,
         persona_ids=["01", "03"],
         question="Ce contrat est-il clair ?",
@@ -225,6 +227,7 @@ def test_plugin_tools_registered_when_active() -> None:
     agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
     names = sorted(agent._function_toolset.tools.keys())
     assert "ask_personas" in names
+    assert "summon_specialist" in names
     assert "simulate_meeting" in names
 
 
@@ -250,6 +253,207 @@ async def test_ask_personas_tool_returns_opinions(plugin_dir: Path) -> None:
     result = await tool.function(ctx, persona_ids=["01"], question="Ce process est-il simple ?")
     assert result["display"] == "persona_opinion_card"
     assert len(result["opinions"]) == 1
+
+
+def _sample_managed_specialist() -> dict[str, object]:
+    return {
+        "id": "org.rh",
+        "name": "Agent RH",
+        "role": "RH",
+        "system_prompt": "Tu es RH.",
+        "is_business_agent": True,
+        "tools": {
+            "allowed": [
+                {"connector_id": "ihora", "tool": "list_absences"},
+            ],
+            "forbidden": [],
+        },
+    }
+
+
+def _install_managed_specialist_catalog(plugin_dir: Path) -> None:
+    port = create_personas_managed_port(plugin_dir)
+    bundle = sign_bundle_for_tests(
+        catalog_id="spec-summon",
+        version="1.0.0",
+        name="Summon test",
+        specialists=[_sample_managed_specialist()],
+    )
+    port.install_catalog_version(bundle)
+    port.activate_catalog("spec-summon")
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_regard_returns_content(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_managed_specialist_catalog(plugin_dir)
+
+    async def fake_run_specialist(**kwargs: Any) -> tuple[str, list[dict[str, object]]]:
+        assert kwargs.get("question") == "Qui est absent ?"
+        return "Avis specialist.", []
+
+    monkeypatch.setattr(specialist_run, "run_regard", fake_run_specialist)
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc3")
+    result = await tool.function(
+        ctx,
+        specialist_id="org.rh",
+        task="Qui est absent ?",
+        mode="regard",
+    )
+    assert result["content"] == "Avis specialist."
+    assert result["mode"] == "regard"
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_operative_uses_operative_runner(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_managed_specialist_catalog(plugin_dir)
+
+    async def fake_run_operative(**kwargs: Any) -> tuple[str, list[dict[str, object]]]:
+        return "Tache executee.", []
+
+    monkeypatch.setattr(specialist_run, "run_operative", fake_run_operative)
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc4")
+    result = await tool.function(
+        ctx,
+        specialist_id="org.rh",
+        task="Creer une saisie",
+        mode="operative",
+    )
+    assert result["content"] == "Tache executee."
+    assert result["mode"] == "operative"
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_unknown_id_refused(plugin_dir: Path) -> None:
+    from pydantic_ai.exceptions import ModelRetry
+
+    _install_managed_specialist_catalog(plugin_dir)
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc5")
+    with pytest.raises(ModelRetry, match="org.unknown"):
+        await tool.function(ctx, specialist_id="org.unknown", task="Test")
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_rejects_invalid_mode(plugin_dir: Path) -> None:
+    from pydantic_ai.exceptions import ModelRetry
+
+    _install_managed_specialist_catalog(plugin_dir)
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc7")
+    with pytest.raises(ModelRetry, match="Mode de délégation invalide"):
+        await tool.function(
+            ctx,
+            specialist_id="org.rh",
+            task="Test",
+            mode="invalid",
+        )
+
+
+@pytest.mark.asyncio
+async def test_resolve_specialists_registry_fail_closed(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.plugins.workproba_personas import storage as personas_storage
+
+    def boom(_plugin_data_dir: Path) -> dict[str, object]:
+        raise RuntimeError("registry unavailable")
+
+    monkeypatch.setattr(personas_storage, "_specialist_index", boom)
+    assert personas_storage.resolve_specialists(plugin_dir, ["org.rh"]) == []
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_rejects_builtin_persona_id(plugin_dir: Path) -> None:
+    from pydantic_ai.exceptions import ModelRetry
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc6")
+    with pytest.raises(ModelRetry, match="01"):
+        await tool.function(ctx, specialist_id="01", task="Test")
 
 
 @pytest.mark.asyncio

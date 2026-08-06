@@ -54,6 +54,7 @@ vi.mock('@composables/useAppSettings', () => ({
   }),
 }));
 
+import { createRunningSpecialistHandoff } from '@utils/specialistHandoff';
 import { useChatStream, mapPythonSseEvent, applyStreamEvent, applyCompactionToMessages, applyAttachmentStatusEvent, mergeLlmConfigsWithSessionReasoning, clearHumanGatesOnAbort, finalizeIncompleteToolsOnMessage, finalizeInterruptedTool, type UseChatStreamReturn } from '@composables/useChatStream';
 import type { ChatMessage } from '#types';
 
@@ -2094,5 +2095,274 @@ describe('useChatStream — browser tool results', () => {
     expect(api.messages.value[0].content).toBe('question');
     expect(lastAssistant(api.messages.value)?.content).toBe('R2');
     unmount();
+  });
+
+  it('applyStreamEvent: summon_specialist crée une carte handoff inline', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-handoff',
+        name: 'summon_specialist',
+        args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+      },
+    });
+
+    expect(messages[0].specialistHandoff).toMatchObject({
+      specialistId: 'rh',
+      status: 'running',
+      mode: 'regard',
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'tc-handoff',
+        name: 'summon_specialist',
+        result: {
+          specialist_id: 'rh',
+          specialist_name: 'Agent RH',
+          mode: 'regard',
+          content: 'Synthèse',
+        },
+      },
+    });
+
+    expect(messages[0].specialistHandoff).toMatchObject({
+      specialistName: 'Agent RH',
+      content: 'Synthèse',
+      status: 'done',
+    });
+  });
+
+  it('applyStreamEvent: ask_personas attache la carte sur le message assistant', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-opinion',
+        name: 'ask_personas',
+        args: { question: 'Budget ?' },
+      },
+    });
+
+    expect(messages[0].personasOpinion).toMatchObject({
+      question: 'Budget ?',
+      streaming: true,
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'tc-opinion',
+        name: 'ask_personas',
+        result: {
+          opinions: [
+            {
+              persona_id: 'rh',
+              persona_name: 'Nathalie',
+              role: 'RH',
+              content: 'OK',
+            },
+          ],
+        },
+      },
+    });
+
+    expect(messages[0].personasOpinion?.opinions[0]?.personaName).toBe('Nathalie');
+    expect(messages[0].personasOpinion?.streaming).toBe(false);
+  });
+
+  it('applyStreamEvent: summon_specialist en erreur met la carte handoff en échec', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-handoff-err',
+        name: 'summon_specialist',
+        args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'tc-handoff-err',
+        name: 'summon_specialist',
+        status: 'error',
+        result: { error: 'delegation_failed' },
+      },
+    });
+
+    expect(messages[0].specialistHandoff).toMatchObject({
+      status: 'error',
+      streaming: false,
+    });
+    expect(messages[0].toolCalls?.[0]?.status).toBe('error');
+  });
+
+  it('applyStreamEvent: summon_specialist malformé force le handoff en erreur', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-handoff-bad',
+        name: 'summon_specialist',
+        args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'tc-handoff-bad',
+        name: 'summon_specialist',
+        result: null,
+      },
+    });
+
+    expect(messages[0].specialistHandoff).toMatchObject({
+      status: 'error',
+      streaming: false,
+    });
+  });
+
+  it('applyStreamEvent: ask_personas en erreur marque la carte opinion', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-opinion-err',
+        name: 'ask_personas',
+        args: { question: 'Budget ?' },
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'tc-opinion-err',
+        name: 'ask_personas',
+        error: 'personas_failed',
+      },
+    });
+
+    expect(messages[0].personasOpinion).toMatchObject({
+      question: 'Budget ?',
+      streaming: false,
+      error: true,
+    });
+  });
+
+  it('applyStreamEvent: summon_specialist en attente HAG passe en pending', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-handoff-hag',
+        name: 'summon_specialist',
+        args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'confirmation_request',
+      data: {
+        confirmationId: 'cf_hag',
+        toolCallId: 'tc-handoff-hag',
+        toolName: 'summon_specialist',
+        action: 'delegate',
+        proposedPath: '',
+        humanSummary: 'Déléguer à RH',
+        turnId: null,
+        effect: null,
+        targets: [],
+        headline: '',
+        protectionLabels: [],
+        trustKey: null,
+      },
+    });
+
+    expect(messages[0].specialistHandoff).toMatchObject({
+      status: 'pending',
+      streaming: false,
+    });
+    expect(messages[0].pendingConfirmation?.toolCallId).toBe('tc-handoff-hag');
+  });
+
+  it('finalizeIncompleteToolsOnMessage: handoff running passe en erreur', () => {
+    const message: ChatMessage = {
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      toolCalls: [
+        {
+          id: 'tc1',
+          name: 'summon_specialist',
+          status: 'running',
+          args: { specialist_id: 'rh' },
+        },
+      ],
+      specialistHandoff: createRunningSpecialistHandoff('tc1', {
+        specialist_id: 'rh',
+        task: 'Analyser',
+      }),
+      createdAt: new Date().toISOString(),
+    };
+
+    finalizeIncompleteToolsOnMessage(message, 'stream_ended');
+
+    expect(message.specialistHandoff).toMatchObject({
+      status: 'error',
+      streaming: false,
+    });
   });
 });
