@@ -396,14 +396,13 @@ MESSAGES: dict[str, dict[str, Any]] = {
             ),
             "managed_connectors_header": "Connecteurs managés Improba Cloud (état local) :",
             "managed_connectors_catalog_hint": (
-                "N'utilisez que les actions du catalogue (outils managed_* ou action "
-                "listée). N'inventez pas d'action connecteur. Si une action est "
-                "inconnue ou absente, informez l'utilisateur et arrêtez-vous ; ne "
-                "proposez pas une autre action connecteur nécessitant une nouvelle "
-                "confirmation."
+                "Les actions connecteur passent par l'agent métier compétent via "
+                "`summon_specialist` ; n'inventez pas d'action ; n'appelez pas "
+                "`managed_*` depuis Imp (agent parent)."
             ),
             "managed_connectors_enabled": (
-                "{id} ({name}) : activé localement ; utiliser les outils managed_*"
+                "{id} ({name}) : activé localement ; déléguer à l'agent métier qui "
+                "a ce connecteur (`summon_specialist`), ne pas invoquer `managed_*` ici"
             ),
             "managed_connectors_disabled": (
                 "{id} ({name}) : désactivé localement ; ne pas invoquer ; "
@@ -1018,13 +1017,13 @@ MESSAGES: dict[str, dict[str, Any]] = {
             ),
             "managed_connectors_header": "Improba Cloud managed connectors (local state):",
             "managed_connectors_catalog_hint": (
-                "Use only catalog actions (managed_* tools or listed action). Do not "
-                "invent connector actions. If an action is unknown or missing, inform "
-                "the user and stop; do not propose another connector action that "
-                "requires a new confirmation."
+                "Connector actions go through the competent business agent via "
+                "`summon_specialist`; do not invent actions; do not call `managed_*` "
+                "from Imp (parent agent)."
             ),
             "managed_connectors_enabled": (
-                "{id} ({name}): enabled locally; use the managed_* tools"
+                "{id} ({name}): enabled locally; delegate to the business agent that "
+                "has this connector (`summon_specialist`), do not invoke `managed_*` here"
             ),
             "managed_connectors_disabled": (
                 "{id} ({name}): disabled locally; do not invoke; "

@@ -411,8 +411,6 @@ def build_managed_connectors_agent_prompt(
                     name=name,
                 )
             )
-            if connector_id == "ihora":
-                lines.append(t(locale, "tools.managed_connectors_ihora_users_hint"))
         else:
             lines.append(
                 t(

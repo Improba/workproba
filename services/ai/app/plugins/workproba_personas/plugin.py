@@ -14,6 +14,9 @@ from app.i18n import t
 from app.agent.tools import ToolDeps
 from app.plugins.registry import PLUGIN_WORKPROBA_PERSONAS, resolve_plugin_data_dir
 from app.plugins.workproba_personas import manifest, orchestrator, specialist_run, storage
+from app.plugins.workproba_personas.delegation_prompt import (
+    build_business_agents_delegation_prompt,
+)
 from app.plugins.workproba_personas.storage import JsonDict
 
 SpecialistDelegationMode = Literal["regard", "operative"]
@@ -38,6 +41,79 @@ def _normalize_specialist_mode(mode: str, *, locale: str) -> SpecialistDelegatio
     if normalized in {"regard", "operative"}:
         return normalized  # type: ignore[return-value]
     raise ModelRetry(t(locale, "errors.invalid_specialist_mode", mode=mode))
+
+
+def _available_specialist_ids(managed: list[JsonDict], *, limit: int = 12) -> str:
+    ids = sorted(
+        str(specialist.get("id") or "")
+        for specialist in managed
+        if specialist.get("id")
+    )
+    return ", ".join(ids[:limit])
+
+
+def _summon_specialist_failure_result(
+    *,
+    specialist_id: str,
+    mode: SpecialistDelegationMode,
+    locale: str,
+    error_code: str,
+    content: str,
+    task: str,
+) -> dict[str, Any]:
+    name = specialist_id
+    return {
+        "specialist_id": specialist_id,
+        "specialist_name": name,
+        "mode": mode,
+        "content": content,
+        "degraded_tools": [],
+        "error": error_code,
+        "display": "specialist_handoff_card",
+        "human_summary": build_human_summary(
+            "summon_specialist",
+            {"specialist_id": specialist_id, "name": name, "mode": mode, "task": task},
+            result={"error": error_code},
+            is_error=True,
+            locale=locale,
+        ),
+    }
+
+
+def _resolve_specialist_for_summon(
+    plugin_data_dir: Path,
+    specialist_id: str,
+    *,
+    locale: str,
+) -> JsonDict:
+    specialists = storage.resolve_specialists(plugin_data_dir, [specialist_id])
+    if specialists:
+        return specialists[0]
+
+    managed = storage.list_managed_specialists(plugin_data_dir)
+    by_connector = storage.resolve_specialist_by_connector(plugin_data_dir, specialist_id)
+    if len(by_connector) == 1:
+        return by_connector[0]
+    if len(by_connector) > 1:
+        candidate_ids = _available_specialist_ids(by_connector)
+        raise ModelRetry(
+            t(
+                locale,
+                "errors.specialist_connector_ambiguous",
+                id=specialist_id,
+                candidates=candidate_ids,
+            )
+        )
+
+    available = _available_specialist_ids(managed)
+    raise ModelRetry(
+        t(
+            locale,
+            "errors.specialist_not_found_with_available",
+            id=specialist_id,
+            available=available or t(locale, "errors.specialist_none_available"),
+        )
+    )
 
 
 async def _delegate_specialist(
@@ -65,6 +141,7 @@ async def _delegate_specialist(
         )
 
     plugins_root = plugin_data_dir.parent
+    parent_tool_call_id = getattr(ctx, "tool_call_id", None)
     try:
         if mode == "operative":
             content, degraded_tools = await specialist_run.run_operative(
@@ -79,6 +156,7 @@ async def _delegate_specialist(
                 tool_deps=tool_deps,
                 ui_mode=getattr(ctx.deps.context, "ui_mode", "agent"),
                 plugins_root=plugins_root,
+                parent_tool_call_id=parent_tool_call_id,
             )
         else:
             content, degraded_tools = await specialist_run.run_regard(
@@ -93,6 +171,7 @@ async def _delegate_specialist(
                 tool_deps=tool_deps,
                 ui_mode=getattr(ctx.deps.context, "ui_mode", "agent"),
                 plugins_root=plugins_root,
+                parent_tool_call_id=parent_tool_call_id,
             )
     except ValueError as exc:
         code = str(exc)
@@ -121,6 +200,16 @@ async def _delegate_specialist(
 
 
 def register_personas_tools(agent: Agent[Any, str]) -> None:
+    @agent.system_prompt
+    async def business_agents_delegation_prompt(ctx: RunContext[Any]) -> str:
+        locale = ctx.deps.context.locale
+        try:
+            plugin_data_dir = _plugin_data_dir(ctx)
+        except ModelRetry:
+            return ""
+        specialists = storage.list_managed_specialists(plugin_data_dir)
+        return build_business_agents_delegation_prompt(locale, specialists)
+
     @agent.tool
     async def summon_specialist(
         ctx: RunContext[Any],
@@ -129,10 +218,17 @@ def register_personas_tools(agent: Agent[Any, str]) -> None:
         mode: str = "regard",
         context: str = "",
     ) -> dict[str, Any]:
-        """Delegate a task to a business agent (Regard or operative mode).
+        """Delegate to a managed business agent.
+
+        Use the catalog id from the injected business-agents list; never a connector id
+        unless it uniquely aliases one catalog agent.
+
+        mode: regard = read-only tools; operative = full panel including writes (approval gate).
+        Use for connector-backed tasks (Ihora timesheets, absences, ...). Prefer this over
+        ask_personas when tools are needed.
 
         Args:
-            specialist_id: Managed business agent identifier (registry only).
+            specialist_id: Managed business agent identifier from the synced catalog.
             task: Task or question for the specialist.
             mode: ``regard`` (read-only tools) or ``operative`` (panel tools, writes via approval).
             context: Relevant excerpt from the current conversation.
@@ -140,12 +236,24 @@ def register_personas_tools(agent: Agent[Any, str]) -> None:
         locale = ctx.deps.context.locale
         plugin_data_dir = _plugin_data_dir(ctx)
         delegation_mode = _normalize_specialist_mode(mode, locale=locale)
-        specialists = storage.resolve_specialists(plugin_data_dir, [specialist_id])
-        if not specialists:
-            raise ModelRetry(t(locale, "errors.specialist_not_found", id=specialist_id))
+        managed = storage.list_managed_specialists(plugin_data_dir)
+        if not managed:
+            return _summon_specialist_failure_result(
+                specialist_id=specialist_id,
+                mode=delegation_mode,
+                locale=locale,
+                error_code="no_business_agents_synced",
+                content=t(locale, "errors.no_business_agents_synced"),
+                task=task,
+            )
+        specialist = _resolve_specialist_for_summon(
+            plugin_data_dir,
+            specialist_id,
+            locale=locale,
+        )
         return await _delegate_specialist(
             ctx,
-            specialist=specialists[0],
+            specialist=specialist,
             task=task,
             context=context,
             mode=delegation_mode,

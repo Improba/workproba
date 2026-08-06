@@ -23,6 +23,19 @@
       @confirm-approve-remaining="emit('confirm-approve-remaining')"
       @confirm-deny="emit('confirm-deny')"
     />
+    <SpecialistHandoffCard
+      v-else-if="block.kind === 'specialist_handoff'"
+      :card="block.card"
+      @discuss="emit('specialist-to-discussion', block.card)"
+    />
+    <PersonasOpinionCard
+      v-else-if="block.kind === 'personas_opinion'"
+      :card="block.card"
+      :show-publish="isProjetPluginActive"
+      @another="emit('personas-another', block.card)"
+      @to-discussion="emit('personas-to-discussion', block.card)"
+      @publish="openOpinionPublish"
+    />
   </template>
 
   <p
@@ -53,20 +66,26 @@
     @reject="emit('plan-reject')"
   />
 
-  <PersonasOpinionCard
-    v-if="message.personasOpinion"
-    :card="message.personasOpinion"
-    :show-publish="isProjetPluginActive"
-    @another="emit('personas-another', message.personasOpinion!)"
-    @to-discussion="emit('personas-to-discussion', message.personasOpinion!)"
-    @publish="openOpinionPublish"
-  />
-
-  <SpecialistHandoffCard
-    v-if="message.specialistHandoff"
-    :card="message.specialistHandoff"
-    @discuss="emit('specialist-to-discussion', message.specialistHandoff!)"
-  />
+  <div
+    v-if="orphanPreparingConfirmation && !orphanPendingConfirmation"
+    class="chat-message__orphan-confirmation"
+  >
+    <ConfirmationCard
+      :confirmation="orphanPreparingConfirmationStub()"
+      preparing
+    />
+  </div>
+  <div v-if="orphanPendingConfirmation" class="chat-message__orphan-confirmation">
+    <ConfirmationCard
+      :confirmation="orphanPendingConfirmation"
+      :busy="confirming"
+      :workspace-data-dir="workspaceDataDir"
+      :project-path="projectPath"
+      @approve="emit('confirm-approve')"
+      @approve-remaining="emit('confirm-approve-remaining')"
+      @cancel="emit('confirm-deny')"
+    />
+  </div>
 
   <MemoryCitationsBar
     v-if="message.role === 'assistant' && message.memoryCitations?.length"
@@ -122,6 +141,7 @@ import ActivityGroup from '@components/chat/ActivityGroup.vue';
 import PlanCard from '@components/chat/PlanCard.vue';
 import PersonasOpinionCard from '@components/personas/PersonasOpinionCard.vue';
 import SpecialistHandoffCard from '@components/personas/SpecialistHandoffCard.vue';
+import ConfirmationCard from '@components/chat/ConfirmationCard.vue';
 import MemoryCitationsBar from '@components/chat/MemoryCitationsBar.vue';
 import WebSearchCitationsBar from '@components/chat/WebSearchCitationsBar.vue';
 import PublishToProjectDialog from '@components/workproba/PublishToProjectDialog.vue';
@@ -133,7 +153,7 @@ import { chatErrorReconnectCta } from '@utils/chatCloudErrors';
 import { extractWebSearchCitations } from '@utils/webSearchCitations';
 import {
   activityGroupIdAt,
-  groupMessageParts,
+  insertPerspectiveCardsInBlocks,
   type ActivityGroupData,
   type MessageRenderBlock,
 } from '@utils/activityGroup';
@@ -142,7 +162,7 @@ import {
   deriveThinkingSubjectDone,
   deriveThinkingSummary,
 } from '@utils/thinkingPresentation';
-import type { ChatMessage, ChatMessagePart, ChatThinkingPart } from '#types';
+import type { ChatMessage, ChatMessagePart, ChatThinkingPart, ChatConfirmation } from '#types';
 
 const props = defineProps<{
   message: ChatMessage;
@@ -194,6 +214,36 @@ const opinionPublishMarkdown = computed(() =>
 );
 
 const webSearchCitations = computed(() => extractWebSearchCitations(props.message));
+
+const toolCallIds = computed(
+  () => new Set((props.message.toolCalls ?? []).map((tc) => tc.id)),
+);
+
+const orphanPendingConfirmation = computed(() => {
+  const pending = props.message.pendingConfirmation;
+  if (!pending) return null;
+  if (toolCallIds.value.has(pending.toolCallId)) return null;
+  return pending;
+});
+
+const orphanPreparingConfirmation = computed(() => {
+  const preparing = props.message.preparingConfirmation;
+  if (!preparing) return null;
+  if (toolCallIds.value.has(preparing.toolCallId)) return null;
+  return preparing;
+});
+
+function orphanPreparingConfirmationStub(): ChatConfirmation {
+  const preparing = orphanPreparingConfirmation.value;
+  return {
+    confirmationId: '',
+    toolCallId: preparing?.toolCallId ?? '',
+    toolName: preparing?.toolName ?? '',
+    action: 'create',
+    proposedPath: '',
+    humanSummary: '',
+  };
+}
 
 const opinionPublishName = computed(() => {
   const topic = props.message.personasOpinion?.question ?? t('personas.opinion.header', { topic: '' });
@@ -274,10 +324,6 @@ const renderParts = computed<ChatMessagePart[]>(() => {
   return fallback;
 });
 
-const partsForRender = computed(() =>
-  filterPartsHidingPerspectiveTools(renderParts.value, props.message),
-);
-
 function compactActivityGroup(group: ActivityGroupData): ActivityGroupData | null {
   if (group.parts.length === 0) return null;
   const toolCallIds = group.parts
@@ -287,23 +333,29 @@ function compactActivityGroup(group: ActivityGroupData): ActivityGroupData | nul
 }
 
 const groupedRenderBlocks = computed(() => {
-  const blocks = groupMessageParts(partsForRender.value);
+  const blocks = insertPerspectiveCardsInBlocks(
+    renderParts.value,
+    props.message,
+    filterPartsHidingPerspectiveTools,
+  );
   const compacted: MessageRenderBlock[] = [];
   for (const block of blocks) {
-    if (block.kind === 'text') {
-      compacted.push(block);
+    if (block.kind === 'activity_group') {
+      const group = compactActivityGroup(block.group);
+      if (group) {
+        compacted.push({ kind: 'activity_group', group });
+      }
       continue;
     }
-    const group = compactActivityGroup(block.group);
-    if (group) {
-      compacted.push({ kind: 'activity_group', group });
-    }
+    compacted.push(block);
   }
   return compacted;
 });
 
 function renderBlockKey(block: MessageRenderBlock): string {
   if (block.kind === 'activity_group') return block.group.id;
+  if (block.kind === 'specialist_handoff') return `handoff:${block.card.id}`;
+  if (block.kind === 'personas_opinion') return `opinion:${block.card.id}`;
   return block.part.id;
 }
 
@@ -411,6 +463,10 @@ watch(
 </script>
 
 <style scoped lang="scss">
+.chat-message__orphan-confirmation {
+  margin-top: var(--wp-space-2);
+}
+
 .chat-message__error {
   display: flex;
   align-items: flex-start;

@@ -63,7 +63,10 @@ import {
 } from '@utils/thinkingPresentation';
 import {
   applyPersonasOpinionFromToolResult,
+  appendSpecialistHandoffThinking,
+  appendSpecialistHandoffToken,
   createRunningSpecialistHandoff,
+  endSpecialistHandoffThinking,
   initStreamingPersonasOpinion,
   markPersonasOpinionAsError,
   markRunningSpecialistHandoffAsError,
@@ -71,6 +74,7 @@ import {
   markSpecialistHandoffAsRunning,
   rehydratePerspectiveCards,
   toolResultToSpecialistHandoff,
+  upsertSpecialistNestedTool,
   type SpecialistMeta,
 } from '@utils/specialistHandoff';
 import { usePersonas } from '@composables/usePersonas';
@@ -235,11 +239,30 @@ function parseMemoryCitations(raw: unknown): MemoryCitation[] {
   return citations;
 }
 
+/** Extrait parent_tool_call_id depuis un payload SSE Python. */
+function extractParentToolCallId(data: Record<string, unknown>): string | null {
+  const raw = data.parent_tool_call_id ?? data.parentToolCallId;
+  if (raw == null) return null;
+  const value = String(raw).trim();
+  return value || null;
+}
+
+function routesToSpecialistHandoff(
+  assistant: ChatMessage,
+  parentToolCallId: string | null | undefined,
+): boolean {
+  return Boolean(
+    parentToolCallId &&
+      assistant.specialistHandoff?.toolCallId === parentToolCallId,
+  );
+}
+
 /** Mappe un event SSE Python vers le format interne du front (testable). */
 export function mapPythonSseEvent(
   event: RawChatStreamEvent,
 ): ChatStreamEvent | null {
   const data = event.data;
+  const parentToolCallId = extractParentToolCallId(data);
 
   switch (event.type) {
     case 'turn_start':
@@ -250,7 +273,10 @@ export function mapPythonSseEvent(
     case 'token':
       return {
         type: 'token',
-        data: { token: String(data.content ?? data.token ?? '') },
+        data: {
+          token: String(data.content ?? data.token ?? ''),
+          parentToolCallId,
+        },
       };
     case 'tool_call_start':
       return {
@@ -260,6 +286,7 @@ export function mapPythonSseEvent(
           name: String(data.tool_name ?? data.name ?? 'tool'),
           args: (data.arguments ?? data.args ?? {}) as Record<string, unknown>,
           humanSummary: extractHumanSummary(data),
+          parentToolCallId,
         },
       };
     case 'tool_call_result': {
@@ -279,6 +306,7 @@ export function mapPythonSseEvent(
               : typeof data.filePath === 'string'
                 ? data.filePath
                 : undefined,
+          parentToolCallId,
         },
       };
     }
@@ -333,6 +361,7 @@ export function mapPythonSseEvent(
         type: 'thinking_start',
         data: {
           thinkingId: String(data.thinking_id ?? ''),
+          parentToolCallId,
         },
       };
     case 'thinking_delta':
@@ -341,6 +370,7 @@ export function mapPythonSseEvent(
         data: {
           thinkingId: String(data.thinking_id ?? ''),
           content: String(data.content ?? ''),
+          parentToolCallId,
         },
       };
     case 'thinking_end':
@@ -348,6 +378,7 @@ export function mapPythonSseEvent(
         type: 'thinking_end',
         data: {
           thinkingId: String(data.thinking_id ?? ''),
+          parentToolCallId,
         },
       };
     case 'memory_citations':
@@ -861,9 +892,33 @@ export function applyStreamEvent(
   if (!assistant) return;
 
   switch (event.type) {
+    case 'token': {
+      if (routesToSpecialistHandoff(assistant, event.data.parentToolCallId)) {
+        assistant.specialistHandoff = appendSpecialistHandoffToken(
+          assistant.specialistHandoff!,
+          event.data.token,
+        );
+        break;
+      }
+      appendTextToParts(assistant, event.data.token);
+      syncContent(assistant);
+      break;
+    }
     case 'tool_call_start': {
       const startSummary = event.data.humanSummary?.trim() ?? '';
       const args = event.data.args ?? {};
+      if (
+        routesToSpecialistHandoff(assistant, event.data.parentToolCallId)
+      ) {
+        const handoff = assistant.specialistHandoff!;
+        assistant.specialistHandoff = upsertSpecialistNestedTool(handoff, {
+          id: event.data.id || createMessageId(),
+          name: event.data.name || 'tool',
+          humanSummary: startSummary || undefined,
+          status: 'running',
+        });
+        break;
+      }
       const fromArgs =
         isFileWriteTool(event.data.name || '')
           ? extractProposedPath(args)
@@ -899,6 +954,13 @@ export function applyStreamEvent(
     }
     case 'confirmation_preparing': {
       const toolId = event.data.toolCallId;
+      if (
+        assistant.specialistHandoff &&
+        (assistant.specialistHandoff.status === 'running' ||
+          assistant.specialistHandoff.streaming === true)
+      ) {
+        markSpecialistHandoffAsPending(assistant);
+      }
       const tool = assistant.toolCalls?.find((t) => t.id === toolId);
       if (tool) {
         tool.status = 'pending_confirmation';
@@ -917,6 +979,13 @@ export function applyStreamEvent(
     }
     case 'confirmation_request': {
       const toolId = event.data.toolCallId;
+      if (
+        assistant.specialistHandoff &&
+        (assistant.specialistHandoff.status === 'running' ||
+          assistant.specialistHandoff.streaming === true)
+      ) {
+        markSpecialistHandoffAsPending(assistant);
+      }
       const tool = assistant.toolCalls?.find((t) => t.id === toolId);
       if (tool) {
         tool.status = 'awaiting_confirmation';
@@ -970,6 +1039,32 @@ export function applyStreamEvent(
     }
     case 'tool_call_result': {
       const toolId = event.data.id;
+      if (
+        routesToSpecialistHandoff(assistant, event.data.parentToolCallId)
+      ) {
+        const handoff = assistant.specialistHandoff!;
+        const wasPending = handoff.status === 'pending';
+        const resultSummary = event.data.humanSummary?.trim() ?? '';
+        assistant.specialistHandoff = upsertSpecialistNestedTool(handoff, {
+          id: toolId,
+          name: event.data.name || 'tool',
+          humanSummary: resultSummary || undefined,
+          status:
+            event.data.error != null || event.data.status === 'error'
+              ? 'error'
+              : 'success',
+        });
+        if (assistant.pendingConfirmation?.toolCallId === toolId) {
+          assistant.pendingConfirmation = null;
+        }
+        if (assistant.preparingConfirmation?.toolCallId === toolId) {
+          assistant.preparingConfirmation = null;
+        }
+        if (wasPending) {
+          markSpecialistHandoffAsRunning(assistant);
+        }
+        break;
+      }
       const tool = assistant.toolCalls?.find((t) => t.id === toolId);
       if (tool) {
         tool.result = event.data.result;
@@ -997,19 +1092,37 @@ export function applyStreamEvent(
           assistant.preparingConfirmation = null;
         }
         if (tool.name === 'summon_specialist') {
+          const resultPayload = event.data.result;
+          const resultHasStructuredError =
+            resultPayload != null &&
+            typeof resultPayload === 'object' &&
+            (resultPayload as Record<string, unknown>).error != null;
           const toolFailed =
             event.data.error != null || event.data.status === 'error';
           const handoff = toolResultToSpecialistHandoff(
             tool.id,
             tool.args ?? {},
             event.data.result,
-            toolFailed ? (event.data.error ?? event.data.result ?? true) : undefined,
+            toolFailed && !resultHasStructuredError
+              ? (event.data.error ?? event.data.result ?? true)
+              : undefined,
             ctx?.resolveSpecialistMeta,
           );
           if (handoff) {
+            const prev = assistant.specialistHandoff;
+            const thinking = prev?.thinking ?? handoff.thinking;
             assistant.specialistHandoff = {
               ...handoff,
-              id: assistant.specialistHandoff?.id ?? handoff.id,
+              id: prev?.id ?? handoff.id,
+              thinking,
+              thinkingDone: thinking
+                ? true
+                : (prev?.thinkingDone ?? handoff.thinkingDone),
+              nestedTools: prev?.nestedTools ?? handoff.nestedTools,
+              content:
+                (handoff.content?.trim()
+                  ? handoff.content
+                  : prev?.content) ?? '',
             };
           } else {
             markRunningSpecialistHandoffAsError(assistant);
@@ -1033,6 +1146,17 @@ export function applyStreamEvent(
     case 'thinking_start': {
       const thinkingId = event.data.thinkingId;
       if (!thinkingId) break;
+      if (
+        routesToSpecialistHandoff(assistant, event.data.parentToolCallId)
+      ) {
+        const handoff = assistant.specialistHandoff!;
+        assistant.specialistHandoff = {
+          ...handoff,
+          thinking: handoff.thinking ?? '',
+          thinkingDone: false,
+        };
+        break;
+      }
       const parts = assistant.parts ?? (assistant.parts = []);
       if (findThinkingPart(parts, thinkingId)) break;
       parts.push({
@@ -1051,6 +1175,16 @@ export function applyStreamEvent(
       const thinkingId = event.data.thinkingId;
       const delta = event.data.content;
       if (!thinkingId || !delta) break;
+      if (
+        routesToSpecialistHandoff(assistant, event.data.parentToolCallId)
+      ) {
+        const handoff = assistant.specialistHandoff!;
+        assistant.specialistHandoff = appendSpecialistHandoffThinking(
+          handoff,
+          delta,
+        );
+        break;
+      }
       const parts = assistant.parts ?? (assistant.parts = []);
       let part = findThinkingPart(parts, thinkingId);
       // Défense : start manqué / thinkingId retardé → créer la part à la volée.
@@ -1072,6 +1206,13 @@ export function applyStreamEvent(
     case 'thinking_end': {
       const thinkingId = event.data.thinkingId;
       if (!thinkingId) break;
+      if (
+        routesToSpecialistHandoff(assistant, event.data.parentToolCallId)
+      ) {
+        const handoff = assistant.specialistHandoff!;
+        assistant.specialistHandoff = endSpecialistHandoffThinking(handoff);
+        break;
+      }
       const parts = assistant.parts ?? (assistant.parts = []);
       let part = findThinkingPart(parts, thinkingId);
       if (!part) {
@@ -1464,6 +1605,20 @@ export function useChatStream(
     }
     if (!currentAssistantId) return;
     if (event.type === 'token') {
+      if (event.data.parentToolCallId) {
+        flushPendingTokens();
+        const assistant = messages.value.find((m) => m.id === currentAssistantId);
+        if (
+          assistant?.specialistHandoff &&
+          assistant.specialistHandoff.toolCallId === event.data.parentToolCallId
+        ) {
+          assistant.specialistHandoff = appendSpecialistHandoffToken(
+            assistant.specialistHandoff,
+            event.data.token,
+          );
+          return;
+        }
+      }
       pendingTokens += event.data.token;
       scheduleFlush();
       return;
@@ -2069,7 +2224,16 @@ export function useChatStream(
       }
       if (assistant && decision !== 'deny') {
         const tool = assistant.toolCalls?.find((t) => t.id === pending.toolCallId);
-        if (tool?.name === 'summon_specialist') {
+        const nestedMatch = assistant.specialistHandoff?.nestedTools?.some(
+          (entry) => entry.id === pending.toolCallId,
+        );
+        // Reprendre le handoff après approve : summon lui-même, tool nested,
+        // ou confirmation orpheline pendant un handoff pending.
+        if (
+          tool?.name === 'summon_specialist' ||
+          nestedMatch ||
+          assistant.specialistHandoff?.status === 'pending'
+        ) {
           markSpecialistHandoffAsRunning(assistant);
         }
       }

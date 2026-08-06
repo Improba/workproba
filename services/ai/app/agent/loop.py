@@ -137,6 +137,7 @@ class AgentLoop:
                     request,
                     gate,
                     plan_gate,
+                    output_queue=output_queue,
                     strip_thinking=strip_thinking,
                     is_fallback_attempt=is_fallback_attempt,
                 ):
@@ -232,6 +233,7 @@ class AgentLoop:
         gate: ConfirmationGate,
         plan_gate: PlanGate,
         *,
+        output_queue: asyncio.Queue[AgentEvent | object] | None = None,
         strip_thinking: bool = False,
         is_fallback_attempt: bool = False,
     ) -> AsyncIterator[AgentEvent]:
@@ -399,6 +401,7 @@ class AgentLoop:
             limits=self._limits,
             confirmation_gate=gate if request.confirm_before_write else None,
             plan_gate=plan_gate,
+            event_queue=output_queue,
         )
         history = to_model_messages(
             request.history,
@@ -736,8 +739,77 @@ class AgentLoop:
                         )
 
 
+async def iter_nested_tool_stream(
+    node: Any,
+    ctx: Any,
+    *,
+    locale: str,
+    parent_tool_call_id: str | None = None,
+) -> AsyncIterator[AgentEvent]:
+    """Émet ToolCallStart/Result pour les tools nested (ex. SpecialistRun)."""
+    from pydantic_ai.messages import FunctionToolCallEvent, FunctionToolResultEvent
+
+    pending_arguments: dict[str, dict[str, Any]] = {}
+    async with node.stream(ctx) as tool_stream:
+        async for event in tool_stream:
+            if isinstance(event, FunctionToolCallEvent):
+                part = event.part
+                arguments = parse_tool_arguments(part.args)
+                pending_arguments[part.tool_call_id] = arguments
+                human_summary = build_human_summary(
+                    part.tool_name,
+                    arguments,
+                    locale=locale,
+                )
+                yield tag_parent_tool_call_id(
+                    ToolCallStartEvent(
+                        tool_call_id=part.tool_call_id,
+                        tool_name=part.tool_name,
+                        arguments=arguments,
+                        human_summary=human_summary,
+                    ),
+                    parent_tool_call_id,
+                )
+            elif isinstance(event, FunctionToolResultEvent):
+                part = event.part
+                tool_call_id = getattr(part, "tool_call_id", "") or ""
+                tool_name = getattr(part, "tool_name", "") or ""
+                arguments = pending_arguments.pop(tool_call_id, {})
+                result = coerce_tool_result(getattr(part, "content", None))
+                is_error = isinstance(part, RetryPromptPart)
+                human_summary = build_human_summary(
+                    tool_name,
+                    arguments,
+                    result=result,
+                    is_error=is_error,
+                    locale=locale,
+                )
+                yield tag_parent_tool_call_id(
+                    ToolCallResultEvent(
+                        tool_call_id=tool_call_id,
+                        tool_name=tool_name,
+                        result=result,
+                        is_error=is_error,
+                        human_summary=human_summary,
+                    ),
+                    parent_tool_call_id,
+                )
+
+
+def tag_parent_tool_call_id(
+    event: AgentEvent,
+    parent_tool_call_id: str | None,
+) -> AgentEvent:
+    if not parent_tool_call_id:
+        return event
+    return event.model_copy(update={"parent_tool_call_id": parent_tool_call_id})
+
+
 async def map_model_stream_events(
-    stream: Any, *, model_round: int = 0
+    stream: Any,
+    *,
+    model_round: int = 0,
+    parent_tool_call_id: str | None = None,
 ) -> AsyncIterator[AgentEvent]:
     """Mappe les ModelResponseStreamEvent Pydantic AI vers les events SSE Workproba."""
     from pydantic_ai.messages import (
@@ -753,8 +825,11 @@ async def map_model_stream_events(
     async for event in stream:
         if isinstance(event, PartStartEvent):
             if isinstance(event.part, ThinkingPart):
-                yield ThinkingStartEvent(
-                    thinking_id=_thinking_id(model_round, event.index)
+                yield tag_parent_tool_call_id(
+                    ThinkingStartEvent(
+                        thinking_id=_thinking_id(model_round, event.index)
+                    ),
+                    parent_tool_call_id,
                 )
                 # pydantic-ai embarque le premier chunk de raisonnement dans le
                 # PartStartEvent (pas de PartDeltaEvent séparé) : il faut le
@@ -762,9 +837,12 @@ async def map_model_stream_events(
                 # est perdu du flux SSE.
                 start_text = event.part.content or ""
                 if start_text:
-                    yield ThinkingDeltaEvent(
-                        thinking_id=_thinking_id(model_round, event.index),
-                        content=start_text,
+                    yield tag_parent_tool_call_id(
+                        ThinkingDeltaEvent(
+                            thinking_id=_thinking_id(model_round, event.index),
+                            content=start_text,
+                        ),
+                        parent_tool_call_id,
                     )
             elif isinstance(event.part, TextPart):
                 # Idem pour la réponse : le premier token texte vit dans le
@@ -774,24 +852,36 @@ async def map_model_stream_events(
                 # tenant en un seul chunk.
                 start_text = event.part.content or ""
                 if start_text:
-                    yield TokenEvent(content=start_text)
+                    yield tag_parent_tool_call_id(
+                        TokenEvent(content=start_text),
+                        parent_tool_call_id,
+                    )
             continue
         if isinstance(event, PartDeltaEvent):
             if isinstance(event.delta, ThinkingPartDelta):
                 delta_text = event.delta.content_delta or ""
                 if delta_text:
-                    yield ThinkingDeltaEvent(
-                        thinking_id=_thinking_id(model_round, event.index),
-                        content=delta_text,
+                    yield tag_parent_tool_call_id(
+                        ThinkingDeltaEvent(
+                            thinking_id=_thinking_id(model_round, event.index),
+                            content=delta_text,
+                        ),
+                        parent_tool_call_id,
                     )
             elif isinstance(event.delta, TextPartDelta):
                 delta_text = event.delta.content_delta or ""
                 if delta_text:
-                    yield TokenEvent(content=delta_text)
+                    yield tag_parent_tool_call_id(
+                        TokenEvent(content=delta_text),
+                        parent_tool_call_id,
+                    )
         elif isinstance(event, PartEndEvent):
             if isinstance(event.part, ThinkingPart):
-                yield ThinkingEndEvent(
-                    thinking_id=_thinking_id(model_round, event.index)
+                yield tag_parent_tool_call_id(
+                    ThinkingEndEvent(
+                        thinking_id=_thinking_id(model_round, event.index)
+                    ),
+                    parent_tool_call_id,
                 )
 
 

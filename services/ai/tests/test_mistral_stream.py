@@ -123,3 +123,55 @@ def test_iter_mistral_chunk_events_ignores_unknown_chunk_types() -> None:
     ))
     assert len(events) == 1
     assert isinstance(events[0].part, TextPart)
+
+
+def test_normalize_mistral_content_list_extracts_thinking_and_text() -> None:
+    from app.llm.mistral import MistralChatModel, normalize_mistral_content_list
+
+    content = [
+        {"type": "thinking", "thinking": [{"type": "text", "text": "Réfléchis "}]},
+        {"type": "text", "text": "Réponse"},
+    ]
+    response_text, thinking = normalize_mistral_content_list(content)
+    assert response_text == "Réponse"
+    assert thinking == "Réfléchis"
+
+    class _FakeChoice:
+        def __init__(self) -> None:
+            self.message = type(
+                "Message",
+                (),
+                {
+                    "content": content,
+                    "model_dump": lambda self: {
+                        "content": content,
+                        "role": "assistant",
+                    },
+                },
+            )()
+
+    class _FakeResponse:
+        def __init__(self) -> None:
+            self.choices = [_FakeChoice()]
+
+        def model_dump(self) -> dict:
+            return {
+                "id": "cmpl-test",
+                "object": "chat.completion",
+                "created": 0,
+                "model": "mistral-large",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": content,
+                        },
+                        "finish_reason": "stop",
+                    }
+                ],
+            }
+
+    validated = MistralChatModel._validate_completion(object(), _FakeResponse())  # type: ignore[arg-type]
+    assert validated.choices[0].message.content == "Réponse"
+    assert validated.choices[0].message.reasoning_content == "Réfléchis"

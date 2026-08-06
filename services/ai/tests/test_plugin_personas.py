@@ -382,8 +382,81 @@ async def test_summon_specialist_unknown_id_refused(plugin_dir: Path) -> None:
     agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
     tool = agent._function_toolset.tools["summon_specialist"]
     ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc5")
-    with pytest.raises(ModelRetry, match="org.unknown"):
+    with pytest.raises(ModelRetry) as exc_info:
         await tool.function(ctx, specialist_id="org.unknown", task="Test")
+    message = str(exc_info.value)
+    assert "org.unknown" in message
+    assert "org.rh" in message
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_empty_catalog_returns_structured_error(
+    plugin_dir: Path,
+) -> None:
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc5b")
+    result = await tool.function(ctx, specialist_id="org.rh", task="Test")
+    assert result["error"] == "no_business_agents_synced"
+    assert result["display"] == "specialist_handoff_card"
+    assert result["content"]
+    assert result["degraded_tools"] == []
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_connector_alias_resolves_unique_match(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_managed_specialist_catalog(plugin_dir)
+
+    async def fake_run_specialist(**kwargs: Any) -> tuple[str, list[dict[str, object]]]:
+        assert kwargs.get("specialist", {}).get("id") == "org.rh"
+        return "Via alias ihora.", []
+
+    monkeypatch.setattr(specialist_run, "run_regard", fake_run_specialist)
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc5c")
+    result = await tool.function(ctx, specialist_id="ihora", task="Lister absences", mode="regard")
+    assert result["specialist_id"] == "org.rh"
+    assert result["content"] == "Via alias ihora."
+
+
+def test_resolve_specialist_by_connector(plugin_dir: Path) -> None:
+    _install_managed_specialist_catalog(plugin_dir)
+    matched = storage.resolve_specialist_by_connector(plugin_dir, "ihora")
+    assert len(matched) == 1
+    assert matched[0]["id"] == "org.rh"
+    assert storage.resolve_specialist_by_connector(plugin_dir, "unknown") == []
 
 
 @pytest.mark.asyncio
@@ -432,9 +505,10 @@ async def test_resolve_specialists_registry_fail_closed(
 
 
 @pytest.mark.asyncio
-async def test_summon_specialist_rejects_builtin_persona_id(plugin_dir: Path) -> None:
-    from pydantic_ai.exceptions import ModelRetry
-
+async def test_summon_specialist_builtin_persona_id_with_empty_catalog(
+    plugin_dir: Path,
+) -> None:
+    """Sans catalogue syncé, même « 01 » renvoie l'erreur structurée catalogue vide."""
     deps = ToolDeps(
         context=ToolContext(
             tenant_id="t",
@@ -452,6 +526,34 @@ async def test_summon_specialist_rejects_builtin_persona_id(plugin_dir: Path) ->
     agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
     tool = agent._function_toolset.tools["summon_specialist"]
     ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc6")
+    result = await tool.function(ctx, specialist_id="01", task="Test")
+    assert result["error"] == "no_business_agents_synced"
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_rejects_builtin_persona_id_when_catalog_present(
+    plugin_dir: Path,
+) -> None:
+    from pydantic_ai.exceptions import ModelRetry
+
+    _install_managed_specialist_catalog(plugin_dir)
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc6b")
     with pytest.raises(ModelRetry, match="01"):
         await tool.function(ctx, specialist_id="01", task="Test")
 

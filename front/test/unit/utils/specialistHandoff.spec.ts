@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
   applyPersonasOpinionFromToolResult,
+  appendSpecialistHandoffThinking,
+  appendSpecialistHandoffToken,
   createRunningSpecialistHandoff,
+  endSpecialistHandoffThinking,
   filterPartsHidingPerspectiveTools,
   initStreamingPersonasOpinion,
   isPerspectiveHandoffTool,
@@ -12,6 +15,7 @@ import {
   rehydratePerspectiveCards,
   shouldHidePerspectiveToolCall,
   toolResultToSpecialistHandoff,
+  upsertSpecialistNestedTool,
 } from '@utils/specialistHandoff';
 import type { ChatMessage, ChatToolCall } from '#types';
 
@@ -125,6 +129,26 @@ describe('specialistHandoff utils', () => {
     expect(card).toMatchObject({
       specialistId: 'rh',
       status: 'error',
+      streaming: false,
+    });
+  });
+
+  it('convertit un résultat structuré avec error en carte erreur', () => {
+    const card = toolResultToSpecialistHandoff(
+      'tc1',
+      { specialist_id: 'org.rh', task: 'Analyser', mode: 'regard' },
+      {
+        specialist_id: 'org.rh',
+        specialist_name: 'org.rh',
+        mode: 'regard',
+        content: 'Aucun agent métier synchronisé.',
+        error: 'no_business_agents_synced',
+      },
+    );
+    expect(card).toMatchObject({
+      specialistId: 'org.rh',
+      status: 'error',
+      content: 'Aucun agent métier synchronisé.',
       streaming: false,
     });
   });
@@ -372,5 +396,29 @@ describe('specialistHandoff utils', () => {
     );
     expect(parts).toHaveLength(1);
     expect(parts[0].type).toBe('text');
+  });
+
+  it('appendSpecialistHandoffToken et thinking préservent id handoff', () => {
+    const card = createRunningSpecialistHandoff('tc1', {
+      specialist_id: 'rh',
+      task: 'Analyser',
+      mode: 'regard',
+    });
+    const withToken = appendSpecialistHandoffToken(card, 'Hello');
+    const withThinking = appendSpecialistHandoffThinking(withToken, 'Réflexion');
+    const withDone = endSpecialistHandoffThinking(withThinking);
+    const withTool = upsertSpecialistNestedTool(withDone, {
+      id: 'nested-1',
+      name: 'managed__ihora__list_absences',
+      status: 'running',
+    });
+
+    expect(withTool.id).toBe(card.id);
+    expect(withTool.content).toBe('Hello');
+    expect(withTool.thinking).toBe('Réflexion');
+    expect(withTool.thinkingDone).toBe(true);
+    expect(withTool.nestedTools).toEqual([
+      expect.objectContaining({ id: 'nested-1', status: 'running' }),
+    ]);
   });
 });

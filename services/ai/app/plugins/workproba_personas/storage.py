@@ -285,6 +285,11 @@ def _specialist_index(plugin_data_dir: Path) -> dict[str, JsonDict]:
     return index
 
 
+def list_managed_specialists(plugin_data_dir: Path) -> list[JsonDict]:
+    """Liste les agents métier du catalogue managé actif."""
+    return list(_specialist_index(plugin_data_dir).values())
+
+
 def resolve_specialists(plugin_data_dir: Path, specialist_ids: list[str]) -> list[JsonDict]:
     """Résout des ids agents métier depuis le registry managé uniquement."""
     try:
@@ -297,6 +302,29 @@ def resolve_specialists(plugin_data_dir: Path, specialist_ids: list[str]) -> lis
         return resolved
     except Exception:  # noqa: BLE001
         return []
+
+
+def resolve_specialist_by_connector(
+    plugin_data_dir: Path,
+    connector_id: str,
+) -> list[JsonDict]:
+    """Résout les agents métier dont le panel référence un connecteur (match exact)."""
+    matched: list[JsonDict] = []
+    for specialist in list_managed_specialists(plugin_data_dir):
+        tools = specialist.get("tools")
+        if not isinstance(tools, dict):
+            continue
+        allowed = tools.get("allowed")
+        if not isinstance(allowed, list):
+            continue
+        for entry in allowed:
+            if not isinstance(entry, dict):
+                continue
+            entry_connector = entry.get("connector_id")
+            if entry_connector == connector_id:
+                matched.append(specialist)
+                break
+    return matched
 
 
 def _safe_object_id(object_id: str) -> bool:

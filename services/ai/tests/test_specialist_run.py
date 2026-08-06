@@ -321,15 +321,40 @@ async def test_run_regard_returns_degraded_tools_when_connector_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    async def fake_run(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
-        _ = (self, user_prompt, deps, kwargs)
-        return type("R", (), {"output": "Avis specialist."})()
+    class _FakeRun:
+        def __init__(self) -> None:
+            self.result = type("R", (), {"output": "Avis specialist."})()
+            self.ctx = object()
+            self._done = False
 
-    def fake_build_regard_agent(**kwargs):  # type: ignore[no-untyped-def]
+        async def __aenter__(self) -> "_FakeRun":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        def __aiter__(self) -> "_FakeRun":
+            return self
+
+        async def __anext__(self) -> object:
+            if self._done:
+                raise StopAsyncIteration
+            self._done = True
+            return object()
+
+    class _FakeAgent:
+        def iter(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+            _ = (user_prompt, deps, kwargs)
+            return _FakeRun()
+
+    def fake_build_specialist_agent(**kwargs):  # type: ignore[no-untyped-def]
         _ = kwargs
-        return type("A", (), {"run": fake_run})()
+        return _FakeAgent()
 
-    monkeypatch.setattr(specialist_run, "build_specialist_agent", fake_build_regard_agent)
+    monkeypatch.setattr(specialist_run, "build_specialist_agent", fake_build_specialist_agent)
+    monkeypatch.setattr(specialist_run.Agent, "is_model_request_node", staticmethod(lambda _n: False))
+    monkeypatch.setattr(specialist_run.Agent, "is_call_tools_node", staticmethod(lambda _n: False))
+    monkeypatch.setattr(specialist_run.Agent, "is_end_node", staticmethod(lambda _n: True))
 
     personas_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_PERSONAS
     personas_dir.mkdir(parents=True)
@@ -926,3 +951,163 @@ async def test_regard_toctou_effect_change_requires_gate(
             ctx,
             **{"from": "2026-01-01", "to": "2026-01-31", "email": "a@b.c"},
         )
+
+
+@pytest.mark.asyncio
+async def test_run_specialist_puts_scoped_events_in_queue(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from app.schemas import (
+        ThinkingDeltaEvent,
+        TokenEvent,
+        ToolCallResultEvent,
+        ToolCallStartEvent,
+    )
+
+    class _FakeModelNode:
+        def stream(self, ctx):  # type: ignore[no-untyped-def]
+            _ = ctx
+
+            class _Ctx:
+                async def __aenter__(self_nonlocal):  # type: ignore[no-untyped-def]
+                    return object()
+
+                async def __aexit__(self_nonlocal, *args: object) -> None:
+                    return None
+
+            return _Ctx()
+
+    model_node = _FakeModelNode()
+    tool_node = object()
+    end_node = object()
+
+    async def fake_map_model_stream_events(
+        stream,
+        *,
+        model_round: int = 0,
+        parent_tool_call_id: str | None = None,
+    ):
+        _ = (stream, model_round)
+        yield TokenEvent(content="Hello", parent_tool_call_id=parent_tool_call_id)
+        yield ThinkingDeltaEvent(
+            thinking_id="think-0-0",
+            content="Reason",
+            parent_tool_call_id=parent_tool_call_id,
+        )
+
+    async def fake_iter_nested_tool_stream(
+        node,
+        ctx,
+        *,
+        locale: str,
+        parent_tool_call_id: str | None = None,
+    ):
+        _ = (node, ctx, locale)
+        yield ToolCallStartEvent(
+            tool_call_id="nested-1",
+            tool_name="managed__ihora__list_absences",
+            parent_tool_call_id=parent_tool_call_id,
+        )
+        yield ToolCallResultEvent(
+            tool_call_id="nested-1",
+            tool_name="managed__ihora__list_absences",
+            result={"ok": True},
+            parent_tool_call_id=parent_tool_call_id,
+        )
+
+    class _FakeRun:
+        def __init__(self) -> None:
+            self.result = type("R", (), {"output": "Specialist output"})()
+            self.ctx = object()
+            self._nodes = [model_node, tool_node, end_node]
+            self._index = 0
+
+        async def __aenter__(self) -> "_FakeRun":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        def __aiter__(self) -> "_FakeRun":
+            return self
+
+        async def __anext__(self) -> object:
+            if self._index >= len(self._nodes):
+                raise StopAsyncIteration
+            node = self._nodes[self._index]
+            self._index += 1
+            return node
+
+    class _FakeAgent:
+        def iter(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+            _ = (user_prompt, deps, kwargs)
+            return _FakeRun()
+
+    def fake_build_specialist_agent(**kwargs):  # type: ignore[no-untyped-def]
+        _ = kwargs
+        return _FakeAgent()
+
+    monkeypatch.setattr(specialist_run, "build_specialist_agent", fake_build_specialist_agent)
+    monkeypatch.setattr(
+        "app.agent.loop.map_model_stream_events",
+        fake_map_model_stream_events,
+    )
+    monkeypatch.setattr(
+        "app.agent.loop.iter_nested_tool_stream",
+        fake_iter_nested_tool_stream,
+    )
+    monkeypatch.setattr(
+        specialist_run.Agent,
+        "is_model_request_node",
+        staticmethod(lambda node: node is model_node),
+    )
+    monkeypatch.setattr(
+        specialist_run.Agent,
+        "is_call_tools_node",
+        staticmethod(lambda node: node is tool_node),
+    )
+    monkeypatch.setattr(
+        specialist_run.Agent,
+        "is_end_node",
+        staticmethod(lambda node: node is end_node),
+    )
+
+    personas_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_PERSONAS
+    personas_dir.mkdir(parents=True)
+    specialist = _sample_specialist_with_tools()
+    event_queue: asyncio.Queue = asyncio.Queue()
+    deps = specialist_run.build_regard_tool_deps(
+        plugins_root=personas_dir.parent,
+        locale="fr",
+        project_client=FakeProjectClient(),
+    )
+    deps.event_queue = event_queue
+
+    content, degraded = await specialist_run.run_specialist(
+        specialist=specialist,
+        task="Question",
+        context="",
+        settings=object(),
+        provider_set=None,
+        locale="fr",
+        cloud_plugin_data_dir=None,
+        tool_deps=deps,
+        plugins_root=personas_dir.parent,
+        parent_tool_call_id="parent-tc-1",
+    )
+
+    assert content == "Specialist output"
+    assert len(degraded) == 3
+    collected = []
+    while not event_queue.empty():
+        collected.append(await event_queue.get())
+
+    assert len(collected) == 4
+    assert all(event.parent_tool_call_id == "parent-tc-1" for event in collected)
+    assert isinstance(collected[0], TokenEvent)
+    assert isinstance(collected[1], ThinkingDeltaEvent)
+    assert isinstance(collected[2], ToolCallStartEvent)
+    assert isinstance(collected[3], ToolCallResultEvent)

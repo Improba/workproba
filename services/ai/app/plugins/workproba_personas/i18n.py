@@ -19,6 +19,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "will": "Je vais déléguer à {name} ({mode})",
                 "cannot": "Je n'ai pas pu déléguer à l'agent métier",
                 "done": "J'ai délégué à {name} ({mode})",
+                "mode_regard": "Regard",
+                "mode_operative": "Action",
             },
             "simulate_meeting": {
                 "will": "Je vais lancer une réunion avec {names} sur « {topic} »",
@@ -130,6 +132,19 @@ MESSAGES: dict[str, dict[str, Any]] = {
         "errors": {
             "personas_not_found": "Personas introuvables : {ids}",
             "specialist_not_found": "Agent métier introuvable : {id}",
+            "specialist_not_found_with_available": (
+                "Agent métier introuvable : {id}. Agents disponibles : {available}. "
+                "N'utilisez pas l'id connecteur ; utilisez l'id agent catalogue."
+            ),
+            "specialist_none_available": "(aucun)",
+            "specialist_connector_ambiguous": (
+                "Plusieurs agents correspondent au connecteur « {id} » : {candidates}. "
+                "Utilisez l'id agent catalogue, pas l'id connecteur."
+            ),
+            "no_business_agents_synced": (
+                "Aucun agent métier synchronisé dans cet espace. Synchronisez le catalogue "
+                "agents métier (Cloud / Capacités Regards) avant de déléguer."
+            ),
             "invalid_specialist_mode": (
                 "Mode de délégation invalide : {mode}. Utilisez « regard » ou « operative »."
             ),
@@ -138,6 +153,39 @@ MESSAGES: dict[str, dict[str, Any]] = {
         },
         "specialist_run": {
             "effect_not_read": "Tool {tool} refusé : lecture seule en mode Regard.",
+        },
+        "prompt": {
+            "delegation": {
+                "header": "Agents métier disponibles (catalogue org) :",
+                "rule_connector_actions": (
+                    "Pour toute action connecteur (Ihora, saisie de temps, absences, etc.) : "
+                    "`summon_specialist(specialist_id, task, mode=...)` avec l'id catalogue "
+                    "(ex. org.rh), JAMAIS l'id connecteur ni le persona builtin « 01 »."
+                ),
+                "rule_modes": (
+                    "Lecture seule : mode `regard` ; écriture / saisie / modification : "
+                    "mode `operative`."
+                ),
+                "rule_no_managed": (
+                    "Ne jamais appeler `managed_*` / `invoke_managed_connector` directement "
+                    "(réservés au run agent métier)."
+                ),
+                "rule_no_simulate": (
+                    "Ne pas simuler une action connecteur ; si aucun agent ne couvre le besoin, "
+                    "le dire clairement."
+                ),
+                "rule_ask_personas": (
+                    "`ask_personas` = avis LLM sans panel connecteurs ; distinct des agents "
+                    "métier catalogue."
+                ),
+                "connectors_suffix": "[connecteurs: {connectors}]",
+                "empty": (
+                    "Aucun agent métier synchronisé dans cet espace. Ne pas appeler "
+                    "`summon_specialist` avec un id inventé (org.rh, ihora, …). Indiquer à "
+                    "l'utilisateur de synchroniser le catalogue agents métier (Cloud / "
+                    "Capacités Regards)."
+                ),
+            },
         },
     },
     "en": {
@@ -154,6 +202,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "will": "I will delegate to {name} ({mode})",
                 "cannot": "I could not delegate to the business agent",
                 "done": "I delegated to {name} ({mode})",
+                "mode_regard": "Regard",
+                "mode_operative": "Action",
             },
             "simulate_meeting": {
                 "will": "I will start a meeting with {names} about « {topic} »",
@@ -265,6 +315,19 @@ MESSAGES: dict[str, dict[str, Any]] = {
         "errors": {
             "personas_not_found": "Personas not found: {ids}",
             "specialist_not_found": "Business agent not found: {id}",
+            "specialist_not_found_with_available": (
+                "Business agent not found: {id}. Available agents: {available}. "
+                "Do not use the connector id; use the catalog agent id."
+            ),
+            "specialist_none_available": "(none)",
+            "specialist_connector_ambiguous": (
+                "Multiple agents match connector « {id} »: {candidates}. "
+                "Use the catalog agent id, not the connector id."
+            ),
+            "no_business_agents_synced": (
+                "No business agents synced in this space. Sync the business agent catalog "
+                "(Cloud / Regards Capabilities) before delegating."
+            ),
             "invalid_specialist_mode": (
                 "Invalid delegation mode: {mode}. Use « regard » or « operative »."
             ),
@@ -273,6 +336,37 @@ MESSAGES: dict[str, dict[str, Any]] = {
         },
         "specialist_run": {
             "effect_not_read": "Tool {tool} denied: read-only in Regard mode.",
+        },
+        "prompt": {
+            "delegation": {
+                "header": "Available business agents (org catalog):",
+                "rule_connector_actions": (
+                    "For any connector action (Ihora, timesheets, absences, etc.): use "
+                    "`summon_specialist(specialist_id, task, mode=...)` with the catalog id "
+                    "(e.g. org.rh), NEVER the connector id or builtin persona \"01\"."
+                ),
+                "rule_modes": (
+                    "Read-only: `regard` mode; writes / data entry / edits: `operative` mode."
+                ),
+                "rule_no_managed": (
+                    "Never call `managed_*` / `invoke_managed_connector` directly (reserved "
+                    "for the business agent run)."
+                ),
+                "rule_no_simulate": (
+                    "Do not simulate a connector action; if no agent covers the need, say "
+                    "so clearly."
+                ),
+                "rule_ask_personas": (
+                    "`ask_personas` = LLM opinions without connector panel; distinct from "
+                    "catalog business agents."
+                ),
+                "connectors_suffix": "[connectors: {connectors}]",
+                "empty": (
+                    "No business agents synced in this space. Do not call `summon_specialist` "
+                    "with a made-up id (org.rh, ihora, …). Tell the user to sync the business "
+                    "agent catalog (Cloud / Regards Capabilities)."
+                ),
+            },
         },
     },
 }

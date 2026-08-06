@@ -12,6 +12,7 @@ et le modèle est informé pour s'adapter, comme le faisait l'ancien
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 from dataclasses import dataclass, field
@@ -94,6 +95,7 @@ class ToolDeps:
     confirmation_gate: ConfirmationGate | None = None
     plan_gate: PlanGate | None = None
     web_search_calls: int = 0
+    event_queue: asyncio.Queue[Any] | None = None
 
 
 def _retry(exc: Exception) -> ModelRetry:

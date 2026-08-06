@@ -16,6 +16,9 @@ qui mappe explicitement les chunks Mistral :
 
 Quand `delta.content` redevient une chaîne (phase de réponse), on délègue au
 comportement standard de `OpenAIStreamedResponse`.
+
+En non-stream, `message.content` peut aussi être une liste de chunks : on
+normalise avant validation Pydantic.
 """
 
 from __future__ import annotations
@@ -23,6 +26,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
+from openai.types import chat as chat_types
 from pydantic_ai._parts_manager import ModelResponsePartsManager
 from pydantic_ai.messages import ModelResponseStreamEvent
 from pydantic_ai.models.openai import OpenAIChatModel, OpenAIStreamedResponse
@@ -40,6 +44,29 @@ def _extract_thinking_text(thinking_field: Any) -> str:
         for inner in thinking_field
         if isinstance(inner, dict) and inner.get("type") == "text"
     )
+
+
+def normalize_mistral_content_list(
+    content: list[Any],
+) -> tuple[str, str | None]:
+    """Extrait le texte de réponse et le raisonnement d'une liste de chunks Mistral."""
+    thinking_parts: list[str] = []
+    text_parts: list[str] = []
+    for chunk in content:
+        if not isinstance(chunk, dict):
+            continue
+        chunk_type = chunk.get("type")
+        if chunk_type == "thinking":
+            thinking_text = _extract_thinking_text(chunk.get("thinking"))
+            if thinking_text:
+                thinking_parts.append(thinking_text)
+        elif chunk_type == "text":
+            text = chunk.get("text") or ""
+            if text:
+                text_parts.append(text)
+    thinking = "".join(thinking_parts).strip() or None
+    response_text = "".join(text_parts)
+    return response_text, thinking
 
 
 def iter_mistral_chunk_events(
@@ -102,3 +129,22 @@ class MistralChatModel(OpenAIChatModel):
     @property
     def _streamed_response_cls(self) -> type[OpenAIStreamedResponse]:
         return MistralStreamedResponse
+
+    def _validate_completion(self, response: chat_types.ChatCompletion) -> Any:
+        data = response.model_dump()
+        for choice in data.get("choices", []):
+            message = choice.get("message")
+            if not isinstance(message, dict):
+                continue
+            content = message.get("content")
+            if not isinstance(content, list):
+                continue
+            response_text, thinking = normalize_mistral_content_list(content)
+            message["content"] = response_text or None
+            if thinking and not message.get("reasoning_content") and not message.get("reasoning"):
+                message["reasoning_content"] = thinking
+        # pydantic-ai hook contract: validated alias of openai ChatCompletion
+        # (private symbol; public openai.ChatCompletion rejects list content).
+        from pydantic_ai.models.openai import _ChatCompletion
+
+        return _ChatCompletion.model_validate(data)

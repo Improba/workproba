@@ -432,10 +432,11 @@ def test_build_managed_connectors_agent_prompt() -> None:
     )
     assert t("fr", "tools.managed_connectors_header") in text
     assert t("fr", "tools.managed_connectors_catalog_hint") in text
+    assert "summon_specialist" in text
     assert "ihora" in text
     assert "Ihora" in text
     assert t("fr", "tools.managed_connectors_enabled", id="ihora", name="Ihora") in text
-    assert t("fr", "tools.managed_connectors_ihora_users_hint") in text
+    assert t("fr", "tools.managed_connectors_ihora_users_hint") not in text
     assert t("fr", "tools.managed_connectors_disabled", id="echo", name="Echo") in text
 
 

@@ -5,8 +5,9 @@ import {
   deriveConnectorSuffix,
   extractManagedConnector,
   groupMessageParts,
+  insertPerspectiveCardsInBlocks,
 } from '@utils/activityGroup';
-import type { ChatMessagePart, ChatToolCall } from '#types';
+import type { ChatMessage, ChatMessagePart, ChatToolCall } from '#types';
 
 describe('groupMessageParts', () => {
   it('groupe un thinking seul en activity_group', () => {
@@ -198,5 +199,70 @@ describe('computeActivityGroupStats', () => {
     );
 
     expect(stats.hasRunning).toBe(true);
+  });
+});
+
+describe('insertPerspectiveCardsInBlocks', () => {
+  it('insère le handoff entre le texte pré et post délégation', () => {
+    const parts: ChatMessagePart[] = [
+      { type: 'text', id: 't-before', content: 'Je délègue.' },
+      { type: 'tool_call', id: 'tc-part', toolCallId: 'tc-summon' },
+      {
+        type: 'text',
+        id: 't-after',
+        content: 'Peux-tu confirmer la date ?',
+      },
+    ];
+    const handoff = {
+      id: 'h1',
+      toolCallId: 'tc-summon',
+      specialistId: 'org.rh',
+      specialistName: 'Agent RH',
+      mode: 'operative' as const,
+      task: 'Saisie',
+      content: 'OK',
+      status: 'done' as const,
+    };
+    const message = {
+      id: 'm1',
+      role: 'assistant' as const,
+      content: '',
+      createdAt: '',
+      toolCalls: [
+        {
+          id: 'tc-summon',
+          name: 'summon_specialist',
+          status: 'success' as const,
+          args: {},
+        },
+      ],
+      specialistHandoff: handoff,
+    } satisfies Partial<ChatMessage> as ChatMessage;
+
+    const filterParts = (
+      slice: ChatMessagePart[],
+      msg: ChatMessage,
+    ): ChatMessagePart[] =>
+      slice.filter((part) => {
+        if (part.type !== 'tool_call') return true;
+        const tc = msg.toolCalls?.find((t) => t.id === part.toolCallId);
+        return !(tc?.name === 'summon_specialist' && msg.specialistHandoff);
+      });
+
+    const blocks = insertPerspectiveCardsInBlocks(parts, message, filterParts);
+    expect(blocks.map((b) => b.kind)).toEqual([
+      'text',
+      'specialist_handoff',
+      'text',
+    ]);
+    if (blocks[0].kind === 'text') {
+      expect(blocks[0].part.content).toBe('Je délègue.');
+    }
+    if (blocks[1].kind === 'specialist_handoff') {
+      expect(blocks[1].card.id).toBe('h1');
+    }
+    if (blocks[2].kind === 'text') {
+      expect(blocks[2].part.content).toBe('Peux-tu confirmer la date ?');
+    }
   });
 });

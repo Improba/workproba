@@ -327,7 +327,12 @@ def build_human_summary(
 
     if tool_name == "summon_specialist":
         name = str(arguments.get("name") or arguments.get("specialist_id") or "")
-        mode = str(arguments.get("mode") or "regard")
+        mode_raw = str(arguments.get("mode") or "regard").strip().lower()
+        mode_labels = {
+            "regard": t(locale, "human.summon_specialist.mode_regard"),
+            "operative": t(locale, "human.summon_specialist.mode_operative"),
+        }
+        mode = mode_labels.get(mode_raw, mode_raw)
         if is_result:
             if is_error:
                 return t(locale, "human.summon_specialist.cannot")

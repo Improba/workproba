@@ -292,22 +292,26 @@ class UtilitySummarizeResponse(BaseModel):
 class TokenEvent(BaseModel):
     type: Literal["token"] = "token"
     content: str
+    parent_tool_call_id: str | None = None
 
 
 class ThinkingStartEvent(BaseModel):
     type: Literal["thinking_start"] = "thinking_start"
     thinking_id: str
+    parent_tool_call_id: str | None = None
 
 
 class ThinkingDeltaEvent(BaseModel):
     type: Literal["thinking_delta"] = "thinking_delta"
     thinking_id: str
     content: str
+    parent_tool_call_id: str | None = None
 
 
 class ThinkingEndEvent(BaseModel):
     type: Literal["thinking_end"] = "thinking_end"
     thinking_id: str
+    parent_tool_call_id: str | None = None
 
 
 class ToolCallStartEvent(BaseModel):
@@ -316,6 +320,7 @@ class ToolCallStartEvent(BaseModel):
     tool_name: str
     arguments: JsonDict = Field(default_factory=dict)
     human_summary: str = ""
+    parent_tool_call_id: str | None = None
 
 
 class ToolCallResultEvent(BaseModel):
@@ -325,6 +330,7 @@ class ToolCallResultEvent(BaseModel):
     result: JsonDict = Field(default_factory=dict)
     is_error: bool = False
     human_summary: str = ""
+    parent_tool_call_id: str | None = None
 
 
 class ConfirmationPreparingEvent(BaseModel):

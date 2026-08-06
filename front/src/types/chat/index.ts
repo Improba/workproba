@@ -327,6 +327,7 @@ export type ChatStreamEventType =
 
 export interface ChatStreamTokenData {
   token: string;
+  parentToolCallId?: string | null;
 }
 
 export interface ChatStreamTurnStartData {
@@ -349,15 +350,18 @@ export interface StreamCorrelation {
 
 export interface ChatStreamThinkingStartData {
   thinkingId: string;
+  parentToolCallId?: string | null;
 }
 
 export interface ChatStreamThinkingDeltaData {
   thinkingId: string;
   content: string;
+  parentToolCallId?: string | null;
 }
 
 export interface ChatStreamThinkingEndData {
   thinkingId: string;
+  parentToolCallId?: string | null;
 }
 
 export interface ChatStreamToolCallStartData {
@@ -366,6 +370,7 @@ export interface ChatStreamToolCallStartData {
   args?: Record<string, unknown>;
   humanSummary?: string;
   filePath?: string;
+  parentToolCallId?: string | null;
 }
 
 export interface ChatStreamToolCallResultData {
@@ -376,6 +381,7 @@ export interface ChatStreamToolCallResultData {
   status?: ToolCallStatus;
   humanSummary?: string;
   filePath?: string;
+  parentToolCallId?: string | null;
 }
 
 export interface ChatStreamConfirmationRequestData {
@@ -517,6 +523,13 @@ export type SpecialistHandoffMode = 'regard' | 'operative';
 
 export type SpecialistHandoffStatus = 'running' | 'pending' | 'done' | 'error';
 
+export interface SpecialistNestedTool {
+  id: string;
+  name: string;
+  humanSummary?: string;
+  status: 'running' | 'success' | 'error';
+}
+
 /** Carte de restitution après délégation à un agent métier. */
 export interface SpecialistHandoffCard {
   id: string;
@@ -528,6 +541,9 @@ export interface SpecialistHandoffCard {
   mode: SpecialistHandoffMode;
   task: string;
   content: string;
+  thinking?: string;
+  thinkingDone?: boolean;
+  nestedTools?: SpecialistNestedTool[];
   degradedTools?: string[];
   status: SpecialistHandoffStatus;
   streaming?: boolean;

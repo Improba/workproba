@@ -2143,6 +2143,222 @@ describe('useChatStream — browser tool results', () => {
     });
   });
 
+  it('applyStreamEvent: events scoped parentToolCallId alimentent la carte handoff', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-handoff',
+        name: 'summon_specialist',
+        args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_delta',
+      data: {
+        thinkingId: 'think-0-0',
+        content: 'Je réfléchis',
+        parentToolCallId: 'tc-handoff',
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'token',
+      data: { token: 'Bonjour', parentToolCallId: 'tc-handoff' },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'nested-1',
+        name: 'managed__ihora__list_absences',
+        parentToolCallId: 'tc-handoff',
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'nested-1',
+        name: 'managed__ihora__list_absences',
+        status: 'success',
+        parentToolCallId: 'tc-handoff',
+      },
+    });
+
+    expect(messages[0].specialistHandoff).toMatchObject({
+      thinking: 'Je réfléchis',
+      content: 'Bonjour',
+      nestedTools: [
+        expect.objectContaining({
+          id: 'nested-1',
+          status: 'success',
+        }),
+      ],
+    });
+    expect(messages[0].parts ?? []).toHaveLength(1);
+    expect(messages[0].toolCalls ?? []).toHaveLength(1);
+  });
+
+  it('applyStreamEvent: final summon_specialist préserve thinking et nestedTools streamés', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-handoff',
+        name: 'summon_specialist',
+        args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'thinking_delta',
+      data: {
+        thinkingId: 'think-0-0',
+        content: 'Je réfléchis',
+        parentToolCallId: 'tc-handoff',
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'token',
+      data: { token: 'Bonjour', parentToolCallId: 'tc-handoff' },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'nested-1',
+        name: 'managed__ihora__list_absences',
+        parentToolCallId: 'tc-handoff',
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'nested-1',
+        name: 'managed__ihora__list_absences',
+        status: 'success',
+        parentToolCallId: 'tc-handoff',
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'tc-handoff',
+        name: 'summon_specialist',
+        result: {
+          specialist_id: 'rh',
+          specialist_name: 'Agent RH',
+          mode: 'regard',
+          content: 'Synthèse finale',
+        },
+      },
+    });
+
+    expect(messages[0].specialistHandoff).toMatchObject({
+      thinking: 'Je réfléchis',
+      content: 'Synthèse finale',
+      status: 'done',
+      nestedTools: [
+        expect.objectContaining({
+          id: 'nested-1',
+          status: 'success',
+        }),
+      ],
+    });
+  });
+
+  it('applyStreamEvent: nested tool_call_result efface pendingConfirmation orpheline', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+        toolCalls: [
+          {
+            id: 'tc-handoff',
+            name: 'summon_specialist',
+            status: 'running',
+            args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+          },
+        ],
+        specialistHandoff: createRunningSpecialistHandoff('tc-handoff', {
+          specialist_id: 'rh',
+          task: 'Analyser',
+          mode: 'regard',
+        }),
+        pendingConfirmation: {
+          confirmationId: 'cf_nested',
+          toolCallId: 'nested-1',
+          toolName: 'managed__ihora__list_absences',
+          action: 'read',
+          proposedPath: '',
+          humanSummary: 'Lire absences',
+        },
+      },
+    ];
+
+    messages[0].specialistHandoff = {
+      ...messages[0].specialistHandoff!,
+      status: 'pending',
+      streaming: false,
+    };
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'nested-1',
+        name: 'managed__ihora__list_absences',
+        status: 'success',
+        parentToolCallId: 'tc-handoff',
+      },
+    });
+
+    expect(messages[0].pendingConfirmation).toBeNull();
+    expect(messages[0].specialistHandoff).toMatchObject({
+      status: 'running',
+      streaming: true,
+      nestedTools: [
+        expect.objectContaining({
+          id: 'nested-1',
+          status: 'success',
+        }),
+      ],
+    });
+  });
+
+  it('mapPythonSseEvent propage parent_tool_call_id', () => {
+    const mapped = mapPythonSseEvent({
+      type: 'token',
+      data: { content: 'x', parent_tool_call_id: 'parent-1' },
+    });
+    expect(mapped).toEqual({
+      type: 'token',
+      data: { token: 'x', parentToolCallId: 'parent-1' },
+    });
+  });
+
   it('applyStreamEvent: ask_personas attache la carte sur le message assistant', () => {
     const messages: ChatMessage[] = [
       {

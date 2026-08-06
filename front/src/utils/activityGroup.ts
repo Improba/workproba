@@ -1,8 +1,11 @@
 import type {
+  ChatMessage,
   ChatMessagePart,
   ChatThinkingPart,
   ChatToolCall,
   ChatToolCallPart,
+  PersonasOpinionCard,
+  SpecialistHandoffCard,
 } from '#types';
 
 export interface ActivityGroupData {
@@ -14,7 +17,9 @@ export interface ActivityGroupData {
 
 export type MessageRenderBlock =
   | { kind: 'text'; part: Extract<ChatMessagePart, { type: 'text' }> }
-  | { kind: 'activity_group'; group: ActivityGroupData };
+  | { kind: 'activity_group'; group: ActivityGroupData }
+  | { kind: 'specialist_handoff'; card: SpecialistHandoffCard }
+  | { kind: 'personas_opinion'; card: PersonasOpinionCard };
 
 /**
  * Regroupe les runs consécutifs `thinking` | `tool_call` entre segments `text`
@@ -57,6 +62,82 @@ export function groupMessageParts(parts: ChatMessagePart[]): MessageRenderBlock[
           .map((p) => p.toolCallId),
       },
     });
+  }
+
+  return result;
+}
+
+/**
+ * Insère les cartes handoff / opinions à la position de leur tool_call dans le
+ * flux (plutôt qu'en bas du message), pour que le texte assistant post-délégation
+ * apparaisse sous l'encart.
+ */
+export function insertPerspectiveCardsInBlocks(
+  parts: ChatMessagePart[],
+  message: ChatMessage,
+  filterParts: (parts: ChatMessagePart[], message: ChatMessage) => ChatMessagePart[],
+): MessageRenderBlock[] {
+  const toolCalls = message.toolCalls ?? [];
+  const handoff = message.specialistHandoff;
+  const opinion = message.personasOpinion;
+
+  const handoffIdx =
+    handoff != null
+      ? parts.findIndex(
+          (part) =>
+            part.type === 'tool_call' && part.toolCallId === handoff.toolCallId,
+        )
+      : -1;
+
+  const opinionToolCallId =
+    opinion != null
+      ? toolCalls.find((tc) => tc.name === 'ask_personas')?.id
+      : undefined;
+  const opinionIdx =
+    opinion != null && opinionToolCallId
+      ? parts.findIndex(
+          (part) =>
+            part.type === 'tool_call' && part.toolCallId === opinionToolCallId,
+        )
+      : -1;
+
+  type Marker = { index: number; block: MessageRenderBlock };
+  const markers: Marker[] = [];
+  if (handoff != null && handoffIdx >= 0) {
+    markers.push({
+      index: handoffIdx,
+      block: { kind: 'specialist_handoff', card: handoff },
+    });
+  }
+  if (opinion != null && opinionIdx >= 0) {
+    markers.push({
+      index: opinionIdx,
+      block: { kind: 'personas_opinion', card: opinion },
+    });
+  }
+  markers.sort((a, b) => a.index - b.index);
+
+  if (markers.length === 0) {
+    return groupMessageParts(filterParts(parts, message));
+  }
+
+  const result: MessageRenderBlock[] = [];
+  let cursor = 0;
+  for (const marker of markers) {
+    const slice = filterParts(parts.slice(cursor, marker.index), message);
+    result.push(...groupMessageParts(slice));
+    result.push(marker.block);
+    cursor = marker.index + 1;
+  }
+  const tail = filterParts(parts.slice(cursor), message);
+  result.push(...groupMessageParts(tail));
+
+  // Cartes sans part tool_call correspondante : fallback en fin de flux.
+  if (handoff != null && handoffIdx < 0) {
+    result.push({ kind: 'specialist_handoff', card: handoff });
+  }
+  if (opinion != null && opinionIdx < 0) {
+    result.push({ kind: 'personas_opinion', card: opinion });
   }
 
   return result;

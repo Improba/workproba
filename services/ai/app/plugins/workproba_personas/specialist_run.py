@@ -439,8 +439,11 @@ async def run_specialist(
     tool_deps: ToolDeps | None = None,
     ui_mode: str = "agent",
     plugins_root: Path | None = None,
+    parent_tool_call_id: str | None = None,
 ) -> tuple[str, list[JsonDict]]:
     """Exécute un tour SpecialistRun. Retourne (contenu, degraded_tools)."""
+    from app.agent.loop import iter_nested_tool_stream, map_model_stream_events
+
     effective_cloud_dir = cloud_plugin_data_dir
     if effective_cloud_dir is None and plugins_root is not None:
         effective_cloud_dir = resolve_cloud_plugin_data_dir(plugins_root / "workproba.personas")
@@ -465,6 +468,7 @@ async def run_specialist(
     if mode == "operative" and effective_deps.confirmation_gate is None:
         raise ValueError("operative_confirmation_gate_required")
 
+    event_queue = effective_deps.event_queue
     tool_filter = resolve_tool_filter(specialist, mode)
 
     system_prompt = build_specialist_system_prompt(
@@ -491,10 +495,35 @@ async def run_specialist(
         ui_mode=ui_mode,
         cloud_plugin_data_dir=effective_cloud_dir,
     )
-    result = await agent.run(user_prompt, deps=effective_deps)
-    output = getattr(result, "output", result)
-    content = output.strip() if isinstance(output, str) else str(output).strip()
-    return content, degraded
+
+    output = ""
+    async with agent.iter(user_prompt, deps=effective_deps) as run:
+        model_round = 0
+        async for node in run:
+            if Agent.is_model_request_node(node):
+                async with node.stream(run.ctx) as stream:
+                    async for event in map_model_stream_events(
+                        stream,
+                        model_round=model_round,
+                        parent_tool_call_id=parent_tool_call_id,
+                    ):
+                        if event_queue is not None:
+                            await event_queue.put(event)
+                model_round += 1
+            elif Agent.is_call_tools_node(node):
+                async for event in iter_nested_tool_stream(
+                    node,
+                    run.ctx,
+                    locale=locale,
+                    parent_tool_call_id=parent_tool_call_id,
+                ):
+                    if event_queue is not None:
+                        await event_queue.put(event)
+            elif Agent.is_end_node(node):
+                raw_output = run.result.output if run.result else ""
+                output = raw_output.strip() if isinstance(raw_output, str) else str(raw_output).strip()
+
+    return output, degraded
 
 
 async def run_regard(
@@ -510,6 +539,7 @@ async def run_regard(
     tool_deps: ToolDeps | None = None,
     ui_mode: str = "agent",
     plugins_root: Path | None = None,
+    parent_tool_call_id: str | None = None,
 ) -> tuple[str, list[JsonDict]]:
     """Exécute un tour Regard pour un agent métier. Retourne (contenu, degraded_tools)."""
     return await run_specialist(
@@ -525,6 +555,7 @@ async def run_regard(
         tool_deps=tool_deps,
         ui_mode=ui_mode,
         plugins_root=plugins_root,
+        parent_tool_call_id=parent_tool_call_id,
     )
 
 
@@ -541,6 +572,7 @@ async def run_operative(
     tool_deps: ToolDeps | None = None,
     ui_mode: str = "agent",
     plugins_root: Path | None = None,
+    parent_tool_call_id: str | None = None,
 ) -> tuple[str, list[JsonDict]]:
     """Exécute un tour opératoire (panel read+write, HAG obligatoire sur write)."""
     return await run_specialist(
@@ -556,4 +588,5 @@ async def run_operative(
         tool_deps=tool_deps,
         ui_mode=ui_mode,
         plugins_root=plugins_root,
+        parent_tool_call_id=parent_tool_call_id,
     )

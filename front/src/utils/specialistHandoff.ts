@@ -7,6 +7,7 @@ import type {
   SpecialistHandoffCard,
   SpecialistHandoffMode,
   SpecialistHandoffStatus,
+  SpecialistNestedTool,
 } from '#types';
 
 export const PERSPECTIVE_HANDOFF_TOOLS = ['ask_personas', 'summon_specialist'] as const;
@@ -122,6 +123,9 @@ export function toolResultToSpecialistHandoff(
   if (!result || typeof result !== 'object') return null;
   const payload = result as Record<string, unknown>;
   const name = String(payload.specialist_name ?? meta.name ?? specialistId).trim();
+  const payloadError = payload.error != null ? String(payload.error).trim() : '';
+  const content = String(payload.content ?? '').trim();
+  const hasStructuredError = payloadError.length > 0;
 
   return {
     id: createHandoffId(),
@@ -132,9 +136,9 @@ export function toolResultToSpecialistHandoff(
     avatarIcon: meta.avatarIcon,
     mode: normalizeHandoffMode(payload.mode ?? mode),
     task,
-    content: String(payload.content ?? '').trim(),
+    content,
     degradedTools: parseDegradedTools(payload.degraded_tools),
-    status: 'done' satisfies SpecialistHandoffStatus,
+    status: hasStructuredError ? 'error' : ('done' satisfies SpecialistHandoffStatus),
     streaming: false,
   };
 }
@@ -197,6 +201,56 @@ export function markSpecialistHandoffAsRunning(message: ChatMessage): void {
     ...handoff,
     status: 'running',
     streaming: true,
+  };
+}
+
+export function appendSpecialistHandoffToken(
+  card: SpecialistHandoffCard,
+  token: string,
+): SpecialistHandoffCard {
+  if (!token) return card;
+  return {
+    ...card,
+    content: card.content + token,
+    streaming: true,
+  };
+}
+
+export function appendSpecialistHandoffThinking(
+  card: SpecialistHandoffCard,
+  delta: string,
+): SpecialistHandoffCard {
+  if (!delta) return card;
+  return {
+    ...card,
+    thinking: (card.thinking ?? '') + delta,
+    thinkingDone: false,
+  };
+}
+
+export function endSpecialistHandoffThinking(
+  card: SpecialistHandoffCard,
+): SpecialistHandoffCard {
+  return {
+    ...card,
+    thinkingDone: true,
+  };
+}
+
+export function upsertSpecialistNestedTool(
+  card: SpecialistHandoffCard,
+  tool: SpecialistNestedTool,
+): SpecialistHandoffCard {
+  const nestedTools = [...(card.nestedTools ?? [])];
+  const index = nestedTools.findIndex((entry) => entry.id === tool.id);
+  if (index >= 0) {
+    nestedTools[index] = { ...nestedTools[index], ...tool };
+  } else {
+    nestedTools.push(tool);
+  }
+  return {
+    ...card,
+    nestedTools,
   };
 }
 
