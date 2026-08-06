@@ -645,12 +645,12 @@ async function onSyncRegards(): Promise<void> {
     notifyError(loadError.value ?? result.error, 'cloud.syncRegardsFailed');
     return;
   }
+  const personasDir = await getPluginDataDir(PERSONAS_PLUGIN_ID);
+  if (personasDir) {
+    await refreshPersonas(personasDir);
+  }
+  emit('regardsChanged');
   if (result.data.count > 0) {
-    const personasDir = await getPluginDataDir(PERSONAS_PLUGIN_ID);
-    if (personasDir) {
-      await refreshPersonas(personasDir);
-    }
-    emit('regardsChanged');
     Notify.create({
       message: t('cloud.syncRegardsSuccess', { count: result.data.count }),
       color: 'positive',

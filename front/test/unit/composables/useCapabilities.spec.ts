@@ -223,13 +223,13 @@ describe('useCapabilities', () => {
     expect(openSideChat).toHaveBeenCalledWith(PERSONAS_PLUGIN_ID);
   });
 
-  it('activateAndOpen workproba_cloud active uniquement le plugin cloud', async () => {
+  it('activateAndOpen workproba_cloud active le plugin cloud et ouvre le panneau', async () => {
     const { activateAndOpen } = useCapabilities();
     await activateAndOpen('workproba_cloud');
 
     expect(activatePlugin).toHaveBeenCalledWith(CLOUD_PLUGIN_ID);
     expect(activatePlugin).not.toHaveBeenCalledWith(PROJET_PLUGIN_ID);
-    expect(openRightPanel).not.toHaveBeenCalled();
+    expect(openRightPanel).toHaveBeenCalledWith('workproba.cloud:right_panel');
   });
 
   it('workproba_cloud est needs_setup si cloud actif mais non enrollé', () => {
@@ -248,7 +248,7 @@ describe('useCapabilities', () => {
     expect(getById('workproba_cloud')?.state.kind).toBe('active');
   });
 
-  it('open workproba_cloud n’ouvre pas de panneau latéral', () => {
+  it('open workproba_cloud ouvre le panneau cloud', () => {
     activePluginIds.value = [CLOUD_PLUGIN_ID];
     isEnrolled.value = true;
 
@@ -256,7 +256,7 @@ describe('useCapabilities', () => {
     open('workproba_cloud');
 
     expect(openSideChat).not.toHaveBeenCalled();
-    expect(openRightPanel).not.toHaveBeenCalled();
+    expect(openRightPanel).toHaveBeenCalledWith('workproba.cloud:right_panel');
   });
 
   it('deactivate workproba_cloud désactive uniquement le plugin cloud quand pas d’enfant actif', async () => {

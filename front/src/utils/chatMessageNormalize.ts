@@ -10,6 +10,7 @@ import type {
 } from '#types';
 import { normalizeChatErrorCode } from '#types';
 import { isCompactionMessageLike } from './compactionMessage';
+import { rehydratePerspectiveCards } from './specialistHandoff';
 
 const VALID_ROLES = new Set<ChatMessageRole>(['user', 'assistant', 'system']);
 const VALID_TOOL_STATUSES = new Set<ToolCallStatus>([
@@ -198,6 +199,10 @@ export function normalizeChatMessage(raw: unknown): ChatMessage | null {
 
   const error = normalizeError(raw.error);
   if (error) message.error = error;
+
+  if (message.role === 'assistant') {
+    rehydratePerspectiveCards(message);
+  }
 
   return message;
 }

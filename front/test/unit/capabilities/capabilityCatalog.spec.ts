@@ -30,6 +30,14 @@ describe('capabilityCatalog', () => {
     }
   });
 
+  it('workproba_cloud domicilie le panneau cloud dans le right panel', () => {
+    const cloud = getCapabilityDefinition('workproba_cloud');
+    expect(cloud?.primarySurface).toEqual({
+      type: 'right_panel',
+      tabKey: `${CLOUD_PLUGIN_ID}:right_panel`,
+    });
+  });
+
   it('expose le top-level et les enfants sous Workproba Cloud', () => {
     expect(getTopLevelCapabilities().map((cap) => cap.id)).toEqual([
       'workproba_cloud',

@@ -9,6 +9,7 @@ import {
   markRunningSpecialistHandoffAsError,
   markSpecialistHandoffAsPending,
   markSpecialistHandoffAsRunning,
+  rehydratePerspectiveCards,
   shouldHidePerspectiveToolCall,
   toolResultToSpecialistHandoff,
 } from '@utils/specialistHandoff';
@@ -39,6 +40,58 @@ describe('specialistHandoff utils', () => {
       createdAt: new Date().toISOString(),
     };
     expect(shouldHidePerspectiveToolCall(message, toolCall)).toBe(true);
+  });
+
+  it('ne masque pas summon_specialist pendant une confirmation en cours', () => {
+    const toolCall: ChatToolCall = {
+      id: 'tc1',
+      name: 'summon_specialist',
+      status: 'awaiting_confirmation',
+    };
+    const message: ChatMessage = {
+      id: 'm1',
+      role: 'assistant',
+      content: '',
+      specialistHandoff: createRunningSpecialistHandoff('tc1', {
+        specialist_id: 'rh',
+        task: 'Analyser le contrat',
+        mode: 'regard',
+      }),
+      pendingConfirmation: {
+        confirmationId: 'cf1',
+        toolCallId: 'tc1',
+        toolName: 'summon_specialist',
+        action: 'create',
+        proposedPath: '',
+        humanSummary: 'Déléguer',
+      },
+      createdAt: new Date().toISOString(),
+    };
+    expect(shouldHidePerspectiveToolCall(message, toolCall)).toBe(false);
+  });
+
+  it('ne masque pas summon_specialist pendant une préparation de confirmation', () => {
+    const toolCall: ChatToolCall = {
+      id: 'tc1',
+      name: 'summon_specialist',
+      status: 'pending_confirmation',
+    };
+    const message: ChatMessage = {
+      id: 'm1',
+      role: 'assistant',
+      content: '',
+      specialistHandoff: createRunningSpecialistHandoff('tc1', {
+        specialist_id: 'rh',
+        task: 'Analyser le contrat',
+        mode: 'regard',
+      }),
+      preparingConfirmation: {
+        toolCallId: 'tc1',
+        toolName: 'summon_specialist',
+      },
+      createdAt: new Date().toISOString(),
+    };
+    expect(shouldHidePerspectiveToolCall(message, toolCall)).toBe(false);
   });
 
   it('convertit le résultat summon_specialist en carte terminée', () => {
@@ -202,6 +255,103 @@ describe('specialistHandoff utils', () => {
     );
     expect(message.personasOpinion?.streaming).toBe(false);
     expect(message.personasOpinion?.opinions[0]?.personaName).toBe('Nathalie');
+  });
+
+  it('marque une opinion en erreur quand le résultat est malformé', () => {
+    const message: ChatMessage = {
+      id: 'm1',
+      role: 'assistant',
+      content: '',
+      personasOpinion: initStreamingPersonasOpinion('Budget ?'),
+      createdAt: new Date().toISOString(),
+    };
+    applyPersonasOpinionFromToolResult(message, { question: 'Budget ?' }, null);
+    expect(message.personasOpinion).toMatchObject({
+      question: 'Budget ?',
+      streaming: false,
+      error: true,
+    });
+  });
+
+  it('rehydrate une carte handoff terminée depuis les toolCalls', () => {
+    const message: ChatMessage = {
+      id: 'm1',
+      role: 'assistant',
+      content: '',
+      toolCalls: [
+        {
+          id: 'tc1',
+          name: 'summon_specialist',
+          status: 'success',
+          args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+          result: {
+            specialist_id: 'rh',
+            specialist_name: 'Agent RH',
+            content: 'Synthèse',
+          },
+        },
+      ],
+      createdAt: new Date().toISOString(),
+    };
+    rehydratePerspectiveCards(message);
+    expect(message.specialistHandoff).toMatchObject({
+      specialistName: 'Agent RH',
+      content: 'Synthèse',
+      status: 'done',
+    });
+  });
+
+  it('rehydrate une opinion personas depuis les toolCalls', () => {
+    const message: ChatMessage = {
+      id: 'm1',
+      role: 'assistant',
+      content: '',
+      toolCalls: [
+        {
+          id: 'tc1',
+          name: 'ask_personas',
+          status: 'success',
+          args: { question: 'Budget ?' },
+          result: {
+            opinions: [
+              {
+                persona_id: 'rh',
+                persona_name: 'Nathalie',
+                role: 'RH',
+                content: 'OK',
+              },
+            ],
+          },
+        },
+      ],
+      createdAt: new Date().toISOString(),
+    };
+    rehydratePerspectiveCards(message);
+    expect(message.personasOpinion?.opinions[0]?.personaName).toBe('Nathalie');
+    expect(message.personasOpinion?.streaming).toBe(false);
+  });
+
+  it('rehydrate un handoff running depuis les toolCalls', () => {
+    const message: ChatMessage = {
+      id: 'm1',
+      role: 'assistant',
+      content: '',
+      toolCalls: [
+        {
+          id: 'tc1',
+          name: 'summon_specialist',
+          status: 'running',
+          args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+        },
+      ],
+      createdAt: new Date().toISOString(),
+    };
+    rehydratePerspectiveCards(message);
+    expect(message.specialistHandoff).toMatchObject({
+      specialistId: 'rh',
+      status: 'running',
+      streaming: true,
+    });
   });
 
   it('filtre les parts tool_call masquées', () => {

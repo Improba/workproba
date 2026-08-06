@@ -94,7 +94,8 @@ export const CAPABILITY_CATALOG: readonly CapabilityDefinition[] = [
     icon: 'cloud',
     pluginIds: [CLOUD_PLUGIN_ID],
     primarySurface: {
-      type: 'central_route',
+      type: 'right_panel',
+      tabKey: `${CLOUD_PLUGIN_ID}:right_panel`,
     },
     source: 'local',
     enableByDefaultInProjects: true,

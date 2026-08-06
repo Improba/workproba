@@ -19,6 +19,8 @@ TOOLS = [
     "sync_managed_regards",
 ]
 
+UI_SLOTS = ["right_panel", "settings"]
+
 HOOKS: list[str] = []
 
 DEFAULT_ENABLED = False

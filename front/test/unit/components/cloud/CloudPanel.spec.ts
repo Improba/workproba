@@ -582,6 +582,33 @@ describe('CloudPanel', () => {
     );
   });
 
+  it('rafraîchit les personas même quand la sync regards ne change rien', async () => {
+    mockStatus.value = {
+      ...mockStatus.value,
+      enrolled: true,
+      org_label: 'Acme RH',
+    };
+    mockSyncRegards.mockResolvedValue({ ok: true, data: { count: 0, installed: [] } });
+
+    const wrapper = mountPanel();
+    await flushPromises();
+
+    const regardsBtn = wrapper
+      .findAll('.cloud-panel__save-btn')
+      .find((btn) => btn.text().includes('cloud.syncRegards'));
+    await regardsBtn!.trigger('click');
+    await flushPromises();
+
+    expect(mockRefreshPersonas).toHaveBeenCalledWith('/data/workproba.personas');
+    expect(wrapper.emitted('regardsChanged')).toHaveLength(1);
+    expect(mockNotifyCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: 'cloud.syncRegardsEmpty',
+        color: 'info',
+      }),
+    );
+  });
+
   it('notifie l\'échec si la mise à jour des regards échoue', async () => {
     mockStatus.value = {
       ...mockStatus.value,

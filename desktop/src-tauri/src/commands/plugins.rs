@@ -173,7 +173,7 @@ pub fn builtin_manifests() -> Vec<PluginManifest> {
                 "settings:section".to_string(),
             ],
             default_enabled: false,
-            ui_slots: vec!["settings".to_string()],
+            ui_slots: vec!["right_panel".to_string(), "settings".to_string()],
             hooks: vec![],
             is_builtin: true,
         },

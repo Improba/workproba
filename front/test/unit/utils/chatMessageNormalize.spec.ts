@@ -164,4 +164,31 @@ describe('chatMessageNormalize', () => {
 
     expect(normalized?.pendingConfirmation).toBeUndefined();
   });
+
+  it('rehydrate les cartes perspective depuis les toolCalls au reload', () => {
+    const normalized = normalizeChatMessage({
+      id: 'a1',
+      role: 'assistant',
+      content: '',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      toolCalls: [
+        {
+          id: 'tc1',
+          name: 'summon_specialist',
+          status: 'success',
+          args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+          result: {
+            specialist_id: 'rh',
+            specialist_name: 'Agent RH',
+            content: 'Synthèse',
+          },
+        },
+      ],
+    });
+
+    expect(normalized?.specialistHandoff).toMatchObject({
+      specialistName: 'Agent RH',
+      status: 'done',
+    });
+  });
 });

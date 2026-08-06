@@ -856,9 +856,18 @@ function openDiscussionView(personaIds?: string[]): void {
 function openDiscussionFromOpinion(card: PersonasOpinionCard): void {
   const ids = card.opinions.map((o) => o.personaId);
   void loadPersonasIfNeeded().then(() => {
+    const selectableIds = new Set(selectablePersonasList.value.map((p) => p.id));
+    const knownIds = ids.filter((id) => selectableIds.has(id));
+    if (knownIds.length === 0) {
+      Notify.create({
+        message: t('personas.errors.personasUnavailable'),
+        color: 'warning',
+      });
+      return;
+    }
     openSideChat(PERSONAS_PLUGIN_ID, {
       mode: 'discussion',
-      personaIds: ids,
+      personaIds: knownIds,
       discussionSeed: card.question,
       conversationContext: buildConversationContext(),
     });
@@ -867,9 +876,19 @@ function openDiscussionFromOpinion(card: PersonasOpinionCard): void {
 
 function openDiscussionFromHandoff(card: SpecialistHandoffCard): void {
   void loadPersonasIfNeeded().then(() => {
+    const knownIds = selectablePersonasList.value
+      .map((p) => p.id)
+      .filter((id) => id === card.specialistId);
+    if (knownIds.length === 0) {
+      Notify.create({
+        message: t('personas.errors.personasUnavailable'),
+        color: 'warning',
+      });
+      return;
+    }
     openSideChat(PERSONAS_PLUGIN_ID, {
       mode: 'discussion',
-      personaIds: [card.specialistId],
+      personaIds: knownIds,
       discussionSeed: card.task,
       conversationContext: buildConversationContext(),
     });

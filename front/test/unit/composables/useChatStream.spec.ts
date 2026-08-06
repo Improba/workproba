@@ -2338,6 +2338,153 @@ describe('useChatStream — browser tool results', () => {
     expect(messages[0].pendingConfirmation?.toolCallId).toBe('tc-handoff-hag');
   });
 
+  it('confirmation_timeout marque un handoff summon_specialist en erreur', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        streaming: true,
+        toolCalls: [
+          {
+            id: 'tc-handoff-hag',
+            name: 'summon_specialist',
+            status: 'awaiting_confirmation',
+            args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+          },
+        ],
+        specialistHandoff: createRunningSpecialistHandoff('tc-handoff-hag', {
+          specialist_id: 'rh',
+          task: 'Analyser',
+          mode: 'regard',
+        }),
+        pendingConfirmation: {
+          confirmationId: 'cf_hag',
+          toolCallId: 'tc-handoff-hag',
+          toolName: 'summon_specialist',
+          action: 'create',
+          proposedPath: '',
+          humanSummary: 'Déléguer à RH',
+        },
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'error',
+      data: {
+        code: 'confirmation_timeout',
+        message: "La confirmation a expiré.",
+      },
+    });
+
+    expect(messages[0].specialistHandoff).toMatchObject({
+      status: 'error',
+      streaming: false,
+    });
+  });
+
+  it('applyStreamEvent: ask_personas status error marque la carte opinion', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-opinion-status',
+        name: 'ask_personas',
+        args: { question: 'Budget ?' },
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'tc-opinion-status',
+        name: 'ask_personas',
+        status: 'error',
+        result: { error: 'personas_failed' },
+      },
+    });
+
+    expect(messages[0].personasOpinion).toMatchObject({
+      question: 'Budget ?',
+      streaming: false,
+      error: true,
+    });
+  });
+
+  it('applyStreamEvent: ask_personas malformé marque la carte opinion en erreur', () => {
+    const messages: ChatMessage[] = [
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+      },
+    ];
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_start',
+      data: {
+        id: 'tc-opinion-bad',
+        name: 'ask_personas',
+        args: { question: 'Budget ?' },
+      },
+    });
+
+    applyStreamEvent(messages, 'a1', {
+      type: 'tool_call_result',
+      data: {
+        id: 'tc-opinion-bad',
+        name: 'ask_personas',
+        result: null,
+      },
+    });
+
+    expect(messages[0].personasOpinion).toMatchObject({
+      question: 'Budget ?',
+      streaming: false,
+      error: true,
+    });
+  });
+
+  it('loadMessages rehydrate les cartes perspective depuis les toolCalls', () => {
+    const { api, unmount } = mountStream();
+    api.loadMessages([
+      {
+        id: 'a1',
+        role: 'assistant',
+        content: '',
+        createdAt: new Date().toISOString(),
+        toolCalls: [
+          {
+            id: 'tc1',
+            name: 'summon_specialist',
+            status: 'success',
+            args: { specialist_id: 'rh', task: 'Analyser', mode: 'regard' },
+            result: {
+              specialist_id: 'rh',
+              specialist_name: 'Agent RH',
+              content: 'Synthèse',
+            },
+          },
+        ],
+      },
+    ]);
+
+    expect(api.messages.value[0]?.specialistHandoff).toMatchObject({
+      specialistName: 'Agent RH',
+      status: 'done',
+    });
+    unmount();
+  });
+
   it('finalizeIncompleteToolsOnMessage: handoff running passe en erreur', () => {
     const message: ChatMessage = {
       id: 'a1',

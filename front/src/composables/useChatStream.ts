@@ -69,6 +69,7 @@ import {
   markRunningSpecialistHandoffAsError,
   markSpecialistHandoffAsPending,
   markSpecialistHandoffAsRunning,
+  rehydratePerspectiveCards,
   toolResultToSpecialistHandoff,
   type SpecialistMeta,
 } from '@utils/specialistHandoff';
@@ -1013,14 +1014,18 @@ export function applyStreamEvent(
           } else {
             markRunningSpecialistHandoffAsError(assistant);
           }
-        } else if (tool.name === 'ask_personas' && event.data.error == null) {
-          applyPersonasOpinionFromToolResult(
-            assistant,
-            tool.args ?? {},
-            event.data.result,
-          );
-        } else if (tool.name === 'ask_personas' && event.data.error != null) {
-          markPersonasOpinionAsError(assistant);
+        } else if (tool.name === 'ask_personas') {
+          const toolFailed =
+            event.data.error != null || event.data.status === 'error';
+          if (toolFailed) {
+            markPersonasOpinionAsError(assistant);
+          } else {
+            applyPersonasOpinionFromToolResult(
+              assistant,
+              tool.args ?? {},
+              event.data.result,
+            );
+          }
         }
       }
       break;
@@ -1135,6 +1140,7 @@ export function applyStreamEvent(
         if (assistant.preparingConfirmation) {
           assistant.preparingConfirmation = null;
         }
+        markRunningSpecialistHandoffAsError(assistant);
         break;
       }
       if (event.data.code === 'plan_timeout') {
@@ -1338,7 +1344,7 @@ export function useChatStream(
     auditEnabled,
   } = useAppSettings();
   const { activePluginIds, getPluginDataDir } = usePlugins();
-  const { findPersona } = usePersonas();
+  const { findPersona, refresh: refreshPersonasCatalog } = usePersonas();
   const { providerReadiness, init: initCloud, refreshQuota } = useCloud();
   // ref (profond) : les objets messages sont réactifs, donc muter
   // `assistant.content` déclenche directement le rendu. Pas de clonage du
@@ -1513,6 +1519,18 @@ export function useChatStream(
     }
     if (event.type === 'tool_call_result') {
       setIdlePaused(false);
+      if (
+        event.data.name === 'sync_managed_regards' &&
+        event.data.error == null &&
+        event.data.status !== 'error'
+      ) {
+        void (async () => {
+          const personasDir = await getPluginDataDir(PERSONAS_PLUGIN_ID);
+          if (personasDir) {
+            await refreshPersonasCatalog(personasDir);
+          }
+        })();
+      }
     }
   }
 
@@ -1553,6 +1571,7 @@ export function useChatStream(
           enrichThinkingPresentation(part);
         }
       }
+      rehydratePerspectiveCards(withParts, correlationContext());
       return withParts;
     });
     lastUsage.value = {

@@ -22,6 +22,13 @@ export function shouldHidePerspectiveToolCall(
   toolCall?: ChatToolCall,
 ): boolean {
   if (!toolCall || !isPerspectiveHandoffTool(toolCall.name)) return false;
+  const toolCallId = toolCall.id;
+  if (
+    message.pendingConfirmation?.toolCallId === toolCallId ||
+    message.preparingConfirmation?.toolCallId === toolCallId
+  ) {
+    return false;
+  }
   if (toolCall.name === 'ask_personas' && message.personasOpinion) return true;
   if (toolCall.name === 'summon_specialist' && message.specialistHandoff) return true;
   return false;
@@ -214,10 +221,107 @@ export function applyPersonasOpinionFromToolResult(
     message.personasOpinion = card;
     return;
   }
-  if (message.personasOpinion) {
-    message.personasOpinion = {
-      ...message.personasOpinion,
-      streaming: false,
-    };
+  if (!message.personasOpinion) {
+    message.personasOpinion = initStreamingPersonasOpinion(question);
+  }
+  markPersonasOpinionAsError(message);
+}
+
+const INCOMPLETE_TOOL_STATUSES = new Set<ChatToolCall['status']>([
+  'pending',
+  'running',
+  'pending_confirmation',
+  'awaiting_confirmation',
+]);
+
+function findLatestPerspectiveToolCall(
+  toolCalls: ChatToolCall[],
+  name: PerspectiveHandoffTool,
+): ChatToolCall | undefined {
+  for (let i = toolCalls.length - 1; i >= 0; i -= 1) {
+    if (toolCalls[i]?.name === name) return toolCalls[i];
+  }
+  return undefined;
+}
+
+export interface RehydratePerspectiveCardsOptions {
+  resolveSpecialistMeta?: (id: string) => SpecialistMeta | null;
+}
+
+/** Reconstruit les cartes inline perspective à partir des toolCalls persistés. */
+export function rehydratePerspectiveCards(
+  message: ChatMessage,
+  options?: RehydratePerspectiveCardsOptions,
+): void {
+  if (message.role !== 'assistant') return;
+  const toolCalls = message.toolCalls ?? [];
+  if (!toolCalls.length) return;
+
+  const summonTool = findLatestPerspectiveToolCall(toolCalls, 'summon_specialist');
+  if (summonTool && !message.specialistHandoff) {
+    const args = summonTool.args ?? {};
+    if (INCOMPLETE_TOOL_STATUSES.has(summonTool.status)) {
+      message.specialistHandoff = createRunningSpecialistHandoff(
+        summonTool.id,
+        args,
+        options?.resolveSpecialistMeta,
+      );
+      if (
+        summonTool.status === 'pending_confirmation' ||
+        summonTool.status === 'awaiting_confirmation'
+      ) {
+        markSpecialistHandoffAsPending(message);
+      }
+    } else if (summonTool.status === 'error') {
+      const handoff = toolResultToSpecialistHandoff(
+        summonTool.id,
+        args,
+        summonTool.result,
+        true,
+        options?.resolveSpecialistMeta,
+      );
+      if (handoff) {
+        message.specialistHandoff = handoff;
+      } else {
+        message.specialistHandoff = createRunningSpecialistHandoff(
+          summonTool.id,
+          args,
+          options?.resolveSpecialistMeta,
+        );
+        markRunningSpecialistHandoffAsError(message);
+      }
+    } else {
+      const handoff = toolResultToSpecialistHandoff(
+        summonTool.id,
+        args,
+        summonTool.result,
+        undefined,
+        options?.resolveSpecialistMeta,
+      );
+      if (handoff) {
+        message.specialistHandoff = handoff;
+      } else {
+        message.specialistHandoff = createRunningSpecialistHandoff(
+          summonTool.id,
+          args,
+          options?.resolveSpecialistMeta,
+        );
+        markRunningSpecialistHandoffAsError(message);
+      }
+    }
+  }
+
+  const askTool = findLatestPerspectiveToolCall(toolCalls, 'ask_personas');
+  if (askTool && !message.personasOpinion) {
+    const args = askTool.args ?? {};
+    const question = String(args.question ?? '');
+    if (INCOMPLETE_TOOL_STATUSES.has(askTool.status)) {
+      message.personasOpinion = initStreamingPersonasOpinion(question);
+    } else if (askTool.status === 'error') {
+      message.personasOpinion = initStreamingPersonasOpinion(question);
+      markPersonasOpinionAsError(message);
+    } else {
+      applyPersonasOpinionFromToolResult(message, args, askTool.result);
+    }
   }
 }
