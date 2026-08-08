@@ -83,6 +83,13 @@ watch(selectedAgent, () => {
   question.value = '';
 });
 
+watch(open, (isOpen) => {
+  if (!isOpen) return;
+  if (activePath.value && activeSpaceId.value) return;
+  Notify.create({ message: t('errors.noSpaceOpen'), color: 'negative' });
+  closeConsultation();
+}, { immediate: true });
+
 function onDialogModelValue(value: boolean): void {
   if (!value) closeConsultation();
 }

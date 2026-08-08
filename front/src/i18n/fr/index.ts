@@ -357,6 +357,7 @@ export default {
     openAgentProfile: 'Voir la fiche de l’agent métier {name}',
     askWorkproba: 'Demander à Workproba',
     askWorkprobaToConsult: 'Demander à Workproba de consulter {name}',
+    consultNeedsSpace: 'Ouvrez un espace pour consulter un agent métier.',
     assistantRemains:
       'Workproba reste votre interlocuteur et restitue le travail de l’agent dans la conversation principale.',
     backToEnvironment: 'Retour à l’environnement',

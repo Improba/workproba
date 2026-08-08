@@ -35,6 +35,9 @@ const activeSet = ref<Record<string, unknown> | null>({ id: 'workproba-cloud' })
 const settingsLocked = ref(true);
 const sidecarState = ref<'connected' | 'idle' | 'working' | 'error'>('connected');
 
+const activePath = ref<string | null>('/tmp/workspace');
+const activeSpaceId = ref<string | null>('space-1');
+
 const push = vi.fn();
 
 vi.mock('vue-router', () => ({
@@ -85,6 +88,13 @@ vi.mock('@composables/useChatActivity', () => ({
   }),
 }));
 
+vi.mock('@composables/useSpace', () => ({
+  useSpace: () => ({
+    activePath,
+    activeSpaceId,
+  }),
+}));
+
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string, params?: Record<string, string>) => {
@@ -102,6 +112,8 @@ describe('EnvironmentDrawer', () => {
     loadError.value = null;
     loading.value = false;
     effectiveActiveSet.value = { id: 'workproba-cloud' };
+    activePath.value = '/tmp/workspace';
+    activeSpaceId.value = 'space-1';
     closeEnvironment.mockClear();
     openCapabilities.mockClear();
     requestConsultation.mockClear();
@@ -165,5 +177,22 @@ describe('EnvironmentDrawer', () => {
     await flushPromises();
 
     expect(refresh).toHaveBeenCalledWith(true);
+  });
+
+  it('désactive la consultation sans espace actif', async () => {
+    selectedBusinessAgentId.value = 'org.rh';
+    activePath.value = null;
+    activeSpaceId.value = null;
+
+    const wrapper = shallowMount(EnvironmentDrawer, {
+      global: { stubs: { Lucide: true, PersonaAvatar: true, SpecialistToolsPanel: true } },
+    });
+
+    const consultButton = wrapper.find('.environment-drawer__primary');
+    expect(consultButton.attributes('disabled')).toBeDefined();
+    expect(wrapper.text()).toContain('environment.consultNeedsSpace');
+
+    await consultButton.trigger('click');
+    expect(requestConsultation).not.toHaveBeenCalled();
   });
 });

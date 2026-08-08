@@ -128,4 +128,26 @@ describe('useOrganizationEnvironment', () => {
     expect(env.cloudConnected.value).toBe(false);
     expect(cloudInit).not.toHaveBeenCalled();
   });
+
+  it('exécute un refresh forcé après un soft refresh concurrent', async () => {
+    let releaseSoft: () => void = () => {};
+    const softGate = new Promise<void>((resolve) => {
+      releaseSoft = resolve;
+    });
+    pluginsRefresh.mockImplementationOnce(async () => {
+      await softGate;
+    });
+
+    const env = useOrganizationEnvironment();
+    const softPromise = env.refresh();
+    const forcePromise = env.refresh(true);
+
+    expect(pluginsRefresh).toHaveBeenCalledTimes(1);
+
+    releaseSoft();
+    await softPromise;
+    await forcePromise;
+
+    expect(pluginsRefresh).toHaveBeenCalledTimes(2);
+  });
 });

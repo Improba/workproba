@@ -12,8 +12,8 @@ const createSession = vi.fn().mockResolvedValue({ id: 'session-1' });
 const setPendingChatLaunch = vi.fn();
 const bumpSessions = vi.fn();
 
-const activePath = ref('/tmp/workspace');
-const activeSpaceId = ref('space-1');
+const activePath = ref<string | null>('/tmp/workspace');
+const activeSpaceId = ref<string | null>('space-1');
 const connectors = ref([]);
 
 const agent = {
@@ -72,31 +72,34 @@ vi.mock('vue-i18n', () => ({
   }),
 }));
 
+const dialogStubs = {
+  Lucide: true,
+  PersonaAvatar: true,
+  SpecialistToolsPanel: true,
+  'q-dialog': {
+    template: '<div><slot /></div>',
+  },
+};
+
 describe('BusinessAgentConsultDialog', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetBusinessAgentConsultationForTests();
-    const { requestConsultation } = useBusinessAgentConsultation();
-    requestConsultation(agent);
     activePath.value = '/tmp/workspace';
     activeSpaceId.value = 'space-1';
     push.mockClear();
     createSession.mockClear();
     setPendingChatLaunch.mockClear();
     bumpSessions.mockClear();
+    const { Notify } = await import('quasar');
+    vi.mocked(Notify.create).mockClear();
   });
 
   it('ouvre une conversation Workproba avec un prompt de consultation', async () => {
+    const { requestConsultation } = useBusinessAgentConsultation();
+    requestConsultation(agent);
+
     const wrapper = shallowMount(BusinessAgentConsultDialog, {
-      global: {
-        stubs: {
-          Lucide: true,
-          PersonaAvatar: true,
-          SpecialistToolsPanel: true,
-          'q-dialog': {
-            template: '<div><slot /></div>',
-          },
-        },
-      },
+      global: { stubs: dialogStubs },
     });
 
     await wrapper.find('textarea').setValue('Vérifier le dossier salarié');
@@ -110,5 +113,49 @@ describe('BusinessAgentConsultDialog', () => {
     });
     expect(bumpSessions).toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith({ name: 'chat_session', params: { id: 'session-1' } });
+  });
+
+  it('notifie et ne crée pas de session si l’espace disparaît avant le submit', async () => {
+    const { Notify } = await import('quasar');
+    const { requestConsultation } = useBusinessAgentConsultation();
+    requestConsultation(agent);
+
+    const wrapper = shallowMount(BusinessAgentConsultDialog, {
+      global: { stubs: dialogStubs },
+    });
+
+    activePath.value = null;
+    activeSpaceId.value = null;
+
+    await wrapper.find('textarea').setValue('Vérifier le dossier salarié');
+    await wrapper.find('.business-agent-consult__submit').trigger('click');
+    await flushPromises();
+
+    expect(Notify.create).toHaveBeenCalledWith({
+      message: 'errors.noSpaceOpen',
+      color: 'negative',
+    });
+    expect(createSession).not.toHaveBeenCalled();
+  });
+
+  it('ferme immédiatement la consultation ouverte sans espace actif', async () => {
+    const { Notify } = await import('quasar');
+    activePath.value = null;
+    activeSpaceId.value = null;
+
+    const { requestConsultation, open } = useBusinessAgentConsultation();
+    requestConsultation(agent);
+    expect(open.value).toBe(true);
+
+    shallowMount(BusinessAgentConsultDialog, {
+      global: { stubs: dialogStubs },
+    });
+    await flushPromises();
+
+    expect(Notify.create).toHaveBeenCalledWith({
+      message: 'errors.noSpaceOpen',
+      color: 'negative',
+    });
+    expect(open.value).toBe(false);
   });
 });

@@ -357,6 +357,7 @@ export default {
     openAgentProfile: 'View {name} business agent profile',
     askWorkproba: 'Ask Workproba',
     askWorkprobaToConsult: 'Ask Workproba to consult {name}',
+    consultNeedsSpace: 'Open a space to consult a business agent.',
     assistantRemains:
       'Workproba remains your contact and reports the agent’s work in the main conversation.',
     backToEnvironment: 'Back to environment',

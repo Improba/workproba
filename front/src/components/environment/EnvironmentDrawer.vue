@@ -67,11 +67,16 @@
         <button
           type="button"
           class="environment-drawer__primary"
+          :disabled="!hasActiveSpace"
+          :title="hasActiveSpace ? undefined : t('environment.consultNeedsSpace')"
           @click="onConsult(selectedAgent)"
         >
           <Lucide name="message-circle-more" size="15" color="wp-canard" />
           {{ t('environment.askWorkprobaToConsult', { name: selectedAgent.name }) }}
         </button>
+        <p v-if="!hasActiveSpace" class="environment-drawer__space-hint">
+          {{ t('environment.consultNeedsSpace') }}
+        </p>
         <p class="environment-drawer__assistant-note">
           {{ t('environment.assistantRemains') }}
         </p>
@@ -166,6 +171,7 @@ import { useBusinessAgentConsultation } from '@composables/useBusinessAgentConsu
 import { useChatActivity } from '@composables/useChatActivity';
 import { useOrganizationEnvironment } from '@composables/useOrganizationEnvironment';
 import { useShellSurfaces } from '@composables/useShellSurfaces';
+import { useSpace } from '@composables/useSpace';
 import { guidedPresetLabel, localizedSetName } from '@utils/providerSets';
 import { resolveEnvironmentChipState } from '@utils/environmentStatus';
 import { specialistAllowedTools } from '@utils/specialistTools';
@@ -192,6 +198,7 @@ const {
   selectBusinessAgent,
   clearBusinessAgentSelection,
 } = useShellSurfaces();
+const { activePath, activeSpaceId } = useSpace();
 const { requestConsultation } = useBusinessAgentConsultation();
 
 const displayOrganizationName = computed(
@@ -202,6 +209,9 @@ const organizationInitial = computed(
 );
 const selectedAgent = computed(
   () => businessAgents.value.find((agent) => agent.id === selectedBusinessAgentId.value) ?? null,
+);
+const hasActiveSpace = computed(
+  () => Boolean(activePath.value && activeSpaceId.value),
 );
 const hasEffectiveEngine = computed(() => Boolean(effectiveActiveSet.value));
 const engineChipState = computed(() => resolveEnvironmentChipState({
@@ -235,6 +245,7 @@ function connectorLabelsFor(agentId: string): string[] {
 }
 
 function onConsult(agent: PersonaInfo): void {
+  if (!hasActiveSpace.value) return;
   requestConsultation(agent);
   closeEnvironment();
 }
@@ -581,6 +592,15 @@ watch(environmentOpen, (open) => {
   background: var(--wp-accent);
   color: var(--wp-canard);
   font-weight: 700;
+
+  &:disabled { cursor: default; opacity: 0.45; }
+}
+
+.environment-drawer__space-hint {
+  margin: 0;
+  color: var(--wp-warning);
+  font-size: var(--wp-fs-xs);
+  line-height: var(--wp-lh-normal);
 }
 
 .environment-drawer__secondary {

@@ -12,6 +12,7 @@ const loading = ref(false);
 const loaded = ref(false);
 const loadError = ref<string | null>(null);
 let refreshPromise: Promise<void> | null = null;
+let pendingForce = false;
 
 function uniqueBusinessAgents(
   sets: ReturnType<typeof usePersonas>['sets']['value'],
@@ -66,33 +67,42 @@ export function useOrganizationEnvironment(): UseOrganizationEnvironmentReturn {
   ));
 
   async function refresh(force = false): Promise<void> {
+    if (force) pendingForce = true;
+
     if (refreshPromise) return refreshPromise;
-    if (loaded.value && !force) return;
+    if (loaded.value && !pendingForce) return;
 
     refreshPromise = (async () => {
-      if (force) loaded.value = false;
-      loading.value = true;
-      loadError.value = null;
       try {
-        await plugins.refresh();
+        do {
+          const mustForce = pendingForce;
+          pendingForce = false;
+          if (mustForce) loaded.value = false;
+          loading.value = true;
+          loadError.value = null;
+          try {
+            await plugins.refresh();
 
-        const tasks: Promise<unknown>[] = [];
-        if (plugins.isCloudPluginActive.value) {
-          tasks.push(cloud.init());
-        }
-        if (plugins.isPersonasPluginActive.value) {
-          tasks.push(
-            plugins.getPluginDataDir(PERSONAS_PLUGIN_ID).then((dir) => (
-              dir ? personas.refresh(dir) : undefined
-            )),
-          );
-        }
-        await Promise.all(tasks);
-        loaded.value = true;
-      } catch (error) {
-        loadError.value = error instanceof Error ? error.message : 'environment_load_failed';
+            const tasks: Promise<unknown>[] = [];
+            if (plugins.isCloudPluginActive.value) {
+              tasks.push(cloud.init());
+            }
+            if (plugins.isPersonasPluginActive.value) {
+              tasks.push(
+                plugins.getPluginDataDir(PERSONAS_PLUGIN_ID).then((dir) => (
+                  dir ? personas.refresh(dir) : undefined
+                )),
+              );
+            }
+            await Promise.all(tasks);
+            loaded.value = true;
+          } catch (error) {
+            loadError.value = error instanceof Error ? error.message : 'environment_load_failed';
+          } finally {
+            loading.value = false;
+          }
+        } while (pendingForce);
       } finally {
-        loading.value = false;
         refreshPromise = null;
       }
     })();
@@ -118,4 +128,5 @@ export function resetOrganizationEnvironmentForTests(): void {
   loaded.value = false;
   loadError.value = null;
   refreshPromise = null;
+  pendingForce = false;
 }
