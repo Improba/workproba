@@ -43,13 +43,15 @@
           />
         </div>
 
-        <BusinessAgentsHome
-          :agents="businessAgents"
-          :connectors="connectors"
-          @consult="requestConsultation"
-          @view-agent="(agent) => openEnvironment(agent.id)"
-          @view-all="openEnvironment()"
-        />
+        <div v-if="businessAgents.length" class="home-page__agents">
+          <BusinessAgentsHome
+            :agents="businessAgents"
+            :connectors="connectors"
+            @consult="requestConsultation"
+            @view-agent="(agent) => openEnvironment(agent.id)"
+            @view-all="openEnvironment()"
+          />
+        </div>
 
         <footer v-if="recentSessions.length" class="home-page__history">
           <header class="home-page__history-head">
@@ -301,7 +303,7 @@ function startConversationFromComposer(
   display: flex;
   flex-direction: column;
   min-height: 0;
-  overflow-y: auto;
+  overflow: hidden;
   box-sizing: border-box;
   width: 100%;
   background: var(--wp-bg);
@@ -327,13 +329,16 @@ function startConversationFromComposer(
   flex-direction: column;
   align-items: center;
   justify-content: flex-start;
+  min-height: 0;
   width: 100%;
   box-sizing: border-box;
-  padding: clamp(1.5rem, 5vh, 2.5rem) clamp(1rem, 4vw, 2rem) 2.5rem;
+  padding: clamp(1.5rem, 5vh, 2.5rem) clamp(1rem, 4vw, 2rem) 1.25rem;
+  overflow: hidden;
 }
 
 .home-page__workspace--solo {
   justify-content: center;
+  overflow: auto;
 }
 
 .home-page__stage {
@@ -343,11 +348,18 @@ function startConversationFromComposer(
   flex-direction: column;
   gap: 2.5rem;
   box-sizing: border-box;
-  flex: none;
+  flex: 1;
+  min-height: 0;
 }
 
 .home-page__hub {
+  flex: none;
   min-width: 0;
+  width: 100%;
+}
+
+.home-page__agents {
+  flex: none;
   width: 100%;
 }
 
@@ -380,10 +392,16 @@ function startConversationFromComposer(
 }
 
 .home-page__history {
+  flex: 1 1 auto;
+  min-height: 0;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
 }
 
 .home-page__history-head {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 0.85rem;
@@ -412,14 +430,15 @@ function startConversationFromComposer(
   list-style: none;
   margin: 0;
   padding: 0;
+  flex: 0 1 auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-md);
   background: var(--wp-surface);
   box-shadow: var(--wp-shadow-1);
-  overflow: hidden;
-  max-height: min(22rem, 42vh);
+  overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
