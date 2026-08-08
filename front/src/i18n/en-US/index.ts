@@ -336,6 +336,49 @@ export default {
       pasteInvitation: 'Paste invitation code',
     },
   },
+  environment: {
+    defaultOrganization: 'Local environment',
+    eyebrow: 'Organization environment',
+    drawerTitle: '{organization} environment',
+    headerAria: 'Open {organization} environment, {status}',
+    headerTooltip: '{organization} environment · {status}',
+    cloudConnected: 'Workproba Cloud connected',
+    localEnvironment: 'Local mode',
+    workprobaAssistant: 'Workproba assistant',
+    workprobaAssistantLead:
+      'Your primary contact. It works in this space and mobilizes business agents when your request requires them.',
+    businessAgentsTitle: 'Business agents',
+    businessAgentsLead:
+      'Each agent carries expertise and the organization tools it is authorized to use.',
+    noBusinessAgents: 'No business agent is available in this environment.',
+    homeAgentsTitle: 'Available business agents',
+    homeAgentsLead: 'Workproba can request their expertise and tools for your task.',
+    viewAllAgents: 'View all',
+    openAgentProfile: 'View {name} business agent profile',
+    askWorkproba: 'Ask Workproba',
+    askWorkprobaToConsult: 'Ask Workproba to consult {name}',
+    assistantRemains:
+      'Workproba remains your contact and reports the agent’s work in the main conversation.',
+    backToEnvironment: 'Back to environment',
+    configurationTitle: 'Configuration',
+    configurationLead:
+      'Technical settings and permissions remain available at a secondary level.',
+    configureCapabilities: 'Configure capabilities',
+    loadFailed: 'Could not load the environment. {error}',
+    retryLoad: 'Retry',
+    engineTitle: 'AI engine',
+    engineReady: '{name}',
+    engineMissing: 'No engine configured for this space',
+    openEngineSettings: 'Configure engine',
+    consultEyebrow: 'Business agent',
+    consultLead:
+      'Describe the task. A new conversation will open with the Workproba assistant, which will consult this business agent.',
+    consultQuestionLabel: 'What should it examine?',
+    consultQuestionPlaceholder: 'E.g. Ask {name} to check what is missing from this case…',
+    startWithWorkproba: 'Open with Workproba',
+    consultPrompt:
+      'Consult the business agent “{name}” (identifier: {id}) in Regard mode, then report its analysis to me:\n\n{question}',
+  },
   chat: {
     emptyHint: 'Ask a question about your documents, or pick a starting point:',
     emptyConversation:

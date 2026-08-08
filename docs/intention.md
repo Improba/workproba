@@ -29,6 +29,14 @@ User ↔ Assistant / Imp (main chat)
 - Writes stay behind an operative business agent and/or Human Approval Gate; not behind Regard.
 - **Plugins = capabilities**; **business agents = who mobilizes** those capabilities.
 
+### UI direction for the organization environment
+
+- The organization name is a persistent context in the title bar, on Home and during chat.
+- Home stays centered on the Workproba assistant. It may show a compact list of available business agents below the composer, with tools displayed through each agent.
+- Clicking a business agent opens its profile or prepares a consultation by Workproba. It does not switch the main conversation to that agent.
+- Workproba remains the user's main interlocutor and delegates through `summon_specialist`.
+- Cloud provider details and capability activation are secondary configuration concerns inside the organization environment, not peer navigation items in the title bar.
+
 UI product vocabulary: Business agent / Regard / Enterprise agent. Code may keep `personas`. Port target: `ManagedAgentsPort` (current code: `ManagedRegardsPort`). See [glossaire.md](../../workproba-improba/roadmaps/glossaire.md).
 
 ## Specialists / Regards amendment (27/07/2026, superseded)

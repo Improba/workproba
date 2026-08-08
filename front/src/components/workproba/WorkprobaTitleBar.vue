@@ -19,68 +19,21 @@
       <button
         type="button"
         class="wp-titlebar__chip"
-        :class="`wp-titlebar__chip--${providerChipState}`"
-        :aria-label="providerAriaLabel"
-        @click="sidecarDialogOpen = true"
+        :class="[
+          `wp-titlebar__chip--${environmentChipState}`,
+          { 'wp-titlebar__chip--active': environmentOpen },
+        ]"
+        :aria-label="environmentAriaLabel"
+        :aria-expanded="environmentOpen"
+        @click="$emit('toggle-environment')"
       >
         <span class="wp-titlebar__chip-dot" />
-        <span class="wp-titlebar__chip-label">{{ providerLabel }}</span>
+        <span class="wp-titlebar__chip-label">{{ environmentLabel }}</span>
+        <Lucide name="chevron-down" size="13" color="text-faint" />
         <q-tooltip anchor="bottom middle" self="top middle" :offset="[0, 6]">
-          {{ providerTooltip }}
+          {{ environmentTooltip }}
         </q-tooltip>
       </button>
-
-      <q-dialog v-model="sidecarDialogOpen">
-        <div class="wp-sidecar-dialog">
-          <header class="wp-sidecar-dialog__head">
-            <span class="wp-sidecar-dialog__title">{{ t('shell.titlebarSidecarDialogTitle') }}</span>
-            <button
-              type="button"
-              class="wp-sidecar-dialog__close"
-              :aria-label="t('common.close')"
-              @click="sidecarDialogOpen = false"
-            >
-              <Lucide name="x" size="16" color="text-muted" />
-            </button>
-          </header>
-
-          <dl class="wp-sidecar-dialog__list">
-            <div class="wp-sidecar-dialog__row">
-              <dt>{{ t('shell.titlebarSidecarLabel') }}</dt>
-              <dd>
-                <span class="wp-sidecar-dialog__dot" :class="`wp-sidecar-dialog__dot--${sidecarState}`" />
-                {{ sidecarLabel }}
-              </dd>
-            </div>
-            <div class="wp-sidecar-dialog__row">
-              <dt>{{ t('shell.titlebarChatModel') }}</dt>
-              <dd>{{ chatProviderLabel }}</dd>
-            </div>
-            <div v-if="activeSetCapabilities.length" class="wp-sidecar-dialog__row wp-sidecar-dialog__row--caps">
-              <dt>{{ t('settings.lockedCapabilities') }}</dt>
-              <dd>
-                <span v-for="cap in activeSetCapabilities" :key="cap" class="wp-sidecar-dialog__cap">{{ cap }}</span>
-              </dd>
-            </div>
-            <div class="wp-sidecar-dialog__row">
-              <dt>{{ t('shell.titlebarEmbeddings') }}</dt>
-              <dd>{{ embeddingProviderLabel }}</dd>
-            </div>
-          </dl>
-
-          <footer class="wp-sidecar-dialog__foot">
-            <button type="button" class="wp-sidecar-dialog__link" @click="onOpenSettings">
-              <Lucide name="settings-2" size="15" color="accent" />
-              <span>{{ t('shell.titlebarOpenSettings') }}</span>
-            </button>
-          </footer>
-        </div>
-      </q-dialog>
-
-      <CapabilitiesButton
-        :open="capabilitiesOpen"
-        @toggle="$emit('toggle-capabilities')"
-      />
 
       <button
         v-if="hasSideChat"
@@ -162,40 +115,45 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { useRouter } from 'vue-router';
 import ThemeToggler from '@lib-improba/components/layouts/theme-toggler/ThemeToggler.vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
-import CapabilitiesButton from '@components/capabilities/CapabilitiesButton.vue';
 import WorkprobaBrand from '@components/brand/WorkprobaBrand.vue';
 import { useAppSettings } from '@composables/useAppSettings';
-import { capabilityLabels, guidedPresetLabel, localizedSetName } from '@utils/providerSets';
+import { useOrganizationEnvironment } from '@composables/useOrganizationEnvironment';
+import { resolveEnvironmentChipState, resolveEnvironmentStatusLabel } from '@utils/environmentStatus';
+import { useChatActivity } from '@composables/useChatActivity';
 
 const props = defineProps<{
   workspaceTitle: string | null;
   activePath: string | null;
   rightPanelOpen: boolean;
-  capabilitiesOpen?: boolean;
+  environmentOpen?: boolean;
   sidebarRail: boolean;
   sideChatOpen?: boolean;
   hasSideChat?: boolean;
-  sidecarState?: 'connected' | 'idle' | 'working' | 'error';
 }>();
 
 defineEmits<{
   (e: 'toggle-right-panel'): void;
-  (e: 'toggle-capabilities'): void;
+  (e: 'toggle-environment'): void;
   (e: 'toggle-sidebar'): void;
   (e: 'toggle-side-chat'): void;
   (e: 'open-shortcuts'): void;
 }>();
 
-const { effectiveActiveSet, activeSet, activeChatProvider, activeEmbeddingProvider, settingsLocked } = useAppSettings();
 const router = useRouter();
 const { t } = useI18n();
-
-const sidecarDialogOpen = ref(false);
+const { effectiveActiveSet } = useAppSettings();
+const { sidecarState } = useChatActivity();
+const {
+  organizationName,
+  cloudConnected,
+  loading: environmentLoading,
+  refresh: refreshEnvironment,
+} = useOrganizationEnvironment();
 
 const filesAriaLabel = computed(() =>
   props.rightPanelOpen
@@ -215,91 +173,35 @@ const regardsAriaLabel = computed(() =>
     : t('shell.titlebarShowRegards'),
 );
 
-const sidecarState = computed(() => props.sidecarState ?? 'idle');
-const displaySet = computed(() => effectiveActiveSet.value ?? activeSet.value);
-const providerChipState = computed(() => {
-  if (!displaySet.value) return 'error';
-  if (!effectiveActiveSet.value) return 'error';
-  return sidecarState.value;
-});
-const sidecarLabel = computed(() => {
-  switch (sidecarState.value) {
-    case 'working':
-      return t('shell.titlebarSidecarWorking');
-    case 'error':
-      return t('shell.titlebarSidecarError');
-    case 'connected':
-      return t('shell.titlebarSidecarConnected');
-    default:
-      return t('shell.titlebarSidecarIdle');
-  }
-});
-
-function capitalize(value: string): string {
-  return value ? value.charAt(0).toUpperCase() + value.slice(1) : value;
-}
-
-function providerDisplay(entry: typeof activeChatProvider.value): string {
-  if (!entry) return t('shell.titlebarNoProvider');
-  return entry.label?.trim() || capitalize(entry.provider);
-}
-
-const labelMode = computed(() => (settingsLocked.value ? 'guided' : 'advanced'));
-
-const activeSetCapabilities = computed(() => {
-  const set = displaySet.value;
-  if (!set) return [];
-  return capabilityLabels(set, labelMode.value, t);
-});
-
-const providerLabel = computed(() => {
-  const set = displaySet.value;
-  if (set) {
-    if (labelMode.value === 'guided') return guidedPresetLabel(set, t);
-    return localizedSetName(set, t);
-  }
-  return providerDisplay(activeChatProvider.value);
-});
-
-const providerAriaLabel = computed(() =>
-  t('shell.titlebarProviderAria', {
-    name: providerLabel.value,
-    status: sidecarLabel.value,
-  }),
+const sidecarStateValue = computed(() => sidecarState.value);
+const hasEffectiveEngine = computed(() => Boolean(effectiveActiveSet.value));
+const environmentLabel = computed(
+  () => organizationName.value || t('environment.defaultOrganization'),
 );
+const environmentChipState = computed(() => resolveEnvironmentChipState({
+  sidecarState: sidecarStateValue.value,
+  hasEffectiveEngine: hasEffectiveEngine.value,
+  cloudConnected: cloudConnected.value,
+}));
+const environmentStatusLabel = computed(() => resolveEnvironmentStatusLabel({
+  loading: environmentLoading.value,
+  sidecarState: sidecarStateValue.value,
+  hasEffectiveEngine: hasEffectiveEngine.value,
+  cloudConnected: cloudConnected.value,
+  t,
+}));
+const environmentAriaLabel = computed(() => t('environment.headerAria', {
+  organization: environmentLabel.value,
+  status: environmentStatusLabel.value,
+}));
+const environmentTooltip = computed(() => t('environment.headerTooltip', {
+  organization: environmentLabel.value,
+  status: environmentStatusLabel.value,
+}));
 
-const providerTooltip = computed(() =>
-  t('shell.titlebarProviderTooltip', {
-    name: providerLabel.value,
-    status: sidecarLabel.value,
-  }),
-);
-
-const chatProviderLabel = computed(() => {
-  const set = displaySet.value;
-  if (set) {
-    const name = labelMode.value === 'guided' ? guidedPresetLabel(set, t) : localizedSetName(set, t);
-    return `${name} ${t('shell.titlebarSep')} ${set.chat.model || '—'}`;
-  }
-  const entry = activeChatProvider.value;
-  if (!entry) return t('shell.titlebarNoChatModel');
-  return `${providerDisplay(entry)} ${t('shell.titlebarSep')} ${entry.model || '—'}`;
+onMounted(() => {
+  void refreshEnvironment();
 });
-
-const embeddingProviderLabel = computed(() => {
-  const set = displaySet.value;
-  if (set?.embeddings) {
-    return `${localizedSetName(set, t)} ${t('shell.titlebarSep')} ${set.embeddings.model}`;
-  }
-  const entry = activeEmbeddingProvider.value;
-  if (!entry || !entry.embeddingModel) return t('shell.titlebarNoEmbeddingModel');
-  return `${providerDisplay(entry)} ${t('shell.titlebarSep')} ${entry.embeddingModel}`;
-});
-
-function onOpenSettings(): void {
-  sidecarDialogOpen.value = false;
-  void router.push({ name: 'settings_models' });
-}
 
 function goHome(): void {
   void router.push({ name: 'home' });
@@ -392,6 +294,12 @@ function goHome(): void {
     background: var(--wp-surface);
     border-color: var(--wp-accent);
   }
+
+  &--active {
+    background: var(--wp-accent-soft);
+    border-color: var(--wp-accent);
+    color: var(--wp-text);
+  }
 }
 
 .wp-titlebar__chip-label {
@@ -417,140 +325,6 @@ function goHome(): void {
   }
   .wp-titlebar__chip--error & {
     background: var(--wp-danger);
-  }
-}
-
-.wp-sidecar-dialog {
-  width: 360px;
-  max-width: 90vw;
-  background: var(--wp-surface);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-r-md);
-  box-shadow: var(--wp-shadow-2);
-  padding: var(--wp-space-4);
-}
-
-.wp-sidecar-dialog__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--wp-space-3);
-}
-
-.wp-sidecar-dialog__title {
-  font-family: var(--wp-font-head);
-  font-weight: 700;
-  font-size: var(--wp-fs-base);
-  color: var(--wp-text);
-}
-
-.wp-sidecar-dialog__close {
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: none;
-  background: transparent;
-  border-radius: var(--wp-r-sm);
-  cursor: pointer;
-
-  &:hover {
-    background: var(--wp-surface-2);
-  }
-}
-
-.wp-sidecar-dialog__list {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-2);
-}
-
-.wp-sidecar-dialog__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--wp-space-3);
-  padding: var(--wp-space-2) 0;
-  border-bottom: 1px solid var(--wp-border);
-
-  &:last-child {
-    border-bottom: none;
-  }
-
-  dt {
-    font-size: var(--wp-fs-xs);
-    color: var(--wp-text-faint);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-
-  dd {
-    margin: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: var(--wp-space-2);
-    font-size: var(--wp-fs-sm);
-    color: var(--wp-text);
-    text-align: right;
-    flex-wrap: wrap;
-    justify-content: flex-end;
-  }
-}
-
-.wp-sidecar-dialog__row--caps dd {
-  max-width: 220px;
-}
-
-.wp-sidecar-dialog__cap {
-  font-size: var(--wp-fs-xs);
-  padding: 2px 8px;
-  border-radius: var(--wp-r-pill);
-  background: var(--wp-surface-2);
-  color: var(--wp-text-muted);
-}
-
-.wp-sidecar-dialog__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--wp-r-pill);
-  background: var(--wp-text-faint);
-
-  &--connected {
-    background: var(--wp-success);
-  }
-  &--working {
-    background: var(--wp-accent);
-    animation: wp-breathe 1.4s ease-in-out infinite;
-  }
-  &--error {
-    background: var(--wp-danger);
-  }
-}
-
-.wp-sidecar-dialog__foot {
-  margin-top: var(--wp-space-3);
-  display: flex;
-  justify-content: flex-end;
-}
-
-.wp-sidecar-dialog__link {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--wp-space-2);
-  padding: var(--wp-space-2) var(--wp-space-3);
-  border: 1px solid var(--wp-border);
-  border-radius: var(--wp-r-sm);
-  background: transparent;
-  cursor: pointer;
-  font-size: var(--wp-fs-sm);
-  color: var(--wp-text);
-  transition: background 120ms var(--wp-ease), border-color 120ms var(--wp-ease);
-
-  &:hover {
-    background: var(--wp-accent-soft);
-    border-color: var(--wp-accent);
   }
 }
 

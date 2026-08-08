@@ -1,24 +1,39 @@
 import { mount } from '@vue/test-utils';
 import { describe, expect, it, vi } from 'vitest';
+import { ref } from 'vue';
 import WorkprobaTitleBar from '@components/workproba/WorkprobaTitleBar.vue';
-import { WORKPROBA_CLOUD_BUILTIN_SET } from '@utils/providerSets';
 
 const push = vi.fn();
-
-const mockUseAppSettings = vi.fn(() => ({
-  activeSet: { value: null },
-  effectiveActiveSet: { value: null },
-  activeChatProvider: { value: null },
-  activeEmbeddingProvider: { value: null },
-  settingsLocked: { value: false },
-}));
+const organizationName = ref<string | null>(null);
+const cloudConnected = ref(false);
+const environmentLoading = ref(false);
+const refreshEnvironment = vi.fn(async () => undefined);
+const effectiveActiveSet = ref<Record<string, unknown> | null>({ id: 'workproba-cloud' });
+const sidecarState = ref<'connected' | 'idle' | 'working' | 'error'>('idle');
 
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
 }));
 
+vi.mock('@composables/useChatActivity', () => ({
+  useChatActivity: () => ({
+    sidecarState,
+  }),
+}));
+
 vi.mock('@composables/useAppSettings', () => ({
-  useAppSettings: () => mockUseAppSettings(),
+  useAppSettings: () => ({
+    effectiveActiveSet,
+  }),
+}));
+
+vi.mock('@composables/useOrganizationEnvironment', () => ({
+  useOrganizationEnvironment: () => ({
+    organizationName,
+    cloudConnected,
+    loading: environmentLoading,
+    refresh: refreshEnvironment,
+  }),
 }));
 
 const mountTitleBar = (props: Record<string, unknown> = {}) =>
@@ -33,7 +48,6 @@ const mountTitleBar = (props: Record<string, unknown> = {}) =>
     global: {
       stubs: {
         Lucide: true,
-        CapabilitiesButton: true,
         ThemeToggler: true,
         WorkprobaBrand: true,
         'q-tooltip': true,
@@ -48,44 +62,56 @@ const mountTitleBar = (props: Record<string, unknown> = {}) =>
   });
 
 describe('WorkprobaTitleBar', () => {
-  it('affiche le chip en erreur sans effectiveActiveSet même si sidecar connecté', () => {
-    mockUseAppSettings.mockReturnValue({
-      activeSet: { value: null },
-      effectiveActiveSet: { value: null },
-      activeChatProvider: { value: null },
-      activeEmbeddingProvider: { value: null },
-      settingsLocked: { value: false },
-    });
+  it('affiche un environnement local quand aucune organisation n’est connectée', () => {
+    organizationName.value = null;
+    cloudConnected.value = false;
+    effectiveActiveSet.value = { id: 'workproba-cloud' };
 
-    const wrapper = mountTitleBar({ sidecarState: 'connected' });
+    const wrapper = mountTitleBar();
+
+    expect(wrapper.find('.wp-titlebar__chip-label').text()).toBe('Environnement local');
+    expect(wrapper.find('.wp-titlebar__chip').classes()).toContain('wp-titlebar__chip--idle');
+  });
+
+  it('affiche une erreur quand aucun moteur effectif n’est configuré', () => {
+    organizationName.value = null;
+    cloudConnected.value = false;
+    effectiveActiveSet.value = null;
+    sidecarState.value = 'connected';
+
+    const wrapper = mountTitleBar();
 
     expect(wrapper.find('.wp-titlebar__chip').classes()).toContain('wp-titlebar__chip--error');
   });
 
-  it('affiche le label cloud et le chip en erreur quand activeSet est défini mais pas effectiveActiveSet', () => {
-    mockUseAppSettings.mockReturnValue({
-      activeSet: { value: WORKPROBA_CLOUD_BUILTIN_SET },
-      effectiveActiveSet: { value: null },
-      activeChatProvider: { value: null },
-      activeEmbeddingProvider: { value: null },
-      settingsLocked: { value: false },
-    });
+  it('affiche une erreur sidecar dans le tooltip', () => {
+    organizationName.value = 'Improba';
+    cloudConnected.value = true;
+    effectiveActiveSet.value = { id: 'workproba-cloud' };
+    sidecarState.value = 'error';
 
-    const wrapper = mountTitleBar({ sidecarState: 'connected' });
+    const wrapper = mountTitleBar();
 
-    expect(wrapper.find('.wp-titlebar__chip-label').text()).toBe('Improba Cloud');
     expect(wrapper.find('.wp-titlebar__chip').classes()).toContain('wp-titlebar__chip--error');
+    expect(wrapper.find('.wp-titlebar__chip').attributes('aria-label')).toContain('Service IA injoignable');
+  });
+
+  it('affiche le nom de l’organisation et ouvre son environnement', async () => {
+    organizationName.value = 'Improba';
+    cloudConnected.value = true;
+    effectiveActiveSet.value = { id: 'workproba-cloud' };
+    sidecarState.value = 'connected';
+
+    const wrapper = mountTitleBar();
+
+    expect(wrapper.find('.wp-titlebar__chip-label').text()).toBe('Improba');
+    expect(wrapper.find('.wp-titlebar__chip').classes()).toContain('wp-titlebar__chip--connected');
+
+    await wrapper.find('.wp-titlebar__chip').trigger('click');
+    expect(wrapper.emitted('toggle-environment')).toHaveLength(1);
   });
 
   it('navigue vers l\'accueil au clic sur Workproba', async () => {
-    mockUseAppSettings.mockReturnValue({
-      activeSet: { value: null },
-      effectiveActiveSet: { value: null },
-      activeChatProvider: { value: null },
-      activeEmbeddingProvider: { value: null },
-      settingsLocked: { value: false },
-    });
-
     push.mockClear();
 
     const wrapper = mountTitleBar({

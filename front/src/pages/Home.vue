@@ -43,6 +43,14 @@
           />
         </div>
 
+        <BusinessAgentsHome
+          :agents="businessAgents"
+          :connectors="connectors"
+          @consult="requestConsultation"
+          @view-agent="(agent) => openEnvironment(agent.id)"
+          @view-all="openEnvironment()"
+        />
+
         <footer v-if="recentSessions.length" class="home-page__history">
           <header class="home-page__history-head">
             <h2 class="home-page__history-title">{{ t('home.recentConversations') }}</h2>
@@ -107,11 +115,15 @@ import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import OpenSpaceButton from '@components/workspace/OpenSpaceButton.vue';
 import ChatView from '@components/chat/ChatView.vue';
 import EngineOnboardingWizard from '@components/onboarding/EngineOnboardingWizard.vue';
+import BusinessAgentsHome from '@components/environment/BusinessAgentsHome.vue';
 import { useSpace } from '@composables/useSpace';
 import { useAppSettings } from '@composables/useAppSettings';
 import { usePlugins } from '@composables/usePlugins';
 import { setPendingChatLaunch } from '@composables/usePendingChatLaunch';
 import { useDeleteConversation } from '@composables/useDeleteConversation';
+import { useBusinessAgentConsultation } from '@composables/useBusinessAgentConsultation';
+import { useOrganizationEnvironment } from '@composables/useOrganizationEnvironment';
+import { useShellSurfaces } from '@composables/useShellSurfaces';
 import {
   createSession,
   listSessions,
@@ -125,6 +137,9 @@ import type { ChatAttachment, ReasoningEffort } from '#types';
 const router = useRouter();
 const { t, locale } = useI18n();
 const { removeConversation, isDeleting } = useDeleteConversation();
+const { requestConsultation } = useBusinessAgentConsultation();
+const { businessAgents, connectors, refresh: refreshEnvironment } = useOrganizationEnvironment();
+const { openEnvironment } = useShellSurfaces();
 
 const { activePath, activeSpaceId, activeDataDir, loading, error, openSpace } = useSpace();
 const {
@@ -212,6 +227,7 @@ watch(sessionVersion, () => {
 
 onMounted(() => {
   sessionsChecked.value = true;
+  void refreshEnvironment();
 });
 
 function formatRelative(iso: string): string {

@@ -4,13 +4,12 @@
       :workspace-title="spaceTitle"
       :active-path="activePath"
       :right-panel-open="rightPanelOpen"
-      :capabilities-open="capabilitiesOpen"
+      :environment-open="environmentOpen"
       :sidebar-rail="sidebarRail"
-      :sidecar-state="sidecarState"
       :side-chat-open="sideChatOpen"
       :has-side-chat="hasSideChat"
       @toggle-right-panel="toggleRightPanel()"
-      @toggle-capabilities="toggleCapabilities()"
+      @toggle-environment="toggleEnvironment()"
       @toggle-sidebar="sidebarRail = !sidebarRail"
       @toggle-side-chat="onToggleSideChat"
       @open-shortcuts="shortcutsHelpOpen = true"
@@ -38,8 +37,11 @@
 
       <SideChatPanel />
 
+      <EnvironmentDrawer />
       <CapabilitiesDrawer />
     </div>
+
+    <BusinessAgentConsultDialog />
   </div>
 </template>
 
@@ -52,6 +54,8 @@ import RightPanel from '@components/workproba/RightPanel.vue';
 import SideChatPanel from '@components/workproba/SideChatPanel.vue';
 import KeyboardShortcutsHelp from '@components/workproba/KeyboardShortcutsHelp.vue';
 import CapabilitiesDrawer from '@components/capabilities/CapabilitiesDrawer.vue';
+import EnvironmentDrawer from '@components/environment/EnvironmentDrawer.vue';
+import BusinessAgentConsultDialog from '@components/environment/BusinessAgentConsultDialog.vue';
 import { useSpace } from '@composables/useSpace';
 import { useSidecarHealth } from '@composables/useSidecarHealth';
 import { useAppSettings } from '@composables/useAppSettings';
@@ -70,7 +74,6 @@ if (!loaded.value) {
 
 defineProps<{
   streaming?: boolean;
-  sidecarState?: 'connected' | 'idle' | 'working' | 'error';
 }>();
 
 const { activePath, spaceTitle, activeDataDir } = useSpace();
@@ -81,13 +84,16 @@ const shortcutsHelpOpen = ref(false);
 const {
   rightPanelOpen,
   capabilitiesOpen,
+  environmentOpen,
   sideChatOpen,
   toggleRightPanel,
   toggleSideChat,
-  openCapabilities,
   closeCapabilities,
-  closeSideChat,
+  openEnvironment,
+  closeEnvironment,
+  clearBusinessAgentSelection,
   closeRightPanel,
+  selectedBusinessAgentId,
 } = useShellSurfaces();
 
 const route = useRoute();
@@ -119,13 +125,12 @@ function onToggleSideChat(): void {
   toggleSideChat(firstSideChatPluginId.value);
 }
 
-function toggleCapabilities(): void {
-  if (capabilitiesOpen.value) {
-    closeCapabilities();
+function toggleEnvironment(): void {
+  if (environmentOpen.value) {
+    closeEnvironment();
     return;
   }
-  closeSideChat();
-  openCapabilities();
+  openEnvironment();
 }
 
 function isTypingTarget(target: EventTarget | null): boolean {
@@ -140,6 +145,7 @@ function applyResponsive(): void {
     sidebarRail.value = true;
     rightPanelOpen.value = false;
     closeCapabilities();
+    closeEnvironment();
   } else if (w < 1100) {
     rightPanelOpen.value = false;
   }
@@ -155,6 +161,15 @@ function onKeydown(e: KeyboardEvent): void {
     if (capabilitiesOpen.value) {
       e.preventDefault();
       closeCapabilities();
+      return;
+    }
+    if (environmentOpen.value) {
+      e.preventDefault();
+      if (selectedBusinessAgentId.value) {
+        clearBusinessAgentSelection();
+        return;
+      }
+      closeEnvironment();
       return;
     }
   }

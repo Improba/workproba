@@ -5,9 +5,9 @@
 
 ## What are capabilities?
 
-**Capabilities** are optional features you can turn on to extend Workproba. They are listed in the **Capabilities** hub (button in the title bar).
+**Capabilities** are optional features you can turn on to extend Workproba. They remain available from the organization environment panel, under the secondary configuration action **Configure capabilities**.
 
-You do not need to know about technical plugins or extensions to use them in guided mode.
+The title bar no longer exposes a separate Capabilities button beside the Cloud provider. The primary user concept is the **organization environment**. You do not need to know about technical plugins or extensions to use it in guided mode.
 
 Activation has **two layers**:
 
@@ -28,6 +28,8 @@ Activation has **two layers**:
 |---|---|
 | **Project management** (`projects`) | Local library + shared projects via Cloud (can open Library) |
 | **Managed** (e.g. **Ihora**) | Org-authorized via allowlist. On this computer: **Activate** / **Disable** only — no panel to open. Per-space wanted toggles in Space settings. |
+
+Managed connectors are not presented as a standalone tool catalog on Home. They are visible through the business agents whose allowlists reference them. This preserves the product model: plugins provide capabilities; business agents define who can mobilize those capabilities.
 
 The Capabilities hub lists **Workproba Cloud first**. Nested items live in a **collapsible** zone (compact cards, scrollable when many). Guided mode hides technical stubs (`echo`, `ihora.shaped`). Managed capabilities do **not** open a surface: they are toggled on/off locally (agent cannot invoke a locally disabled connector).
 

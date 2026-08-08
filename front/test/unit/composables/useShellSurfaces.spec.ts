@@ -70,6 +70,51 @@ describe('useShellSurfaces', () => {
     expect(focusCapabilityId.value).toBeNull();
   });
 
+  it('ouvre l’environnement sur une fiche agent et ferme les autres surfaces', () => {
+    const {
+      openEnvironment,
+      environmentOpen,
+      selectedBusinessAgentId,
+      rightPanelOpen,
+      capabilitiesOpen,
+    } = useShellSurfaces();
+
+    rightPanelOpen.value = true;
+    capabilitiesOpen.value = true;
+    sideChatOpen.value = true;
+    openEnvironment('org.rh');
+
+    expect(environmentOpen.value).toBe(true);
+    expect(selectedBusinessAgentId.value).toBe('org.rh');
+    expect(rightPanelOpen.value).toBe(false);
+    expect(capabilitiesOpen.value).toBe(false);
+    expect(closeSideChatInternal).toHaveBeenCalled();
+  });
+
+  it('ferme l’environnement quand le panneau fichiers s’ouvre', () => {
+    const { openEnvironment, openRightPanel, environmentOpen } = useShellSurfaces();
+
+    openEnvironment();
+    openRightPanel('files');
+
+    expect(environmentOpen.value).toBe(false);
+  });
+
+  it('sélectionne un agent métier sans rouvrir le drawer', () => {
+    const {
+      openEnvironment,
+      selectBusinessAgent,
+      selectedBusinessAgentId,
+      environmentOpen,
+    } = useShellSurfaces();
+
+    openEnvironment();
+    selectBusinessAgent('org.rh');
+
+    expect(environmentOpen.value).toBe(true);
+    expect(selectedBusinessAgentId.value).toBe('org.rh');
+  });
+
   it('toggleRightPanel bascule l’état du panneau droit', () => {
     const { toggleRightPanel, rightPanelOpen } = useShellSurfaces();
 

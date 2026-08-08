@@ -1,5 +1,5 @@
 <template>
-  <WorkprobaLayout :streaming="streaming" :sidecar-state="sidecarState">
+  <WorkprobaLayout :streaming="streaming">
     <router-view />
   </WorkprobaLayout>
 </template>
@@ -8,5 +8,5 @@
 import WorkprobaLayout from '@layouts/WorkprobaLayout.vue';
 import { useChatActivity } from '@composables/useChatActivity';
 
-const { streaming, sidecarState } = useChatActivity();
+const { streaming } = useChatActivity();
 </script>

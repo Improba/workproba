@@ -6,12 +6,17 @@ import WorkprobaLayout from '../../../src/layouts/WorkprobaLayout.vue';
 const sideChatOpen = ref(false);
 const rightPanelOpen = ref(false);
 const capabilitiesOpen = ref(false);
+const environmentOpen = ref(false);
+const selectedBusinessAgentId = ref<string | null>(null);
 const openSideChat = vi.fn();
 const closeSideChat = vi.fn();
 const toggleSideChat = vi.fn();
 const toggleRightPanel = vi.fn();
 const openCapabilities = vi.fn();
 const closeCapabilities = vi.fn();
+const openEnvironment = vi.fn();
+const closeEnvironment = vi.fn();
+const clearBusinessAgentSelection = vi.fn();
 const sideChatPluginPanels = ref([{ pluginId: 'workproba.personas', key: 'workproba.personas:side_chat' }]);
 
 vi.mock('@composables/useDesktop', () => ({
@@ -42,12 +47,17 @@ vi.mock('@composables/useShellSurfaces', () => ({
   useShellSurfaces: () => ({
     rightPanelOpen,
     capabilitiesOpen,
+    environmentOpen,
     sideChatOpen,
     toggleRightPanel,
     toggleSideChat,
     openCapabilities,
     closeCapabilities,
+    openEnvironment,
+    closeEnvironment,
+    clearBusinessAgentSelection,
     closeSideChat,
+    selectedBusinessAgentId,
   }),
 }));
 
@@ -56,6 +66,8 @@ describe('WorkprobaLayout side chat', () => {
     sideChatOpen.value = false;
     rightPanelOpen.value = false;
     capabilitiesOpen.value = false;
+    environmentOpen.value = false;
+    selectedBusinessAgentId.value = null;
     openSideChat.mockClear();
     closeSideChat.mockClear();
     toggleSideChat.mockClear();
@@ -73,6 +85,8 @@ describe('WorkprobaLayout side chat', () => {
           SideChatPanel: true,
           KeyboardShortcutsHelp: true,
           CapabilitiesDrawer: true,
+          EnvironmentDrawer: true,
+          BusinessAgentConsultDialog: true,
         },
       },
     });
@@ -98,6 +112,8 @@ describe('WorkprobaLayout side chat', () => {
           SideChatPanel: true,
           KeyboardShortcutsHelp: true,
           CapabilitiesDrawer: true,
+          EnvironmentDrawer: true,
+          BusinessAgentConsultDialog: true,
         },
       },
     });
@@ -125,6 +141,8 @@ describe('WorkprobaLayout side chat', () => {
           SideChatPanel: true,
           KeyboardShortcutsHelp: true,
           CapabilitiesDrawer: true,
+          EnvironmentDrawer: true,
+          BusinessAgentConsultDialog: true,
         },
       },
     });
@@ -135,5 +153,37 @@ describe('WorkprobaLayout side chat', () => {
 
     wrapper.unmount();
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+  });
+
+  it('revient à la liste des agents avant de fermer l’environnement sur Escape', async () => {
+    environmentOpen.value = true;
+    selectedBusinessAgentId.value = 'org.rh';
+
+    const wrapper = shallowMount(WorkprobaLayout, {
+      slots: { default: '<div />' },
+      global: {
+        stubs: {
+          WorkprobaTitleBar: true,
+          SpaceSidebar: true,
+          RightPanel: true,
+          SideChatPanel: true,
+          KeyboardShortcutsHelp: true,
+          CapabilitiesDrawer: true,
+          EnvironmentDrawer: true,
+          BusinessAgentConsultDialog: true,
+        },
+      },
+    });
+    await flushPromises();
+
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(clearBusinessAgentSelection).toHaveBeenCalled();
+    expect(closeEnvironment).not.toHaveBeenCalled();
+
+    selectedBusinessAgentId.value = null;
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    expect(closeEnvironment).toHaveBeenCalled();
+
+    wrapper.unmount();
   });
 });

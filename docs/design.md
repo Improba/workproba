@@ -22,7 +22,7 @@ The main layout is `front/src/layouts/WorkprobaLayout.vue`. Root element: `.wp-s
 ```
 +--------------------------------------------------------------------------------+
 | WorkprobaTitleBar (~40px)                                                      |
-| [Workproba · workspace · user]     [sidecar] [side chat] [files] [sidebar] …   |
+| [Workproba · workspace]     [organization environment] [regards] [files] …    |
 +----------+-------------------------------------------+------------+----------+
 | Sidebar  |              Center (router-view)         | RightPanel | SideChat |
 | 268px    |  Home · Chat · Settings …                 |  320px     | 380px    |
@@ -34,11 +34,20 @@ The main layout is `front/src/layouts/WorkprobaLayout.vue`. Root element: `.wp-s
 
 | Region | Component | Role |
 |--------|-----------|------|
-| **Title bar** | `WorkprobaTitleBar.vue` | Tauri drag region; `WorkprobaBrand` (mark + logo), workspace name, user profile; sidecar status chip (opens settings dialog); toggles for side chat, right panel, sidebar; keyboard shortcuts (`?`); theme toggle |
+| **Title bar** | `WorkprobaTitleBar.vue` | Tauri drag region; `WorkprobaBrand` (mark + logo), workspace name, persistent organization environment chip; toggles for side chat and right panel; keyboard shortcuts (`?`); theme toggle |
 | **Left sidebar** | `WorkspaceSidebar.vue` | **Tree model**: recent workspaces as expandable nodes, conversations nested under each workspace. Footer: settings, memory, profile. Collapsible to **56px icon rail** (never fully hidden) |
 | **Center** | `<router-view />` in `.wp-center` | Home (`EngineOnboardingWizard` on first run), chat (`ChatView`), settings pages. Chat body uses `--wp-font-chat` |
 | **Right panel** | `RightPanel.vue` | Collapsible (`Ctrl/Cmd+B`), state per session. **Tabs**: Files (`FileExplorer`), Preview (`DocumentPreview`), Personas (if plugin active), dynamic plugin tabs |
 | **Side chat** | `SideChatPanel.vue` | Optional panel (`Ctrl/Cmd+Shift+L`) for plugin side conversations (e.g. Personas). Width 320–420px (default 380px) |
+| **Environment drawer** | `EnvironmentDrawer.vue` | Organization identity, Cloud connection, business agents and the tools attached to each agent. Technical capability settings remain one level deeper. |
+
+### Organization context and business agents
+
+The organization environment is a persistent shell context, not a home-page dashboard and not an application catalog. Its name is visible in the title bar on Home and during a conversation. Clicking it opens one coordinated drawer; it never competes with the files panel, side chat or capabilities drawer.
+
+The Home page keeps the main assistant composer as its center of gravity. A compact business-agent section appears below the work area. Tools are shown only through the business agents authorized to use them. There is no separate list of managed tools on Home.
+
+Starting from a business agent does not replace the main chat persona. The user describes a task, then a new main conversation opens with Workproba. Workproba remains the interlocutor and delegates to the selected business agent through `summon_specialist`.
 
 ### Responsive breakpoints
 
