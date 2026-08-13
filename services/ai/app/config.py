@@ -262,6 +262,12 @@ class Settings(BaseSettings):
         le=64,
         validation_alias="MAX_AGENT_ITERATIONS",
     )
+    unexpected_model_behavior_retries: int = Field(
+        default=1,
+        ge=0,
+        le=3,
+        validation_alias="UNEXPECTED_MODEL_BEHAVIOR_RETRIES",
+    )
 
     # --- Limites outils (tunables ops) ---
     read_max_lines: int = Field(default=2000, ge=1, validation_alias="READ_MAX_LINES")

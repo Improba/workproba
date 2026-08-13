@@ -138,6 +138,7 @@
           {{ t('personas.publishToProject') }}
         </button>
         <textarea
+          ref="composerInputRef"
           v-model="draft"
           class="personas-side-chat__input"
           rows="2"
@@ -231,6 +232,7 @@ const avisEntries = ref<
 const discussionMessages = ref<DiscussionMessage[]>([]);
 const discussionId = ref<string | null>(null);
 const draft = ref('');
+const composerInputRef = ref<HTMLTextAreaElement | null>(null);
 const busy = ref(false);
 const pickerOpen = ref(false);
 const publishOpen = ref(false);
@@ -569,6 +571,11 @@ function applySideChatInitial(): void {
   const initial = consumeInitial();
   applyInitialPayload(initial);
   void maybeAutoAsk();
+  if (!pendingAutoAsk.value) {
+    void nextTick(() => {
+      composerInputRef.value?.focus();
+    });
+  }
 }
 
 watch(launchToken, () => {

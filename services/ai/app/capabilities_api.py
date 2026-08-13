@@ -267,11 +267,15 @@ def apply_wanted_updates(
     *,
     auto_want_cloud_parent: bool = True,
 ) -> CapabilitiesProfile:
-    """Write wanted updates; optionally auto-enable workproba_cloud for nested ons."""
-    normalized = dict(updates)
+    """Write wanted updates; optionally auto-enable workproba_cloud for nested locals."""
+    normalized = {
+        cap_id: value
+        for cap_id, value in updates.items()
+        if not is_managed_capability_id(cap_id)
+    }
     if auto_want_cloud_parent:
         for cap_id, value in updates.items():
-            if value and _is_cloud_nested(cap_id):
+            if value and cap_id in CLOUD_NESTED_LOCAL_IDS:
                 normalized["workproba_cloud"] = True
                 break
     return set_wanted(workspace_data_dir, normalized)

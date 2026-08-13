@@ -4,6 +4,7 @@ import type {
   ChatMessagePart,
   ChatToolCall,
   PersonasOpinionCard,
+  SpecialistDegradedTool,
   SpecialistHandoffCard,
   SpecialistHandoffMode,
   SpecialistHandoffStatus,
@@ -87,9 +88,54 @@ export function createRunningSpecialistHandoff(
   };
 }
 
-function parseDegradedTools(raw: unknown): string[] {
+function parseLegacyManagedToolString(value: string): SpecialistDegradedTool | null {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '[object Object]' || !trimmed.startsWith('managed__')) {
+    return null;
+  }
+  const rest = trimmed.slice('managed__'.length);
+  const sep = rest.lastIndexOf('__');
+  if (sep <= 0 || sep + 2 >= rest.length) {
+    return null;
+  }
+  const connectorId = rest.slice(0, sep).trim();
+  const tool = rest.slice(sep + 2).trim();
+  if (!connectorId || !tool) return null;
+  return { connectorId, tool };
+}
+
+function parseDegradedToolObject(item: Record<string, unknown>): SpecialistDegradedTool | null {
+  const connectorId = String(item.connector_id ?? item.connectorId ?? '').trim();
+  const tool = String(item.tool ?? '').trim();
+  if (!connectorId || !tool) return null;
+  const reason = item.reason != null ? String(item.reason).trim() : '';
+  return {
+    connectorId,
+    tool,
+    ...(reason ? { reason } : {}),
+  };
+}
+
+export function parseDegradedTools(raw: unknown): SpecialistDegradedTool[] {
   if (!Array.isArray(raw)) return [];
-  return raw.map((item) => String(item).trim()).filter(Boolean);
+  const seen = new Set<string>();
+  const result: SpecialistDegradedTool[] = [];
+
+  for (const item of raw) {
+    let parsed: SpecialistDegradedTool | null = null;
+    if (item && typeof item === 'object') {
+      parsed = parseDegradedToolObject(item as Record<string, unknown>);
+    } else if (typeof item === 'string') {
+      parsed = parseLegacyManagedToolString(item);
+    }
+    if (!parsed) continue;
+    const key = `${parsed.connectorId}__${parsed.tool}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(parsed);
+  }
+
+  return result;
 }
 
 export function toolResultToSpecialistHandoff(

@@ -6,12 +6,9 @@
       :right-panel-open="rightPanelOpen"
       :environment-open="environmentOpen"
       :sidebar-rail="sidebarRail"
-      :side-chat-open="sideChatOpen"
-      :has-side-chat="hasSideChat"
       @toggle-right-panel="toggleRightPanel()"
       @toggle-environment="toggleEnvironment()"
       @toggle-sidebar="sidebarRail = !sidebarRail"
-      @toggle-side-chat="onToggleSideChat"
       @open-shortcuts="shortcutsHelpOpen = true"
     />
 
@@ -85,7 +82,6 @@ const {
   rightPanelOpen,
   capabilitiesOpen,
   environmentOpen,
-  sideChatOpen,
   toggleRightPanel,
   toggleSideChat,
   closeCapabilities,

@@ -82,6 +82,7 @@
         @personas-another="(card) => openOpinionPicker(card.question)"
         @personas-to-discussion="openDiscussionFromOpinion"
         @specialist-to-discussion="openDiscussionFromHandoff"
+        @specialist-retry="retrySpecialistHandoff"
         @regenerate="(id) => regenerateFrom(id)"
       />
     </section>
@@ -117,7 +118,7 @@ import { useSpace } from '@composables/useSpace';
 import { clearExpansionState } from '@composables/useToolCallExpansion';
 import { createSessionLoadGuard } from '@composables/useSessionLoadGuard';
 import { bumpSessions } from '@composables/useSessionSync';
-import { consumePendingChatLaunch } from '@composables/usePendingChatLaunch';
+import { consumePendingChatLaunchForSession } from '@composables/usePendingChatLaunch';
 import {
   resolveUiMode,
   requestTitle,
@@ -174,6 +175,7 @@ const { consumeAction, pendingAction } = usePersonasNavigation();
   refresh: refreshPersonas,
   startMeeting,
   saveMeeting,
+  findPersona,
 } = usePersonas();
 const { openSideChat, closeSideChat } = useSideChat();
 const { setMessages: syncMainChatContext } = useMainChatContext();
@@ -485,10 +487,10 @@ async function afterSessionLoaded(loadGen: number): Promise<void> {
     initialPrompt?: string;
     focusComposer?: boolean;
   } | null;
-  const pending = consumePendingChatLaunch();
-
   await nextTick();
   if (sessionLoadGuard.isStale(loadGen)) return;
+
+  const pending = consumePendingChatLaunchForSession(sessionId.value);
 
   if (pending) {
     if (pending.reasoningEffort != null) {
@@ -497,8 +499,18 @@ async function afterSessionLoaded(loadGen: number): Promise<void> {
     if (pending.model) {
       sessionModelOverride.value = pending.model;
     }
-    await send(pending.text, { attachments: pending.attachments });
-    void tryAutoTitle(loadGen);
+    const pendingText = pending.text?.trim() ?? '';
+    if (pendingText) {
+      await send(pendingText, { attachments: pending.attachments ?? [] });
+      void tryAutoTitle(loadGen);
+    }
+    if (pending.personasAction === 'meeting') {
+      openMeetingView();
+    } else if (pending.personasAction === 'discussion') {
+      openDiscussionView();
+    } else if (pending.personasAction === 'avis') {
+      openExpertsPanel();
+    }
     return;
   }
 
@@ -788,6 +800,7 @@ function buildConversationContext(): string {
 function openExpertsPanel(): void {
   void loadPersonasIfNeeded().then(() => {
     openSideChat(PERSONAS_PLUGIN_ID, {
+      mode: 'avis',
       conversationContext: buildConversationContext(),
     });
   });
@@ -876,21 +889,75 @@ function openDiscussionFromOpinion(card: PersonasOpinionCard): void {
 
 function openDiscussionFromHandoff(card: SpecialistHandoffCard): void {
   void loadPersonasIfNeeded().then(() => {
-    const knownIds = selectablePersonasList.value
-      .map((p) => p.id)
-      .filter((id) => id === card.specialistId);
-    if (knownIds.length === 0) {
+    const known = findPersona(card.specialistId);
+    if (!known) {
       Notify.create({
-        message: t('personas.errors.personasUnavailable'),
+        message: t('personas.handoff.specialistUnavailable', {
+          name: card.specialistName,
+        }),
         color: 'warning',
       });
       return;
     }
     openSideChat(PERSONAS_PLUGIN_ID, {
       mode: 'discussion',
-      personaIds: knownIds,
-      discussionSeed: card.task,
+      personaIds: [known.id],
       conversationContext: buildConversationContext(),
+    });
+  });
+}
+
+function isChatBusyForHandoffRetry(): boolean {
+  return (
+    streaming.value ||
+    confirming.value ||
+    approvingPlan.value ||
+    messages.value.some(
+      (item) =>
+        Boolean(item.pendingConfirmation) ||
+        item.pendingPlan?.status === 'pending',
+    )
+  );
+}
+
+function retrySpecialistHandoff(messageId: string): void {
+  if (isChatBusyForHandoffRetry()) {
+    Notify.create({
+      message: t('personas.handoff.retryBusy'),
+      color: 'warning',
+    });
+    return;
+  }
+  const idx = messages.value.findIndex((item) => item.id === messageId);
+  const assistant = idx >= 0 ? messages.value[idx] : undefined;
+  if (!assistant || assistant.role !== 'assistant') {
+    Notify.create({
+      message: t('personas.handoff.retryFailed'),
+      color: 'warning',
+    });
+    return;
+  }
+  const userMessage = assistant.parentId
+    ? messages.value.find((item) => item.id === assistant.parentId)
+    : messages.value[idx - 1];
+  if (!userMessage || userMessage.role !== 'user' || !userMessage.content.trim()) {
+    Notify.create({
+      message: t('personas.handoff.retryFailed'),
+      color: 'warning',
+    });
+    return;
+  }
+  void regenerateFrom(messageId).then((started) => {
+    if (!started) {
+      Notify.create({
+        message: t('personas.handoff.retryFailed'),
+        color: 'warning',
+      });
+    }
+  }).catch(() => {
+    Notify.create({
+      message: t('personas.handoff.retryFailed'),
+      color: 'warning',
     });
   });
 }

@@ -54,6 +54,40 @@ _BROWSER_TOOLS = frozenset(
     }
 )
 
+_BROWSER_NON_BLOCKING_RETRY = frozenset({"browser_extract", "browser_scroll"})
+
+_BROWSER_BLOCKING_RETRY = frozenset(
+    {
+        "browser_navigate",
+        "browser_click",
+        "browser_type",
+        "browser_press",
+        "browser_back",
+        "browser_forward",
+    }
+)
+
+_MANAGED_WRITE_SEGMENTS = (
+    "create_",
+    "update_",
+    "delete_",
+    "send_",
+    "add_",
+    "remove_",
+    "set_",
+)
+
+_IRREVERSIBLE_TOOLS = frozenset(
+    {
+        "run_code",
+        "publish_artifact",
+        "sync_to_cloud",
+        "sync_from_cloud",
+        "sync_managed_regards",
+        "invoke_managed_connector",
+    }
+)
+
 
 class EffectProtection(BaseModel):
     preview: bool = False
@@ -166,6 +200,22 @@ def protection_labels(proposal: EffectProposal, locale: str) -> list[str]:
         labels.append(t(locale, "effect.protection.no_external_send"))
 
     return labels
+
+
+def tool_blocks_model_behavior_retry(tool_name: str, *, is_error: bool) -> bool:
+    """True si un result outil reussi interdit le retry UnexpectedModelBehavior."""
+    if is_error:
+        return False
+    if tool_name in _WRITE_TOOLS or tool_name in _IRREVERSIBLE_TOOLS:
+        return True
+    if tool_name in _BROWSER_BLOCKING_RETRY:
+        return True
+    if tool_name.startswith("browser_") and tool_name not in _BROWSER_NON_BLOCKING_RETRY:
+        return True
+    if tool_name.startswith("managed_"):
+        action_name = tool_name.rsplit("__", 1)[-1]
+        return any(action_name.startswith(segment) for segment in _MANAGED_WRITE_SEGMENTS)
+    return False
 
 
 def classify_effect(

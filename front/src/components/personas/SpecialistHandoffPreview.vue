@@ -1,28 +1,16 @@
 <template>
   <div
     class="specialist-handoff-preview"
-    role="status"
-    aria-live="polite"
-    :aria-busy="true"
+    aria-hidden="true"
   >
-    <PersonaAvatar
-      :name="name"
-      :color="avatarColor"
-      :icon="avatarIcon"
-    />
     <span class="specialist-handoff-preview__label">{{ label }}</span>
     <span class="specialist-handoff-preview__spinner" aria-hidden="true" />
   </div>
 </template>
 
 <script setup lang="ts">
-import PersonaAvatar from '@components/personas/PersonaAvatar.vue';
-
 defineProps<{
-  name: string;
   label: string;
-  avatarColor?: string;
-  avatarIcon?: string;
 }>();
 </script>
 

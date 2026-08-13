@@ -56,6 +56,27 @@ def is_entitled(
     return capability_id in _as_frozenset(machine_entitled_local_ids)
 
 
+def auto_effective_managed_ids(
+    *,
+    machine_entitled_local_ids: frozenset[str] | Iterable[str],
+    cloud_plugin_entitled: bool,
+    cloud_allowlist: frozenset[str] | Iterable[str],
+    disabled_managed_connectors: frozenset[str] | Iterable[str],
+) -> set[str]:
+    """Managed connectors on the org allowlist that pass entitlement (not space toggles)."""
+    ctx = {
+        "machine_entitled_local_ids": _as_frozenset(machine_entitled_local_ids),
+        "cloud_plugin_entitled": cloud_plugin_entitled,
+        "cloud_allowlist": _as_frozenset(cloud_allowlist),
+        "disabled_managed_connectors": _as_frozenset(disabled_managed_connectors),
+    }
+    return {
+        f"managed:{connector_id}"
+        for connector_id in _as_frozenset(cloud_allowlist)
+        if is_entitled(f"managed:{connector_id}", **ctx)
+    }
+
+
 def apply_parent_gates(effective: set[str], wanted: dict[str, bool]) -> set[str]:
     """Drop nested caps when parent workproba_cloud is not wanted in the space."""
     if wanted.get("workproba_cloud") is True:
@@ -87,6 +108,8 @@ def resolve_effective(
         for cap_id, is_wanted in wanted.items()
         if is_wanted and is_entitled(cap_id, **ctx)
     }
+    if wanted.get("workproba_cloud") is True:
+        entitled_wanted |= auto_effective_managed_ids(**ctx)
     return apply_parent_gates(entitled_wanted, wanted)
 
 

@@ -51,4 +51,34 @@ describe('thinkingPresentation', () => {
     expect(deriveThinkingSubject('---\n***')).toBeNull();
     expect(deriveThinkingSummary('   \n\n  ')).toBeNull();
   });
+
+  it('ignore le ton observateur pour le sujet courant', () => {
+    const content = [
+      'Vérification des entrées.',
+      "L'utilisateur veut une saisie mardi.",
+      'Préparation de la requête API.',
+    ].join('\n');
+    expect(deriveThinkingSubject(content)).toBe('Préparation de la requête API.');
+  });
+
+  it('retourne null si seules des lignes observateur', () => {
+    const content = "L'utilisateur demande une modification.\nJe vais lui expliquer la procédure.";
+    expect(deriveThinkingSubject(content)).toBeNull();
+    expect(deriveThinkingSubjectDone(content)).toBeNull();
+    expect(deriveThinkingSummary(content)).toBeNull();
+  });
+
+  it('filtre le ton observateur dans le résumé thinking', () => {
+    const content = [
+      "L'utilisateur a confirmé.",
+      'Vérification du montant TTC.',
+      'Je vais lui dire quoi coller.',
+      "Appel de l'API Pennylane.",
+    ].join('\n');
+    const summary = deriveThinkingSummary(content);
+    expect(summary).toContain('Vérification du montant TTC.');
+    expect(summary).toContain("Appel de l'API Pennylane.");
+    expect(summary).not.toMatch(/L'utilisateur/i);
+    expect(summary).not.toMatch(/Je vais lui/i);
+  });
 });

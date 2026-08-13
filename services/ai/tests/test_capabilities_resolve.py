@@ -76,7 +76,7 @@ def test_resolve_effective_is_entitled_intersection_wanted() -> None:
         "projects": True,
         "regards": False,
         "web_navigation": True,
-        "managed:ihora": True,
+        "managed:ihora": False,
         "managed:echo": True,
         "managed:unknown": True,
     }
@@ -91,6 +91,39 @@ def test_resolve_effective_is_entitled_intersection_wanted() -> None:
     assert effective == {"workproba_cloud", "projects", "managed:ihora"}
     assert wanted["managed:echo"] is True
     assert wanted["web_navigation"] is True
+
+
+def test_cloud_wanted_auto_activates_allowlisted_managed_without_wanted_keys() -> None:
+    wanted = {
+        "workproba_cloud": True,
+        "projects": True,
+    }
+    ctx = _ctx(
+        machine_entitled_local_ids=LOCAL_ENTITLED,
+        cloud_allowlist=frozenset({"ihora", "echo"}),
+    )
+
+    effective = resolve_effective(wanted, **ctx)
+
+    assert effective == {
+        "workproba_cloud",
+        "projects",
+        "managed:ihora",
+        "managed:echo",
+    }
+
+
+def test_disabled_managed_connectors_still_block_auto_activation() -> None:
+    wanted = {"workproba_cloud": True}
+    ctx = _ctx(
+        cloud_allowlist=frozenset({"ihora", "echo"}),
+        disabled_managed_connectors=frozenset({"ihora"}),
+    )
+
+    effective = resolve_effective(wanted, **ctx)
+
+    assert "managed:ihora" not in effective
+    assert "managed:echo" in effective
 
 
 def test_parent_gate_cloud_off_blocks_managed_even_if_wanted() -> None:
@@ -142,12 +175,16 @@ def test_parent_gate_cloud_on_projects_on_ihora_off() -> None:
 
     effective = resolve_effective(wanted, **ctx)
 
-    assert effective == {"workproba_cloud", "projects", "managed:echo"}
+    assert effective == {
+        "workproba_cloud",
+        "projects",
+        "managed:ihora",
+        "managed:echo",
+    }
     plugins = capability_ids_to_active_plugins(effective)
     assert PLUGIN_WORKPROBA_PROJET in plugins
     assert PLUGIN_WORKPROBA_CLOUD in plugins
-    assert effective_managed_connector_ids(effective) == frozenset({"echo"})
-    assert "ihora" not in effective_managed_connector_ids(effective)
+    assert effective_managed_connector_ids(effective) == frozenset({"ihora", "echo"})
 
 
 def test_apply_parent_gates_preserves_when_cloud_wanted() -> None:

@@ -92,6 +92,28 @@ def test_auto_want_cloud_parent_on_nested_enable(tmp_path: Path) -> None:
     assert updated.wanted["workproba_cloud"] is True
 
 
+def test_apply_wanted_updates_ignores_managed_keys(tmp_path: Path) -> None:
+    ensure_initialized(
+        tmp_path,
+        sorted(LOCAL_IDS | {"managed:ihora", "managed:echo"}),
+    )
+    set_wanted(
+        tmp_path,
+        {
+            "workproba_cloud": True,
+            "managed:ihora": True,
+            "managed:echo": True,
+        },
+    )
+    updated = apply_wanted_updates(
+        tmp_path,
+        {"managed:ihora": False, "managed:echo": False, "projects": True},
+    )
+    assert updated.wanted["managed:ihora"] is True
+    assert updated.wanted["managed:echo"] is True
+    assert updated.wanted["projects"] is True
+
+
 def test_http_get_put_workspace_capabilities(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

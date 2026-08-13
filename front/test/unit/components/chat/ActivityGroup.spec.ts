@@ -117,6 +117,7 @@ describe('ActivityGroup', () => {
           thinkingId: 'think-0',
           content: 'Je réfléchis',
           done: false,
+          subject: 'Fragment de CoT qui ne doit pas défiler',
         },
       ],
       toolCallIds: [],
@@ -137,8 +138,45 @@ describe('ActivityGroup', () => {
 
     const toggle = wrapper.find('.activity-group__toggle');
     expect(toggle.text()).toContain('Le modèle réfléchit');
+    expect(toggle.text()).not.toContain('Fragment de CoT');
     expect(toggle.text()).not.toContain('Utilisé 0 outil');
     expect(wrapper.find('.activity-group__spinner').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('affiche le sujet figé pour un groupe thinking-only terminé', () => {
+    const thinkingOnlyGroup: ActivityGroupData = {
+      id: 'think-done-subject',
+      parts: [
+        {
+          type: 'thinking',
+          id: 'think-done-subject',
+          thinkingId: 'think-0',
+          content: 'Analyse terminée',
+          done: true,
+          subject: 'Vérifier la consommation juillet',
+        },
+      ],
+      toolCallIds: [],
+    };
+
+    const wrapper = mount(ActivityGroup, {
+      props: { group: thinkingOnlyGroup, streaming: false },
+      global: {
+        stubs: {
+          Lucide: true,
+          'q-icon': true,
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    expect(wrapper.find('.activity-group__toggle').text()).toContain(
+      'Vérifier la consommation juillet',
+    );
+    expect(wrapper.find('.activity-group__spinner').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -211,6 +249,50 @@ describe('ActivityGroup', () => {
     const thinkingCard = wrapper.findComponent({ name: 'ThinkingCard' });
     expect(thinkingCard.exists()).toBe(true);
     expect(thinkingCard.props('embedded')).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('porte la présence thinking après outils terminés (pas le résumé outils)', () => {
+    const group: ActivityGroupData = {
+      id: 'think-post-tools',
+      parts: [
+        {
+          type: 'thinking',
+          id: 'th-1',
+          thinkingId: 'th-1',
+          content: 'suite',
+          done: false,
+          subject: 'Ne doit pas défiler',
+        },
+        { type: 'tool_call', id: 'tc-part-1', toolCallId: 'tc-1' },
+      ],
+      toolCallIds: ['tc-1'],
+    };
+
+    const wrapper = mount(ActivityGroup, {
+      props: {
+        group,
+        streaming: true,
+        toolCalls: [
+          { id: 'tc-1', name: 'managed__ihora__list_absences', status: 'success' },
+        ],
+      },
+      global: {
+        stubs: {
+          Lucide: true,
+          'q-icon': true,
+          ThinkingCard: true,
+          ToolCallCard: true,
+          ConfirmationCard: true,
+        },
+      },
+    });
+
+    const toggle = wrapper.find('.activity-group__toggle');
+    expect(toggle.text()).toContain('Le modèle réfléchit');
+    expect(toggle.text()).not.toContain('Utilisé');
+    expect(toggle.text()).not.toContain('Ne doit pas défiler');
+    expect(wrapper.find('.activity-group__spinner').exists()).toBe(true);
     wrapper.unmount();
   });
 });

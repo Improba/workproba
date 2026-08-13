@@ -14,6 +14,7 @@ from pydantic_ai.models.test import TestModel
 from app.agent.tools import ToolDeps, ToolContext, build_agent
 from app.limits import DEFAULT_LIMITS
 from app.plugins.workproba_personas import PLUGIN_ID, manifest, orchestrator, specialist_run, storage
+from app.plugins.workproba_personas.plugin import _truncate_summon_task
 from app.plugins.workproba_personas.tool_allowlist import ResolvedReadTool
 from app.plugins.ports.managed_regards import create_personas_managed_port, sign_bundle_for_tests
 from app.sandbox.runner import SandboxRunner
@@ -395,8 +396,6 @@ async def test_summon_specialist_operative_uses_operative_runner(
 
 @pytest.mark.asyncio
 async def test_summon_specialist_unknown_id_refused(plugin_dir: Path) -> None:
-    from pydantic_ai.exceptions import ModelRetry
-
     _install_managed_specialist_catalog(plugin_dir)
     deps = ToolDeps(
         context=ToolContext(
@@ -415,11 +414,11 @@ async def test_summon_specialist_unknown_id_refused(plugin_dir: Path) -> None:
     agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
     tool = agent._function_toolset.tools["summon_specialist"]
     ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc5")
-    with pytest.raises(ModelRetry) as exc_info:
-        await tool.function(ctx, specialist_id="org.unknown", task="Test")
-    message = str(exc_info.value)
-    assert "org.unknown" in message
-    assert "org.gestionnaire" in message
+    result = await tool.function(ctx, specialist_id="org.unknown", task="Test")
+    assert result["error"] == "specialist_not_found"
+    assert result["display"] == "specialist_handoff_card"
+    assert "org.unknown" in result["content"]
+    assert "org.gestionnaire" in result["content"]
 
 
 @pytest.mark.asyncio
@@ -494,8 +493,6 @@ def test_resolve_specialist_by_connector(plugin_dir: Path) -> None:
 
 @pytest.mark.asyncio
 async def test_summon_specialist_rejects_invalid_mode(plugin_dir: Path) -> None:
-    from pydantic_ai.exceptions import ModelRetry
-
     _install_managed_specialist_catalog(plugin_dir)
     deps = ToolDeps(
         context=ToolContext(
@@ -514,13 +511,62 @@ async def test_summon_specialist_rejects_invalid_mode(plugin_dir: Path) -> None:
     agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
     tool = agent._function_toolset.tools["summon_specialist"]
     ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc7")
-    with pytest.raises(ModelRetry, match="Mode de délégation invalide"):
-        await tool.function(
-            ctx,
-            specialist_id="org.gestionnaire",
-            task="Test",
-            mode="invalid",
-        )
+    result = await tool.function(
+        ctx,
+        specialist_id="org.gestionnaire",
+        task="Test",
+        mode="invalid",
+    )
+    assert result["error"] == "invalid_specialist_mode"
+    assert result["display"] == "specialist_handoff_card"
+    assert result["mode"] == "regard"
+    assert "Mode de délégation invalide" in result["content"]
+
+
+def test_truncate_summon_task_caps_length() -> None:
+    short = _truncate_summon_task("hello")
+    assert short == "hello"
+    long = "a" * 2500
+    truncated = _truncate_summon_task(long)
+    assert len(truncated) == 2000
+    assert truncated.endswith("…")
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_truncates_long_task(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_managed_specialist_catalog(plugin_dir)
+    captured: dict[str, str] = {}
+
+    async def fake_run_regard(**kwargs: Any) -> tuple[str, list[dict[str, object]]]:
+        captured["task"] = str(kwargs.get("question") or kwargs.get("task") or "")
+        return "OK", []
+
+    monkeypatch.setattr(specialist_run, "run_regard", fake_run_regard)
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc7b")
+    long_task = "x" * 2500
+    await tool.function(ctx, specialist_id="org.gestionnaire", task=long_task, mode="regard")
+    assert captured["task"]
+    assert len(captured["task"]) <= 2000
+    assert captured["task"].endswith("…")
 
 
 @pytest.mark.asyncio
@@ -567,8 +613,6 @@ async def test_summon_specialist_builtin_persona_id_with_empty_catalog(
 async def test_summon_specialist_rejects_builtin_persona_id_when_catalog_present(
     plugin_dir: Path,
 ) -> None:
-    from pydantic_ai.exceptions import ModelRetry
-
     _install_managed_specialist_catalog(plugin_dir)
     deps = ToolDeps(
         context=ToolContext(
@@ -587,8 +631,98 @@ async def test_summon_specialist_rejects_builtin_persona_id_when_catalog_present
     agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
     tool = agent._function_toolset.tools["summon_specialist"]
     ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc6b")
-    with pytest.raises(ModelRetry, match="01"):
-        await tool.function(ctx, specialist_id="01", task="Test")
+    result = await tool.function(ctx, specialist_id="01", task="Test")
+    assert result["error"] == "specialist_not_found"
+    assert result["display"] == "specialist_handoff_card"
+    assert "01" in result["content"]
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_rejects_ambiguous_connector_alias(
+    plugin_dir: Path,
+) -> None:
+    port = create_personas_managed_port(plugin_dir)
+    second = {
+        **_sample_managed_specialist(),
+        "id": "org.second",
+        "name": "Second",
+    }
+    bundle = sign_bundle_for_tests(
+        catalog_id="spec-ambiguous",
+        version="1.0.0",
+        name="Ambiguous connector",
+        specialists=[_sample_managed_specialist(), second],
+    )
+    port.install_catalog_version(bundle)
+    port.activate_catalog("spec-ambiguous")
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc7b")
+    result = await tool.function(ctx, specialist_id="ihora", task="Test")
+    assert result["error"] == "specialist_connector_ambiguous"
+    assert result["display"] == "specialist_handoff_card"
+    assert "ihora" in result["content"]
+    assert "org.gestionnaire" in result["content"]
+    assert "org.second" in result["content"]
+
+
+@pytest.mark.asyncio
+async def test_summon_specialist_returns_structured_error_on_unexpected_model_behavior(
+    plugin_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai.exceptions import UnexpectedModelBehavior
+
+    _install_managed_specialist_catalog(plugin_dir)
+
+    pennylane_message = (
+        "Tool 'managed__pennylane__create_customer_invoice' exceeded max retries count of 1"
+    )
+
+    async def fake_run_operative(**kwargs: Any) -> tuple[str, list[dict[str, object]]]:
+        raise UnexpectedModelBehavior(pennylane_message)
+
+    monkeypatch.setattr(specialist_run, "run_operative", fake_run_operative)
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugin_dir,
+            locale="fr",
+            active_plugins=[PLUGIN_ID],
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+    )
+    agent = build_agent(TestModel(), active_plugins=[PLUGIN_ID])
+    tool = agent._function_toolset.tools["summon_specialist"]
+    ctx = RunContext(deps=deps, model=TestModel(), usage=None, prompt=None, tool_call_id="tc5")
+    result = await tool.function(
+        ctx,
+        specialist_id="org.gestionnaire",
+        task="Creer une facture client",
+        mode="operative",
+    )
+    assert result["error"] == "specialist_run_failed"
+    assert "managed__pennylane__create_customer_invoice" in result["content"]
+    assert "create_customer_invoice" in result["content"]
 
 
 @pytest.mark.asyncio

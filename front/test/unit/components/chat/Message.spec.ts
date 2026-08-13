@@ -655,7 +655,7 @@ describe('Message placeholder continuation', () => {
     wrapper.unmount();
   });
 
-  it('affiche la continuation pendant un raisonnement post-outil (groupe replié)', () => {
+  it('masque la continuation pendant un raisonnement post-outil (présence via pastille)', () => {
     const wrapper = mountStreamingToolsMessage({
       parts: [
         {
@@ -676,8 +676,58 @@ describe('Message placeholder continuation', () => {
       ],
     });
 
-    expect(wrapper.find('.chat-message__continuation').exists()).toBe(true);
+    expect(wrapper.find('.chat-message__continuation').exists()).toBe(false);
     expect(wrapper.find('.chat-message__live-generating').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('masque continuation et live-generating pendant un thinking-only', () => {
+    const wrapper = mount(Message, {
+      props: {
+        message: {
+          id: 'a-thinking-only',
+          role: 'assistant',
+          content: '',
+          streaming: true,
+          parts: [
+            {
+              type: 'thinking',
+              id: 'th-1',
+              thinkingId: 'th-1',
+              content: 'réflexion…',
+              done: false,
+              subject: 'Fragment live',
+            },
+          ],
+          createdAt: '2026-01-01T00:00:00.000Z',
+        },
+      },
+      global: { stubs: defaultStubs },
+    });
+
+    expect(wrapper.find('.chat-message__continuation').exists()).toBe(false);
+    expect(wrapper.find('.chat-message__live-generating').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('masque live-generating pendant une délégation agent métier en cours', () => {
+    const wrapper = mountStreamingToolsMessage({
+      toolCalls: [{ id: 'tc-1', name: 'summon_specialist', status: 'running' }],
+      specialistHandoff: {
+        id: 'h1',
+        toolCallId: 'tc-1',
+        specialistId: 'rh',
+        specialistName: 'Gestionnaire',
+        mode: 'regard',
+        task: 'Analyser',
+        content: '',
+        status: 'running',
+        streaming: true,
+      },
+    });
+
+    expect(wrapper.find('.chat-message__live-generating').exists()).toBe(false);
+    expect(wrapper.find('.chat-message__continuation').exists()).toBe(false);
     wrapper.unmount();
   });
 

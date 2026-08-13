@@ -229,7 +229,7 @@ describe('useCapabilities', () => {
 
     expect(activatePlugin).toHaveBeenCalledWith(CLOUD_PLUGIN_ID);
     expect(activatePlugin).not.toHaveBeenCalledWith(PROJET_PLUGIN_ID);
-    expect(openRightPanel).toHaveBeenCalledWith('workproba.cloud:right_panel');
+    expect(openRightPanel).toHaveBeenCalledWith('files');
   });
 
   it('workproba_cloud est needs_setup si cloud actif mais non enrollé', () => {
@@ -248,7 +248,7 @@ describe('useCapabilities', () => {
     expect(getById('workproba_cloud')?.state.kind).toBe('active');
   });
 
-  it('open workproba_cloud ouvre le panneau cloud', () => {
+  it('open workproba_cloud ouvre le panneau fichiers', () => {
     activePluginIds.value = [CLOUD_PLUGIN_ID];
     isEnrolled.value = true;
 
@@ -256,7 +256,7 @@ describe('useCapabilities', () => {
     open('workproba_cloud');
 
     expect(openSideChat).not.toHaveBeenCalled();
-    expect(openRightPanel).toHaveBeenCalledWith('workproba.cloud:right_panel');
+    expect(openRightPanel).toHaveBeenCalledWith('files');
   });
 
   it('deactivate workproba_cloud désactive uniquement le plugin cloud quand pas d’enfant actif', async () => {

@@ -2,11 +2,11 @@ import { mount } from '@vue/test-utils';
 import { describe, expect, it } from 'vitest';
 import ChatView from '@components/chat/ChatView.vue';
 
-function mountChatView(personasEnabled: boolean) {
+function mountChatView(personasEnabled: boolean, streaming = false) {
   return mount(ChatView, {
     props: {
       messages: [],
-      streaming: false,
+      streaming,
       personasEnabled,
     },
     global: {
@@ -21,34 +21,37 @@ function mountChatView(personasEnabled: boolean) {
   });
 }
 
-describe('ChatView Regards (menu +)', () => {
-  it('n’affiche pas la section Regards quand personas est désactivé', () => {
+describe('ChatView Regards (chip composer)', () => {
+  it('n’affiche pas le chip Regards quand personas est désactivé', () => {
     const wrapper = mountChatView(false);
 
-    expect(wrapper.find('.chat-view__regards').exists()).toBe(false);
+    expect(wrapper.find('.chat-composer__regards').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('Demander un regard');
     expect(wrapper.text()).not.toContain('Croiser plusieurs regards');
   });
 
-  it('n’affiche pas le chip Regards visible et place les entrées dans le menu +', () => {
+  it('affiche le chip Regards hors du menu +', () => {
     const wrapper = mountChatView(true);
 
-    expect(wrapper.find('.chat-view__regards').exists()).toBe(false);
+    expect(wrapper.find('.chat-composer__regards').exists()).toBe(true);
+    expect(wrapper.find('.chat-composer__regards-menu').exists()).toBe(true);
     expect(wrapper.text()).toContain('Regards');
     expect(wrapper.text()).toContain('Demander un regard');
     expect(wrapper.text()).toContain('Croiser plusieurs regards');
+    const addItems = wrapper.findAll('.chat-composer__add-item');
+    const regardsInPlus = addItems.filter(
+      (item) =>
+        !item.classes().includes('chat-composer__regards-item') &&
+        (item.text().includes('Demander un regard') ||
+          item.text().includes('Croiser plusieurs regards')),
+    );
+    expect(regardsInPlus).toHaveLength(0);
   });
 
-  it('émet personas-open, personas-meeting et personas-discuss depuis le menu +', async () => {
+  it('émet personas-open, personas-meeting et personas-discuss depuis le chip', async () => {
     const wrapper = mountChatView(true);
 
-    const items = wrapper.findAll('.chat-composer__add-item');
-    const regardsItems = items.filter(
-      (item) =>
-        item.text().includes('Demander un regard') ||
-        item.text().includes('Croiser plusieurs regards') ||
-        item.text().includes('Discuter avec un regard'),
-    );
+    const regardsItems = wrapper.findAll('.chat-composer__regards-item');
     expect(regardsItems).toHaveLength(3);
 
     await regardsItems[0]!.trigger('click');
@@ -58,5 +61,18 @@ describe('ChatView Regards (menu +)', () => {
     expect(wrapper.emitted('personas-open')).toHaveLength(1);
     expect(wrapper.emitted('personas-meeting')).toHaveLength(1);
     expect(wrapper.emitted('personas-discuss')).toHaveLength(1);
+  });
+
+  it('n’ouvre pas une réunion pendant un échange en cours', async () => {
+    const wrapper = mountChatView(true, true);
+
+    const regardsItems = wrapper.findAll('.chat-composer__regards-item');
+    expect(regardsItems).toHaveLength(3);
+
+    await regardsItems[1]!.trigger('click');
+    expect(wrapper.emitted('personas-meeting')).toBeUndefined();
+
+    await regardsItems[0]!.trigger('click');
+    expect(wrapper.emitted('personas-open')).toHaveLength(1);
   });
 });

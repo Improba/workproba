@@ -109,14 +109,15 @@ export function useSpaceCapabilities(
     }
     const seq = ++requestSeq;
 
+    if (isManagedCapabilityId(id)) {
+      return { ok: false, autoWantedCloud: false, error: 'managed_not_toggleable' };
+    }
+
     const cloudWasWanted = profile.value?.wanted?.workproba_cloud === true;
     const nestedNeedsParent =
       wanted
       && !cloudWasWanted
-      && (
-        getCapabilityDefinition(id)?.parentId === 'workproba_cloud'
-        || isManagedCapabilityId(id)
-      );
+      && getCapabilityDefinition(id)?.parentId === 'workproba_cloud';
 
     const pluginDataDir = await resolvePluginDataDir();
     const result = await updateWorkspaceCapabilitiesWanted({

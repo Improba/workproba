@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fallbackHumanLabel } from '@utils/toolCallHumanLabel';
+import { fallbackHumanLabel, handoffToolLabel } from '@utils/toolCallHumanLabel';
 
 describe('fallbackHumanLabel', () => {
   it('retourne un libellé lisible pour les outils connus', () => {
@@ -44,5 +44,17 @@ describe('fallbackHumanLabel', () => {
 
   it('retourne un libellé générique pour un outil inconnu', () => {
     expect(fallbackHumanLabel('unknown_tool')).toBe("J'ai effectué une action");
+  });
+});
+
+describe('handoffToolLabel', () => {
+  it('formate les outils managed sans fallback générique', () => {
+    expect(handoffToolLabel('managed__ihora__list_absences')).toBe('ihora · list absences');
+    expect(handoffToolLabel('managed__malformed')).toBe('managed__malformed');
+  });
+
+  it('humanise les noms snake_case', () => {
+    expect(handoffToolLabel('create_timesheet')).toBe('create timesheet');
+    expect(handoffToolLabel('unknown_tool')).toBe('unknown tool');
   });
 });

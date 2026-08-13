@@ -8,17 +8,17 @@
       @click="onToggle"
     >
       <span
-        v-if="hasToolCall"
+        v-if="showPresenceSpinner"
+        class="activity-group__spinner"
+        aria-hidden="true"
+      />
+      <span
+        v-else-if="hasToolCall"
         class="activity-group__icon"
         aria-hidden="true"
       >
         <Lucide name="wrench" size="12" color="wp-text-muted" />
       </span>
-      <span
-        v-else-if="isThinkingOnlyRunning"
-        class="activity-group__spinner"
-        aria-hidden="true"
-      />
       <q-icon
         v-else
         name="psychology"
@@ -170,16 +170,33 @@ const isThinkingOnlyRunning = computed(() => {
   return Boolean(props.streaming && part && !part.done);
 });
 
+/** Thinking encore ouvert (thinking-only ou reprise post-outil). */
+const hasActiveThinking = computed(() =>
+  thinkingParts.value.some((part) => !part.done),
+);
+
+/**
+ * Présence stable pendant le stream : pas de sujet dérivé live dans la pastille
+ * (évite le défilement de fragments de CoT). Le sujet n'apparaît qu'une fois terminé.
+ */
 const thinkingOnlySummary = computed(() => {
+  if (isThinkingOnlyRunning.value) return t('chat.thinking');
   const subject = firstThinkingPart.value?.subject?.trim();
   if (subject) return subject;
-  if (isThinkingOnlyRunning.value) return t('chat.thinking');
   return t('chat.reasoning');
 });
 
 const stats = computed(() =>
   computeActivityGroupStats(toolCallParts.value, toolCallsById.value),
 );
+
+/** Spinner de présence : thinking-only, ou reprise après outils terminés. */
+const showPresenceSpinner = computed(() => {
+  if (isThinkingOnlyRunning.value) return true;
+  return Boolean(
+    props.streaming && hasActiveThinking.value && !stats.value.hasRunning,
+  );
+});
 
 const connectorSuffix = computed(() => {
   const calls = toolCallParts.value
@@ -209,6 +226,16 @@ const effectiveExpanded = computed(() =>
 const summaryText = computed(() => {
   if (!hasToolCall.value) {
     return thinkingOnlySummary.value;
+  }
+
+  // Outils terminés + raisonnement en cours : une seule présence stable
+  // (évite « Utilisé N outils » + « Suite de la génération… » empilés).
+  if (
+    props.streaming &&
+    hasActiveThinking.value &&
+    !stats.value.hasRunning
+  ) {
+    return t('chat.thinking');
   }
 
   const segments: string[] = [
@@ -319,18 +346,11 @@ function preparingConfirmationStub(toolCallId: string): ChatConfirmation {
 
 .activity-group__spinner {
   flex-shrink: 0;
-  width: 0.75rem;
-  height: 0.75rem;
+  width: 0.55rem;
+  height: 0.55rem;
   border-radius: 999px;
-  border: 2px solid var(--wp-accent-soft);
-  border-top-color: var(--wp-accent);
-  animation: activity-group-spin 0.7s linear infinite;
-}
-
-@keyframes activity-group-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  background: var(--wp-accent);
+  animation: wp-breathe 1.6s ease-in-out infinite;
 }
 
 .activity-group__chevron {

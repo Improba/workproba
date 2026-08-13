@@ -2083,3 +2083,94 @@ async def test_write_without_gate_raises_model_retry(tmp_path: Path) -> None:
             gate_tool_name="managed__ihora__create_timesheet",
         )
 
+
+@pytest.mark.asyncio
+async def test_invoke_managed_connector_remote_exception_returns_structured_error(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pydantic_ai import RunContext
+    from pydantic_ai.models.test import TestModel
+
+    from app.agent.confirmation import ConfirmationGate
+    from app.agent.tools import ToolContext, ToolDeps
+    from app.limits import DEFAULT_LIMITS
+    from app.plugins.registry import PLUGIN_WORKPROBA_CLOUD
+    from app.plugins.workproba_cloud import storage as cloud_storage
+    from app.plugins.workproba_cloud.control_plane_client import CloudControlPlaneClient
+    from app.plugins.workproba_cloud.plugin import invoke_managed_connector_impl
+    from app.sandbox.runner import SandboxRunner
+
+    from conftest import FakeProjectClient
+
+    class CaptureGate(ConfirmationGate):
+        async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
+            return "approved"
+
+    cloud_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_CLOUD
+    cloud_dir.mkdir(parents=True)
+    plugins_root = cloud_dir.parent
+    cloud_storage.save_config(cloud_dir, {"base_url": "https://cloud.test"})
+    cloud_storage.set_managed_connector_enabled(cloud_dir, "ihora", enabled=True)
+    _seed_ihora_connectors_cache(cloud_dir)
+    client = CloudControlPlaneClient(
+        base_url="https://cloud.test",
+        plugin_data_dir=cloud_dir,
+    )
+    client.save_tokens({"access_token": "tok", "org_id": "org-a", "device_id": "dev-1"})
+
+    async def fake_allowed(self: CloudControlPlaneClient) -> set[str]:
+        return {"ihora"}
+
+    async def fake_invoke_remote(self, connector_id, payload, identity):  # type: ignore[no-untyped-def]
+        raise ConnectionError("upstream pennylane unavailable")
+
+    monkeypatch.setattr(CloudControlPlaneClient, "fetch_allowed_connector_ids", fake_allowed)
+    monkeypatch.setattr(
+        "app.plugins.workproba_cloud.plugin.open_remote_capability_gateway",
+        lambda **kwargs: type("GW", (), {"invoke_remote": fake_invoke_remote})(),
+    )
+
+    deps = ToolDeps(
+        context=ToolContext(
+            tenant_id="t",
+            project_id="p",
+            session_id="s1",
+            documents=[],
+            plugin_data_dir=plugins_root,
+            locale="fr",
+            permissions_network=True,
+            managed_allowed_connector_ids=frozenset({"ihora"}),
+        ),
+        project_client=FakeProjectClient(),
+        sandbox_runner=SandboxRunner(timeout_seconds=30, limits=DEFAULT_LIMITS),
+        limits=DEFAULT_LIMITS,
+        confirmation_gate=CaptureGate(session_id="s1", turn_id="t1"),
+    )
+    ctx = RunContext(
+        deps=deps,
+        model=TestModel(),
+        usage=None,
+        prompt=None,
+        tool_call_id="tc-remote-fail",
+    )
+
+    result = await invoke_managed_connector_impl(
+        ctx,
+        connector_id="ihora",
+        payload={
+            "action": "create_timesheet",
+            "date": "2026-07-03",
+            "hours": 8,
+            "employeeId": 1,
+        },
+        gate_tool_name="managed__ihora__create_timesheet",
+    )
+
+    assert result["ok"] is False
+    assert result["error"] == "remote_invoke_failed"
+    assert result["connector_id"] == "ihora"
+    assert result["action"] == "create_timesheet"
+    assert "ConnectionError" in result["detail"]
+    assert "pennylane" in result["detail"].lower() or "unavailable" in result["detail"].lower()
+

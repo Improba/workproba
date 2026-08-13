@@ -2184,6 +2184,48 @@ async def workspace_capabilities_put(
     return _workspace_capabilities_response(view)
 
 
+class WorkspacePolicyResponse(BaseModel):
+    approvalMode: Literal["security", "trust"]
+
+
+class WorkspacePolicyUpdateRequest(BaseModel):
+    workspace_data_dir: str
+    approval_mode: Literal["security", "trust"]
+
+
+@app.get("/workspace/policy", response_model=WorkspacePolicyResponse)
+async def workspace_policy_get(
+    request: Request,
+    workspace_data_dir: str,
+    locale: str = "fr",
+) -> WorkspacePolicyResponse:
+    """Mode d'approbation de l'espace (security | trust)."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+    _ = normalize_locale(locale)
+
+    from app.space_policy import load_approval_mode
+
+    ws_dir = _resolve_workspace_data_dir_path(workspace_data_dir)
+    return WorkspacePolicyResponse(approvalMode=load_approval_mode(ws_dir))
+
+
+@app.put("/workspace/policy", response_model=WorkspacePolicyResponse)
+async def workspace_policy_put(
+    request: Request,
+    payload: WorkspacePolicyUpdateRequest,
+) -> WorkspacePolicyResponse:
+    """Met à jour le mode d'approbation de l'espace."""
+    settings: Settings = request.app.state.settings
+    require_internal_secret(request, settings)
+
+    from app.space_policy import set_approval_mode
+
+    ws_dir = _resolve_workspace_data_dir_path(payload.workspace_data_dir)
+    mode = set_approval_mode(ws_dir, payload.approval_mode)
+    return WorkspacePolicyResponse(approvalMode=mode)
+
+
 @app.get("/memory/items", response_model=MemoryItemsResponse)
 async def memory_list_items(
     request: Request,

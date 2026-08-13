@@ -110,6 +110,7 @@ describe('BusinessAgentConsultDialog', () => {
     expect(setPendingChatLaunch).toHaveBeenCalledWith({
       text: expect.stringContaining('org.rh'),
       attachments: [],
+      sessionId: 'session-1',
     });
     expect(bumpSessions).toHaveBeenCalled();
     expect(push).toHaveBeenCalledWith({ name: 'chat_session', params: { id: 'session-1' } });

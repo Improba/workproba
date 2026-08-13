@@ -37,7 +37,7 @@
         @update:model-value="onToggle"
       />
       <q-toggle
-        v-else
+        v-else-if="showDisabledToggle"
         dense
         size="sm"
         color="primary"
@@ -101,7 +101,11 @@ const title = computed(() => {
 
 const icon = computed(() => definition.value?.icon ?? 'puzzle');
 
-const canToggle = computed(() => props.item.entitled);
+const isManaged = computed(() => isManagedCapabilityId(props.item.id as CapabilityId));
+
+const canToggle = computed(() => props.item.entitled && !isManaged.value);
+
+const showDisabledToggle = computed(() => !isManaged.value && !props.item.entitled);
 
 const showSetupLink = computed(() => {
   const reason = props.item.unavailableReason;

@@ -51,7 +51,7 @@ import { mergeLlmConfigsWithSessionReasoning } from '@utils/llmRouting';
 import { isBrowserAgentTool, type BrowserAgentToolName } from '@utils/browserTools';
 import { ensureProviderSetChatReady, chatErrorCodeForReadiness, chatErrorMessageForReadiness } from '@utils/providerSetNotify';
 import { isMistralOutageCode, isNonRetryableCloudLlmCode } from '@utils/chatCloudErrors';
-import { createIncidentId } from '@utils/errorReport';
+import { createIncidentId, sanitizeErrorDetail } from '@utils/errorReport';
 import { contextWindowForSet } from '@utils/providerSetModels';
 import { contextWindowFor } from '@utils/modelCatalog';
 import { t } from '@utils/i18nT';
@@ -428,21 +428,28 @@ export function mapPythonSseEvent(
           reason: String(data.reason ?? ''),
         },
       };
-    case 'error':
+    case 'error': {
+      const code = normalizeChatErrorCode(String(data.code ?? 'agent_error'));
+      const rawMessage = String(data.message ?? '');
+      const localizedMessage = localizeAgentError(code, rawMessage);
+      const sanitizedRaw = rawMessage.trim()
+        ? sanitizeErrorDetail(rawMessage)
+        : '';
+      const detail =
+        sanitizedRaw && sanitizedRaw !== localizedMessage ? sanitizedRaw : null;
       return {
         type: 'error',
         data: {
-          code: normalizeChatErrorCode(String(data.code ?? 'agent_error')),
-          message: localizeAgentError(
-            String(data.code ?? 'agent_error'),
-            String(data.message ?? ''),
-          ),
+          code,
+          message: localizedMessage,
+          detail,
           turnId: data.turn_id != null ? String(data.turn_id) : null,
           workId: data.work_id != null ? String(data.work_id) : null,
           sessionId: data.session_id != null ? String(data.session_id) : null,
           incidentId: data.incident_id != null ? String(data.incident_id) : null,
         },
       };
+    }
     case 'plan_proposed':
       return {
         type: 'plan_proposed',
@@ -726,6 +733,7 @@ function buildStreamChatError(
   return {
     code: data.code,
     message: data.message,
+    detail: data.detail ?? null,
     retryable: isChatErrorRetryable(data.code),
     incidentId: data.incidentId ?? createIncidentId(),
     turnId: data.turnId ?? ctx?.turnId ?? null,
@@ -1425,12 +1433,12 @@ export interface UseChatStreamReturn {
   lastCompaction: Ref<ChatCompactionInfo | null>;
   attachmentStatuses: Ref<Record<string, AttachmentStatusEntry>>;
   streamCorrelation: Ref<StreamCorrelation>;
-  send: (text: string, options?: Partial<SendMessagePayload>) => Promise<void>;
+  send: (text: string, options?: Partial<SendMessagePayload>) => Promise<boolean>;
   confirm: (decision: 'approve' | 'deny' | 'approve_remaining') => Promise<void>;
   approvePlan: (approved: boolean) => Promise<void>;
   retry: () => Promise<void>;
   editAndResend: (userMessageId: string, newText: string) => Promise<void>;
-  regenerateFrom: (assistantMessageId: string) => Promise<void>;
+  regenerateFrom: (assistantMessageId: string) => Promise<boolean>;
   abort: () => void;
   loadMessages: (items: ChatMessage[]) => void;
   reprocessAttachment: (
@@ -1521,6 +1529,16 @@ export function useChatStream(
   let currentTurnId: string | null = null;
   let currentWorkId: string | null = null;
   let fallbackNotifiedTurnId: string | null = null;
+  // confirmation_id déjà accepté par POST /agent/confirm (filet anti-reclic).
+  let submittedConfirmationId: string | null = null;
+
+  function releaseConfirmingIfNoPendingGate(): void {
+    const hasPendingConfirmation = messages.value.some((m) => m.pendingConfirmation);
+    if (!hasPendingConfirmation) {
+      confirming.value = false;
+      submittedConfirmationId = null;
+    }
+  }
 
   function correlationContext(): ChatCorrelationContext {
     return {
@@ -1665,6 +1683,7 @@ export function useChatStream(
       },
       correlationContext(),
     );
+    releaseConfirmingIfNoPendingGate();
     if (
       event.type === 'error' &&
       (event.data.code === 'confirmation_timeout' ||
@@ -1754,6 +1773,7 @@ export function useChatStream(
     clearAllThinkingSubjectThrottles();
     resetStreamingFlag();
     clearHumanGatesOnAbort(messages.value);
+    releaseConfirmingIfNoPendingGate();
     currentAssistantId = null;
     currentTurnId = null;
     currentWorkId = null;
@@ -1765,9 +1785,9 @@ export function useChatStream(
   async function send(
     text: string,
     payload: Partial<SendMessagePayload> = {},
-  ): Promise<void> {
+  ): Promise<boolean> {
     const trimmed = text.trim();
-    if (!trimmed || streaming.value || hasActiveHumanGate()) return;
+    if (!trimmed || streaming.value || hasActiveHumanGate()) return false;
 
     const projectPath = options.projectPath?.value;
     if (!projectPath) {
@@ -1779,7 +1799,7 @@ export function useChatStream(
         },
         correlationContext(),
       );
-      return;
+      return false;
     }
 
     const providerSet = buildActiveProviderSet(
@@ -1804,7 +1824,7 @@ export function useChatStream(
           },
           correlationContext(),
         );
-        return;
+        return false;
       }
     } else {
       const legacyChat = buildActiveLlmConfigs().chat;
@@ -1817,7 +1837,7 @@ export function useChatStream(
           },
           correlationContext(),
         );
-        return;
+        return false;
       }
     }
 
@@ -1837,7 +1857,7 @@ export function useChatStream(
     if (regenerateUserId) {
       const existing = messages.value.find((m) => m.id === regenerateUserId);
       if (!existing || existing.role !== 'user') {
-        return;
+        return false;
       }
       userMessage = existing;
       lastRegenerateUserId = regenerateUserId;
@@ -2086,11 +2106,13 @@ export function useChatStream(
           finalizeIncompleteToolsOnMessage(message, 'stream_ended', streamEndedSummary);
         }
       }
+      releaseConfirmingIfNoPendingGate();
       setIdlePaused(false);
       currentAssistantId = null;
       streaming.value = false;
       abortController = null;
     }
+    return true;
   }
 
   function findMessageIndex(messageId: string): number {
@@ -2159,17 +2181,17 @@ export function useChatStream(
     await send(trimmed, attachments ? { attachments } : {});
   }
 
-  async function regenerateFrom(assistantMessageId: string): Promise<void> {
-    if (streaming.value || hasActiveHumanGate()) return;
+  async function regenerateFrom(assistantMessageId: string): Promise<boolean> {
+    if (streaming.value || hasActiveHumanGate()) return false;
 
     const idx = findMessageIndex(assistantMessageId);
-    if (idx < 0) return;
+    if (idx < 0) return false;
 
     const assistant = messages.value[idx];
-    if (assistant.role !== 'assistant') return;
-    if (assistant.streaming) return;
-    if (assistant.pendingConfirmation) return;
-    if (assistant.pendingPlan?.status === 'pending') return;
+    if (assistant.role !== 'assistant') return false;
+    if (assistant.streaming) return false;
+    if (assistant.pendingConfirmation) return false;
+    if (assistant.pendingPlan?.status === 'pending') return false;
 
     let userIdx = idx - 1;
     if (assistant.parentId) {
@@ -2178,24 +2200,30 @@ export function useChatStream(
     }
 
     const userMessage = messages.value[userIdx];
-    if (!userMessage || userMessage.role !== 'user') return;
+    if (!userMessage || userMessage.role !== 'user') return false;
 
     const userText = userMessage.content.trim();
-    if (!userText) return;
+    if (!userText) return false;
 
     error.value = null;
-    messages.value.splice(idx);
+    const removed = messages.value.splice(idx);
     const attachments = attachmentsFromUserMessage(userMessage);
-    await send(userText, {
+    const started = await send(userText, {
       regenerateFromUserId: userMessage.id,
       ...(attachments ? { attachments } : {}),
     });
+    if (!started) {
+      messages.value.splice(idx, 0, ...removed);
+      return false;
+    }
+    return true;
   }
 
   async function confirm(decision: 'approve' | 'deny' | 'approve_remaining'): Promise<void> {
     const assistant = messages.value.find((m) => m.pendingConfirmation);
     const pending = assistant?.pendingConfirmation;
     if (!pending || confirming.value) return;
+    if (submittedConfirmationId === pending.confirmationId) return;
 
     confirming.value = true;
     error.value = null;
@@ -2222,8 +2250,23 @@ export function useChatStream(
       if (!response.ok) {
         throw await SidecarHttpError.fromResponse(response);
       }
+      submittedConfirmationId = pending.confirmationId;
       if (assistant && decision !== 'deny') {
         const tool = assistant.toolCalls?.find((t) => t.id === pending.toolCallId);
+        if (
+          tool &&
+          (tool.status === 'pending_confirmation' || tool.status === 'awaiting_confirmation')
+        ) {
+          tool.status = 'running';
+        }
+        const handoff = assistant.specialistHandoff;
+        const nestedTool = handoff?.nestedTools?.find((entry) => entry.id === pending.toolCallId);
+        if (nestedTool && handoff) {
+          assistant.specialistHandoff = upsertSpecialistNestedTool(handoff, {
+            ...nestedTool,
+            status: 'running',
+          });
+        }
         const nestedMatch = assistant.specialistHandoff?.nestedTools?.some(
           (entry) => entry.id === pending.toolCallId,
         );
@@ -2237,7 +2280,10 @@ export function useChatStream(
           markSpecialistHandoffAsRunning(assistant);
         }
       }
+      // Succès POST : confirming reste true jusqu'à disparition de pendingConfirmation (SSE).
     } catch (err) {
+      confirming.value = false;
+      submittedConfirmationId = null;
       const ctx = correlationContext();
       if (isConfirmationNotFoundError(err)) {
         const detail =
@@ -2246,6 +2292,7 @@ export function useChatStream(
         if (assistant) {
           finalizeIncompleteToolsOnMessage(assistant, 'confirmation_not_found', summary);
         }
+        releaseConfirmingIfNoPendingGate();
         error.value = withChatCorrelation(
           {
             code: 'confirmation_not_found',
@@ -2274,8 +2321,6 @@ export function useChatStream(
           ctx,
         );
       }
-    } finally {
-      confirming.value = false;
     }
   }
 

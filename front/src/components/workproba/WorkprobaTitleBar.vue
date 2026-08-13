@@ -36,22 +36,6 @@
       </button>
 
       <button
-        v-if="hasSideChat"
-        type="button"
-        class="wp-titlebar__btn wp-titlebar__btn--regards"
-        :class="{ 'wp-titlebar__btn--active': sideChatOpen }"
-        :aria-label="regardsAriaLabel"
-        :title="regardsAriaLabel"
-        @click="$emit('toggle-side-chat')"
-      >
-        <q-tooltip anchor="bottom middle" self="top middle" :offset="[0, 6]">
-          {{ regardsAriaLabel }}
-        </q-tooltip>
-        <Lucide name="users" size="16" :color="sideChatOpen ? 'wp-accent' : 'text-muted'" />
-        <span class="wp-sr-only">{{ regardsAriaLabel }}</span>
-      </button>
-
-      <button
         type="button"
         class="wp-titlebar__btn"
         :class="{ 'wp-titlebar__btn--active': rightPanelOpen }"
@@ -132,15 +116,12 @@ const props = defineProps<{
   rightPanelOpen: boolean;
   environmentOpen?: boolean;
   sidebarRail: boolean;
-  sideChatOpen?: boolean;
-  hasSideChat?: boolean;
 }>();
 
 defineEmits<{
   (e: 'toggle-right-panel'): void;
   (e: 'toggle-environment'): void;
   (e: 'toggle-sidebar'): void;
-  (e: 'toggle-side-chat'): void;
   (e: 'open-shortcuts'): void;
 }>();
 
@@ -165,12 +146,6 @@ const sidebarAriaLabel = computed(() =>
   props.sidebarRail
     ? t('shell.titlebarShowSidebar')
     : t('shell.titlebarHideSidebar'),
-);
-
-const regardsAriaLabel = computed(() =>
-  props.sideChatOpen
-    ? t('shell.titlebarHideRegards')
-    : t('shell.titlebarShowRegards'),
 );
 
 const sidecarStateValue = computed(() => sidecarState.value);
@@ -347,10 +322,6 @@ function goHome(): void {
   }
 
   &--active {
-    color: var(--wp-accent);
-  }
-
-  &--regards.wp-titlebar__btn--active {
     color: var(--wp-accent);
   }
 }

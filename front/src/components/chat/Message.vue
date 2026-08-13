@@ -40,6 +40,8 @@
           :workspace-data-dir="workspaceDataDir"
           :confirming="confirming"
           :approving-plan="approvingPlan"
+          :retry-disabled="!!chatStreaming || !!interactionLocked"
+          :hide-retry="!isLastMessage"
           @open-file="(path) => emit('open-file', path)"
           @restored="(path) => emit('restored', path)"
           @confirm-approve="emit('confirm-approve')"
@@ -50,6 +52,7 @@
           @personas-another="(card) => emit('personas-another', card)"
           @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
           @specialist-to-discussion="(card) => emit('specialist-to-discussion', card)"
+          @specialist-retry="(id) => emit('specialist-retry', id)"
           @error-reconnect="(cta) => emit('error-reconnect', cta)"
         />
 
@@ -106,6 +109,7 @@ const props = defineProps<{
   chatStreaming?: boolean;
   /** Confirmation ou plan en attente : bloque la régénération. */
   interactionLocked?: boolean;
+  isLastMessage?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -119,6 +123,7 @@ const emit = defineEmits<{
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
   'specialist-to-discussion': [card: import('#types').SpecialistHandoffCard];
+  'specialist-retry': [messageId: string];
   regenerate: [messageId: string];
   'error-reconnect': [cta: 'login' | 'enroll'];
 }>();

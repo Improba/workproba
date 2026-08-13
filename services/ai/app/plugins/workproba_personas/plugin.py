@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic_ai import Agent, RunContext
-from pydantic_ai.exceptions import ModelRetry
+from pydantic_ai.exceptions import ModelRetry, UnexpectedModelBehavior
 
 from app.agent.human import build_human_summary
 from app.config import get_settings
@@ -19,7 +20,18 @@ from app.plugins.workproba_personas.delegation_prompt import (
 )
 from app.plugins.workproba_personas.storage import JsonDict
 
+logger = logging.getLogger(__name__)
+
 SpecialistDelegationMode = Literal["regard", "operative"]
+
+_SUMMON_TASK_MAX_LEN = 2000
+
+
+def _truncate_summon_task(task: str) -> str:
+    trimmed = task.strip()
+    if len(trimmed) <= _SUMMON_TASK_MAX_LEN:
+        return trimmed
+    return f"{trimmed[: _SUMMON_TASK_MAX_LEN - 1].rstrip()}…"
 
 
 def _plugin_data_dir(ctx: RunContext[Any]) -> Path:
@@ -36,11 +48,15 @@ def _persona_label(personas: list[JsonDict]) -> str:
     return ", ".join(str(p.get("name") or p.get("id") or "") for p in personas)
 
 
-def _normalize_specialist_mode(mode: str, *, locale: str) -> SpecialistDelegationMode:
+def _normalize_specialist_mode(
+    mode: str,
+    *,
+    locale: str,
+) -> tuple[SpecialistDelegationMode, str | None]:
     normalized = (mode or "regard").strip().lower()
     if normalized in {"regard", "operative"}:
-        return normalized  # type: ignore[return-value]
-    raise ModelRetry(t(locale, "errors.invalid_specialist_mode", mode=mode))
+        return normalized, None  # type: ignore[return-value]
+    return "regard", t(locale, "errors.invalid_specialist_mode", mode=mode)
 
 
 def _available_specialist_ids(managed: list[JsonDict], *, limit: int = 12) -> str:
@@ -85,34 +101,38 @@ def _resolve_specialist_for_summon(
     specialist_id: str,
     *,
     locale: str,
-) -> JsonDict:
+) -> tuple[JsonDict | None, str | None, str | None]:
     specialists = storage.resolve_specialists(plugin_data_dir, [specialist_id])
     if specialists:
-        return specialists[0]
+        return specialists[0], None, None
 
     managed = storage.list_managed_specialists(plugin_data_dir)
     by_connector = storage.resolve_specialist_by_connector(plugin_data_dir, specialist_id)
     if len(by_connector) == 1:
-        return by_connector[0]
+        return by_connector[0], None, None
     if len(by_connector) > 1:
         candidate_ids = _available_specialist_ids(by_connector)
-        raise ModelRetry(
+        return (
+            None,
+            "specialist_connector_ambiguous",
             t(
                 locale,
                 "errors.specialist_connector_ambiguous",
                 id=specialist_id,
                 candidates=candidate_ids,
-            )
+            ),
         )
 
     available = _available_specialist_ids(managed)
-    raise ModelRetry(
+    return (
+        None,
+        "specialist_not_found",
         t(
             locale,
             "errors.specialist_not_found_with_available",
             id=specialist_id,
             available=available or t(locale, "errors.specialist_none_available"),
-        )
+        ),
     )
 
 
@@ -178,9 +198,57 @@ async def _delegate_specialist(
         detail = t(locale, f"errors.{code}")
         if detail == f"errors.{code}":
             detail = code
-        raise ModelRetry(detail) from exc
+        specialist_id = str(specialist.get("id") or "")
+        logger.warning(
+            "specialist delegation config error specialist_id=%s mode=%s error=%s",
+            specialist_id,
+            mode,
+            detail,
+        )
+        return _summon_specialist_failure_result(
+            specialist_id=specialist_id,
+            mode=mode,
+            locale=locale,
+            error_code=code or "specialist_config_error",
+            content=detail,
+            task=task,
+        )
+    except UnexpectedModelBehavior as exc:
+        specialist_id = str(specialist.get("id") or "")
+        detail = str(exc)
+        logger.exception(
+            "specialist run failed specialist_id=%s mode=%s type=%s message=%s",
+            specialist_id,
+            mode,
+            type(exc).__name__,
+            detail,
+        )
+        return _summon_specialist_failure_result(
+            specialist_id=specialist_id,
+            mode=mode,
+            locale=locale,
+            error_code="specialist_run_failed",
+            content=detail,
+            task=task,
+        )
     except Exception as exc:  # noqa: BLE001
-        raise ModelRetry(f"{type(exc).__name__}: {exc}") from exc
+        specialist_id = str(specialist.get("id") or "")
+        detail = f"{type(exc).__name__}: {exc}"
+        logger.exception(
+            "specialist delegation failed specialist_id=%s mode=%s type=%s message=%s",
+            specialist_id,
+            mode,
+            type(exc).__name__,
+            detail,
+        )
+        return _summon_specialist_failure_result(
+            specialist_id=specialist_id,
+            mode=mode,
+            locale=locale,
+            error_code="specialist_run_failed",
+            content=detail,
+            task=task,
+        )
 
     name = str(specialist.get("name") or specialist.get("id") or "")
     return {
@@ -225,17 +293,28 @@ def register_personas_tools(agent: Agent[Any, str]) -> None:
 
         mode: regard = read-only tools; operative = full panel including writes (approval gate).
         Use for connector-backed tasks (Ihora timesheets, absences, ...). Prefer this over
-        ask_personas when tools are needed.
+        ask_personas when tools are needed. User approval for writes is handled by the Human
+        Approval Gate card, not by text pasted into ``task``.
 
         Args:
             specialist_id: Managed business agent identifier from the synced catalog.
-            task: Task or question for the specialist.
+            task: Current directive for the specialist, rephrased as structured parameters.
             mode: ``regard`` (read-only tools) or ``operative`` (panel tools, writes via approval).
-            context: Relevant excerpt from the current conversation.
+            context: Untrusted background only (prior conversation excerpt).
         """
         locale = ctx.deps.context.locale
         plugin_data_dir = _plugin_data_dir(ctx)
-        delegation_mode = _normalize_specialist_mode(mode, locale=locale)
+        task = _truncate_summon_task(task)
+        delegation_mode, mode_error_content = _normalize_specialist_mode(mode, locale=locale)
+        if mode_error_content:
+            return _summon_specialist_failure_result(
+                specialist_id=specialist_id,
+                mode=delegation_mode,
+                locale=locale,
+                error_code="invalid_specialist_mode",
+                content=mode_error_content,
+                task=task,
+            )
         managed = storage.list_managed_specialists(plugin_data_dir)
         if not managed:
             return _summon_specialist_failure_result(
@@ -246,11 +325,20 @@ def register_personas_tools(agent: Agent[Any, str]) -> None:
                 content=t(locale, "errors.no_business_agents_synced"),
                 task=task,
             )
-        specialist = _resolve_specialist_for_summon(
+        specialist, resolve_error_code, resolve_error_content = _resolve_specialist_for_summon(
             plugin_data_dir,
             specialist_id,
             locale=locale,
         )
+        if resolve_error_code:
+            return _summon_specialist_failure_result(
+                specialist_id=specialist_id,
+                mode=delegation_mode,
+                locale=locale,
+                error_code=resolve_error_code,
+                content=resolve_error_content or resolve_error_code,
+                task=task,
+            )
         return await _delegate_specialist(
             ctx,
             specialist=specialist,

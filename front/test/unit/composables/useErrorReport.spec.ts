@@ -1,5 +1,6 @@
 import { describe, expect, it, afterEach, vi } from 'vitest';
 import { useErrorReport } from '@composables/useErrorReport';
+import { formatErrorReportBlob } from '@utils/errorReport';
 
 describe('useErrorReport', () => {
   const {
@@ -85,5 +86,18 @@ describe('useErrorReport', () => {
       serious: true,
     });
     expect(report.value?.layer).toBe('unknown');
+  });
+
+  it('openFromChatError propage detail dans le rapport', () => {
+    openFromChatError({
+      code: 'unexpected_model_behavior',
+      message: 'Le modèle a renvoyé une réponse inattendue. Réessayez.',
+      retryable: true,
+      detail: "Tool 'summon_specialist' exceeded max retries count of 1",
+    });
+    expect(report.value?.detail).toContain('summon_specialist');
+    const blob = formatErrorReportBlob(report.value!);
+    expect(blob).toContain('Detail / Détail');
+    expect(blob).toContain('summon_specialist');
   });
 });

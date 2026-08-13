@@ -334,6 +334,84 @@ class ConfirmationGate:
         self._pending.clear()
 
 
+class AutoApproveGate(ConfirmationGate):
+    """Gate qui approuve immédiatement les écritures (mode Confiance espace)."""
+
+    async def notify_preparing(
+        self,
+        *,
+        tool_call_id: str,
+        tool_name: str = "",
+        connector_id: str = "",
+        action: str = "",
+    ) -> None:
+        return
+
+    async def request_write(
+        self,
+        *,
+        tool_call_id: str,
+        tool_name: str = "generate_document",
+        action: Literal["create", "modify"],
+        proposed_path: str,
+        human_summary: str,
+        audit_app_data_dir: Path | None = None,
+        audit_enabled: bool | None = None,
+    ) -> ApprovalOutcome:
+        trust_key = trust_key_for_write(action=action)
+        async with self._lock:
+            await self._emit_auto_approved(
+                tool_call_id=tool_call_id,
+                tool_name=tool_name,
+                trust_key=trust_key,
+                audit_app_data_dir=audit_app_data_dir,
+                audit_enabled=audit_enabled,
+            )
+        return "approved"
+
+    async def request_effect(
+        self,
+        *,
+        tool_call_id: str,
+        proposal: EffectProposal,
+        audit_app_data_dir: Path | None = None,
+        audit_enabled: bool | None = None,
+    ) -> ApprovalOutcome:
+        trust_key = trust_key_for_proposal(proposal) or f"effect:{proposal.effect or 'unknown'}"
+        async with self._lock:
+            await self._emit_auto_approved(
+                tool_call_id=tool_call_id,
+                tool_name=proposal.tool_name,
+                trust_key=trust_key,
+                audit_app_data_dir=audit_app_data_dir,
+                audit_enabled=audit_enabled,
+            )
+        return "approved"
+
+
+def create_confirmation_gate(
+    *,
+    session_id: str,
+    turn_id: str,
+    locale: str = "fr",
+    workspace_data_dir: Path | None = None,
+    confirm_before_write: bool = True,
+) -> ConfirmationGate:
+    """Retourne toujours un gate. Politique espace prioritaire si workspace_data_dir est défini."""
+    use_auto = False
+    if workspace_data_dir is not None:
+        from app.space_policy import load_approval_mode
+
+        use_auto = load_approval_mode(workspace_data_dir) == "trust"
+    else:
+        # Sans espace : fallback sur le réglage machine confirm_before_write.
+        use_auto = not confirm_before_write
+
+    if use_auto:
+        return AutoApproveGate(session_id=session_id, turn_id=turn_id, locale=locale)
+    return ConfirmationGate(session_id=session_id, turn_id=turn_id, locale=locale)
+
+
 class ConfirmationRegistry:
     """Registre global (session_id, turn_id) -> gate (pour POST /agent/confirm)."""
 

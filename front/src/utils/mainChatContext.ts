@@ -18,16 +18,33 @@ function roleLabels(locale?: string): { user: string; assistant: string } {
 function messageLine(message: ChatMessage, labels: { user: string; assistant: string }): string | null {
   if (message.streaming) return null;
 
+  const parts: string[] = [];
   const trimmed = message.content?.trim();
   if (trimmed) {
     const label = message.role === 'user' ? labels.user : labels.assistant;
-    return `${label} : ${trimmed}`;
+    parts.push(`${label} : ${trimmed}`);
+  }
+
+  const handoff = message.specialistHandoff;
+  if (
+    handoff &&
+    handoff.streaming !== true &&
+    (handoff.status === 'done' || handoff.status === 'error')
+  ) {
+    const analysis = handoff.content?.trim();
+    if (analysis) {
+      const name = handoff.specialistName?.trim() || handoff.specialistId;
+      parts.push(`${labels.assistant} : [${name}] ${analysis}`);
+    }
+  }
+
+  if (parts.length > 0) {
+    return parts.join('\n');
   }
 
   const opinion = message.personasOpinion;
   if (opinion?.question?.trim()) {
-    const label = labels.assistant;
-    return `${label} : [Avis personas sur « ${opinion.question.trim()} »]`;
+    return `${labels.assistant} : [Avis personas sur « ${opinion.question.trim()} »]`;
   }
 
   return null;

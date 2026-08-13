@@ -32,6 +32,38 @@
         />
       </div>
 
+      <section class="wp-space-settings-dialog__approval">
+        <h3 class="wp-space-settings-dialog__approval-title">
+          {{ t('shell.spaceApprovalTitle') }}
+        </h3>
+        <p class="wp-space-settings-dialog__approval-lead">
+          {{ t('shell.spaceApprovalLead') }}
+        </p>
+        <div
+          class="wp-space-settings-dialog__approval-pills"
+          role="radiogroup"
+          :aria-label="t('shell.spaceApprovalTitle')"
+        >
+          <button
+            v-for="option in approvalOptions"
+            :key="option.value"
+            type="button"
+            class="wp-space-settings-dialog__approval-pill"
+            :class="{
+              'wp-space-settings-dialog__approval-pill--selected':
+                approvalMode === option.value,
+            }"
+            role="radio"
+            :aria-checked="approvalMode === option.value"
+            :disabled="policyLoading || policySaving"
+            @click="onApprovalSelect(option.value)"
+          >
+            <span class="wp-space-settings-dialog__approval-pill-label">{{ option.label }}</span>
+            <span class="wp-space-settings-dialog__approval-pill-hint">{{ option.hint }}</span>
+          </button>
+        </div>
+      </section>
+
       <SpaceCapabilitiesPanel
         :key="workspace.id"
         :workspace-data-dir="workspace.dataDir"
@@ -86,12 +118,14 @@
 </template>
 
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, toRef, watch } from 'vue';
 import { useI18n } from 'vue-i18n';
 import { Notify } from 'quasar';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import SpaceCapabilitiesPanel from '@components/capabilities/SpaceCapabilitiesPanel.vue';
 import { useSpace } from '@composables/useSpace';
+import { useSpacePolicy } from '@composables/useSpacePolicy';
+import type { ApprovalMode } from '@composables/useSpacePolicy';
 import { setWorkspaceArchived } from '@composables/useDesktop';
 import { useShellSurfaces } from '@composables/useShellSurfaces';
 import type { WorkspaceInfo } from '@composables/useDesktop.types';
@@ -111,6 +145,26 @@ const emit = defineEmits<{
 const { t } = useI18n();
 const { renameSpace } = useSpace();
 const { openCapabilities } = useShellSurfaces();
+
+const {
+  approvalMode,
+  loading: policyLoading,
+  saving: policySaving,
+  setApprovalMode,
+} = useSpacePolicy({ workspaceDataDir: toRef(() => props.workspace?.dataDir) });
+
+const approvalOptions = computed(() => [
+  {
+    value: 'security' as ApprovalMode,
+    label: t('shell.spaceApprovalSecurity'),
+    hint: t('shell.spaceApprovalSecurityHint'),
+  },
+  {
+    value: 'trust' as ApprovalMode,
+    label: t('shell.spaceApprovalTrust'),
+    hint: t('shell.spaceApprovalTrustHint'),
+  },
+]);
 
 const titleDraft = ref('');
 const saving = ref(false);
@@ -137,6 +191,17 @@ function onDialogUpdate(value: boolean): void {
 
 function close(): void {
   emit('update:modelValue', false);
+}
+
+async function onApprovalSelect(mode: ApprovalMode): Promise<void> {
+  if (policyLoading.value || policySaving.value || approvalMode.value === mode) return;
+  const result = await setApprovalMode(mode);
+  if (!result.ok) {
+    Notify.create({
+      message: result.error || t('shell.spaceApprovalUpdateFailed'),
+      classes: 'bg-danger text-white',
+    });
+  }
 }
 
 async function onOpenSetup(_item: SpaceCapabilityItem): Promise<void> {
@@ -265,6 +330,71 @@ async function onArchive(): Promise<void> {
       border-color: var(--wp-accent);
     }
   }
+}
+
+.wp-space-settings-dialog__approval {
+  display: flex;
+  flex-direction: column;
+  gap: var(--wp-space-2);
+}
+
+.wp-space-settings-dialog__approval-title {
+  margin: 0;
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  color: var(--wp-text);
+}
+
+.wp-space-settings-dialog__approval-lead {
+  margin: 0;
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
+}
+
+.wp-space-settings-dialog__approval-pills {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--wp-space-2);
+}
+
+.wp-space-settings-dialog__approval-pill {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--wp-space-1);
+  padding: var(--wp-space-2) var(--wp-space-3);
+  border: 1px solid var(--wp-border);
+  border-radius: var(--wp-r-sm);
+  background: var(--wp-surface-2);
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--wp-font-ui);
+
+  &:hover:not(:disabled) {
+    border-color: var(--wp-accent);
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  &--selected {
+    border-color: var(--wp-accent);
+    background: color-mix(in srgb, var(--wp-accent) 8%, var(--wp-surface-2));
+  }
+}
+
+.wp-space-settings-dialog__approval-pill-label {
+  font-size: var(--wp-fs-sm);
+  font-weight: 600;
+  color: var(--wp-text);
+}
+
+.wp-space-settings-dialog__approval-pill-hint {
+  font-size: var(--wp-fs-xs);
+  color: var(--wp-text-faint);
+  line-height: 1.35;
 }
 
 .wp-space-settings-dialog :deep(.wp-space-caps--embedded) {

@@ -83,6 +83,7 @@ function openFromChatError(
       turnId: err.turnId ?? correlation?.turnId ?? null,
       workId: err.workId ?? correlation?.workId ?? null,
       sessionId: err.sessionId ?? correlation?.sessionId ?? null,
+      detail: err.detail ?? null,
     },
     retry,
   );

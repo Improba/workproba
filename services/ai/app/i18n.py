@@ -398,7 +398,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "managed_connectors_catalog_hint": (
                 "Les actions connecteur passent par l'agent métier compétent via "
                 "`summon_specialist` ; n'inventez pas d'action ; n'appelez pas "
-                "`managed_*` depuis Imp (agent parent)."
+                "`managed_*` depuis Imp (agent parent). Si la délégation Pennylane "
+                "échoue, n'inventez pas de contournement (ex. write_pdf local) sans "
+                "accord explicite de l'utilisateur ; rapportez l'erreur outil."
             ),
             "managed_connectors_enabled": (
                 "{id} ({name}) : activé localement ; déléguer à l'agent métier qui "
@@ -656,11 +658,13 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "finale. Résume l'intention de l'utilisateur."
             ),
             "summary_system_prompt": (
-                "Tu synthétises une conversation de travail en français. "
-                "Produis un résumé compact et structuré. Utilise seulement les "
-                "sections qui ont du contenu : Décisions, Faits établis, Fichiers "
-                "concernés, Questions ouvertes. Reste factuel, sans inventer, et "
-                "privilégie les informations utiles pour reprendre le travail."
+                "Vous synthétisez une conversation de travail en français. "
+                "Adressez-vous au lecteur collaborateur avec « vous » ; n'utilisez "
+                "pas « l'utilisateur ». Produisez un résumé compact et structuré. "
+                "Utilisez seulement les sections qui ont du contenu : Décisions, "
+                "Faits établis, Fichiers concernés, Questions ouvertes. Restez "
+                "factuel, sans inventer, et privilégiez les informations utiles "
+                "pour reprendre le travail."
             ),
             "default_title": "Nouvelle conversation",
             "user_message_label": "Message utilisateur :",
@@ -1019,7 +1023,9 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "managed_connectors_catalog_hint": (
                 "Connector actions go through the competent business agent via "
                 "`summon_specialist`; do not invent actions; do not call `managed_*` "
-                "from Imp (parent agent)."
+                "from Imp (parent agent). If a Pennylane delegation fails, do not invent "
+                "a workaround (e.g. local write_pdf) without the user's explicit OK; "
+                "report the tool error."
             ),
             "managed_connectors_enabled": (
                 "{id} ({name}): enabled locally; delegate to the business agent that "
@@ -1274,7 +1280,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "the user's intent."
             ),
             "summary_system_prompt": (
-                "You summarize a work conversation in English. Produce a "
+                "You summarize a work conversation in English. Address the "
+                "collaborating reader as \"you\"; do not use \"the user\". Produce a "
                 "compact structured summary. Use only sections with content: "
                 "Decisions, Established facts, Files involved, Open questions. "
                 "Stay factual, do not invent, and favor information useful to "

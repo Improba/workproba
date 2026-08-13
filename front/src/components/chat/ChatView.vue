@@ -42,6 +42,7 @@
         @personas-another="(card) => emit('personas-another', card)"
         @personas-to-discussion="(card) => emit('personas-to-discussion', card)"
         @specialist-to-discussion="(card) => emit('specialist-to-discussion', card)"
+        @specialist-retry="(id) => emit('specialist-retry', id)"
         @regenerate="(id) => emit('regenerate', id)"
         @error-reconnect="(cta) => emit('error-reconnect', cta)"
       />
@@ -149,6 +150,7 @@ const emit = defineEmits<{
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
   'specialist-to-discussion': [card: import('#types').SpecialistHandoffCard];
+  'specialist-retry': [messageId: string];
   regenerate: [messageId: string];
   'stream-error-report': [];
   'stream-error-retry': [];

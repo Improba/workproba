@@ -2654,6 +2654,54 @@ export interface SpaceCapabilitiesProfile {
   cloudEntitled: boolean;
 }
 
+export type ApprovalMode = 'security' | 'trust';
+
+export interface WorkspacePolicy {
+  approvalMode: ApprovalMode;
+}
+
+export async function fetchWorkspacePolicy(opts: {
+  workspaceDataDir: string;
+}): Promise<SidecarResult<WorkspacePolicy>> {
+  const params = new URLSearchParams({
+    workspace_data_dir: opts.workspaceDataDir,
+  });
+  try {
+    const response = await fetch(
+      `${getAiSidecarUrl()}/workspace/policy?${params.toString()}`,
+      { headers: { 'X-Internal-Secret': getDesktopSecret() } },
+    );
+    return parseSidecarJson<WorkspacePolicy>(response);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'workspace_policy_failed',
+    };
+  }
+}
+
+export async function updateWorkspacePolicy(opts: {
+  workspaceDataDir: string;
+  approvalMode: ApprovalMode;
+}): Promise<SidecarResult<WorkspacePolicy>> {
+  try {
+    const response = await fetch(`${getAiSidecarUrl()}/workspace/policy`, {
+      method: 'PUT',
+      headers: sidecarHeaders(),
+      body: JSON.stringify({
+        workspace_data_dir: opts.workspaceDataDir,
+        approval_mode: opts.approvalMode,
+      }),
+    });
+    return parseSidecarJson<WorkspacePolicy>(response);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : 'workspace_policy_update_failed',
+    };
+  }
+}
+
 export async function fetchWorkspaceCapabilities(opts: {
   workspaceDataDir: string;
   pluginDataDir?: string | null;

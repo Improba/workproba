@@ -78,54 +78,91 @@
         :accept="ATTACHMENT_ACCEPT"
         @change="onFileInputChange"
       />
-      <button
-        type="button"
-        class="chat-composer__attach"
-        :aria-label="attachAriaLabel"
-        :title="attachTitle"
-        aria-haspopup="menu"
-      >
-        <Lucide name="plus" size="18" color="wp-text" />
-        <q-menu
-          ref="addMenuRef"
-          anchor="bottom left"
-          self="top left"
-          :offset="[0, 8]"
-          :close-on-click="false"
-          class="chat-composer__add-menu"
-          transition-show="jump-down"
-          transition-hide="jump-up"
+      <div class="chat-composer__tools">
+        <button
+          type="button"
+          class="chat-composer__attach"
+          :aria-label="attachAriaLabel"
+          :title="attachTitle"
+          aria-haspopup="menu"
         >
-          <div class="chat-composer__add-menu-scroll">
-            <div class="chat-composer__add-head">{{ t('chat.attachFile') }}</div>
-            <q-list dense>
-              <q-item
-                clickable
-                class="chat-composer__add-item"
-                @click="onAttachClick"
-              >
-                <q-item-section avatar class="chat-composer__add-icon">
-                  <Lucide name="paperclip" size="16" color="wp-text" />
-                </q-item-section>
-                <q-item-section>
-                  <q-item-label class="chat-composer__add-item-label">
-                    {{ t('chat.attachFile') }}
-                  </q-item-label>
-                  <q-item-label caption class="chat-composer__add-item-hint">
-                    {{ t('chat.attachFileHint') }}
-                  </q-item-label>
-                </q-item-section>
-              </q-item>
-            </q-list>
-
-            <template v-if="personasEnabled">
-              <q-separator class="chat-composer__add-sep" />
-              <div class="chat-composer__add-head">{{ t('chat.addMenuPersonas') }}</div>
+          <Lucide name="plus" size="18" color="wp-text" />
+          <q-menu
+            ref="addMenuRef"
+            anchor="bottom left"
+            self="top left"
+            :offset="[0, 8]"
+            :close-on-click="false"
+            class="chat-composer__add-menu"
+            transition-show="jump-down"
+            transition-hide="jump-up"
+          >
+            <div class="chat-composer__add-menu-scroll">
+              <div class="chat-composer__add-head">{{ t('chat.attachFile') }}</div>
               <q-list dense>
                 <q-item
                   clickable
                   class="chat-composer__add-item"
-                  @click="onPersonasOpen"
+                  @click="onAttachClick"
+                >
+                  <q-item-section avatar class="chat-composer__add-icon">
+                    <Lucide name="paperclip" size="16" color="wp-text" />
+                  </q-item-section>
+                  <q-item-section>
+                    <q-item-label class="chat-composer__add-item-label">
+                      {{ t('chat.attachFile') }}
+                    </q-item-label>
+                    <q-item-label caption class="chat-composer__add-item-hint">
+                      {{ t('chat.attachFileHint') }}
+                    </q-item-label>
+                  </q-item-section>
+                </q-item>
+              </q-list>
+
+              <template v-if="showModelControl">
+                <q-separator class="chat-composer__add-sep" />
+                <ChatModelMenuContent
+                  :model-value="reasoningEffort ?? 'none'"
+                  :provider="reasoningProvider"
+                  :model="reasoningModel"
+                  :provider-set="effectiveActiveSet"
+                  @update:model-value="
+                    (value) => emit('update:reasoningEffort', value)
+                  "
+                  @update:model="(value) => emit('update:reasoningModel', value)"
+                />
+              </template>
+            </div>
+          </q-menu>
+        </button>
+
+        <button
+          v-if="personasEnabled"
+          type="button"
+          class="chat-composer__regards"
+          :aria-label="t('regards.chipAria')"
+          :title="t('regards.chip')"
+          aria-haspopup="menu"
+        >
+          <Lucide name="users" size="14" color="wp-gold" />
+          <span>{{ t('regards.chip') }}</span>
+          <q-menu
+            ref="regardsMenuRef"
+            anchor="bottom left"
+            self="top left"
+            :offset="[0, 8]"
+            :close-on-click="false"
+            class="chat-composer__add-menu chat-composer__regards-menu"
+            transition-show="jump-down"
+            transition-hide="jump-up"
+          >
+            <div class="chat-composer__add-menu-scroll">
+              <div class="chat-composer__add-head">{{ t('chat.addMenuPersonas') }}</div>
+              <q-list dense>
+                <q-item
+                  clickable
+                  class="chat-composer__add-item chat-composer__regards-item"
+                  @click.stop="onPersonasOpen"
                 >
                   <q-item-section avatar class="chat-composer__add-icon">
                     <Lucide name="message-circle-question" size="16" color="wp-gold" />
@@ -141,8 +178,9 @@
                 </q-item>
                 <q-item
                   clickable
-                  class="chat-composer__add-item"
-                  @click="onPersonasMeeting"
+                  class="chat-composer__add-item chat-composer__regards-item"
+                  :disable="streaming"
+                  @click.stop="onPersonasMeeting"
                 >
                   <q-item-section avatar class="chat-composer__add-icon">
                     <Lucide name="presentation" size="16" color="wp-gold" />
@@ -158,8 +196,8 @@
                 </q-item>
                 <q-item
                   clickable
-                  class="chat-composer__add-item"
-                  @click="onPersonasDiscuss"
+                  class="chat-composer__add-item chat-composer__regards-item"
+                  @click.stop="onPersonasDiscuss"
                 >
                   <q-item-section avatar class="chat-composer__add-icon">
                     <Lucide name="messages-square" size="16" color="wp-gold" />
@@ -174,24 +212,10 @@
                   </q-item-section>
                 </q-item>
               </q-list>
-            </template>
-
-            <template v-if="showModelControl">
-              <q-separator class="chat-composer__add-sep" />
-              <ChatModelMenuContent
-                :model-value="reasoningEffort ?? 'none'"
-                :provider="reasoningProvider"
-                :model="reasoningModel"
-                :provider-set="effectiveActiveSet"
-                @update:model-value="
-                  (value) => emit('update:reasoningEffort', value)
-                "
-                @update:model="(value) => emit('update:reasoningModel', value)"
-              />
-            </template>
-          </div>
-        </q-menu>
-      </button>
+            </div>
+          </q-menu>
+        </button>
+      </div>
 
       <div class="chat-composer__field">
         <q-input
@@ -305,6 +329,7 @@ const {
 
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const addMenuRef = ref<QMenu | null>(null);
+const regardsMenuRef = ref<QMenu | null>(null);
 const indexAttachmentsInMemory = ref(false);
 
 const canIndexAttachments = computed(
@@ -410,6 +435,10 @@ function closeAddMenu(): void {
   addMenuRef.value?.hide?.();
 }
 
+function closeRegardsMenu(): void {
+  regardsMenuRef.value?.hide?.();
+}
+
 function onAttachClick(): void {
   openFilePicker();
   closeAddMenu();
@@ -417,17 +446,18 @@ function onAttachClick(): void {
 
 function onPersonasOpen(): void {
   emit('personas-open');
-  closeAddMenu();
+  closeRegardsMenu();
 }
 
 function onPersonasMeeting(): void {
+  if (props.streaming) return;
   emit('personas-meeting');
-  closeAddMenu();
+  closeRegardsMenu();
 }
 
 function onPersonasDiscuss(): void {
   emit('personas-discuss');
-  closeAddMenu();
+  closeRegardsMenu();
 }
 
 const draft = ref('');
@@ -676,7 +706,7 @@ onMounted(() => {
   grid-template-columns: auto 1fr;
   grid-template-areas:
     'field field'
-    'attach actions';
+    'tools actions';
   align-items: center;
   column-gap: 0.45rem;
   row-gap: 4px;
@@ -684,8 +714,15 @@ onMounted(() => {
   padding: 10px 10px 8px;
 }
 
-.chat-composer--expanded .chat-composer__attach {
-  grid-area: attach;
+.chat-composer__tools {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex: 0 0 auto;
+}
+
+.chat-composer--expanded .chat-composer__tools {
+  grid-area: tools;
   justify-self: start;
 }
 
@@ -753,6 +790,39 @@ onMounted(() => {
   &:focus-visible {
     outline: none;
     box-shadow: 0 0 0 3px var(--wp-accent-soft);
+  }
+}
+
+.chat-composer__regards {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 2rem;
+  padding: 0 0.7rem 0 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--wp-gold) 50%, var(--wp-border));
+  border-radius: var(--wp-r-pill);
+  background: var(--wp-gold-soft);
+  color: var(--wp-text);
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--wp-dur) var(--wp-ease),
+    border-color var(--wp-dur) var(--wp-ease),
+    transform var(--wp-dur) var(--wp-ease);
+
+  &:hover {
+    filter: brightness(0.97);
+    border-color: var(--wp-gold);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--wp-focus-ring);
   }
 }
 

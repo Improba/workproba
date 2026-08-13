@@ -1,6 +1,6 @@
 import { t } from './i18nT';
 
-function formatManagedToolLabel(name: string): string {
+export function formatManagedToolLabel(name: string): string {
   if (!name.startsWith('managed__')) {
     return name;
   }
@@ -80,4 +80,12 @@ export function fallbackHumanLabel(
     default:
       return t('toolCalls.defaultAction');
   }
+}
+
+/** Libellé d'outil pour la carte handoff (jamais le fallback générique). */
+export function handoffToolLabel(name: string): string {
+  if (name.startsWith('managed__')) {
+    return formatManagedToolLabel(name);
+  }
+  return name.replace(/_/g, ' ');
 }

@@ -1239,13 +1239,44 @@ async def invoke_managed_connector_impl(
                 base_url=base_url,
                 allowed_capability_ids=allowed,
             )
-        result = await gateway.invoke_remote(connector_id, payload, identity)
     except ModelRetry:
         raise
     except PermissionError as exc:
         raise ModelRetry(str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
         raise ModelRetry(f"{type(exc).__name__}: {exc}") from exc
+
+    try:
+        result = await gateway.invoke_remote(connector_id, payload, identity)
+    except Exception as exc:  # noqa: BLE001
+        detail = f"{type(exc).__name__}: {exc}"
+        logger.warning(
+            "managed connector remote invoke failed connector_id=%s action=%s tool=%s detail=%s",
+            connector_id,
+            action,
+            gate_tool_name,
+            detail,
+            exc_info=exc,
+        )
+        summary_connector_id = human_connector_id or connector_id
+        human_summary = build_human_summary(
+            gate_tool_name,
+            {
+                "connector_id": summary_connector_id,
+                "tool_name": gate_tool_name,
+                "ok": False,
+            },
+            locale=locale,
+        )
+        return {
+            "ok": False,
+            "error": "remote_invoke_failed",
+            "connector_id": connector_id,
+            "action": action,
+            "tool_name": gate_tool_name,
+            "detail": detail,
+            "human_summary": human_summary,
+        }
 
     summary_connector_id = human_connector_id or connector_id
     human_summary = build_human_summary(
@@ -1257,4 +1288,12 @@ async def invoke_managed_connector_impl(
         },
         locale=locale,
     )
+    if not result.get("ok", True):
+        logger.warning(
+            "managed connector remote returned failure connector_id=%s action=%s tool=%s detail=%s",
+            connector_id,
+            action,
+            gate_tool_name,
+            result.get("detail") or result.get("error"),
+        )
     return {**result, "human_summary": human_summary}

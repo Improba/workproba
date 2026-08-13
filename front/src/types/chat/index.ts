@@ -125,6 +125,8 @@ export interface ChatError {
   code: ChatErrorCode;
   /** Message localisé affichable. */
   message: string;
+  /** Détail technique backend (rapport d'erreur, hors UI principale). */
+  detail?: string | null;
   /** true si l'utilisateur peut tenter un retry. */
   retryable: boolean;
   incidentId?: string | null;
@@ -415,6 +417,7 @@ export interface ChatStreamToolAutoApprovedData {
 export interface ChatStreamErrorData {
   code: ChatErrorCode;
   message: string;
+  detail?: string | null;
   turnId?: string | null;
   workId?: string | null;
   sessionId?: string | null;
@@ -530,6 +533,12 @@ export interface SpecialistNestedTool {
   status: 'running' | 'success' | 'error';
 }
 
+export interface SpecialistDegradedTool {
+  connectorId: string;
+  tool: string;
+  reason?: string;
+}
+
 /** Carte de restitution après délégation à un agent métier. */
 export interface SpecialistHandoffCard {
   id: string;
@@ -544,7 +553,7 @@ export interface SpecialistHandoffCard {
   thinking?: string;
   thinkingDone?: boolean;
   nestedTools?: SpecialistNestedTool[];
-  degradedTools?: string[];
+  degradedTools?: SpecialistDegradedTool[];
   status: SpecialistHandoffStatus;
   streaming?: boolean;
 }

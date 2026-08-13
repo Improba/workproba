@@ -64,6 +64,52 @@ describe('formatMainChatContext', () => {
     );
   });
 
+  it('inclut la réponse de l’agent métier même sans texte Imp', () => {
+    const context = formatMainChatContext([
+      msg({ id: '1', role: 'user', content: 'Peux-tu demander à Camille ?' }),
+      msg({
+        id: '2',
+        role: 'assistant',
+        content: '',
+        specialistHandoff: {
+          id: 'h1',
+          toolCallId: 'tc1',
+          specialistId: 'org.rh',
+          specialistName: 'Camille RH',
+          mode: 'regard',
+          task: 'Relire le CV',
+          content: 'Le CV est clair, resserre l’accroche.',
+          status: 'done',
+        },
+      }),
+    ]);
+
+    expect(context).toContain('Utilisateur : Peux-tu demander à Camille ?');
+    expect(context).toContain('[Camille RH] Le CV est clair, resserre l’accroche.');
+  });
+
+  it('conserve le texte Imp et l’analyse de l’agent métier', () => {
+    const context = formatMainChatContext([
+      msg({
+        role: 'assistant',
+        content: 'Voici l’avis demandé.',
+        specialistHandoff: {
+          id: 'h1',
+          toolCallId: 'tc1',
+          specialistId: 'org.rh',
+          specialistName: 'Camille RH',
+          mode: 'regard',
+          task: 'Relire',
+          content: 'OK pour moi.',
+          status: 'done',
+        },
+      }),
+    ]);
+
+    expect(context).toContain('Assistant : Voici l’avis demandé.');
+    expect(context).toContain('[Camille RH] OK pour moi.');
+  });
+
   it('conserve les messages récents quand le budget est dépassé', () => {
     const long = 'x'.repeat(100);
     const context = formatMainChatContext(

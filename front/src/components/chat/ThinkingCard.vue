@@ -113,7 +113,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import Lucide from '@lib-improba/components/mastok/Lucide.vue';
 import { useI18n } from 'vue-i18n';
 import { useAppSettings } from '@composables/useAppSettings';
@@ -145,46 +145,38 @@ const showSpinner = computed(
   () => props.streaming && !props.thinking.done,
 );
 
-const debouncedSubject = ref<string | null>(null);
-let subjectDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+const headerSubject = ref<string | null>(null);
 
 watch(
-  () => props.thinking.subject,
-  (subject) => {
-    if (subjectDebounceTimer) clearTimeout(subjectDebounceTimer);
-    if (!props.streaming || props.thinking.done) {
-      debouncedSubject.value = subject ?? null;
+  () =>
+    [props.thinking.subject, props.thinking.done, props.streaming] as const,
+  ([subject, done, streaming]) => {
+    // Pendant le stream : header fixe, pas de sujet live.
+    if (streaming && !done) {
+      headerSubject.value = null;
       return;
     }
-    subjectDebounceTimer = setTimeout(() => {
-      debouncedSubject.value = subject ?? null;
-    }, 300);
+    headerSubject.value = subject ?? null;
   },
   { immediate: true },
 );
 
-onBeforeUnmount(() => {
-  if (subjectDebounceTimer) {
-    clearTimeout(subjectDebounceTimer);
-    subjectDebounceTimer = null;
-  }
-});
-
+/** Présence stable pendant le stream : pas de sujet live dans l'en-tête. */
 const headerPrimaryLabel = computed(() => {
-  const subject = debouncedSubject.value?.trim();
-  if (subject) return subject;
   if (props.streaming && !props.thinking.done) return t('chat.thinking');
+  const subject = headerSubject.value?.trim();
+  if (subject) return subject;
   return t('chat.reasoning');
 });
 
 const headerSecondaryLabel = computed(() => {
   if (!props.thinking.done) return '';
-  if (debouncedSubject.value?.trim()) return t('chat.reasoning');
+  if (headerSubject.value?.trim()) return t('chat.reasoning');
   return '';
 });
 
 const headerAriaLabel = computed(() => {
-  const subject = debouncedSubject.value?.trim();
+  const subject = headerSubject.value?.trim();
   if (subject) return t('chat.thinkingSubjectAria', { subject });
   return expanded.value ? t('common.hide') : t('chat.reasoning');
 });
@@ -313,19 +305,12 @@ function setDetailView(view: ThinkingDetailViewMode): void {
 
 .thinking-card__spinner {
   flex: 0 0 auto;
-  width: 0.9rem;
-  height: 0.9rem;
-  margin-top: 0.2rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  margin-top: 0.35rem;
   border-radius: 999px;
-  border: 2px solid var(--wp-accent-soft);
-  border-top-color: var(--wp-accent);
-  animation: thinking-spin 0.7s linear infinite;
-}
-
-@keyframes thinking-spin {
-  to {
-    transform: rotate(360deg);
-  }
+  background: var(--wp-accent);
+  animation: wp-breathe 1.6s ease-in-out infinite;
 }
 
 .thinking-card__body {

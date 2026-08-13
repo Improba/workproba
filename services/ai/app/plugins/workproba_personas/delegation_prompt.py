@@ -73,6 +73,8 @@ def build_business_agents_delegation_prompt(
         t(locale, "prompt.delegation.header"),
         t(locale, "prompt.delegation.rule_connector_actions"),
         t(locale, "prompt.delegation.rule_modes"),
+        t(locale, "prompt.delegation.rule_task_context"),
+        t(locale, "prompt.delegation.rule_no_ritual_confirmation"),
         t(locale, "prompt.delegation.rule_no_managed"),
         t(locale, "prompt.delegation.rule_no_simulate"),
         t(locale, "prompt.delegation.rule_ask_personas"),

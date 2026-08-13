@@ -116,6 +116,44 @@ function sseHangAfter(
   };
 }
 
+/** SSE ouvert après les events initiaux ; permet d'en pousser d'autres avant close(). */
+function sseControllable(
+  initialEvents: Array<{ event: string; data: unknown }>,
+): {
+  response: Response;
+  close: () => void;
+  push: (events: Array<{ event: string; data: unknown }>) => void;
+} {
+  const encode = (events: Array<{ event: string; data: unknown }>) =>
+    events.map((e) => `event: ${e.event}\ndata: ${JSON.stringify(e.data)}\n\n`).join('');
+  let streamController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      streamController = controller;
+      controller.enqueue(new TextEncoder().encode(encode(initialEvents)));
+    },
+  });
+  return {
+    response: {
+      ok: true,
+      status: 200,
+      body,
+      headers: new Headers(),
+      text: async () => '',
+    } as unknown as Response,
+    close: () => {
+      try {
+        streamController?.close();
+      } catch {
+        /* déjà fermé */
+      }
+    },
+    push: (events) => {
+      streamController?.enqueue(new TextEncoder().encode(encode(events)));
+    },
+  };
+}
+
 async function waitForPendingConfirmation(
   api: UseChatStreamReturn,
   timeoutMs = 2000,
@@ -451,6 +489,31 @@ describe('useChatStream — feedbacks', () => {
     expect(assistant?.error?.turnId).toBe('turn_abc');
     expect(assistant?.error?.workId).toBe('work_abc');
     expect(assistant?.error?.sessionId).toBe('sess_abc');
+    unmount();
+  });
+
+  it('unexpected_model_behavior conserve message UI générique et detail backend', async () => {
+    const backendDetail =
+      "Tool 'summon_specialist' exceeded max retries count of 1";
+    (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue(
+      sseResponse([
+        {
+          event: 'error',
+          data: {
+            code: 'unexpected_model_behavior',
+            message: backendDetail,
+          },
+        },
+      ]),
+    );
+
+    const { api, unmount } = mountStream();
+    await api.send('hi');
+
+    const assistant = lastAssistant(api.messages.value);
+    expect(assistant?.error?.code).toBe('unexpected_model_behavior');
+    expect(assistant?.error?.message).toContain('réponse inattendue');
+    expect(assistant?.error?.detail).toBe(backendDetail);
     unmount();
   });
 
@@ -1226,9 +1289,106 @@ describe('useChatStream — feedbacks', () => {
     expect(assistantAfter?.pendingConfirmation).toBeNull();
     expect(api.error.value?.code).toBe('confirmation_not_found');
     expect(api.error.value?.retryable).toBe(false);
+    expect(api.confirming.value).toBe(false);
     hang.close();
     await sendPromise;
     expect(api.streaming.value).toBe(false);
+    unmount();
+  });
+
+  it('confirm approve garde confirming true jusqu\'au tool_call_result SSE', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const hang = sseControllable([
+      {
+        event: 'tool_call_start',
+        data: { tool_call_id: 'tc_1', tool_name: 'write_docx' },
+      },
+      {
+        event: 'confirmation_request',
+        data: {
+          confirmation_id: 'cf_1',
+          tool_call_id: 'tc_1',
+          tool_name: 'write_docx',
+          action: 'create',
+          proposed_path: 'out.docx',
+          human_summary: 'Créer',
+        },
+      },
+    ]);
+    fetchMock.mockResolvedValueOnce(hang.response);
+
+    const { api, unmount } = mountStream();
+    const sendPromise = api.send('hi');
+    const assistant = await waitForPendingConfirmation(api);
+
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await api.confirm('approve');
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(api.confirming.value).toBe(true);
+    expect(assistant.pendingConfirmation?.confirmationId).toBe('cf_1');
+    expect(assistant.toolCalls?.[0]?.status).toBe('running');
+
+    hang.push([
+      {
+        event: 'tool_call_result',
+        data: {
+          tool_call_id: 'tc_1',
+          tool_name: 'write_docx',
+          result: { metadata: { path: 'out.docx' } },
+          is_error: false,
+        },
+      },
+    ]);
+
+    const started = Date.now();
+    while (Date.now() - started < 2000) {
+      if (!api.confirming.value && assistant.pendingConfirmation == null) break;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+
+    expect(api.confirming.value).toBe(false);
+    expect(assistant.pendingConfirmation).toBeNull();
+    hang.close();
+    await sendPromise;
+    unmount();
+  });
+
+  it('second confirm pendant confirming true ne refait pas de POST', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const hang = sseHangAfter([
+      {
+        event: 'tool_call_start',
+        data: { tool_call_id: 'tc_1', tool_name: 'write_docx' },
+      },
+      {
+        event: 'confirmation_request',
+        data: {
+          confirmation_id: 'cf_1',
+          tool_call_id: 'tc_1',
+          tool_name: 'write_docx',
+          action: 'create',
+          proposed_path: 'out.docx',
+          human_summary: 'Créer',
+        },
+      },
+    ]);
+    fetchMock.mockResolvedValueOnce(hang.response);
+
+    const { api, unmount } = mountStream();
+    const sendPromise = api.send('hi');
+    await waitForPendingConfirmation(api);
+
+    fetchMock.mockResolvedValueOnce(new Response('{}', { status: 200 }));
+    await api.confirm('approve');
+    expect(api.confirming.value).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    await api.confirm('approve');
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+
+    hang.close();
+    await sendPromise;
     unmount();
   });
 
@@ -2055,12 +2215,47 @@ describe('useChatStream — browser tool results', () => {
     await api.send('question');
     const assistantId = lastAssistant(api.messages.value)!.id;
 
-    await api.regenerateFrom(assistantId);
+    const started = await api.regenerateFrom(assistantId);
 
+    expect(started).toBe(true);
     expect(api.messages.value).toHaveLength(2);
     expect(api.messages.value[0].content).toBe('question');
     expect(lastAssistant(api.messages.value)?.content).toBe('R2');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+    unmount();
+  });
+
+  it('regenerateFrom refuse un message inconnu sans relancer', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const { api, unmount } = mountStream();
+    const started = await api.regenerateFrom('missing');
+    expect(started).toBe(false);
+    expect(fetchMock).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('regenerateFrom restaure la réponse si l’envoi ne démarre pas', async () => {
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    fetchMock.mockResolvedValueOnce(
+      sseResponse([
+        { event: 'token', data: { content: 'R1' } },
+        { event: 'done', data: { content: '' } },
+      ]),
+    );
+
+    const { api, projectPath, unmount } = mountStream();
+    await api.send('question');
+    const assistantId = lastAssistant(api.messages.value)!.id;
+    expect(api.messages.value).toHaveLength(2);
+
+    projectPath.value = null;
+    const started = await api.regenerateFrom(assistantId);
+
+    expect(started).toBe(false);
+    expect(api.messages.value).toHaveLength(2);
+    expect(lastAssistant(api.messages.value)?.id).toBe(assistantId);
+    expect(lastAssistant(api.messages.value)?.content).toBe('R1');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
     unmount();
   });
 

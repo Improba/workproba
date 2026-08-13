@@ -22,7 +22,11 @@ from pathlib import Path
 from typing import Any
 
 from pydantic_ai import Agent
-from pydantic_ai.exceptions import UnexpectedModelBehavior, UsageLimitExceeded
+from pydantic_ai.exceptions import (
+    ContentFilterError,
+    UnexpectedModelBehavior,
+    UsageLimitExceeded,
+)
 from pydantic_ai.messages import (
     ModelRequest,
     ModelResponse,
@@ -37,10 +41,12 @@ from pydantic_ai.messages import (
 from pydantic_ai.usage import UsageLimits
 
 from app.agent.attachments import build_user_prompt, process_inline_attachments
+from app.agent.effects import tool_blocks_model_behavior_retry
 from app.agent.confirmation import (
     approval_gate_retry_kind,
     ConfirmationGate,
     confirmation_registry,
+    create_confirmation_gate,
 )
 from app.agent.human import build_human_summary
 from app.agent.plan import PlanGate, plan_registry
@@ -55,6 +61,7 @@ from app.agent.work_events import (
     derive_work_event,
     work_id_for_turn,
 )
+from app.config import get_settings
 from app.i18n import DEFAULT_LOCALE, t
 from app.limits import DEFAULT_LIMITS, Limits
 from app.llm.cloud_errors import cloud_llm_error_message, parse_cloud_llm_error_code
@@ -120,10 +127,17 @@ class AgentLoop:
         strip_thinking: bool = False,
         is_fallback_attempt: bool = False,
     ) -> AsyncIterator[AgentEvent]:
-        gate = ConfirmationGate(
+        workspace_data_dir = (
+            Path(request.workspace_data_dir).expanduser().resolve()
+            if request.workspace_data_dir
+            else None
+        )
+        gate = create_confirmation_gate(
             session_id=request.session_id,
             turn_id=turn_id,
             locale=request.locale,
+            workspace_data_dir=workspace_data_dir,
+            confirm_before_write=request.confirm_before_write,
         )
         plan_gate = PlanGate(session_id=request.session_id, turn_id=turn_id)
         await confirmation_registry.register(gate)
@@ -399,7 +413,8 @@ class AgentLoop:
             project_client=self._project_client,
             sandbox_runner=self._sandbox_runner,
             limits=self._limits,
-            confirmation_gate=gate if request.confirm_before_write else None,
+            # Toujours un gate : politique espace (security/trust) ou fallback confirm_before_write.
+            confirmation_gate=gate,
             plan_gate=plan_gate,
             event_queue=output_queue,
         )
@@ -470,66 +485,135 @@ class AgentLoop:
                     enabled=request.audit_enabled,
                 )
 
+        retries = get_settings().unexpected_model_behavior_retries
+        attempts = 1 + retries
+        irreversible_done = False
+
         try:
-            async with self._agent.iter(
-                user_prompt=user_prompt,
-                message_history=history,
-                deps=deps,
-                model_settings=self._model_settings or None,
-                usage_limits=UsageLimits(request_limit=self._max_iterations),
-            ) as run:
-                model_round = 0
-                async for node in run:
-                    if Agent.is_model_request_node(node):
-                        async for event in self._iter_model_stream(
-                            node, run.ctx, model_round=model_round
-                        ):
-                            if not emitted and isinstance(
-                                event,
-                                (TokenEvent, ThinkingDeltaEvent, ThinkingStartEvent),
-                            ):
-                                emitted = True
-                            yield event
-                        model_round += 1
-                    elif Agent.is_call_tools_node(node):
-                        async for event in self._iter_tool_stream(
-                            node,
-                            run.ctx,
-                            locale=request.locale,
-                            work_id=work_id,
-                            hook_payload_base=hook_payload_base,
-                            plugin_data_dir=plugin_data_dir,
-                        ):
-                            if not emitted and isinstance(
-                                event,
-                                (ToolCallStartEvent, ToolCallResultEvent),
-                            ):
-                                emitted = True
-                            yield event
-                    elif Agent.is_end_node(node):
-                        output = run.result.output if run.result else ""
-                        turn_summary = output if isinstance(output, str) else str(output)
-                        input_tokens, output_tokens, total_tokens = extract_usage_tokens(
-                            run.result or run
+            for attempt in range(attempts):
+                try:
+                    async with self._agent.iter(
+                        user_prompt=user_prompt,
+                        message_history=history,
+                        deps=deps,
+                        model_settings=self._model_settings or None,
+                        usage_limits=UsageLimits(request_limit=self._max_iterations),
+                    ) as run:
+                        model_round = 0
+                        async for node in run:
+                            if Agent.is_model_request_node(node):
+                                async for event in self._iter_model_stream(
+                                    node, run.ctx, model_round=model_round
+                                ):
+                                    if not emitted and isinstance(
+                                        event,
+                                        (TokenEvent, ThinkingDeltaEvent, ThinkingStartEvent),
+                                    ):
+                                        emitted = True
+                                    yield event
+                                model_round += 1
+                            elif Agent.is_call_tools_node(node):
+                                async for event in self._iter_tool_stream(
+                                    node,
+                                    run.ctx,
+                                    locale=request.locale,
+                                    work_id=work_id,
+                                    hook_payload_base=hook_payload_base,
+                                    plugin_data_dir=plugin_data_dir,
+                                ):
+                                    if (
+                                        isinstance(event, ToolCallResultEvent)
+                                        and not event.is_error
+                                        and tool_blocks_model_behavior_retry(
+                                            event.tool_name,
+                                            is_error=event.is_error,
+                                        )
+                                    ):
+                                        irreversible_done = True
+                                    if not emitted and isinstance(
+                                        event,
+                                        (ToolCallStartEvent, ToolCallResultEvent),
+                                    ):
+                                        emitted = True
+                                    yield event
+                            elif Agent.is_end_node(node):
+                                output = run.result.output if run.result else ""
+                                turn_summary = (
+                                    output if isinstance(output, str) else str(output)
+                                )
+                                input_tokens, output_tokens, total_tokens = (
+                                    extract_usage_tokens(run.result or run)
+                                )
+                                hook_registry.dispatch(
+                                    "turn.completed",
+                                    {
+                                        **hook_payload_base,
+                                        "summary": turn_summary,
+                                    },
+                                )
+                                yield derive_work_event(
+                                    phase="completed",
+                                    work_id=work_id,
+                                    turn_summary=turn_summary,
+                                )
+                                yield DoneEvent(
+                                    content=output if isinstance(output, str) else str(output),
+                                    input_tokens=input_tokens,
+                                    output_tokens=output_tokens,
+                                    total_tokens=total_tokens,
+                                )
+                    break
+                except ContentFilterError as exc:
+                    message = t(
+                        request.locale,
+                        "loop.unexpected_model_behavior",
+                        detail=exc,
+                    )
+                    yield derive_work_event(
+                        phase="failed",
+                        work_id=work_id,
+                        code="unexpected_model_behavior",
+                        message=message,
+                    )
+                    yield make_error_event(
+                        code="unexpected_model_behavior",
+                        message=message,
+                        turn_id=gate.turn_id,
+                        work_id=work_id,
+                        session_id=request.session_id,
+                    )
+                    return
+                except UnexpectedModelBehavior as exc:
+                    if attempt + 1 < attempts and not irreversible_done:
+                        logger.warning(
+                            "Unexpected model behavior, retrying same model "
+                            "(session=%s turn=%s attempt=%s/%s detail=%s)",
+                            request.session_id,
+                            gate.turn_id,
+                            attempt + 1,
+                            attempts,
+                            exc,
                         )
-                        hook_registry.dispatch(
-                            "turn.completed",
-                            {
-                                **hook_payload_base,
-                                "summary": turn_summary,
-                            },
-                        )
-                        yield derive_work_event(
-                            phase="completed",
-                            work_id=work_id,
-                            turn_summary=turn_summary,
-                        )
-                        yield DoneEvent(
-                            content=output if isinstance(output, str) else str(output),
-                            input_tokens=input_tokens,
-                            output_tokens=output_tokens,
-                            total_tokens=total_tokens,
-                        )
+                        continue
+                    message = t(
+                        request.locale,
+                        "loop.unexpected_model_behavior",
+                        detail=exc,
+                    )
+                    yield derive_work_event(
+                        phase="failed",
+                        work_id=work_id,
+                        code="unexpected_model_behavior",
+                        message=message,
+                    )
+                    yield make_error_event(
+                        code="unexpected_model_behavior",
+                        message=message,
+                        turn_id=gate.turn_id,
+                        work_id=work_id,
+                        session_id=request.session_id,
+                    )
+                    return
         except UsageLimitExceeded:
             message = t(request.locale, "loop.usage_limit_exceeded")
             yield derive_work_event(
@@ -545,25 +629,7 @@ class AgentLoop:
                 work_id=work_id,
                 session_id=request.session_id,
             )
-        except UnexpectedModelBehavior as exc:
-            message = t(
-                request.locale,
-                "loop.unexpected_model_behavior",
-                detail=exc,
-            )
-            yield derive_work_event(
-                phase="failed",
-                work_id=work_id,
-                code="unexpected_model_behavior",
-                message=message,
-            )
-            yield make_error_event(
-                code="unexpected_model_behavior",
-                message=message,
-                turn_id=gate.turn_id,
-                work_id=work_id,
-                session_id=request.session_id,
-            )
+            return
         except asyncio.CancelledError:
             raise
         except Exception as exc:

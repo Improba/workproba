@@ -7,17 +7,11 @@ import type { PersonasOpinionCard as PersonasOpinionCardType, SpecialistHandoffC
 vi.mock('vue-i18n', () => ({
   useI18n: () => ({
     t: (key: string, params?: Record<string, string>) => {
-      if (key === 'personas.handoff.badgeWithMode') {
-        return `${params?.badge} · ${params?.mode}`;
-      }
-      if (key === 'personas.handoff.takeoverRunning') {
-        return `${params?.name} prend le relais…`;
-      }
       if (key === 'personas.handoff.takeoverDone') {
-        return `${params?.name} a pris le relais`;
+        return `${params?.name} a rendu son avis`;
       }
-      if (key === 'personas.handoff.takeoverError') {
-        return `La délégation à ${params?.name} a échoué`;
+      if (key === 'personas.handoff.takeoverDoneOperative') {
+        return `${params?.name} a traité la demande`;
       }
       if (key === 'personas.handoff.analysing') {
         return `${params?.name} analyse…`;
@@ -25,15 +19,23 @@ vi.mock('vue-i18n', () => ({
       if (key === 'personas.handoff.detailWhileRunning') {
         return `Activité de ${params?.name}`;
       }
-      if (key === 'personas.handoff.detailDone') {
-        return `Réponse de ${params?.name}`;
+      if (key === 'personas.handoff.detailActivity') {
+        return `Activité de ${params?.name}`;
+      }
+      if (key === 'personas.handoff.degradedToolsNamed') {
+        return `Certains outils étaient indisponibles (${params?.names}).`;
+      }
+      if (key === 'personas.handoff.discuss') {
+        return `Continuer avec ${params?.name}`;
+      }
+      if (key === 'personas.handoff.talk') {
+        return `Parler à ${params?.name}`;
       }
       const labels: Record<string, string> = {
         'personas.handoff.cardLabel': 'Retour de {name}',
-        'personas.handoff.badge': 'Agent métier',
-        'personas.handoff.modeRegard': 'Regard',
+        'personas.handoff.retry': 'Réessayer',
+        'personas.handoff.modeRegard': 'Avis',
         'personas.handoff.modeOperative': 'Action',
-        'personas.handoff.discuss': 'Discuter',
         'personas.handoff.statusFailed': 'Échec',
         'personas.handoff.error': 'La délégation à l\'agent métier a échoué.',
         'personas.handoff.pendingAuthorization': 'En attente de votre autorisation…',
@@ -80,7 +82,7 @@ function doneCard(): SpecialistHandoffCardType {
   return {
     ...runningCard(),
     content: 'Voici la synthèse.',
-    degradedTools: ['managed__x__y'],
+    degradedTools: [{ connectorId: 'x', tool: 'y' }],
     status: 'done',
     streaming: false,
   };
@@ -120,15 +122,19 @@ describe('SpecialistHandoffCard', () => {
       props: { card: runningCard() },
       global: { stubs: globalStubs },
     });
-    expect(wrapper.text()).toContain('Gestionnaire prend le relais…');
-    expect(wrapper.text()).toContain('Agent métier · Regard');
+    expect(wrapper.text()).toContain('Gestionnaire');
+    expect(wrapper.text()).toContain('Avis');
+    expect(wrapper.find('.specialist-handoff-card__badge').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain('Agent métier · Action');
+    expect(wrapper.text()).not.toContain('prend le relais');
     expect(wrapper.text()).toContain('Analyser le contrat');
     expect(wrapper.text()).toContain('Gestionnaire analyse…');
     expect(wrapper.find('.specialist-handoff-preview__spinner').exists()).toBe(true);
     expect(wrapper.find('[role="status"].wp-sr-only').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('En cours');
   });
 
-  it('ne montre pas la réponse dans l\'encart tant que le détail est fermé', () => {
+  it('affiche la réponse done sans ouvrir le détail', () => {
     const wrapper = mount(SpecialistHandoffCard, {
       props: {
         card: {
@@ -149,15 +155,14 @@ describe('SpecialistHandoffCard', () => {
       },
       global: { stubs: globalStubs },
     });
-    expect(wrapper.text()).toContain('Réponse de Gestionnaire');
+    expect(wrapper.text()).toContain('Activité de Gestionnaire');
     expect(wrapper.text()).toContain('Voir le détail');
-    expect(wrapper.find('.stub-text').exists()).toBe(false);
+    expect(wrapper.find('.stub-text').text()).toContain('Saisie enregistrée avec succès.');
     expect(wrapper.find('[data-testid="thinking-card"]').exists()).toBe(false);
-    expect(wrapper.text()).not.toContain('Saisie enregistrée avec succès.');
     expect(wrapper.text()).not.toContain('Je vérifie le projet Test.');
   });
 
-  it('révèle réflexion, outils et réponse après Voir le détail', async () => {
+  it('révèle réflexion et outils après Voir le détail', async () => {
     const wrapper = mount(SpecialistHandoffCard, {
       props: {
         card: {
@@ -183,6 +188,7 @@ describe('SpecialistHandoffCard', () => {
       'Je vérifie le projet Test.',
     );
     expect(wrapper.text()).toContain('Création de la saisie');
+    expect(wrapper.findAll('.stub-text')).toHaveLength(1);
     expect(wrapper.find('.stub-text').text()).toContain('Saisie enregistrée avec succès.');
     expect(wrapper.text()).toContain('Masquer');
   });
@@ -216,51 +222,56 @@ describe('SpecialistHandoffCard', () => {
     expect(wrapper.text()).toContain('Création de la saisie');
   });
 
-  it('affiche l\'état pending sans spinner', () => {
+  it('affiche l\'état pending sans spinner ni doublon d\'autorisation', () => {
     const wrapper = mount(SpecialistHandoffCard, {
       props: { card: { ...pendingCard(), id: 'h-pending-empty' } },
       global: { stubs: globalStubs },
     });
-    expect(wrapper.text()).toContain('En attente de votre autorisation…');
+    const pendingMatches = wrapper.text().match(/En attente de votre autorisation…/g);
+    expect(pendingMatches).toHaveLength(2);
+    expect(wrapper.text()).toContain('Gestionnaire');
+    expect(wrapper.text()).not.toContain('Autorisation demandée pour');
     expect(wrapper.text()).not.toContain('prend le relais');
     expect(wrapper.find('.specialist-handoff-preview__spinner').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('En cours');
   });
 
-  it('affiche le contenu, les outils dégradés et le CTA Discuter à la fin', async () => {
+  it('affiche le contenu, les outils dégradés condensés et le CTA Continuer à la fin', async () => {
     const wrapper = mount(SpecialistHandoffCard, {
       props: { card: { ...doneCard(), id: 'h-done-cta' } },
       global: { stubs: globalStubs },
     });
-    expect(wrapper.text()).toContain('Agent métier · Regard');
-    expect(wrapper.find('.specialist-handoff-card__badge').exists()).toBe(true);
-    expect(wrapper.find('.specialist-handoff-card__mode').exists()).toBe(false);
-    expect(wrapper.text()).toContain('x · y');
-    expect(wrapper.text()).not.toContain('managed__x__y');
-    // Contenu derrière détail
-    expect(wrapper.find('.stub-text').exists()).toBe(false);
-    await wrapper.get('.specialist-handoff-card__detail-toggle').trigger('click');
+    expect(wrapper.find('.specialist-handoff-card__badge').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Avis');
+    expect(wrapper.text()).toContain('Gestionnaire');
+    expect(wrapper.text()).not.toContain('Agent métier');
+    expect(wrapper.text()).toContain('Certains outils étaient indisponibles (x).');
+    expect(wrapper.text()).not.toContain("J'ai effectué une action");
     expect(wrapper.find('.stub-text').text()).toContain('Voici la synthèse.');
-    await wrapper.get('.specialist-handoff-card__action').trigger('click');
+    expect(wrapper.text()).toContain('Continuer avec Gestionnaire');
+    await wrapper.get('.specialist-handoff-card__action--discuss').trigger('click');
     expect(wrapper.emitted('discuss')).toHaveLength(1);
   });
 
-  it('affiche l\'état erreur avec CTA Discuter', async () => {
+  it('affiche l\'état erreur avec Réessayer et Continuer', async () => {
     const wrapper = mount(SpecialistHandoffCard, {
       props: { card: errorCard() },
       global: { stubs: globalStubs },
     });
-    expect(wrapper.text()).toContain('La délégation à Gestionnaire a échoué');
+    expect(wrapper.text()).toContain('Gestionnaire');
     expect(wrapper.text()).toContain('Échec');
     expect(wrapper.text()).toContain('La délégation à l\'agent métier a échoué.');
     expect(wrapper.find('[role="alert"]').exists()).toBe(true);
     expect(wrapper.find('.specialist-handoff-preview__spinner').exists()).toBe(false);
     expect(wrapper.text()).not.toContain('En cours');
-    await wrapper.get('button').trigger('click');
+    expect(wrapper.text()).toContain('Parler à Gestionnaire');
+    await wrapper.get('.specialist-handoff-card__action--retry').trigger('click');
+    expect(wrapper.emitted('retry')).toHaveLength(1);
+    await wrapper.get('.specialist-handoff-card__action--discuss').trigger('click');
     expect(wrapper.emitted('discuss')).toHaveLength(1);
   });
 
-  it('affiche le contenu d\'erreur structuré et le badge Action', () => {
+  it('affiche le contenu d\'erreur structuré avec le mode Action', () => {
     const wrapper = mount(SpecialistHandoffCard, {
       props: {
         card: {
@@ -271,11 +282,61 @@ describe('SpecialistHandoffCard', () => {
       },
       global: { stubs: globalStubs },
     });
-    expect(wrapper.text()).toContain('Agent métier · Action');
+    expect(wrapper.text()).toContain('Action');
+    expect(wrapper.text()).toContain('Échec');
+    expect(wrapper.text()).not.toContain('Agent métier · Action');
+    expect(wrapper.find('.specialist-handoff-card__badge').exists()).toBe(false);
     expect(wrapper.find('[role="alert"]').text()).toContain(
       'Aucun agent métier synchronisé dans cet espace.',
     );
     expect(wrapper.text()).not.toContain('La délégation à l\'agent métier a échoué.');
+  });
+
+  it('montre les outils nested pendant l\'analyse sans ouvrir le détail', () => {
+    const wrapper = mount(SpecialistHandoffCard, {
+      props: {
+        card: {
+          ...runningCard(),
+          id: 'h-live-tools',
+          nestedTools: [
+            {
+              id: 'nt1',
+              name: 'read_document',
+              humanSummary: 'Lecture du contrat',
+              status: 'running',
+            },
+          ],
+        },
+      },
+      global: { stubs: globalStubs },
+    });
+    expect(wrapper.text()).toContain('Lecture du contrat');
+    expect(wrapper.find('.specialist-handoff-card__nested-tools--live').exists()).toBe(true);
+    expect(wrapper.find('.specialist-handoff-preview').exists()).toBe(true);
+    expect(wrapper.text()).not.toContain('Voir le détail');
+    expect(wrapper.find('[data-testid="thinking-card"]').exists()).toBe(false);
+  });
+
+  it('n’affiche pas Réessayer quand la délégation n’est plus le dernier message', () => {
+    const wrapper = mount(SpecialistHandoffCard, {
+      props: { card: errorCard(), hideRetry: true },
+      global: { stubs: globalStubs },
+    });
+    expect(wrapper.find('.specialist-handoff-card__action--retry').exists()).toBe(false);
+    expect(wrapper.text()).toContain('Parler à Gestionnaire');
+  });
+
+  it('désactive Réessayer pendant un échange en cours', () => {
+    const wrapper = mount(SpecialistHandoffCard, {
+      props: { card: errorCard(), retryDisabled: true },
+      global: { stubs: globalStubs },
+    });
+    expect(
+      wrapper.get('.specialist-handoff-card__action--retry').attributes('disabled'),
+    ).toBeDefined();
+    expect(
+      wrapper.get('.specialist-handoff-card__action--retry').attributes('title'),
+    ).toBe('personas.handoff.retryBusy');
   });
 });
 

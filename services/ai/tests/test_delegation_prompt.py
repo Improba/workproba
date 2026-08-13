@@ -33,6 +33,7 @@ def test_build_business_agents_delegation_prompt_lists_specialist() -> None:
     assert "operative" in text
     assert "managed_*" in text
     assert "ask_personas" in text
+    assert "verbatim" in text.lower() or "reformulez" in text.lower()
 
 
 def test_build_business_agents_delegation_prompt_empty() -> None:
@@ -54,3 +55,10 @@ def test_build_business_agents_delegation_prompt_uses_doctrine_mission() -> None
     }
     text = build_business_agents_delegation_prompt("en", [specialist])
     assert "Piloter la saisie de temps" in text
+
+
+def test_build_business_agents_delegation_prompt_includes_no_ritual_rule() -> None:
+    text = build_business_agents_delegation_prompt("fr", [_sample_rh_specialist()])
+    assert "CONFIRMATION DIRECTE" in text or "Je suis" in text
+    assert "Human Approval Gate" in text or "carte Human Approval Gate" in text
+    assert "rôle gestionnaire iHora" in text or "gestionnaire iHora" in text

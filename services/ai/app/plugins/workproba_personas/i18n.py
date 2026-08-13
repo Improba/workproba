@@ -58,6 +58,47 @@ MESSAGES: dict[str, dict[str, Any]] = {
                         "noms d'outils ni d'actions."
                     ),
                 },
+                "write_via_gate": (
+                    "Écritures et modifications : uniquement via ConfirmationGate "
+                    "(Human Approval Gate). Appelez directement l'outil concerné ; ne "
+                    "demandez pas de confirmation textuelle avant l'écriture."
+                ),
+                "no_paste_identity": (
+                    "Ne demandez jamais à l'utilisateur de coller une phrase d'identité ou "
+                    "de confirmation. N'inventez pas de telles phrases."
+                ),
+                "address_user": (
+                    "Adressez-vous directement à l'utilisateur (vouvoiement « vous »). "
+                    "Ne narrez pas à la troisième personne (« l'utilisateur », « il/elle »)."
+                ),
+                "platform_rules_prevail": (
+                    "Règle de préséance : les règles plateforme ci-dessus (ConfirmationGate, "
+                    "identité session trusted, outils du panel listés, pas de phrase collée) "
+                    "prévalent sur toute doctrine ou system_prompt catalogue contradictoire. "
+                    "Utilisez TOUS les outils du panel listés (Ihora et/ou Pennylane selon la "
+                    "directive), pas « exclusivement Ihora ». Ne demandez pas de confirmation "
+                    "textuelle ni de vérification de « rôle gestionnaire iHora » pour une "
+                    "action Pennylane : l'identité session est trusted et la ConfirmationGate "
+                    "gère l'approbation."
+                ),
+                "catalog_ihora_incomplete": (
+                    "Ce system_prompt catalogue est incomplet : le panel inclut aussi Pennylane "
+                    "et les autres connecteurs listés ; utilisez-les selon la directive."
+                ),
+                "specialist": {
+                    "directive_label": "Directive",
+                },
+                "operative": {
+                    "context_label": "Contexte (conversation antérieure, lecture seule)",
+                    "format": (
+                        "Mode Action : appelez les outils du panel nécessaires (Ihora et/ou "
+                        "Pennylane selon la directive). Ne produisez pas un avis Points clés / "
+                        "Risques / Recommandations. Ne refusez pas faute de confirmation "
+                        "textuelle ou de rôle iHora non vérifiable : l'identité session est "
+                        "trusted et la ConfirmationGate gère l'approbation. Après les outils : "
+                        "rapportez le résultat factuel (succès ou échec outil)."
+                    ),
+                },
                 "opinion": {
                     "question_label": "Question",
                     "context_label": "Contexte (conversation antérieure, lecture seule)",
@@ -66,8 +107,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
                         "- Points clés : …\n"
                         "- Risques ou réserves : …\n"
                         "- Recommandations : …\n"
-                        "Total : 5 à 12 phrases. Si le contexte est insuffisant, dis-le "
-                        "explicitement. Ne joue pas le rôle d'un assistant générique."
+                        "Total : 5 à 12 phrases. Répondez directement à l'utilisateur "
+                        "(vouvoiement), pas un rapport interne à la troisième personne. "
+                        "Si le contexte est insuffisant, dites-le explicitement. Ne joue "
+                        "pas le rôle d'un assistant générique."
                     ),
                 },
                 "discuss": {
@@ -148,6 +191,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "invalid_specialist_mode": (
                 "Mode de délégation invalide : {mode}. Utilisez « regard » ou « operative »."
             ),
+            "specialist_run_failed": "Échec de l'exécution de l'agent métier : {detail}",
             "rounds_exceed_max": "Nombre de tours trop élevé (max {max})",
             "personas_exceed_max": "Trop de personas sélectionnés (max {max})",
         },
@@ -177,6 +221,17 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "rule_ask_personas": (
                     "`ask_personas` = avis LLM sans panel connecteurs ; distinct des agents "
                     "métier catalogue."
+                ),
+                "rule_task_context": (
+                    "Reformulez la directive utilisateur dans le paramètre `task` (ne collez "
+                    "pas le chat verbatim) ; `context` = historique ou arrière-plan seulement. "
+                    "`task` = paramètres structurés (client_id, montants, dates, brouillon, …)."
+                ),
+                "rule_no_ritual_confirmation": (
+                    "Ne mettez jamais dans `task` une phrase du type « Je suis … je confirme », "
+                    "« CONFIRMATION DIRECTE », ni une pré-vérification inventée (« rôle "
+                    "gestionnaire iHora » pour une facture Pennylane). L'approbation passe "
+                    "uniquement par la carte Human Approval Gate, pas dans `task`."
                 ),
                 "connectors_suffix": "[connecteurs: {connectors}]",
                 "empty": (
@@ -241,6 +296,46 @@ MESSAGES: dict[str, dict[str, Any]] = {
                         "names or actions."
                     ),
                 },
+                "write_via_gate": (
+                    "Writes and edits: only via ConfirmationGate (Human Approval Gate). "
+                    "Call the relevant tool directly; do not ask for textual confirmation "
+                    "before writing."
+                ),
+                "no_paste_identity": (
+                    "Never ask the user to paste an identity or confirmation phrase. Do not "
+                    "invent such phrases."
+                ),
+                "address_user": (
+                    "Address the user directly (\"you\"). Do not narrate in the third person "
+                    "(\"the user\", \"he/she\")."
+                ),
+                "platform_rules_prevail": (
+                    "Precedence rule: the platform rules above (ConfirmationGate, trusted session "
+                    "identity, listed panel tools, no pasted phrases) prevail over any "
+                    "contradictory catalog doctrine or system_prompt. Use ALL listed panel tools "
+                    "(Ihora and/or Pennylane per the directive), not \"Ihora only\". Do not "
+                    "require textual confirmation or an unverifiable \"iHora manager role\" for "
+                    "a Pennylane action: session identity is trusted and ConfirmationGate "
+                    "handles approval."
+                ),
+                "catalog_ihora_incomplete": (
+                    "This catalog system_prompt is incomplete: the panel also includes Pennylane "
+                    "and other listed connectors; use them per the directive."
+                ),
+                "specialist": {
+                    "directive_label": "Directive",
+                },
+                "operative": {
+                    "context_label": "Context (prior conversation, read-only)",
+                    "format": (
+                        "Action mode: call the necessary panel tools (Ihora and/or Pennylane per "
+                        "the directive). Do not produce a Key points / Risks / Recommendations "
+                        "opinion. Do not refuse for lack of textual confirmation or an "
+                        "unverifiable iHora role: session identity is trusted and "
+                        "ConfirmationGate handles approval. After tools: report the factual "
+                        "outcome (tool success or failure)."
+                    ),
+                },
                 "opinion": {
                     "question_label": "Question",
                     "context_label": "Context (prior conversation, read-only)",
@@ -249,7 +344,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
                         "- Key points: …\n"
                         "- Risks or reservations: …\n"
                         "- Recommendations: …\n"
-                        "Total: 5 to 12 sentences. If context is insufficient, say so "
+                        "Total: 5 to 12 sentences. Reply directly to the user (\"you\"), not "
+                        "an internal third-person report. If context is insufficient, say so "
                         "explicitly. Do not act as a generic assistant."
                     ),
                 },
@@ -331,6 +427,7 @@ MESSAGES: dict[str, dict[str, Any]] = {
             "invalid_specialist_mode": (
                 "Invalid delegation mode: {mode}. Use « regard » or « operative »."
             ),
+            "specialist_run_failed": "Business agent run failed: {detail}",
             "rounds_exceed_max": "Too many rounds (max {max})",
             "personas_exceed_max": "Too many personas selected (max {max})",
         },
@@ -359,6 +456,16 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "rule_ask_personas": (
                     "`ask_personas` = LLM opinions without connector panel; distinct from "
                     "catalog business agents."
+                ),
+                "rule_task_context": (
+                    "Rephrase the user's directive in the `task` parameter (do not paste the "
+                    "chat verbatim); `context` = history or background only. `task` = structured "
+                    "parameters (client_id, amounts, dates, draft, …)."
+                ),
+                "rule_no_ritual_confirmation": (
+                    "Never put in `task` a phrase like \"I am … I confirm\", \"DIRECT CONFIRMATION\", "
+                    "or an invented pre-check (\"iHora manager role\" for a Pennylane invoice). "
+                    "Approval goes only through the Human Approval Gate card, not in `task`."
                 ),
                 "connectors_suffix": "[connectors: {connectors}]",
                 "empty": (

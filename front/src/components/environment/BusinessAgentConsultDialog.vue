@@ -113,6 +113,7 @@ async function submit(): Promise<void> {
         question: task,
       }),
       attachments: [],
+      sessionId: session.id,
     });
     bumpSessions();
     closeConsultation();

@@ -30,12 +30,25 @@ function truncate(text: string, max: number): string {
   return `${trimmed.slice(0, max - 1).trimEnd()}…`;
 }
 
+function isObserverToneLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (/^l['']utilisateur\b/i.test(trimmed)) return true;
+  if (/^the user\b/i.test(trimmed)) return true;
+  if (/^je vais lui\b/i.test(trimmed)) return true;
+  if (/^i['']ll tell (him|her|them)\b/i.test(trimmed)) return true;
+  return false;
+}
+
 function significantLines(content: string): string[] {
   return normalizeNewlines(content)
     .split('\n')
     .map((line) => line.trim())
     .filter(isSignificantLine)
     .map(stripBulletPrefix);
+}
+
+function subjectCandidateLines(content: string): string[] {
+  return significantLines(content).filter((line) => !isObserverToneLine(line));
 }
 
 function lastSentence(text: string): string {
@@ -74,7 +87,7 @@ function pickDoneSubject(lines: string[]): string | null {
 
 /** Sujet courant dérivé du contenu thinking (dernière ligne / phrase significative). */
 export function deriveThinkingSubject(content: string): string | null {
-  const lines = significantLines(content);
+  const lines = subjectCandidateLines(content);
   if (!lines.length) return null;
   const lastLine = lines[lines.length - 1]!;
   const candidate = lastSentence(lastLine);
@@ -84,13 +97,13 @@ export function deriveThinkingSubject(content: string): string | null {
 
 /** Sujet figé en fin de thinking (première phrase utile ou dernière si plus informative). */
 export function deriveThinkingSubjectDone(content: string): string | null {
-  const lines = significantLines(content);
+  const lines = subjectCandidateLines(content);
   return pickDoneSubject(lines);
 }
 
-/** Résumé prose (3 à 5 lignes / phrases significatives). */
+/** Résumé prose (3 à 5 lignes / phrases significatives, hors ton observateur). */
 export function deriveThinkingSummary(content: string): string | null {
-  const lines = significantLines(content);
+  const lines = subjectCandidateLines(content);
   if (!lines.length) return null;
 
   const items: string[] = [];
@@ -98,13 +111,14 @@ export function deriveThinkingSummary(content: string): string | null {
     const sentences = line
       .split(/(?<=[.!?])\s+/)
       .map((part) => part.trim())
-      .filter((part) => part.length >= MIN_SIGNIFICANT_LEN);
+      .filter((part) => part.length >= MIN_SIGNIFICANT_LEN)
+      .filter((part) => !isObserverToneLine(part));
     if (sentences.length) {
       for (const sentence of sentences) {
         items.push(truncate(sentence, SUMMARY_LINE_MAX_LEN));
         if (items.length >= SUMMARY_ITEM_MAX) break;
       }
-    } else {
+    } else if (!isObserverToneLine(line)) {
       items.push(truncate(line, SUMMARY_LINE_MAX_LEN));
     }
     if (items.length >= SUMMARY_ITEM_MAX) break;

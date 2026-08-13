@@ -41,4 +41,28 @@ describe('getAssistantCopyText', () => {
 
     expect(getAssistantCopyText(message)).toBe('');
   });
+
+  it('inclut l’analyse de l’agent métier une fois la délégation terminée', () => {
+    const message: ChatMessage = {
+      id: 'a4',
+      role: 'assistant',
+      content: '',
+      parts: [{ type: 'text', id: 't1', content: 'Voici ce que j’en retiens.' }],
+      specialistHandoff: {
+        id: 'h1',
+        toolCallId: 'tc1',
+        specialistId: 'rh',
+        specialistName: 'Gestionnaire',
+        mode: 'regard',
+        task: 'Analyser le contrat',
+        content: 'Clause 4 à revoir.',
+        status: 'done',
+      },
+      createdAt: '2026-01-01T00:00:00.000Z',
+    };
+
+    expect(getAssistantCopyText(message)).toBe(
+      'Voici ce que j’en retiens.\n\nGestionnaire\nClause 4 à revoir.',
+    );
+  });
 });

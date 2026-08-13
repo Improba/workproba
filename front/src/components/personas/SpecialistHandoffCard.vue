@@ -21,62 +21,68 @@
       />
       <div class="specialist-handoff-card__head-meta">
         <p class="specialist-handoff-card__takeover">
-          {{ takeoverLabel }}
+          {{ card.specialistName }}
         </p>
         <p
           v-if="card.task"
           class="specialist-handoff-card__task"
+          :title="card.task"
         >
           {{ card.task }}
         </p>
-        <div class="specialist-handoff-card__chips">
-          <span
-            class="specialist-handoff-card__badge"
-            :class="`specialist-handoff-card__badge--${card.mode}`"
-          >
-            {{ badgeLabel }}
-          </span>
-        </div>
       </div>
-      <span
-        v-if="isRunning"
-        class="specialist-handoff-card__status"
-        aria-hidden="true"
-      >
-        {{ t('common.inProgress') }}
-      </span>
-      <span
-        v-else-if="isPending"
-        class="specialist-handoff-card__status specialist-handoff-card__status--pending"
-        aria-hidden="true"
-      >
-        {{ t('personas.handoff.pendingAuthorization') }}
-      </span>
-      <span
-        v-else-if="card.status === 'error'"
-        class="specialist-handoff-card__status specialist-handoff-card__status--error"
-        aria-hidden="true"
-      >
-        {{ t('personas.handoff.statusFailed') }}
-      </span>
+      <div class="specialist-handoff-card__head-aside">
+        <span
+          class="specialist-handoff-card__mode"
+          :class="`specialist-handoff-card__mode--${card.mode}`"
+        >
+          {{ modeLabel }}
+        </span>
+        <span
+          v-if="card.status === 'error'"
+          class="specialist-handoff-card__status specialist-handoff-card__status--error"
+          aria-hidden="true"
+        >
+          {{ t('personas.handoff.statusFailed') }}
+        </span>
+      </div>
     </header>
 
     <div class="specialist-handoff-card__body">
       <p
         v-if="isPending"
         class="specialist-handoff-card__pending"
+        aria-hidden="true"
       >
         {{ t('personas.handoff.pendingAuthorization') }}
       </p>
 
-      <!-- Encadré compact : pas de réponse / raisonnement à l'air libre. -->
       <SpecialistHandoffPreview
         v-if="isRunning && !detailOpen"
-        :name="card.specialistName"
-        :label="t('personas.handoff.analysing', { name: card.specialistName })"
-        :avatar-color="card.avatarColor"
-        :avatar-icon="card.avatarIcon"
+        :label="runningPreviewLabel"
       />
+
+      <ul
+        v-if="showLiveTools"
+        class="specialist-handoff-card__nested-tools specialist-handoff-card__nested-tools--live"
+        :aria-label="t('personas.handoff.nestedTools')"
+      >
+        <li
+          v-for="tool in card.nestedTools"
+          :key="tool.id"
+          class="specialist-handoff-card__nested-tool"
+          :class="`specialist-handoff-card__nested-tool--${tool.status}`"
+        >
+          <span
+            v-if="tool.status === 'running'"
+            class="specialist-handoff-card__nested-tool-spinner"
+            aria-hidden="true"
+          />
+          <span class="specialist-handoff-card__nested-tool-name">
+            {{ tool.humanSummary || handoffToolLabel(tool.name) }}
+          </span>
+        </li>
+      </ul>
 
       <div
         v-if="hasDetailPayload"
@@ -137,12 +143,12 @@
                 aria-hidden="true"
               />
               <span class="specialist-handoff-card__nested-tool-name">
-                {{ tool.humanSummary || formatDegradedToolLabel(tool.name) }}
+                {{ tool.humanSummary || handoffToolLabel(tool.name) }}
               </span>
             </li>
           </ul>
           <MessageTextPart
-            v-if="card.content && card.status !== 'error'"
+            v-if="card.content && card.status !== 'error' && card.status !== 'done'"
             class="specialist-handoff-card__content"
             :content="card.content"
             :streaming="isRunning"
@@ -150,31 +156,28 @@
         </div>
       </div>
 
+      <MessageTextPart
+        v-if="card.content && card.status === 'done'"
+        class="specialist-handoff-card__content specialist-handoff-card__content--primary"
+        :content="card.content"
+        :streaming="false"
+      />
+
       <template v-if="card.status === 'done'">
         <div
           v-if="card.degradedTools?.length"
           class="specialist-handoff-card__degraded"
         >
           <Lucide name="alert-triangle" size="12" color="wp-text-muted" />
-          <div class="specialist-handoff-card__degraded-copy">
-            <span>{{ t('personas.handoff.degradedTools') }}</span>
-            <ul class="specialist-handoff-card__degraded-list">
-              <li
-                v-for="toolName in card.degradedTools"
-                :key="toolName"
-              >
-                {{ formatDegradedToolLabel(toolName) }}
-              </li>
-            </ul>
-          </div>
+          <span>{{ degradedToolsMessage }}</span>
         </div>
         <footer class="specialist-handoff-card__actions">
           <button
             type="button"
-            class="specialist-handoff-card__action"
+            class="specialist-handoff-card__action specialist-handoff-card__action--discuss"
             @click="emit('discuss')"
           >
-            {{ t('personas.handoff.discuss') }}
+            {{ t('personas.handoff.discuss', { name: card.specialistName }) }}
           </button>
         </footer>
       </template>
@@ -188,11 +191,21 @@
         </p>
         <footer class="specialist-handoff-card__actions">
           <button
+            v-if="showRetry"
             type="button"
-            class="specialist-handoff-card__action"
+            class="specialist-handoff-card__action specialist-handoff-card__action--retry"
+            :disabled="retryDisabled"
+            :title="retryDisabled ? t('personas.handoff.retryBusy') : undefined"
+            @click="emit('retry')"
+          >
+            {{ t('personas.handoff.retry') }}
+          </button>
+          <button
+            type="button"
+            class="specialist-handoff-card__action specialist-handoff-card__action--quiet specialist-handoff-card__action--discuss"
             @click="emit('discuss')"
           >
-            {{ t('personas.handoff.discuss') }}
+            {{ t('personas.handoff.talk', { name: card.specialistName }) }}
           </button>
         </footer>
       </template>
@@ -209,7 +222,7 @@ import MessageTextPart from '@components/chat/MessageTextPart.vue';
 import ThinkingCard from '@components/chat/ThinkingCard.vue';
 import SpecialistHandoffPreview from '@components/personas/SpecialistHandoffPreview.vue';
 import type { ChatThinkingPart, SpecialistHandoffCard } from '#types';
-import { fallbackHumanLabel } from '@utils/toolCallHumanLabel';
+import { handoffToolLabel } from '@utils/toolCallHumanLabel';
 import { useThinkingExpansion } from '@composables/useToolCallExpansion';
 import {
   deriveThinkingSubject,
@@ -219,10 +232,13 @@ import {
 
 const props = defineProps<{
   card: SpecialistHandoffCard;
+  retryDisabled?: boolean;
+  hideRetry?: boolean;
 }>();
 
 const emit = defineEmits<{
   discuss: [];
+  retry: [];
 }>();
 
 const { t } = useI18n();
@@ -243,12 +259,37 @@ const isRunning = computed(
     (props.card.status === 'running' || props.card.streaming === true),
 );
 
-const hasDetailPayload = computed(
+const isOperative = computed(() => props.card.mode === 'operative');
+
+const modeLabel = computed(() =>
+  isOperative.value
+    ? t('personas.handoff.modeOperative')
+    : t('personas.handoff.modeRegard'),
+);
+
+const hasDetailPayload = computed(() => {
+  if (props.card.status === 'error') return false;
+  const hasThinking = Boolean(props.card.thinking?.trim());
+  const hasNestedTools = Boolean(props.card.nestedTools?.length);
+  const hasInProgressContent =
+    Boolean(props.card.content?.trim()) && props.card.status !== 'done';
+  if (isRunning.value && !hasThinking && !hasInProgressContent) {
+    return false;
+  }
+  return hasThinking || hasNestedTools || hasInProgressContent;
+});
+
+const showRetry = computed(() => !props.hideRetry);
+
+const showLiveTools = computed(
   () =>
-    (Boolean(props.card.thinking?.trim()) ||
-      Boolean(props.card.content?.trim()) ||
-      Boolean(props.card.nestedTools?.length)) &&
-    props.card.status !== 'error',
+    isRunning.value &&
+    !detailOpen.value &&
+    Boolean(props.card.nestedTools?.length),
+);
+
+const runningPreviewLabel = computed(() =>
+  t('personas.handoff.analysing', { name: props.card.specialistName }),
 );
 
 const detailToggleLabel = computed(() => {
@@ -257,7 +298,7 @@ const detailToggleLabel = computed(() => {
       name: props.card.specialistName,
     });
   }
-  return t('personas.handoff.detailDone', {
+  return t('personas.handoff.detailActivity', {
     name: props.card.specialistName,
   });
 });
@@ -284,56 +325,32 @@ const handoffThinkingPart = computed<ChatThinkingPart>(() => {
   };
 });
 
-const modeLabel = computed(() =>
-  props.card.mode === 'operative'
-    ? t('personas.handoff.modeOperative')
-    : t('personas.handoff.modeRegard'),
-);
-
-const badgeLabel = computed(() =>
-  t('personas.handoff.badgeWithMode', {
-    badge: t('personas.handoff.badge'),
-    mode: modeLabel.value,
-  }),
-);
-
-const takeoverLabel = computed(() => {
-  if (props.card.status === 'error') {
-    return t('personas.handoff.takeoverError', {
-      name: props.card.specialistName,
+const degradedToolsMessage = computed(() => {
+  const tools = props.card.degradedTools;
+  if (!tools?.length) return '';
+  const connectorIds = [...new Set(tools.map((entry) => entry.connectorId))];
+  if (connectorIds.length) {
+    return t('personas.handoff.degradedToolsNamed', {
+      names: connectorIds.join(', '),
     });
   }
-  if (isPending.value) {
-    return t('personas.handoff.pendingAuthorization');
-  }
-  if (isRunning.value) {
-    return t('personas.handoff.takeoverRunning', {
-      name: props.card.specialistName,
-    });
-  }
-  return t('personas.handoff.takeoverDone', {
-    name: props.card.specialistName,
-  });
+  return t('personas.handoff.degradedTools');
 });
-
-function formatDegradedToolLabel(toolName: string): string {
-  return fallbackHumanLabel(toolName);
-}
 
 const liveStatusMessage = computed(() => {
   if (isPending.value) {
     return t('personas.handoff.pendingAuthorization');
   }
   if (isRunning.value) {
-    return t('personas.handoff.analysing', { name: props.card.specialistName });
+    return runningPreviewLabel.value;
   }
   if (props.card.status === 'error') {
-    return props.card.content?.trim() || t('personas.handoff.error');
+    return '';
   }
   if (props.card.status === 'done') {
-    return t('personas.handoff.takeoverDone', {
-      name: props.card.specialistName,
-    });
+    return isOperative.value
+      ? t('personas.handoff.takeoverDoneOperative', { name: props.card.specialistName })
+      : t('personas.handoff.takeoverDone', { name: props.card.specialistName });
   }
   return '';
 });
@@ -398,37 +415,34 @@ const liveStatusMessage = computed(() => {
   font-size: var(--wp-fs-xs);
   line-height: var(--wp-lh-normal);
   color: var(--wp-text-muted);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
-.specialist-handoff-card__chips {
+.specialist-handoff-card__head-aside {
+  flex: 0 0 auto;
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-end;
   gap: var(--wp-space-1);
 }
 
-.specialist-handoff-card__badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px var(--wp-space-2);
+.specialist-handoff-card__mode {
+  flex: 0 0 auto;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--wp-border);
   border-radius: var(--wp-r-pill);
-  font-size: var(--wp-fs-xs);
-  font-weight: 700;
-  letter-spacing: 0.01em;
   background: var(--wp-surface-2, var(--wp-bg));
   color: var(--wp-text-muted);
-  border: 1px solid var(--wp-border);
-
-  &--regard {
-    background: color-mix(in srgb, var(--wp-gold) 18%, var(--wp-surface));
-    color: color-mix(in srgb, var(--wp-gold) 70%, var(--wp-text));
-    border: 1px solid color-mix(in srgb, var(--wp-gold) 55%, transparent);
-  }
+  font-size: var(--wp-fs-xs);
+  font-weight: 600;
+  white-space: nowrap;
 
   &--operative {
-    background: color-mix(in srgb, var(--wp-accent) 16%, var(--wp-surface));
-    color: var(--wp-accent-high);
-    border: 1px solid color-mix(in srgb, var(--wp-accent) 55%, transparent);
+    border-color: color-mix(in srgb, var(--wp-gold) 45%, var(--wp-border));
+    color: var(--wp-gold);
   }
 }
 
@@ -439,13 +453,17 @@ const liveStatusMessage = computed(() => {
   font-weight: 600;
   white-space: nowrap;
 
-  &--pending {
-    color: var(--wp-text-muted);
-  }
-
   &--error {
     color: var(--wp-danger);
   }
+}
+
+.specialist-handoff-card__pending {
+  margin: 0;
+  font-size: var(--wp-fs-sm);
+  line-height: var(--wp-lh-normal);
+  color: var(--wp-text-muted);
+  font-style: italic;
 }
 
 .specialist-handoff-card__body {
@@ -533,6 +551,10 @@ const liveStatusMessage = computed(() => {
   display: flex;
   flex-direction: column;
   gap: var(--wp-space-1);
+
+  &--live {
+    padding: 0.15rem 0 0.25rem;
+  }
 }
 
 .specialist-handoff-card__nested-tool {
@@ -578,19 +600,15 @@ const liveStatusMessage = computed(() => {
   min-width: 0;
 }
 
-.specialist-handoff-card__pending {
-  margin: 0;
-  font-size: var(--wp-fs-sm);
-  line-height: var(--wp-lh-normal);
-  color: var(--wp-text-muted);
-  font-style: italic;
-}
-
 .specialist-handoff-card__content {
   font-family: var(--wp-font-chat, var(--wp-font-ui));
   font-size: var(--wp-fs-sm);
   line-height: var(--wp-lh-relaxed);
   color: var(--wp-text);
+
+  &--primary {
+    margin-top: var(--wp-space-1);
+  }
 
   :deep(.chat-message__markdown) {
     font-family: inherit;
@@ -615,17 +633,6 @@ const liveStatusMessage = computed(() => {
   margin: var(--wp-space-2) 0 0;
   font-size: var(--wp-fs-xs);
   color: var(--wp-text-muted);
-}
-
-.specialist-handoff-card__degraded-copy {
-  display: flex;
-  flex-direction: column;
-  gap: var(--wp-space-1);
-}
-
-.specialist-handoff-card__degraded-list {
-  margin: 0;
-  padding-left: 1.1rem;
 }
 
 .specialist-handoff-card__error {
@@ -658,8 +665,23 @@ const liveStatusMessage = computed(() => {
   font-weight: 600;
   cursor: pointer;
 
-  &:hover {
+  &:hover:not(:disabled) {
     filter: brightness(0.97);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--wp-focus-ring);
+  }
+
+  &--quiet {
+    background: var(--wp-surface);
+    border-color: var(--wp-border);
   }
 }
 </style>

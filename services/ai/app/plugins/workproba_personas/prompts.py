@@ -48,16 +48,102 @@ def build_panel_tools_notice(
     return "\n".join(lines)
 
 
-def build_persona_system_prompt(base_prompt: str, *, locale: str) -> str:
+def build_persona_system_prompt(
+    base_prompt: str,
+    *,
+    locale: str,
+    mode: str | None = None,
+) -> str:
     """Identité persona + règles stables dans le message system."""
     parts = [base_prompt.strip()]
     anti_injection = t(locale, "personas.prompt.anti_injection")
     respond_locale = t(locale, "personas.prompt.respond_in_locale")
+    no_paste = t(locale, "personas.prompt.no_paste_identity")
+    address_user = t(locale, "personas.prompt.address_user")
     if anti_injection and not anti_injection.startswith("personas."):
         parts.append(anti_injection)
     if respond_locale and not respond_locale.startswith("personas."):
         parts.append(respond_locale)
+    if no_paste and not no_paste.startswith("personas."):
+        parts.append(no_paste)
+    if address_user and not address_user.startswith("personas."):
+        parts.append(address_user)
+    if mode == "operative":
+        write_via_gate = t(locale, "personas.prompt.write_via_gate")
+        if write_via_gate and not write_via_gate.startswith("personas."):
+            parts.append(write_via_gate)
+    platform_rules = t(locale, "personas.prompt.platform_rules_prevail")
+    if platform_rules and not platform_rules.startswith("personas."):
+        parts.append(platform_rules)
     return "\n\n".join(part for part in parts if part)
+
+
+def format_cloud_user_identity_prompt(
+    locale: str,
+    *,
+    current_user_email: str | None = None,
+    current_user_display_name: str | None = None,
+    current_user_ihora_id: str | None = None,
+) -> str:
+    """Identité cloud trusted (contexte session), jamais depuis untrusted."""
+    identity_email: str | None = None
+    identity_username: str | None = None
+
+    context_email = (current_user_email or "").strip()
+    if not context_email:
+        return ""
+    if "@" in context_email:
+        identity_email = context_email
+    else:
+        identity_username = context_email
+
+    display_name = (current_user_display_name or "").strip()
+    lines: list[str] = []
+    if identity_email:
+        if not display_name:
+            display_name = identity_email.split("@", 1)[0]
+        lines.extend(
+            [
+                t(
+                    locale,
+                    "tools.cloud_current_user_identity",
+                    email=identity_email,
+                    display_name=display_name,
+                ),
+                t(
+                    locale,
+                    "tools.cloud_current_user_add_me_hint",
+                    email=identity_email,
+                    display_name=display_name,
+                ),
+            ]
+        )
+    else:
+        assert identity_username is not None
+        if not display_name:
+            display_name = identity_username
+        lines.extend(
+            [
+                t(
+                    locale,
+                    "tools.cloud_current_user_identity_username_only",
+                    display_name=display_name,
+                    username=identity_username,
+                ),
+                t(locale, "tools.cloud_current_user_username_only_hint"),
+            ]
+        )
+
+    ihora_id = (current_user_ihora_id or "").strip()
+    if ihora_id:
+        lines.append(
+            t(
+                locale,
+                "tools.cloud_current_user_ihora_id",
+                user_id=ihora_id,
+            )
+        )
+    return "\n".join(lines)
 
 
 def wrap_untrusted_context(context: str, *, locale: str) -> str:
@@ -73,8 +159,14 @@ def build_opinion_user_prompt(
     context: str,
     memory_text: str,
     locale: str,
+    directive: bool = False,
 ) -> str:
-    parts = [f"{t(locale, 'personas.prompt.opinion.question_label')} : {question.strip()}"]
+    label_key = (
+        "personas.prompt.specialist.directive_label"
+        if directive
+        else "personas.prompt.opinion.question_label"
+    )
+    parts = [f"{t(locale, label_key)} : {question.strip()}"]
     wrapped = wrap_untrusted_context(context, locale=locale)
     if wrapped:
         parts.append(
@@ -83,6 +175,27 @@ def build_opinion_user_prompt(
     if memory_text.strip():
         parts.append(memory_text.strip())
     parts.append(t(locale, "personas.prompt.opinion.format"))
+    return "\n\n".join(parts)
+
+
+def build_operative_user_prompt(
+    *,
+    directive: str,
+    context: str,
+    memory_text: str,
+    locale: str,
+) -> str:
+    parts = [
+        f"{t(locale, 'personas.prompt.specialist.directive_label')} : {directive.strip()}",
+    ]
+    wrapped = wrap_untrusted_context(context, locale=locale)
+    if wrapped:
+        parts.append(
+            f"{t(locale, 'personas.prompt.operative.context_label')} :\n{wrapped}",
+        )
+    if memory_text.strip():
+        parts.append(memory_text.strip())
+    parts.append(t(locale, "personas.prompt.operative.format"))
     return "\n\n".join(parts)
 
 

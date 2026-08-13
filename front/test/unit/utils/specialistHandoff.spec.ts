@@ -12,6 +12,7 @@ import {
   markRunningSpecialistHandoffAsError,
   markSpecialistHandoffAsPending,
   markSpecialistHandoffAsRunning,
+  parseDegradedTools,
   rehydratePerspectiveCards,
   shouldHidePerspectiveToolCall,
   toolResultToSpecialistHandoff,
@@ -115,8 +116,52 @@ describe('specialistHandoff utils', () => {
       mode: 'operative',
       content: 'Synthèse RH',
       status: 'done',
-      degradedTools: ['managed__x__y'],
+      degradedTools: [{ connectorId: 'x', tool: 'y' }],
     });
+  });
+
+  it('parse les objets degraded_tools du backend', () => {
+    expect(
+      parseDegradedTools([
+        { connector_id: 'ihora', tool: 'list_absences', reason: 'quota' },
+        { connectorId: 'echo', tool: 'ping' },
+      ]),
+    ).toEqual([
+      { connectorId: 'ihora', tool: 'list_absences', reason: 'quota' },
+      { connectorId: 'echo', tool: 'ping' },
+    ]);
+  });
+
+  it('ignore les entrées degraded_tools invalides', () => {
+    expect(
+      parseDegradedTools([
+        { connector_id: 'ihora' },
+        '[object Object]',
+        { foo: 'bar' },
+        'managed__x__y',
+      ]),
+    ).toEqual([{ connectorId: 'x', tool: 'y' }]);
+  });
+
+  it('convertit le résultat summon_specialist avec objets degraded_tools', () => {
+    const card = toolResultToSpecialistHandoff(
+      'tc1',
+      { specialist_id: 'rh', task: 'Analyser', mode: 'operative' },
+      {
+        specialist_id: 'rh',
+        specialist_name: 'Gestionnaire',
+        mode: 'operative',
+        content: 'Synthèse RH',
+        degraded_tools: [
+          { connector_id: 'ihora', tool: 'list_absences' },
+          { connector_id: 'ihora', tool: 'create_timesheet' },
+        ],
+      },
+    );
+    expect(card?.degradedTools).toEqual([
+      { connectorId: 'ihora', tool: 'list_absences' },
+      { connectorId: 'ihora', tool: 'create_timesheet' },
+    ]);
   });
 
   it('convertit une erreur summon_specialist en carte erreur', () => {

@@ -26,7 +26,10 @@
     <SpecialistHandoffCard
       v-else-if="block.kind === 'specialist_handoff'"
       :card="block.card"
+      :retry-disabled="retryDisabled"
+      :hide-retry="hideRetry"
       @discuss="emit('specialist-to-discussion', block.card)"
+      @retry="emit('specialist-retry', message.id)"
     />
     <PersonasOpinionCard
       v-else-if="block.kind === 'personas_opinion'"
@@ -171,6 +174,8 @@ const props = defineProps<{
   workspaceDataDir?: string | null;
   confirming?: boolean;
   approvingPlan?: boolean;
+  retryDisabled?: boolean;
+  hideRetry?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -184,6 +189,7 @@ const emit = defineEmits<{
   'personas-another': [card: import('#types').PersonasOpinionCard];
   'personas-to-discussion': [card: import('#types').PersonasOpinionCard];
   'specialist-to-discussion': [card: import('#types').SpecialistHandoffCard];
+  'specialist-retry': [messageId: string];
   'error-reconnect': [cta: 'login' | 'enroll'];
 }>();
 
@@ -382,11 +388,20 @@ const allToolCallsTerminal = computed(() => {
   return toolCalls.every((tc) => tc.status === 'success' || tc.status === 'error');
 });
 
+const hasActiveHandoff = computed(() => {
+  const handoff = props.message.specialistHandoff;
+  if (!handoff) return false;
+  return (
+    handoff.status === 'running' ||
+    handoff.status === 'pending' ||
+    handoff.streaming === true
+  );
+});
+
 /**
  * Indicateur « Suite de la génération… » sous les outils terminés tant que
- * le tour stream encore sans texte assistant visible. Affiché aussi pendant
- * un raisonnement post-outil : le groupe d'activité est souvent replié et ne
- * montre plus que « Utilisé N outils », sans spinner.
+ * le tour stream encore sans texte assistant visible, et sans raisonnement
+ * actif (sinon la pastille ActivityGroup porte déjà la présence).
  */
 const showContinuationPlaceholder = computed(() => {
   if (props.message.role !== 'assistant') return false;
@@ -397,15 +412,21 @@ const showContinuationPlaceholder = computed(() => {
   if (props.message.preparingConfirmation) return false;
   if (props.message.pendingPlan?.status === 'pending') return false;
   if (hasVisibleAssistantText.value) return false;
-  if (allToolCallsTerminal.value) return true;
-  return (props.message.toolCalls ?? []).length === 0;
+  if (!allToolCallsTerminal.value) return false;
+  // Raisonnement en cours : une seule présence via ActivityGroup.
+  const hasActiveThinking = (props.message.parts ?? []).some(
+    (p) => p.type === 'thinking' && !p.done,
+  );
+  if (hasActiveThinking) return false;
+  if (hasActiveHandoff.value) return false;
+  return true;
 });
 
 /**
  * Indicateur « Génération… » quand le tour est actif sans texte visible ni
  * gate humaine (outils encore running, trou avant le premier token, etc.).
- * Ne dépend pas de `thinking.done` : le raisonnement vit dans un ActivityGroup
- * souvent replié, donc invisible pour l'utilisateur.
+ * Pas pendant un raisonnement actif : la pastille ActivityGroup porte déjà
+ * la présence.
  */
 const showLiveGenerating = computed(() => {
   if (props.message.role !== 'assistant') return false;
@@ -417,6 +438,11 @@ const showLiveGenerating = computed(() => {
   if (props.message.preparingConfirmation) return false;
   if (props.message.pendingPlan?.status === 'pending') return false;
   if (hasVisibleAssistantText.value) return false;
+  const hasActiveThinking = (props.message.parts ?? []).some(
+    (p) => p.type === 'thinking' && !p.done,
+  );
+  if (hasActiveThinking) return false;
+  if (hasActiveHandoff.value) return false;
   return true;
 });
 
@@ -543,12 +569,11 @@ watch(
 
 .chat-message__continuation-spinner {
   flex: 0 0 auto;
-  width: 0.85rem;
-  height: 0.85rem;
+  width: 0.55rem;
+  height: 0.55rem;
   border-radius: 999px;
-  border: 2px solid var(--wp-accent-soft);
-  border-top-color: var(--wp-accent);
-  animation: chat-message-continuation-spin 0.7s linear infinite;
+  background: var(--wp-accent);
+  animation: wp-breathe 1.6s ease-in-out infinite;
 }
 
 .chat-message__live-generating {
@@ -567,11 +592,5 @@ watch(
   border-radius: var(--wp-r-pill);
   background: var(--wp-accent);
   animation: wp-breathe 1.4s ease-in-out infinite;
-}
-
-@keyframes chat-message-continuation-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 </style>

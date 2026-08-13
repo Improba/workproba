@@ -128,14 +128,12 @@ describe('WorkprobaLayout side chat', () => {
   });
 
   it('replie l’explorateur de fichiers à l’ouverture du side chat', async () => {
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
+    rightPanelOpen.value = true;
     const wrapper = shallowMount(WorkprobaLayout, {
       slots: { default: '<div />' },
       global: {
         stubs: {
-          WorkprobaTitleBar: {
-            template: '<button class="toggle-side-chat" @click="$emit(\'toggle-side-chat\')" />',
-          },
+          WorkprobaTitleBar: true,
           SpaceSidebar: true,
           RightPanel: true,
           SideChatPanel: true,
@@ -148,11 +146,12 @@ describe('WorkprobaLayout side chat', () => {
     });
     await flushPromises();
 
-    await wrapper.find('.toggle-side-chat').trigger('click');
+    window.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'l', ctrlKey: true, shiftKey: true }),
+    );
     expect(toggleSideChat).toHaveBeenCalledWith('workproba.personas');
 
     wrapper.unmount();
-    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1280 });
   });
 
   it('revient à la liste des agents avant de fermer l’environnement sur Escape', async () => {

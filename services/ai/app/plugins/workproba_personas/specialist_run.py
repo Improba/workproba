@@ -151,6 +151,9 @@ def build_specialist_system_prompt(
     resolution: PanelToolsResolution | None = None,
     mode: SpecialistRunModeLiteral = "regard",
     tool_filter: ToolFilter | None = None,
+    current_user_email: str | None = None,
+    current_user_display_name: str | None = None,
+    current_user_ihora_id: str | None = None,
 ) -> str:
     base = str(specialist.get("system_prompt") or "").strip()
     doctrine = specialist.get("doctrine")
@@ -169,7 +172,15 @@ def build_specialist_system_prompt(
         if doctrine_parts:
             doctrine_text = "\n".join(doctrine_parts)
             base = f"{base}\n\n{doctrine_text}".strip() if base else doctrine_text
-    base = prompts.build_persona_system_prompt(base, locale=locale)
+    base = prompts.build_persona_system_prompt(base, locale=locale, mode=mode)
+    identity_block = prompts.format_cloud_user_identity_prompt(
+        locale,
+        current_user_email=current_user_email,
+        current_user_display_name=current_user_display_name,
+        current_user_ihora_id=current_user_ihora_id,
+    )
+    if identity_block:
+        base = f"{base}\n\n{identity_block}".strip()
     if resolution is not None:
         effective_filter = tool_filter or resolve_tool_filter(specialist, mode)
         if effective_filter == "disabled":
@@ -186,6 +197,13 @@ def build_specialist_system_prompt(
         )
         if notice:
             base = f"{base}\n\n{notice}".strip()
+    if mode == "operative":
+        raw_system = str(specialist.get("system_prompt") or "")
+        lowered = raw_system.lower()
+        if "exclusivement" in lowered and "ihora" in lowered:
+            incomplete = t(locale, "personas.prompt.catalog_ihora_incomplete")
+            if incomplete and not incomplete.startswith("personas."):
+                base = f"{base}\n\n{incomplete}".strip()
     return base
 
 
@@ -477,12 +495,29 @@ async def run_specialist(
         resolution=resolution,
         mode=mode,
         tool_filter=tool_filter,
+        current_user_email=getattr(effective_deps.context, "current_user_email", None),
+        current_user_display_name=getattr(
+            effective_deps.context,
+            "current_user_display_name",
+            None,
+        ),
+        current_user_ihora_id=getattr(effective_deps.context, "current_user_ihora_id", None),
     )
-    user_prompt = prompts.build_opinion_user_prompt(
-        question=task,
-        context=context,
-        memory_text=memory_text,
-        locale=locale,
+    user_prompt = (
+        prompts.build_operative_user_prompt(
+            directive=task,
+            context=context,
+            memory_text=memory_text,
+            locale=locale,
+        )
+        if mode == "operative"
+        else prompts.build_opinion_user_prompt(
+            question=task,
+            context=context,
+            memory_text=memory_text,
+            locale=locale,
+            directive=True,
+        )
     )
     agent = build_specialist_agent(
         settings=settings,

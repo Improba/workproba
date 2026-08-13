@@ -38,6 +38,9 @@
             :reasoning-provider="activeChatRouting?.provider ?? null"
             :reasoning-model="homeReasoningModel"
             @send="startConversationFromComposer"
+            @personas-open="() => startPersonasFromHome('avis')"
+            @personas-meeting="() => startPersonasFromHome('meeting')"
+            @personas-discuss="() => startPersonasFromHome('discussion')"
             @update:reasoning-effort="onHomeReasoningEffortChange"
             @update:reasoning-model="onHomeReasoningModelChange"
           />
@@ -199,6 +202,7 @@ const engineWizardVisible = computed({
 const recentSessions = ref<LocalSession[]>([]);
 const sessionsChecked = ref(false);
 const sessionsReady = ref(false);
+const homeLaunching = ref(false);
 
 const { sessionVersion } = useSessionSync();
 
@@ -263,6 +267,7 @@ function startConversationFromComposer(
   prompt: string,
   attachments: ChatAttachment[],
 ): void {
+  if (homeLaunching.value) return;
   if (!activePath.value || !activeSpaceId.value) {
     Notify.create({
       message: t('shell.conversationCreateFailed'),
@@ -270,6 +275,7 @@ function startConversationFromComposer(
     });
     return;
   }
+  homeLaunching.value = true;
   void (async () => {
     try {
       const session = await createSession(
@@ -281,6 +287,7 @@ function startConversationFromComposer(
         attachments,
         reasoningEffort: homeReasoningEffort.value,
         model: homeReasoningModel.value,
+        sessionId: session.id,
       });
       bumpSessions();
       await router.push({
@@ -292,6 +299,50 @@ function startConversationFromComposer(
         message: err instanceof Error ? err.message : t('shell.conversationCreateFailed'),
         classes: 'bg-danger text-white',
       });
+    } finally {
+      homeLaunching.value = false;
+    }
+  })();
+}
+
+function startPersonasFromHome(
+  action: 'avis' | 'meeting' | 'discussion',
+): void {
+  if (homeLaunching.value) return;
+  if (!activePath.value || !activeSpaceId.value) {
+    Notify.create({
+      message: t('shell.conversationCreateFailed'),
+      classes: 'bg-danger text-white',
+    });
+    return;
+  }
+  homeLaunching.value = true;
+  void (async () => {
+    try {
+      const session = await createSession(
+        activeSpaceId.value!,
+        activePath.value!,
+      );
+      setPendingChatLaunch({
+        text: '',
+        attachments: [],
+        reasoningEffort: homeReasoningEffort.value,
+        model: homeReasoningModel.value,
+        personasAction: action,
+        sessionId: session.id,
+      });
+      bumpSessions();
+      await router.push({
+        name: 'chat_session',
+        params: { id: session.id },
+      });
+    } catch (err) {
+      Notify.create({
+        message: err instanceof Error ? err.message : t('shell.conversationCreateFailed'),
+        classes: 'bg-danger text-white',
+      });
+    } finally {
+      homeLaunching.value = false;
     }
   })();
 }

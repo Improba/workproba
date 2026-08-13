@@ -108,7 +108,7 @@ describe('ThinkingCard', () => {
     wrapper.unmount();
   });
 
-  it('expose aria-live et aria-busy sur le subject pendant le streaming', () => {
+  it('expose aria-live et aria-busy pendant le streaming sans sujet live', () => {
     const wrapper = mount(ThinkingCard, {
       props: {
         thinking: {
@@ -130,6 +130,8 @@ describe('ThinkingCard', () => {
     });
 
     const subject = wrapper.find('[data-testid="thinking-card__subject"]');
+    expect(subject.text()).toContain('Le modèle réfléchit');
+    expect(subject.text()).not.toContain('Analyse');
     expect(subject.attributes('aria-live')).toBe('polite');
     expect(subject.attributes('aria-busy')).toBe('true');
     wrapper.unmount();

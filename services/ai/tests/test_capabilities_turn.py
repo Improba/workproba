@@ -93,6 +93,7 @@ async def test_turn_snapshot_uses_space_profile_not_payload(
             PLUGIN_WORKPROBA_PROJET,
             PLUGIN_WORKPROBA_PERSONAS,
         ],
+        allowlist=frozenset({"ihora"}),
     )
 
     assert PLUGIN_WORKPROBA_PROJET in snap.active_plugins
@@ -144,7 +145,7 @@ async def test_turn_snapshot_frozen_until_next_turn(
 
     turn_b = await _snapshot(workspace, plugins_root)
     assert PLUGIN_WORKPROBA_PERSONAS not in turn_b.active_plugins
-    assert "ihora" not in turn_b.managed_allowed_connector_ids
+    assert "ihora" in turn_b.managed_allowed_connector_ids
     assert "projects" not in turn_b.effective_ids
     assert PLUGIN_WORKPROBA_CLOUD in turn_b.active_plugins
 
@@ -173,7 +174,7 @@ async def test_turn_nested_independent_under_cloud_parent(
     snap = await _snapshot(workspace, plugins_root)
     assert PLUGIN_WORKPROBA_PROJET not in snap.active_plugins
     assert PLUGIN_WORKPROBA_CLOUD in snap.active_plugins
-    assert snap.managed_allowed_connector_ids == frozenset({"ihora"})
+    assert snap.managed_allowed_connector_ids == frozenset({"ihora", "echo"})
 
 
 @pytest.mark.asyncio
@@ -236,6 +237,7 @@ async def test_turn_snapshot_frozen_across_provider_attempts(
         workspace,
         plugins_root,
         payload_plugins=machine_plugins,
+        allowlist=frozenset({"ihora"}),
     )
     assert PLUGIN_WORKPROBA_PERSONAS not in turn_snapshot.active_plugins
     assert "regards" not in turn_snapshot.effective_ids
@@ -247,7 +249,7 @@ async def test_turn_snapshot_frozen_across_provider_attempts(
     set_wanted(
         workspace,
         {
-            "regards": True,
+            "projects": False,
             "managed:ihora": False,
         },
     )
@@ -256,12 +258,15 @@ async def test_turn_snapshot_frozen_across_provider_attempts(
         workspace,
         plugins_root,
         payload_plugins=attempt_payload_plugins,
+        allowlist=frozenset({"ihora"}),
     )
     assert reresolved.effective_ids != turn_snapshot.effective_ids
+    assert "projects" not in reresolved.effective_ids
 
     # Correct pattern: reuse the first snapshot, do not re-resolve.
     assert PLUGIN_WORKPROBA_PERSONAS not in turn_snapshot.active_plugins
     assert "regards" not in turn_snapshot.effective_ids
+    assert "projects" in turn_snapshot.effective_ids
     assert "ihora" in turn_snapshot.managed_allowed_connector_ids
 
 

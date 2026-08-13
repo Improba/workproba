@@ -519,6 +519,114 @@ def test_build_specialist_system_prompt_includes_panel_notice() -> None:
     assert "create_timesheet" in prompt
 
 
+def test_build_specialist_system_prompt_operative_includes_gate_rules() -> None:
+    specialist = _sample_specialist_with_tools()
+    prompt = specialist_run.build_specialist_system_prompt(
+        specialist,
+        locale="fr",
+        mode="operative",
+    )
+    assert "ConfirmationGate" in prompt
+    assert "coller" in prompt.lower()
+    assert "prévalent" in prompt.lower() or "préséance" in prompt.lower()
+
+
+def test_build_specialist_system_prompt_catalog_ihora_incomplete_note() -> None:
+    specialist = _sample_specialist_with_tools()
+    specialist["system_prompt"] = "Utilise exclusivement les outils Ihora."
+    prompt = specialist_run.build_specialist_system_prompt(
+        specialist,
+        locale="fr",
+        mode="operative",
+    )
+    assert "Pennylane" in prompt
+    assert "incomplet" in prompt.lower()
+
+
+@pytest.mark.asyncio
+async def test_run_specialist_operative_uses_execution_user_prompt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+
+    class _FakeRun:
+        def __init__(self) -> None:
+            self.result = type("R", (), {"output": "done"})()
+
+        async def __aenter__(self) -> "_FakeRun":
+            return self
+
+        async def __aexit__(self, *args: object) -> None:
+            return None
+
+        def __aiter__(self) -> "_FakeRun":
+            return self
+
+        async def __anext__(self) -> object:
+            raise StopAsyncIteration
+
+    class _FakeAgent:
+        def iter(self, user_prompt, *, deps=None, **kwargs):  # type: ignore[no-untyped-def]
+            captured["user_prompt"] = user_prompt
+            _ = (deps, kwargs)
+            return _FakeRun()
+
+    monkeypatch.setattr(specialist_run, "build_specialist_agent", lambda **kwargs: _FakeAgent())
+    monkeypatch.setattr(
+        "app.agent.loop.map_model_stream_events",
+        lambda *args, **kwargs: iter(()),
+    )
+    monkeypatch.setattr(
+        "app.agent.loop.iter_nested_tool_stream",
+        lambda *args, **kwargs: iter(()),
+    )
+
+    from app.agent.confirmation import ConfirmationGate
+
+    class _Gate(ConfirmationGate):
+        async def request_effect(self, **kwargs):  # type: ignore[no-untyped-def]
+            return "approved"
+
+    personas_dir = tmp_path / "plugins" / PLUGIN_WORKPROBA_PERSONAS
+    personas_dir.mkdir(parents=True)
+    deps = specialist_run.build_regard_tool_deps(
+        plugins_root=personas_dir.parent,
+        locale="fr",
+        project_client=FakeProjectClient(),
+        confirmation_gate=_Gate(session_id="s1", turn_id="t1"),
+    )
+
+    await specialist_run.run_specialist(
+        specialist=_sample_specialist_with_tools(),
+        task="Créer facture Pennylane",
+        context="",
+        settings=object(),
+        provider_set=None,
+        locale="fr",
+        mode="operative",
+        tool_deps=deps,
+        plugins_root=personas_dir.parent,
+    )
+
+    user_prompt = captured["user_prompt"]
+    assert "Mode Action" in user_prompt
+    assert "Format attendu" not in user_prompt
+    assert "- Points clés" not in user_prompt
+
+
+def test_build_specialist_system_prompt_includes_trusted_identity() -> None:
+    specialist = _sample_specialist_with_tools()
+    prompt = specialist_run.build_specialist_system_prompt(
+        specialist,
+        locale="fr",
+        current_user_email="bob@example.com",
+        current_user_display_name="Bob",
+    )
+    assert "bob@example.com" in prompt
+    assert "Bob" in prompt
+
+
 def _register_tools_for_filter(
     tmp_path: Path,
     specialist: dict[str, object],
