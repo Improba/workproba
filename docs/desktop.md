@@ -100,10 +100,13 @@ Workproba metadata lives in the **application folder**, not in the client folder
 6. Before sensitive actions (file write, publish, network, code execution), the sidecar
    may emit `confirmation_preparing` (preparing card, no actions) then `confirmation_request`
    (effect-oriented headline + protections). The user approves or denies in `ConfirmationCard`;
-   the front calls `POST /agent/confirm`. **Approve remaining** trusts the same `trust_key`
-   for the rest of the turn (`tool_auto_approved` on later matches). On deny or timeout, the
+   the front calls `POST /agent/confirm` and keeps the card busy until `tool_call_result`
+   (no second click). **Approve remaining** trusts the same `trust_key`
+   for the rest of the turn (`tool_auto_approved` on later matches). In space mode **Confiance**,
+   `AutoApproveGate` skips the pause and emits `tool_auto_approved` immediately. On deny or timeout, the
    model receives a `ModelRetry` and can adapt. Agent loop limits: see [stack.md](./stack.md)
-   (`MAX_AGENT_ITERATIONS` default 40, max 64; `TURN_TIMEOUT_SECONDS` default 600).
+   (`MAX_AGENT_ITERATIONS` default 40, max 64; `TURN_TIMEOUT_SECONDS` default 600;
+   `UNEXPECTED_MODEL_BEHAVIOR_RETRIES` default 1).
 7. SSE events are shown in chat (tokens, reasoning with spinner, tool calls, `work_*`
    business events); sessions are persisted in `{app_data}/spaces/{id}/.workproba/conversations/`.
 
@@ -126,8 +129,9 @@ Workproba metadata lives in the **application folder**, not in the client folder
   code execution, or external sync, the agent pauses and shows a confirmation card in human
   language (e.g. "I will modify: Budget_2026.xlsx") with active safeguards (preview,
   automatic version, no network). Implemented in `app/agent/effects.py` +
-  `ConfirmationGate.request_effect()`; UI: `ConfirmationCard.vue`. See
-  [architecture.md § Human approval](./architecture.md#human-approval-and-work-events).
+  `ConfirmationGate.request_effect()`; UI: `ConfirmationCard.vue`. Per-space policy
+  (`space_policy.json`, Sécurité / Confiance) selects `ConfirmationGate` vs `AutoApproveGate`.
+  See [architecture.md § Human approval](./architecture.md#human-approval-and-work-events).
 - **Automatic versions**: copy to `.workproba/versions/` before write (Python `LocalProjectClient`),
   in addition to user confirmation on modifications.
 - **Scope**: the agent does not leave the project folder.
@@ -151,7 +155,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 | **D** | Done | SQLite RAG, Office extraction, sidecar monitoring |
 | **D+** | Done | Scoped user/project memory, builtin plugins (Regards métier), attachments, document preview, audit, Human Approval Gate, Work Event Bus |
 | **E** | Done | Multi-OS packaging + PyInstaller sidecar (`scripts/build-sidecar.sh`, CI `desktop-release.yml`) |
-| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`): desktop login (`POST /devices/login` → `desktop-bearer` → durable `wp_dev_*`), join via `join_token`, first-run onboarding (`EngineOnboardingWizard`), managed capabilities under **Workproba Cloud** (`echo`, `ihora.shaped` stub, `ihora` HTTP allowlist org, **17 tools** incl. `list_users`, `create_project_budget`, `update_project_budget`), dedicated agent tools + `invoke_managed_connector`, **per-space** `capabilities.json`, CloudPanel, sync published artefacts, Capabilities hub hierarchy (21/07), PPTX visual pipeline (HTML + Chromium fallback), Human Approval Gate polish (preparing, approve_remaining / trust) |
+| **F** | **Partial / MVP Mode A** | Improba Cloud (`workproba-cloud/`): desktop login (`POST /devices/login` → `desktop-bearer` → durable `wp_dev_*`), join via `join_token`, first-run onboarding (`EngineOnboardingWizard`), managed capabilities under **Workproba Cloud** (`echo`, `ihora.shaped` stub, `ihora` HTTP 17 tools, **Pennylane**, **GazFlow** opt-in), dedicated agent tools + `invoke_managed_connector`, **per-space** `capabilities.json` + **`space_policy.json`** (Sécurité/Confiance), CloudPanel, sync published artefacts, Capabilities hub hierarchy (21/07), PPTX visual pipeline (HTML + Chromium fallback), Human Approval Gate polish (preparing, approve_remaining / trust, confirmation busy until tool result) |
 
 ### Phase D: validation
 
@@ -174,6 +178,8 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 - Desktop : `RemoteCapabilityGateway`, outils agent dédiés `managed_*` + `invoke_managed_connector`, sidecar `GET /plugins/cloud/connectors`, freeze allowlist par tour ; Human Approval Gate : `confirmation_preparing`, `approve_remaining` / `trust_key`, `tool_auto_approved`
 - **Hub Capacités (21/07)** : **Workproba Cloud** en premier ; zone **Sous-capacités** dépliante (Gestion de projet + managées type Ihora, cartes compactes) ; stubs masqués en guidé
 - **Capacités par espace (22/07)** : `capabilities.json`, `SpaceCapabilitiesPanel`, `GET`/`PUT /workspace/capabilities`
+- **Politique d'approbation par espace (13/08)** : `space_policy.json` (`approvalMode` `security` / `trust`), `GET`/`PUT /workspace/policy`, `AutoApproveGate` en Confiance ; carte de confirmation busy jusqu'au `tool_call_result`
+- **Retry modèle** : `UNEXPECTED_MODEL_BEHAVIOR_RETRIES` (défaut 1), pas de retry après filtre contenu ou outil irréversible
 - CloudPanel (join, capacités managées, regards, projets), sync artefacts publiés, org LLM (DeviceBearer) ; quota illimité sans ligne `llm_quota_limit`
 - Secrets org + overrides user connecteurs : persistés PostgreSQL (+ AES-GCM pour secrets) ; UI admin org allowlist/secrets/overrides
 - PPTX : builder natif éditable + pipeline HTML/Chromium (`pptx_svg`) avec repli
@@ -196,9 +202,8 @@ Monorepo `workproba-cloud/` (NestJS + Quasar admin). Plugin desktop `workproba.c
 - **OCR / scanned PDFs**: Mistral OCR path exists when the active provider set supports it; Docling integration deferred. User decision ("Docling for OCR") remains open for a heavy local extractor.
 - **V1→V2 storage migration** (T-V2-15b): legacy `.workproba/` under client folders not yet migrated to canonical `app_data/spaces/`.
 - **Durable (Temporal/Inngest)**: deferred. Current agent loop is synchronous (one SSE turn). No long workflow resume/persistence on crash.
-- **Configurable approval policy**: effect gate is always on for mapped sensitive tools; a global "auto-approve" setting is not implemented yet.
 - **Office preview before write**: `POST /documents/preview-change` builds proposed Office bytes (docx/xlsx/pdf/pptx) and shows HTML preview before approval (PPTX uses the HTML slides pipeline when available). Pixel-perfect binary diff is not available (T-V2-14 partially addressed).
-- **Per-space capabilities**: see [capacites.md](./capacites.md) and [architecture.md](./architecture.md#per-space-capabilities-profile).
+- **Per-space capabilities and approval policy**: see [capacites.md](./capacites.md) and [architecture.md](./architecture.md#human-approval-and-work-events).
 
 ### Quality / integration
 

@@ -1,6 +1,6 @@
 # Space storage (espace)
 
-> **Last updated:** 23/07/2026  
+> **Last updated:** 13/08/2026  
 > **Terminology:** UI label **space** / FR **espace**; internal identifiers may still use `workspace_id` in code and `registry.json`.
 
 ## Terminology
@@ -52,6 +52,7 @@ This model follows **Claude Cowork** (metadata in Application Support, user file
             ├── manifest.json               # folder path, display title, dates
             ├── config.json                 # project instructions (later phase)
             ├── capabilities.json           # per-space wanted capabilities profile
+            ├── space_policy.json           # per-space approvalMode (security | trust)
             ├── conversations/
             │   └── sess_....json           # one session = one JSON file
             ├── versions/                   # snapshots before AI modification
@@ -60,6 +61,8 @@ This model follows **Claude Cowork** (metadata in Application Support, user file
 ```
 
 **`capabilities.json`:** per-space activation profile (`wanted` map for local capability ids and `managed:{connectorId}`). Initialized from defaults / migration when missing. See [capacites.md](./capacites.md) and [architecture.md § Per-space capabilities](./architecture.md#per-space-capabilities-profile).
+
+**`space_policy.json`:** per-space Human Approval Gate policy (`approvalMode`: `security` default, or `trust`). Sidecar `GET` / `PUT /workspace/policy`. See [architecture.md § Human approval](./architecture.md#human-approval-and-work-events).
 ## Display title
 
 Each space has a **display title** shown in the sidebar (default = folder basename). The user can rename it without affecting the folder on disk or the stable `workspace_id`. Tauri command: `update_workspace_title(workspace_id, title)` → updates `manifest.json` and the `registry.json` entry.

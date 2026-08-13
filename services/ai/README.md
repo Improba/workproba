@@ -58,13 +58,16 @@ Most endpoints require the `X-Internal-Secret` header (value `INTERNAL_SECRET` o
 
 ### Human Approval Gate
 
-Sensitive agent tools pause until the user approves via `POST /agent/confirm`.
+Sensitive agent tools pause until the user approves via `POST /agent/confirm`, unless the space is in **Confiance**.
 
-1. During `/agent/turn`, the sidecar may emit SSE `confirmation_request` with effect-oriented fields: `effect`, `targets`, `headline`, `protection_labels`, `protections`.
-2. The front displays `ConfirmationCard` and posts `{ session_id, turn_id, confirmation_id, decision }` to `/agent/confirm`.
-3. On deny or timeout (300 s), the tool is not executed; the model receives `ModelRetry` with `workproba:approval_denied` or `workproba:approval_timeout`.
+1. At turn start, `create_confirmation_gate()` reads `{space}/.workproba/space_policy.json` (`GET`/`PUT /workspace/policy`). `security` (default) → `ConfirmationGate`; `trust` → `AutoApproveGate` (immediate approve + SSE `tool_auto_approved` + audit). Without a space, `confirm_before_write` is the fallback. A gate is **always** registered so `/agent/confirm` never hits a missing gate after a successful first click.
+2. During `/agent/turn`, the sidecar may emit SSE `confirmation_request` with effect-oriented fields: `effect`, `targets`, `headline`, `protection_labels`, `protections`.
+3. The front displays `ConfirmationCard` and posts `{ session_id, turn_id, confirmation_id, decision }` to `/agent/confirm`. After a successful POST the card stays busy until `tool_call_result`.
+4. On deny or timeout (300 s), the tool is not executed; the model receives `ModelRetry` with `workproba:approval_denied` or `workproba:approval_timeout`.
 
-Effect classification: `app/agent/effects.py` (`classify_effect`). Gate: `app/agent/confirmation.py` (`ConfirmationGate.request_effect`). Gated tools include file writes, `publish_artifact`, `web_search`, `browser_*`, `run_code`, `sync_to_cloud`, **`invoke_managed_connector`** (including nested specialist writes). Read-only tools are not gated.
+Effect classification: `app/agent/effects.py` (`classify_effect`). Gate: `app/agent/confirmation.py` (`ConfirmationGate.request_effect`, `AutoApproveGate`). Policy: `app/space_policy.py`. Gated tools include file writes, `publish_artifact`, `web_search`, `browser_*`, `run_code`, `sync_to_cloud`, **`invoke_managed_connector`** (including nested specialist writes). Read-only tools are not gated.
+
+**Unexpected model behaviour:** `UNEXPECTED_MODEL_BEHAVIOR_RETRIES` (default 1) retries the same model after `UnexpectedModelBehavior`, except `ContentFilterError` or after an irreversible tool succeeded this turn.
 
 **Specialist delegation:** `summon_specialist` runs `SpecialistRun` (`plugins/workproba_personas/specialist_run.py`) via **`agent.iter`**. Nested SSE events (`token`, `thinking_*`, `tool_call_*`) carry optional **`parent_tool_call_id`** and are forwarded on the parent turn through `ToolDeps.event_queue`. See [docs/plugins.md](../../docs/plugins.md) and [docs/architecture.md](../../docs/architecture.md#specialist-delegation-streaming).
 
@@ -78,6 +81,13 @@ Work events (`work_started`, `work_contribution`, `work_completed`, `work_failed
 | POST | `/documents/preview-change` | yes | Diff before write |
 | GET | `/versions` | yes | List file versions |
 | POST | `/versions/restore` | yes | Restore a version |
+
+### Workspace profile
+
+| Method | Route | Secret | Role |
+|---|---|---|---|
+| GET / PUT | `/workspace/capabilities` | yes | Per-space `capabilities.json` (`wanted` map) |
+| GET / PUT | `/workspace/policy` | yes | Per-space `space_policy.json` (`approvalMode`: `security` / `trust`) |
 
 ### Memory
 
@@ -159,7 +169,7 @@ Join org, managed capabilities (API connectors), artefact sync, enterprise regar
 | POST | `/plugins/cloud/sync` | yes | Mount sync push (blocked when enrolled) |
 | POST | `/plugins/cloud/pull` | yes | Mount sync pull (blocked when enrolled) |
 
-Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins `echo`, `ihora.shaped` stub, `ihora` HTTP when org allowlist permits ; payload only, identity derived server-side). Desktop Capabilities hub shows these as managed capabilities under Workproba Cloud. See [architecture-cloud.md](../../../workproba-improba/roadmaps/architecture-cloud.md).
+Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins `echo`, `ihora.shaped` stub, `ihora` HTTP, **Pennylane**, **GazFlow** when org allowlist permits ; payload only, identity derived server-side). Desktop Capabilities hub shows these as managed capabilities under Workproba Cloud. See [architecture-cloud.md](../../../workproba-improba/roadmaps/architecture-cloud.md).
 
 ### Improba Cloud LLM (`device_bearer`)
 

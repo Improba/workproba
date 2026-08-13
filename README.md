@@ -2,7 +2,7 @@
 
 AI is fragmenting: a copilot in every app, contexts that never overlap, features siloed inside each suite. Our conviction is that it should first be **a personal work interface**, centered on the person, connected to their folders and tools, rather than embedded in each one of them.
 
-**Workproba** is a desktop application (**macOS, Linux, Windows**) that embodies this principle. You **open a space** (a local folder on your machine); the assistant works directly on your files (Word, Excel, PDF), indexes and remembers context locally, and relies on the **LLM provider of your choice** (Ollama, Mistral, OpenAI, etc.). The standard path for organization services is **Workproba Cloud** (Improba Cloud Mode A: auth, secrets, managed capabilities such as Ihora, transport relay). Direct desktop-to-external connectors remain a power-user option.
+**Workproba** is a desktop application (**macOS, Linux, Windows**) that embodies this principle. You **open a space** (a local folder on your machine); the assistant works directly on your files (Word, Excel, PDF), indexes and remembers context locally, and relies on the **LLM provider of your choice** (Ollama, Mistral, OpenAI, etc.). The standard path for organization services is **Workproba Cloud** (Improba Cloud Mode A: auth, secrets, managed capabilities such as Ihora, Pennylane or GazFlow, transport relay). Direct desktop-to-external connectors remain a power-user option.
 
 *Desktop app for local files and memory, connected to Workproba Cloud for managed capabilities. Configurable LLM providers.*
 
@@ -15,11 +15,11 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 ## Features
 
 - **Agent chat**: SSE streaming, model and reasoning per conversation, attachments, composite "+" menu
-- **Human approval**: effect-oriented confirmation before file writes, publishing, network access, or code execution; **approve remaining** trusts the same `trust_key` for the rest of the turn
+- **Human approval**: effect-oriented confirmation before file writes, publishing, network access, or code execution; **approve remaining** trusts the same `trust_key` for the rest of the turn. Per-space policy **Sécurité** / **Confiance** (`space_policy.json`)
 - **Scoped memory**: global user memories + project memories, local RAG, agent `remember` tool
-- **Activatable capabilities**: **Workproba Cloud** first (collapsible sub-capabilities: **Project management**, managed services such as **Ihora**), Regards métier, web navigation. **Per-space** wanted profile (`capabilities.json`). Managed connectors via Improba Cloud Mode A (`managed_*` tools in operative runs). Integrated plugins; not a third-party extension marketplace in V2.
+- **Activatable capabilities**: **Workproba Cloud** first (collapsible sub-capabilities: **Project management**, managed services such as **Ihora**, **Pennylane**, **GazFlow**), Regards métier, web navigation. **Per-space** wanted profile (`capabilities.json`). Managed connectors via Improba Cloud Mode A (`managed_*` tools in operative runs). Integrated plugins; not a third-party extension marketplace in V2.
 - **Agents métier & Regards**: builtin perspectives plus **org-published catalogs** synced from Workproba Cloud (`specialists[]`, signed bundle). UI: opinions, meetings, discussions; **Regard** = read-only consultative mode. The main assistant (**Imp**) delegates via `summon_specialist` with a **live streaming** inline handoff card (thinking / tools / answer behind « Voir le détail », Human Approval Gate when needed).
-- **Spaces**: sidebar, right panel (files, preview, active capabilities, CloudPanel), side chat for Regards, space settings for capabilities
+- **Spaces**: sidebar, right panel (files, preview, active capabilities, CloudPanel), side chat for Regards, space settings for capabilities and approval policy
 - **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write; native PPTX generation (`write_pptx`) with optional HTML/Chromium visual pipeline
 - **Branding**: `WorkprobaBrand` mark and logo assets in the shell
 - **Improba Cloud desktop auth**: first-run onboarding (`EngineOnboardingWizard`), cloud login (`POST /devices/login` → exchange to durable DeviceBearer `wp_dev_*`), device enroll (`join_token` → DeviceBearer)

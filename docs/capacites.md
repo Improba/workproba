@@ -1,6 +1,6 @@
 # Capacités activables
 
-> **Last updated:** 23/07/2026  
+> **Last updated:** 13/08/2026  
 > **Audience:** end users (mode guidé) + product/engineering overview
 
 ## What are capabilities?
@@ -12,7 +12,7 @@ The title bar no longer exposes a separate Capabilities button beside the Cloud 
 Activation has **two layers**:
 
 1. **Machine / org** — plugins enabled on this computer; managed connectors allowlisted by the organization (and not locally disabled under Workproba Cloud).
-2. **Per space** — each space stores a `wanted` profile in `{space}/.workproba/capabilities.json`. Space settings let you turn entitled capabilities on or off for that folder only.
+2. **Per space** — each space stores a `wanted` profile in `{space}/.workproba/capabilities.json` and an approval policy in `{space}/.workproba/space_policy.json`. Space settings let you turn entitled capabilities on or off for that folder, and choose **Sécurité** (confirm each write) or **Confiance** (auto-approve, still audited).
 
 ### Local capabilities
 
@@ -27,7 +27,7 @@ Activation has **two layers**:
 | Sub-capability | Role |
 |---|---|
 | **Project management** (`projects`) | Local library + shared projects via Cloud (can open Library) |
-| **Managed** (e.g. **Ihora**) | Org-authorized via allowlist. On this computer: **Activate** / **Disable** only — no panel to open. Per-space wanted toggles in Space settings. |
+| **Managed** (e.g. **Ihora**, **Pennylane**, **GazFlow**) | Org-authorized via allowlist. On this computer: **Activate** / **Disable** only — no panel to open. Per-space wanted toggles in Space settings. GazFlow is opt-in (`enableByDefaultInProjects: false`). |
 
 Managed connectors are not presented as a standalone tool catalog on Home. They are visible through the business agents whose allowlists reference them. This preserves the product model: plugins provide capabilities; business agents define who can mobilize those capabilities.
 
@@ -41,13 +41,13 @@ The Capabilities hub lists **Workproba Cloud first**. Nested items live in a **c
 
 | Concept | Detail |
 |---|---|
-| Storage | `{app_data}/spaces/{id}/.workproba/capabilities.json` (`wanted` map, versioned) |
-| UI | Space settings → capabilities panel (`SpaceCapabilitiesPanel`) |
+| Storage | `{app_data}/spaces/{id}/.workproba/capabilities.json` (`wanted` map, versioned) plus `space_policy.json` (`approvalMode`) |
+| UI | Space settings → approval pills (Sécurité / Confiance) then capabilities panel (`SpaceCapabilitiesPanel`) |
 | Statuses | `active` (wanted + entitled), `available` (entitled but wanted off), `unavailable` (plugin off / cloud missing / not allowlisted) |
-| Defaults | `enableByDefaultInProjects` from local catalog + connector descriptors (Ihora on by default in new project spaces; web navigation off) |
-| Agent turn | Effective set is **frozen once per turn** (`TurnCapabilitiesSnapshot`); mid-turn toggles apply on the next turn |
+| Defaults | `enableByDefaultInProjects` from local catalog + connector descriptors (Ihora on by default in new project spaces; GazFlow off; web navigation off) |
+| Agent turn | Effective set is **frozen once per turn** (`TurnCapabilitiesSnapshot`); mid-turn toggles apply on the next turn. Approval mode is read at gate creation for that turn. |
 
-API: `GET` / `PUT /workspace/capabilities` (sidecar). See [architecture.md § Per-space capabilities](./architecture.md#per-space-capabilities-profile).
+API: `GET` / `PUT /workspace/capabilities` and `GET` / `PUT /workspace/policy` (sidecar). See [architecture.md § Per-space capabilities](./architecture.md#per-space-capabilities-profile) and [architecture.md § Human approval](./architecture.md#human-approval-and-work-events).
 
 ## Projects and sources of truth
 
@@ -63,6 +63,8 @@ Solo projects stay **local SoT** (on the machine). Shared projects and **managed
 Managed capabilities use Improba Cloud Mode A. Each org-allowed connector exposes a `tools[]` catalog from the control plane (`name`, `action`, `description`, `effect`, `visibility`, `input_schema`, plus connector-level `enableByDefaultInProjects` / `requiresSecrets`). `GET /connectors` also returns `catalogVersion`. When a managed capability is **enabled on this computer** and **wanted in the current space**, the chat registers one agent tool per entry: `managed_{connector_id}_{tool_name}` (connector dots become underscores). The generic `invoke_managed_connector` remains a fallback. Validation of `action` and payload is **authoritative on the cloud** at invoke time. Human Approval Gate: `external_send` (dedicated confirmation layout with human summary and args). The desktop does not send `device_id`, `subject_id` or `org_id` in the invoke body. Guided mode hides tools with `visibility: advanced`. Bidirectional sync with conflict resolution is **out of scope** as a product flow. See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.md).
 
 **Ihora (example):** 17 tools including `list_users` (resolve email/name → numeric userId) before `create_project` / `update_project_member` (userId or email), plus `create_project_budget` and `update_project_budget`. The agent prompt includes the signed-in cloud user identity for « add me » flows.
+
+**Pennylane / GazFlow:** curated Company API v2 (customers, invoices, quotes) and GazFlow NoVa/N-1/batch (13 tools, opt-in). Catalogues live on the control plane; the desktop only relays via `managed_*` / `invoke_managed_connector`.
 
 ## How to activate
 

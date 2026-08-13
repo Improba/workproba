@@ -67,6 +67,7 @@ Sidecar logs in dev: `tail -f .dev-ai.log` at the monorepo root.
 | `SANDBOX_TIMEOUT_SECONDS` | Subprocess sandbox timeout |
 | `MAX_AGENT_ITERATIONS` | Agent loop limit (default 40, max 64) |
 | `TURN_TIMEOUT_SECONDS` | Global agent turn timeout (default 600) |
+| `UNEXPECTED_MODEL_BEHAVIOR_RETRIES` | Same-model retries after `UnexpectedModelBehavior` (default 1, max 3; skipped after content filter or irreversible tool) |
 
 ### Dev variables (root)
 

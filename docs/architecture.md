@@ -1,6 +1,6 @@
 # Workproba architecture
 
-> **Last updated:** 06/08/2026 (specialist streaming handoff, confirmation trust / approve_remaining, chat UX polish)
+> **Last updated:** 13/08/2026 (space approval policy Sécurité/Confiance, AutoApproveGate, unexpected-model retry, chat/handoff polish)
 
 ## Overview
 
@@ -54,7 +54,16 @@ Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./wor
 
 ### Human Approval Gate (effect-oriented)
 
-Before executing a sensitive tool, the agent classifies the intended **effect** (not the raw tool name) and waits for user approval.
+Before executing a sensitive tool, the agent classifies the intended **effect** (not the raw tool name). A confirmation **gate is always present** for the turn. The space **approval policy** (`space_policy.json`) chooses how it behaves:
+
+| Mode | UI label | Behaviour |
+|---|---|---|
+| `security` (default) | Sécurité | Each write / external effect waits for a confirmation card |
+| `trust` | Confiance | `AutoApproveGate` approves immediately; SSE `tool_auto_approved` still fires; actions remain auditable |
+
+Without a space (`workspace_data_dir` missing), the machine setting `confirm_before_write` is the fallback. Factory: `create_confirmation_gate()` in `app/agent/confirmation.py`. Storage: `{space}/.workproba/space_policy.json`. API: `GET` / `PUT /workspace/policy`. UI: Space settings (`SpaceSettingsDialog`).
+
+In **Sécurité**, the agent waits for user approval.
 
 | Effect type | Typical tools | User-facing example |
 |---|---|---|
@@ -71,9 +80,11 @@ Read-only tools (`read_document`, `list_files`, `remember`, `propose_plan`, pers
 1. `classify_effect()` (`app/agent/effects.py`) builds an `EffectProposal` (effect, targets, protections).
 2. For managed writes that need pre-resolution (e.g. Ihora member identity), the gate may emit SSE `confirmation_preparing` first. The front shows a **preparing** card (no actions) until the rich `confirmation_request` arrives.
 3. `ConfirmationGate.request_effect()` emits SSE `confirmation_request` with `headline` and `protection_labels` (localized via `app/i18n.py`).
-4. The front shows `ConfirmationCard.vue`; the user approves or denies via `POST /agent/confirm`. For `external_send` / managed tools, the card uses a dedicated layout (primary human summary, optional secondary target, argument list, protection labels). **Approve remaining** (`approve_remaining`) records turn-scoped trust in `_turn_trust` keyed by `trust_key` (`connector:{id}`, `effect:{effect}`, `file_write:{create|modify}`). Later tools in the same turn with the same `trust_key` skip the card and emit SSE `tool_auto_approved` (UI: auto-approved).
+4. The front shows `ConfirmationCard.vue`; the user approves or denies via `POST /agent/confirm`. After a successful POST the card stays **busy / submitted** until `tool_call_result` (buttons stay disabled) so a second click cannot 404 `confirmation_not_found` and abort a nested specialist run. For `external_send` / managed tools, the card uses a dedicated layout (primary human summary, optional secondary target, argument list, protection labels). **Approve remaining** (`approve_remaining`) records turn-scoped trust in `_turn_trust` keyed by `trust_key` (`connector:{id}`, `effect:{effect}`, `file_write:{create|modify}`). Later tools in the same turn with the same `trust_key` skip the card and emit SSE `tool_auto_approved` (UI: auto-approved).
 5. On **approve**: the tool runs. On **deny** or **timeout** (5 min): `ModelRetry` informs the model (`workproba:approval_denied` / `workproba:approval_timeout` markers). Incomplete tool calls are finalized on abort, idle, or confirmation timeout.
-6. Optional audit: `approval.requested` / `approval.resolved` in `{app_data}/audit/`.
+6. Optional audit: `approval.requested` / `approval.resolved` / `approval.auto_approved` in `{app_data}/audit/`.
+
+**Unexpected model behaviour:** `UnexpectedModelBehavior` retries the same model (`UNEXPECTED_MODEL_BEHAVIOR_RETRIES`, default 1) unless an irreversible tool already succeeded this turn, or the error is `ContentFilterError` (no retry).
 
 Protections shown on the card include: preview available, automatic version before modify, no network, no external send, and (when relevant) user unresolved before confirmation.
 
@@ -151,7 +162,7 @@ Activation is resolved **per space**, not only machine-wide:
 | Org allowlist + local disable | Which managed connectors the org permits; local disable under Workproba Cloud |
 | Space profile `{space}/.workproba/capabilities.json` | Per-space `wanted` map (`true`/`false`) for local ids and `managed:{connectorId}` |
 
-UI: **Space settings** (`SpaceSettingsDialog` → `SpaceCapabilitiesPanel`) lists items as `active` / `available` / `unavailable` with reasons (plugin off, cloud not connected, not allowlisted). API: `GET` / `PUT /workspace/capabilities`. Defaults use `enableByDefaultInProjects` from the local catalog and from each connector descriptor (e.g. Ihora defaults on in new project spaces; web navigation defaults off).
+UI: **Space settings** (`SpaceSettingsDialog`) holds the approval policy (Sécurité / Confiance) then `SpaceCapabilitiesPanel`, which lists items as `active` / `available` / `unavailable` with reasons (plugin off, cloud not connected, not allowlisted). API: `GET` / `PUT /workspace/capabilities` and `GET` / `PUT /workspace/policy`. Defaults use `enableByDefaultInProjects` from the local catalog and from each connector descriptor (e.g. Ihora defaults on in new project spaces; GazFlow defaults off; web navigation defaults off).
 
 ### Turn freeze (managed allowlist)
 
@@ -159,7 +170,7 @@ At the start of each agent turn, `resolve_turn_capabilities_snapshot()` (`capabi
 
 ### Managed tools in chat
 
-When a managed connector is effective for the space, the sidecar registers dedicated agent tools `managed_{connector_id}_{tool_name}` (dots in connector id become underscores) from the cloud `tools[]` catalog, plus generic `invoke_managed_connector` as fallback. Human Approval Gate uses `external_send`. Guided UI hides `visibility: advanced` tools. Tool cards use localized **human summaries**; Ihora write confirmations can show resolved member identity (display name, email, userId) after `list_users` resolution. The signed-in cloud user identity (email / display name, optional cached Ihora userId) is injected into the tool context for « add me » style requests.
+When a managed connector is effective for the space, the sidecar registers dedicated agent tools `managed_{connector_id}_{tool_name}` (dots in connector id become underscores) from the cloud `tools[]` catalog, plus generic `invoke_managed_connector` as fallback. Human Approval Gate uses `external_send` (skipped as a pause in Confiance, still auto-approved + audited). Guided UI hides `visibility: advanced` tools. Tool cards use localized **human summaries**; Ihora write confirmations can show resolved member identity (display name, email, userId) after `list_users` resolution. The signed-in cloud user identity (email / display name, optional cached Ihora userId) is injected into the tool context for « add me » style requests. Org examples: Ihora, Pennylane, GazFlow (opt-in).
 
 **File versions** (T-V2-15): snapshots live under `{space}/versions/`; the sidecar exposes `GET /versions`, `POST /versions/restore`, and optional `POST /versions/purge` (keep last N, default 20, and/or drop entries older than X days). The right-panel **Versions** tab offers restore and manual cleanup.
 
@@ -380,11 +391,12 @@ front/src/
 │   └── EnrollCloudModal.vue       # join_token → DeviceBearer
 ├── components/workproba/
 │   ├── WorkprobaBrand.vue         # shell brand mark/logo
-│   └── SpaceSettingsDialog.vue    # space title + capabilities
+│   └── SpaceSettingsDialog.vue    # space title, approval policy, capabilities
 ├── composables/
 │   ├── useChatStream.ts           # SSE, send, edit, regenerate, retry, handoff routing
 │   ├── chatScrollAnchor.ts        # turn-anchor / sticky promote
-│   └── useSpaceCapabilities.ts    # GET/PUT /workspace/capabilities
+│   ├── useSpaceCapabilities.ts    # GET/PUT /workspace/capabilities
+│   └── useSpacePolicy.ts          # GET/PUT /workspace/policy (security/trust)
 ├── services/cloudDesktopAuth.ts   # POST /devices/login client
 └── utils/
     ├── cloudWebUrls.ts            # VITE_CLOUD_WEB_URL helpers
@@ -394,6 +406,7 @@ front/src/
     └── markdownStreaming.ts       # block split for streaming
 
 services/ai/app/
+├── space_policy.py                # space_policy.json (approvalMode security/trust)
 ├── capabilities_profile.py        # capabilities.json load/save
 ├── capabilities_turn.py           # TurnCapabilitiesSnapshot (frozen allowlist)
 └── documents/
