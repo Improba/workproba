@@ -7,6 +7,7 @@ import {
   browserStatus,
   buildSidecarSecurityContext,
   isBrowserLockedError,
+  isBrowserChromiumMissingError,
   type BrowserActionPayload,
 } from '@services/aiSidecar';
 import {
@@ -211,6 +212,7 @@ export function useBrowser(): UseBrowserReturn {
   function mapBrowserError(err: unknown): string {
     const message = err instanceof Error ? err.message : 'browser_action_failed';
     if (isBrowserLockedError(message)) return 'browser_locked';
+    if (isBrowserChromiumMissingError(message)) return 'browser_not_available';
     return message;
   }
 

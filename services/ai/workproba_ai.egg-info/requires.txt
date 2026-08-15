@@ -9,13 +9,13 @@ python-pptx
 pydantic
 pydantic-ai
 pydantic-settings
+playwright==1.61.0
 reportlab
 sqlite-vec
 sse-starlette
 uvicorn[standard]
 
 [browser]
-playwright>=1.49
 
 [build]
 pyinstaller>=6

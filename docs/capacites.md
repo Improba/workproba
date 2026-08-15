@@ -1,6 +1,6 @@
 # Capacités activables
 
-> **Last updated:** 13/08/2026  
+> **Last updated:** 15/08/2026  
 > **Audience:** end users (mode guidé) + product/engineering overview
 
 ## What are capabilities?
@@ -20,7 +20,7 @@ Activation has **two layers**:
 |---|---|---|
 | **Workproba Cloud** | Connect this computer to your organization (login / invitation), org LLM, gateway for sub-capabilities | Right panel, Workproba Cloud tab |
 | **Business perspectives** (Regards métier) | Expert-style opinions, discussions, cross-perspectives | Side panel and central area |
-| **Web navigation** | Browse pages from Workproba with guided agent help | Right panel, Browser tab |
+| **Web navigation** | Browse pages from Workproba with guided agent help. Engine already in the installer (no extra download). | Right panel, Browser tab |
 
 ### Sub-capabilities (under Workproba Cloud, collapsible)
 
@@ -68,7 +68,7 @@ Managed capabilities use Improba Cloud Mode A. Each org-allowed connector expose
 
 ## How to activate
 
-1. Click **Capabilities** in the title bar.
+1. Click the **organization name** in the title bar, then **Configure capabilities**.
 2. **Workproba Cloud** appears first. Enable / configure it to enroll your organization.
 3. Open **Sub-capabilities** (collapsible) under Cloud: **Project management** (opens Library), then any org-managed items (e.g. **Ihora**). For Ihora-like items: **Activate** or **Disable** only — no Open.
 4. Open **Space settings** for the current folder and adjust per-space wanted toggles when needed.

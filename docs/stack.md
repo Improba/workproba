@@ -1,6 +1,6 @@
 # Workproba technical stack
 
-> **Last updated:** 06/08/2026
+> **Last updated:** 15/08/2026
 
 ## Desktop application
 
@@ -15,7 +15,8 @@
 | sqlite-vec | 0.1.x | Vector search (RAG) |
 | Pydantic AI | 2.7 | Agent (chat/agent, tools, streaming): native models |
 | LiteLLM | 1.x | RAG embeddings only (Ollama, Mistral, OpenAI…) |
-| pdfplumber / python-docx / openpyxl / python-pptx | | Digital document extraction and native Office generation (DOCX, XLSX, PPTX via `write_*` tools) |
+| pdfplumber / python-docx / openpyxl / python-pptx / reportlab | | Digital document extraction and native Office / PDF generation |
+| Playwright + bundled Chromium | 1.61.0 | HTML→PDF, visual PPTX, `workproba.browser`. Driver in the sidecar; binaries in Tauri `resources/ms-playwright`. Launch `channel=chromium`. Fetch `playwright install chromium --no-shell`. No runtime download. |
 
 ### Ports (development)
 
@@ -37,6 +38,8 @@ yarn dev              # same via scripts/dev-all.sh
 ```bash
 make dev-ai           # Python sidecar only
 make dev-desktop      # Tauri + Quasar (sidecar already running elsewhere)
+make fetch-chromium   # Chrome for Testing → desktop/src-tauri/resources/ms-playwright/
+make build-desktop    # Chromium + sidecar + Tauri installers
 yarn dev:ai-only      # sidecar only
 yarn dev:no-ai        # desktop without restarting the sidecar
 ```
@@ -68,6 +71,13 @@ Sidecar logs in dev: `tail -f .dev-ai.log` at the monorepo root.
 | `MAX_AGENT_ITERATIONS` | Agent loop limit (default 40, max 64) |
 | `TURN_TIMEOUT_SECONDS` | Global agent turn timeout (default 600) |
 | `UNEXPECTED_MODEL_BEHAVIOR_RETRIES` | Same-model retries after `UnexpectedModelBehavior` (default 1, max 3; skipped after content filter or irreversible tool) |
+
+### Playwright (set by the desktop shell, not `.env`)
+
+| Variable | Role |
+|---|---|
+| `PLAYWRIGHT_BROWSERS_PATH` | Set by Tauri / `run_dev.sh` when a `chromium-<revision>` tree exists |
+| `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD` | `1` when Chromium is bundled. Frozen sidecars never call `playwright install` |
 
 ### Dev variables (root)
 

@@ -1,6 +1,6 @@
 # Core web search (`web_search`)
 
-> **Last updated:** 15 Jul 2026  
+> **Last updated:** 15/08/2026  
 > **Status:** implemented (Mistral path); Tavily fallback and provider-set capabilities pending
 
 The **`web_search`** agent tool lets the assistant look up **recent or external facts** on the public web and return **citable sources**. It is a **core agent tool**, not a plugin. The browser plugin (`workproba.browser`) remains separate for page interaction (click, type, auth flows).
@@ -15,7 +15,7 @@ The tool is registered on every agent build, but **runtime execution** requires:
 | **`permissions_network`** is `true` | Network guard passes |
 | Both missing | `ModelRetry` with `errors.web_search_unavailable` or `errors.web_search_locked` |
 
-No plugin toggle. No entry in Settings → Plugins. Switching from Mistral to Ollama (or another provider) disables web search until Tavily fallback is implemented (T-V2-WS-3).
+No plugin toggle. Not a Capabilities card. No entry in Settings → Extensions. Switching from Mistral to Ollama (or another provider) disables web search until Tavily fallback is implemented (T-V2-WS-3).
 
 ## Use cases vs other tools
 

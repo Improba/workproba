@@ -38,6 +38,7 @@ collect_packages = [
     "jinja2",
     "tokenizers",
     "genai_prices",
+    "playwright",
 ]
 
 for package in collect_packages:
@@ -60,8 +61,8 @@ a = Analysis(
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
-    excludes=["playwright"],
+    runtime_hooks=["playwright_exec_hook.py"],
+    excludes=[],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,

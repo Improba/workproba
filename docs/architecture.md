@@ -1,6 +1,6 @@
 # Workproba architecture
 
-> **Last updated:** 13/08/2026 (space approval policy Sécurité/Confiance, AutoApproveGate, unexpected-model retry, chat/handoff polish)
+> **Last updated:** 15/08/2026 (bundled Chromium / Playwright 1.61, space approval policy Sécurité/Confiance)
 
 ## Overview
 
@@ -24,6 +24,7 @@ Detailed documentation: [desktop.md](./desktop.md), [workspace-storage.md](./wor
 | RAG | SQLite + sqlite-vec (`memory.db`) | Embeddings + vector search per project; explicit user/project memories |
 | Extraction | pdfplumber, python-docx, openpyxl, python-pptx | Digital PDF/Office read (OCR out of initial scope) |
 | Office writers | python-docx, openpyxl, python-pptx, reportlab | Native generation via `write_docx` / `write_xlsx` / `write_pptx` / `write_pdf` |
+| Chromium (bundled) | Playwright 1.61 + installer resource | HTML→PDF, visual PPTX, `workproba.browser` (not pip at runtime) |
 
 ## Diagram
 
@@ -110,12 +111,13 @@ Implementation: `app/agent/work_events.py`. Labels are localized (`work.capabili
 The main layout (`WorkprobaLayout.vue`) organizes the screen:
 
 ```
-WorkprobaTitleBar          ← WorkprobaBrand, Capabilities hub, engine chip, panel toggles
+WorkprobaTitleBar          ← WorkprobaBrand, organization environment chip, panel toggles
 ├── WorkspaceSidebar (left, responsive rail mode)
+├── EnvironmentDrawer      ← org identity, Cloud, business agents; Configure capabilities
 ├── central zone (router-view: Home/EngineOnboardingWizard, chat, settings, crossed-regards view)
 ├── RightPanel (right, Ctrl+B): Files · Preview · active capability tabs only
 ├── SideChatPanel (Ctrl+Shift+L): Regards métier opinion/discussion
-└── CapabilitiesDrawer (non-modal, Escape to close): discover / activate capabilities
+└── CapabilitiesDrawer     ← discover / activate (opened from the environment panel, not a title-bar button)
 ```
 
 **Sidebar** (`WorkspaceSidebar.vue`): spaces → conversations tree, renameable display titles, **auto-generated conversation title on the first user message** (`POST /util/title`; optional `first_assistant_reply`), streaming indicator, user profile, memory and model settings access.
@@ -124,7 +126,7 @@ WorkprobaTitleBar          ← WorkprobaBrand, Capabilities hub, engine chip, pa
 
 **Chat** (`ChatView.vue`): grid composer (full-width field, `+` and send on bottom row), stream error banner above composer, "+" menu (attachments only), compact **Regards** chip when personas active, model/reasoning control, file drag-and-drop.
 
-**Capabilities** (`useCapabilities.ts`, `useShellSurfaces.ts`): product catalog maps capabilities to plugin activation (Tauri) and shell navigation (right panel tab, side chat). `activateAndOpen()` activates plugins then opens the documented home surface.
+**Capabilities** (`useCapabilities.ts`, `useShellSurfaces.ts`): product catalog maps capabilities to plugin activation (Tauri) and shell navigation (right panel tab, side chat). Opened from the organization environment (**Configure capabilities**), not from a title-bar button. `activateAndOpen()` activates plugins then opens the documented home surface.
 
 ## Office writers
 
@@ -134,12 +136,14 @@ Fixed agent tools generate native Office and PDF files in the project folder (Hu
 |---|---|---|
 | `write_docx` | `app/documents/writer.py` | Word documents |
 | `write_xlsx` | `app/documents/writer.py` | Excel workbooks |
-| `write_pdf` | `app/documents/writer.py` | PDF reports |
+| `write_pdf` | `app/documents/writer.py` | PDF: ReportLab A4 (`sections`) or Chromium HTML print (`slides`, 16:9 CSS `@page`) |
 | `write_pptx` | `app/documents/pptx_builder.py` | PowerPoint 16:9 decks |
 
 **PPTX** (`pptx_builder.py`): native 16:9 generation via `python-pptx`. Layouts: `title`, `section`, `bullets`, `two_column`, `kpi_row`, `quote`, `closing`. Themes: `improba` (default), `light`, `dark`. Hard cap: `MAX_PPTX_SLIDES = 60`.
 
-**Visual PPTX pipeline** (`pptx_svg.py` + `slides_html.py` + `slides_chromium.py`): optional high-fidelity path renders the deck as HTML, captures PNG pages via Chromium when available, then embeds images in the PPTX (`render_mode: visual`). If Chromium is missing or capture fails, the writer falls back to the editable native builder (`editable_fallback`). A light layout critique (`slides_critique.py`) runs before either path. Preview HTML for PPTX uses the same HTML deck (`wp-slide` / `wp-pptx-slide` classes).
+**Visual PPTX pipeline** (`pptx_svg.py` + `slides_html.py` + `slides_chromium.py` + `runtime_chromium.py`): high-fidelity path renders the deck as HTML, captures PNG pages via the **bundled** Chromium, then embeds images in the PPTX (`render_mode: visual`). If Chromium is missing or capture fails, the writer falls back to the editable native builder (`editable_fallback`). The same Chromium serves `write_pdf` HTML print (`prefer_css_page_size`) and the `workproba.browser` plugin. A light layout critique (`slides_critique.py`) runs before either path. Preview HTML for PPTX uses the same HTML deck (`wp-slide` / `wp-pptx-slide` classes).
+
+**Bundled Chromium (runtime contract):** Playwright **1.61.0** is inside the sidecar; browser binaries are a Tauri resource (`desktop/src-tauri/resources/ms-playwright/`, filled by `make fetch-chromium`). The shell sets `PLAYWRIGHT_BROWSERS_PATH`. Launch uses `channel='chromium'` (full Chrome for Testing / new headless). Fetch uses `playwright install chromium --no-shell` (headless-shell is not enough). Frozen builds never call `pip` / `playwright install`. `GET /health` reports `"chromium": "ready"|"missing"` (sidecar JSON only). The shell health badge (`ai_sidecar_status`) is TCP liveness of port `8765`, not that field. Packaging details: [desktop.md](./desktop.md#python-packaging-sidecar). End-user install: [installateurs.md](./installateurs.md).
 
 ## Attachments and document preview
 
@@ -150,7 +154,7 @@ Fixed agent tools generate native Office and PDF files in the project folder (Hu
 
 ## Plugins and capabilities
 
-Four builtin plugins; guided UX presents them as **activatable capabilities**. Order in the Capabilities hub: **Workproba Cloud** first (with a **collapsible** sub-capabilities zone: Project management, managed services such as Ihora), then Regards métier, then Navigation web. Org services from the control plane still use the API name `connectors`. Technical plugin details in advanced Settings → Extensions. See [plugins.md](./plugins.md), [capacites.md](./capacites.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
+Four builtin plugins; guided UX presents them as **activatable capabilities**. Entry: organization environment chip → **Configure capabilities**. Order in the hub: **Workproba Cloud** first (with a **collapsible** sub-capabilities zone: Project management, managed services such as Ihora), then Regards métier, then Navigation web. Org services from the control plane still use the API name `connectors`. Technical plugin details in advanced Settings → Extensions (builtin plugins cannot be toggled there). See [plugins.md](./plugins.md), [capacites.md](./capacites.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
 ### Per-space capabilities profile
 
@@ -380,8 +384,10 @@ front/src/
 │   └── PlanCard.vue               # multi-step plan approval
 ├── components/personas/
 │   └── SpecialistHandoffCard.vue  # compact specialist delegation card
+├── components/environment/
+│   └── EnvironmentDrawer.vue      # org chip drawer; Configure capabilities
 ├── components/capabilities/
-│   ├── CapabilitiesDrawer.vue     # hub Capacités
+│   ├── CapabilitiesDrawer.vue     # hub Capacités (from environment panel)
 │   ├── SpaceCapabilitiesPanel.vue # per-space wanted toggles
 │   └── SpaceCapabilityRow.vue
 ├── components/onboarding/
@@ -409,9 +415,10 @@ services/ai/app/
 ├── space_policy.py                # space_policy.json (approvalMode security/trust)
 ├── capabilities_profile.py        # capabilities.json load/save
 ├── capabilities_turn.py           # TurnCapabilitiesSnapshot (frozen allowlist)
+├── runtime_chromium.py            # probe + launch (channel=chromium, bundled binary)
 └── documents/
     ├── pptx_builder.py            # editable PPTX (write_pptx)
     ├── pptx_svg.py                # visual PPTX via HTML + Chromium
-    ├── slides_html.py             # HTML deck renderer
-    └── slides_chromium.py         # PNG capture / PDF helpers
+    ├── slides_html.py             # HTML deck renderer (16:9 @page)
+    └── slides_chromium.py         # PNG capture / PDF print (CSS page size)
 ```

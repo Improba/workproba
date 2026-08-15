@@ -1,8 +1,8 @@
 # Workproba plugins
 
-> **Last updated:** 06/08/2026 (agents métier P0–P4, streaming handoff `summon_specialist`)
+> **Last updated:** 15/08/2026 (bundled Chromium, Capabilities via organization environment)
 
-Workproba extends the agent core with a **plugin system** (technical layer): agent tools, HTTP endpoints, UI slots, and namespaced storage. User-facing discovery uses **activatable capabilities** (hub « Capacités », V2.2) — see [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
+Workproba extends the agent core with a **plugin system** (technical layer): agent tools, HTTP endpoints, UI slots, and namespaced storage. User-facing discovery uses **activatable capabilities** (organization environment → **Configure capabilities**, V2.2) — see [capacites.md](./capacites.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
 ## Implementation status (honest)
 
@@ -21,7 +21,7 @@ Only **`right_panel`** and **`side_chat`** slots are generalized via `usePluginS
 | `workproba.personas` | yes | Regards métier | Side chat; central view for crossed perspectives |
 | `workproba.projet` | no | Projets et livrables | Right panel, Project tab |
 | `workproba.browser` | no | Navigation web | Right panel, Browser tab |
-| `workproba.cloud` | no | Improba Cloud (under Projects) | CloudPanel : join, connecteurs, regards, projets |
+| `workproba.cloud` | no | Workproba Cloud | CloudPanel : join, connecteurs, regards, projets |
 
 Effective activation depends on Tauri settings (`active_plugins`). Enterprise presets can restrict the list (`plugins_allowed`).
 
@@ -59,7 +59,7 @@ Personas example:
 | Right panel | **Generalized** | `RightPanel.vue`, `usePluginSlots` | Active plugin tabs only (Project, Browser when enabled) — **no ghost tabs** for disabled modules |
 | Side chat | **Generalized** | `SideChatPanel.vue`, `PersonasSideChat.vue` | Regards métier opinion/discussion (`Ctrl+Shift+L`) |
 | Chat composer | Manual | `ChatView.vue` | `+` menu: attachments only ; chip **Regards** (three usages) when personas active |
-| Capabilities hub | **Delivered V2.2** | `CapabilitiesButton.vue`, `CapabilitiesDrawer.vue`, `useCapabilities.ts` | Titlebar drawer: discover, activate, open home surface |
+| Capabilities hub | **Delivered V2.2** | `EnvironmentDrawer.vue`, `CapabilitiesDrawer.vue`, `useCapabilities.ts` | Organization environment → **Configure capabilities**; builtin plugins are not toggled in Settings → Extensions |
 | Settings | Static | `PluginsPanel.vue` | Advanced mode: **Extensions** (technical details) |
 
 Useful shortcuts: `Ctrl+B` (right panel), `Ctrl+Shift+L` (side chat).
@@ -150,7 +150,7 @@ See [architecture-cloud.md](../../workproba-improba/roadmaps/architecture-cloud.
 
 ## Experimental plugins
 
-- **Browser**: see [browser.md](./browser.md) (opt-in, Playwright backend)
+- **Browser**: see [browser.md](./browser.md) (opt-in, bundled Chromium, Capabilities hub)
 
 ## Local plugins
 

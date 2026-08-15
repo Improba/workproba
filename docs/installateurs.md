@@ -20,6 +20,8 @@ Installers are **not yet digitally signed**. Official signing (Windows certifica
 
 The artificial intelligence engine is **bundled** in the installer: you do not need to install Python, Node.js, or other development tools.
 
+The installer also includes an **embedded browser engine**. Workproba uses it to produce PDF reports and, if you enable **Web navigation** in Capabilities, to browse pages. Nothing extra is downloaded at first launch. The installer file is therefore larger (a few hundred MB).
+
 ---
 
 ## Where to download
@@ -62,6 +64,8 @@ Windows may show:
 
 The app appears in the Start menu under **Workproba**. On first startup, the assistant asks for your name and organization.
 
+When you generate a PDF or use web navigation, Windows Task Manager may briefly show a process such as **Google Chrome for Testing**. That is the engine inside Workproba, not a separate Chrome install.
+
 ---
 
 ## macOS
@@ -100,7 +104,9 @@ This command removes the quarantine attribute macOS places on files downloaded f
 
 ### Minimum macOS version
 
-Workproba requires **macOS 10.13** (High Sierra) or newer.
+Workproba requires **macOS 12** (Monterey) or newer (the installer includes the embedded browser engine).
+
+When you generate a PDF or use web navigation, Activity Monitor may briefly show **Google Chrome for Testing**. That is Workproba's engine, not a separate Chrome install.
 
 ---
 
@@ -139,9 +145,11 @@ chmod +x workproba_*.AppImage
 
 The AppImage does not install into the system: it is a single file you can place anywhere (Desktop, home folder, USB drive). Signature warnings generally do not apply on Linux.
 
+If PDF output looks basic or web navigation cannot start, install common desktop libraries (NSS, GBM, ALSA). On Debian/Ubuntu: `sudo apt-get install -f` after the `.deb`, or install `libnss3 libgbm1 libasound2` for an AppImage.
+
 ### Linux dependencies
 
-The `.deb` package declares its dependencies automatically (`libwebkit2gtk`, taskbar indicator). The AppImage bundles most required libraries.
+The `.deb` package declares its dependencies automatically (WebKit, taskbar indicator, and libraries needed by the embedded browser). The AppImage does not include all of those system libraries: if PDF or web navigation fails, install `libnss3 libgbm1 libasound2`.
 
 ---
 

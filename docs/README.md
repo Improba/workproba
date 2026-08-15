@@ -15,14 +15,14 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 
 ## Installation (end users)
 
-- **[installateurs.md](./installateurs.md)**: download and install Workproba (Windows, macOS, Linux), SmartScreen/Gatekeeper warnings, uninstall
-- **[signing.md](./signing.md)**: future code signing procedure (Windows Authenticode, macOS notarization)
+- **[installateurs.md](./installateurs.md)**: download and install Workproba (Windows, macOS, Linux), SmartScreen/Gatekeeper warnings, uninstall, bundled Chromium (no extra download)
+- **[signing.md](./signing.md)**: future code signing procedure (Windows Authenticode, macOS notarization, nested Chrome for Testing)
 
 ## Product framing
 
 - **[intention.md](./intention.md)**: Product intent, desktop pivot, Improba Cloud scope (see roadmaps)
 - **[plan.md](./plan.md)**: Plan agents métier / Regard, config par tenant, sync cloud → UI, phasage P0–P4 + streaming handoff
-- **[desktop.md](./desktop.md)**: Desktop architecture, phasing, message flow, phase validation
+- **[desktop.md](./desktop.md)**: Desktop architecture, phasing, message flow, sidecar packaging (Playwright 1.61 + bundled Chromium)
 
 ## Technical architecture
 
@@ -33,7 +33,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 - **[capacites.md](./capacites.md)**: Activatable capabilities hub + **per-space profile** (guided mode, FR/EN UI)
 - **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, hybrid ranking, embedding cache, promotion, cross-session recall
 - **[plugins.md](./plugins.md)**: Plugin system, capabilities, Regards métier — honest implementation status
-- **[browser.md](./browser.md)**: Browser plugin (Playwright, agent tools, live view, security)
+- **[browser.md](./browser.md)**: Browser plugin (bundled Chromium `channel=chromium`, Capabilities via organization environment, agent tools, live view, security)
 - **[web-search.md](./web-search.md)**: Core `web_search` tool (Mistral Conversations API, citations, network guard)
 
 ## Product specs (roadmaps)
@@ -49,7 +49,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 ## Desktop onboarding & cloud auth
 
 - **[architecture.md § Improba Cloud desktop auth UX](./architecture.md#improba-cloud-desktop-auth-ux)**: `EngineOnboardingWizard`, `CloudLoginModal`, `EnrollCloudModal`, `cloudWebUrls`
-- **[architecture.md § Office writers](./architecture.md#office-writers)**: `write_pptx`, layouts, themes, `MAX_PPTX_SLIDES`, HTML/Chromium visual path
+- **[architecture.md § Office writers](./architecture.md#office-writers)**: `write_pptx`, layouts, themes, `MAX_PPTX_SLIDES`, HTML/Chromium visual path, `write_pdf` slides 16:9 vs ReportLab A4 sections
 - **[architecture.md § Per-space capabilities](./architecture.md#per-space-capabilities-profile)**: `capabilities.json`, turn freeze, managed tools
 - **[architecture.md § Human approval](./architecture.md#human-approval-and-work-events)**: `space_policy.json`, Sécurité / Confiance, `AutoApproveGate`
 - **[capacites.md](./capacites.md)**: hub + space profile (product view)

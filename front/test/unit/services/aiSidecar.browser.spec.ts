@@ -13,6 +13,7 @@ import {
   browserAction,
   browserNavigate,
   isBrowserLockedError,
+  isBrowserChromiumMissingError,
 } from '@services/aiSidecar';
 
 describe('aiSidecar browser', () => {
@@ -73,5 +74,16 @@ describe('aiSidecar browser', () => {
     expect(isBrowserLockedError('Navigateur interdit en mode verrouillé')).toBe(true);
     expect(isBrowserLockedError('forbidden in locked mode')).toBe(true);
     expect(isBrowserLockedError('network error')).toBe(false);
+  });
+
+  it('isBrowserChromiumMissingError détecte sans tenir compte de la casse', () => {
+    expect(isBrowserChromiumMissingError('browser_not_available')).toBe(true);
+    expect(isBrowserChromiumMissingError('Chromium missing from the application')).toBe(true);
+    expect(
+      isBrowserChromiumMissingError(
+        'Réinstallez Workproba depuis la source officielle.',
+      ),
+    ).toBe(true);
+    expect(isBrowserChromiumMissingError('timeout')).toBe(false);
   });
 });

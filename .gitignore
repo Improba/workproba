@@ -76,5 +76,9 @@ AGENTS.md
 desktop/src-tauri/binaries/workproba-ai-*
 !desktop/src-tauri/binaries/.gitkeep
 
+# Chromium Playwright bundlé (fetch à la CI / make fetch-chromium)
+desktop/src-tauri/resources/ms-playwright/**
+!desktop/src-tauri/resources/ms-playwright/.gitkeep
+
 # CI staging / release bundles
 artifacts/

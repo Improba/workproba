@@ -39,6 +39,10 @@ vi.mock('@services/aiSidecar', () => ({
     locale: 'fr',
   })),
   isBrowserLockedError: (message: string) => message.includes('browser_locked'),
+  isBrowserChromiumMissingError: (message: string) =>
+    message.toLowerCase().includes('chromium')
+    || message.includes('browser_not_available')
+    || message.toLowerCase().includes('reinstall workproba'),
 }));
 
 const getPluginDataDir = vi.fn().mockResolvedValue('/data/plugins/workproba.browser');
@@ -146,6 +150,15 @@ describe('useBrowser', () => {
       expect.objectContaining({ settingsLocked: false }),
     );
     expect(error.value).toBe('browser_locked');
+  });
+
+  it('navigate mappe une absence de navigateur intégré', async () => {
+    browserMocks.browserNavigate.mockRejectedValueOnce(
+      new Error('The built-in browser is not available. Reinstall Workproba from the official source.'),
+    );
+    const { navigate, error } = useBrowser();
+    await navigate('https://example.com');
+    expect(error.value).toBe('browser_not_available');
   });
 
   it('goBack appelle browserAction avec action back', async () => {

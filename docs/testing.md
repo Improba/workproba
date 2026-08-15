@@ -34,7 +34,7 @@ Framework: **pytest** + `pytest-asyncio`. Offline tests are deterministic (no LL
 - `tests/test_space_policy.py`, `test_auto_approve_gate.py`: `space_policy.json` (`security` / `trust`), `GET`/`PUT /workspace/policy`, `AutoApproveGate`
 - `tests/test_unexpected_model_retry.py`: `UnexpectedModelBehavior` retry vs `ContentFilterError` / irreversible tools
 - `tests/test_managed_connectors.py`: managed tools registration, allowlist freeze, invoke guards, human summaries / user resolution
-- `tests/test_slides_html.py`, `test_slides_chromium.py`, `test_slides_critique.py`, `test_slides_schema.py`: HTML deck render, Chromium capture, layout critique
+- `tests/test_slides_html.py`, `test_slides_chromium.py`, `test_slides_critique.py`, `test_slides_schema.py`, `test_runtime_chromium.py`: HTML deck render, layout critique, Chromium probe (revision dir `chromium-<rev>`, ignore headless-shell-only, frozen pin vs `pyproject.toml`, launch kwargs `channel=chromium` without `executable_path`, `GET /health` `chromium` in `{ready, missing}`)
 - `tests/test_attachments.py`, `test_reprocess_attachment.py`: attachments
 - `tests/test_audit.py`, `test_audit_export.py`: audit log
 - `tests/test_versions.py`: file versions
@@ -86,7 +86,7 @@ WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 
 ### Current coverage
 
-Run `pytest -q` for the up-to-date count (**~900+ offline tests** + a few skips, plus live/eval suites). Covers: agent, approval gate (approve_remaining, trust, preparing, interrupted tools, **space policy / AutoApproveGate**), unexpected-model retry, work events, scoped memory (hybrid ranking + embedding cache), plugins, managed connectors, **specialist streaming / handoff**, per-space capabilities, documents / slides HTML, audit, attachments, RAG, HTTP SSE, web search.
+Run `pytest -q` for the up-to-date count (**~900+ offline tests** + a few skips, plus live/eval suites). Covers: agent, approval gate (approve_remaining, trust, preparing, interrupted tools, **space policy / AutoApproveGate**), unexpected-model retry, work events, scoped memory (hybrid ranking + embedding cache), plugins, managed connectors, **specialist streaming / handoff**, per-space capabilities, documents / slides HTML, bundled Chromium probe, audit, attachments, RAG, HTTP SSE, web search.
 
 ## Frontend (`front/`)
 
@@ -127,7 +127,8 @@ yarn test:e2e                  # Playwright (smoke)
 - `markdownStreaming.spec.ts`: block/tail split (fences, paragraphs).
 - `spaceTerminology.spec.ts`: Space UX i18n (FR/EN).
 - `useUiTheme.spec.ts`, `uiTheme.spec.ts`: theme persistence (Tauri + localStorage boot).
-- `useSidecarHealth.spec.ts`: sidecar health polling (connected / error / streaming).
+- `useSidecarHealth.spec.ts`: sidecar health polling (connected / error / streaming). TCP liveness of the sidecar, not the `GET /health` `chromium` field.
+- `aiSidecar.browser.spec.ts`, `useBrowser.spec.ts`: browser plugin client, Chromium-missing mapping (`isBrowserChromiumMissingError`).
 - `providerSetModels.spec.ts`, `providerSetsEnrich.spec.ts`, `llmRouting.spec.ts`: provider set catalogue, reasoning clamp, session overrides (see [provider-sets-reasoning.md](./provider-sets-reasoning.md)).
 
 ### Test selection by risk
@@ -139,7 +140,7 @@ yarn test:e2e                  # Playwright (smoke)
 
 ## Tauri shell (`desktop/`)
 
-Rust unit tests (`cargo test --lib`, 32 tests): workspace migration `workspaces/` → `spaces/`, provider set migration, sidecar status helpers, plugin registry.
+Rust unit tests (`cargo test --lib`): workspace migration `workspaces/` → `spaces/`, provider set migration, sidecar status helpers, plugin registry, bundled Chromium dir probe (`chromium-*` vs headless-shell-only).
 
 ```bash
 cd desktop/src-tauri && cargo test --lib

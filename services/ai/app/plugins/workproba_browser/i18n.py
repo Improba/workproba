@@ -56,7 +56,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
             },
         },
         "errors": {
-            "browser_not_available": "Le navigateur intégré n'est pas disponible",
+            "browser_not_available": (
+                "Le navigateur intégré n'est pas disponible. "
+                "Réinstallez Workproba depuis la source officielle."
+            ),
             "browser_url_scheme_forbidden": "Schéma d'URL non autorisé (http/https uniquement)",
             "browser_url_invalid": "URL invalide",
             "browser_session_inactive": "Aucune session browser active",
@@ -118,7 +121,10 @@ MESSAGES: dict[str, dict[str, Any]] = {
             },
         },
         "errors": {
-            "browser_not_available": "Embedded browser is not available",
+            "browser_not_available": (
+                "The built-in browser is not available. "
+                "Reinstall Workproba from the official source."
+            ),
             "browser_url_scheme_forbidden": "URL scheme not allowed (http/https only)",
             "browser_url_invalid": "Invalid URL",
             "browser_session_inactive": "No active browser session",

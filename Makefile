@@ -1,4 +1,4 @@
-.PHONY: help dev dev-all dev-ai dev-front dev-desktop build-sidecar build-desktop
+.PHONY: help dev dev-all dev-ai dev-front dev-desktop build-sidecar build-desktop fetch-chromium
 
 AI_DIR = services/ai
 FRONT_DIR = front
@@ -13,8 +13,9 @@ help:
 	@echo '  dev-ai          - Sidecar Python seul (port 8765)'
 	@echo '  dev-front       - Quasar dev server seul (port 5053)'
 	@echo '  dev-desktop     - Tauri + Quasar (sidecar à lancer à part)'
+	@echo '  fetch-chromium  - Télécharger Chromium Playwright dans les resources Tauri'
 	@echo '  build-sidecar   - Empaqueter le sidecar Python (PyInstaller)'
-	@echo '  build-desktop   - Sidecar + installateurs Tauri (plateforme courante)'
+	@echo '  build-desktop   - Chromium + sidecar + installateurs Tauri (plateforme courante)'
 	@echo ''
 
 dev dev-all:
@@ -32,5 +33,8 @@ dev-desktop:
 build-sidecar:
 	bash scripts/build-sidecar.sh
 
-build-desktop: build-sidecar
+fetch-chromium:
+	bash scripts/fetch-chromium.sh
+
+build-desktop: build-sidecar fetch-chromium
 	cd $(DESKTOP_DIR) && yarn build

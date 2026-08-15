@@ -1,7 +1,7 @@
 # Workproba Desktop (application locale)
 
 > **Status:** Product decision: desktop pivot  
-> **Last updated:** 23/07/2026  
+> **Last updated:** 15/08/2026  
 > **Terminology:** user-facing **space** (FR: **espace**) = one local folder you work in
 
 ## Decision
@@ -11,7 +11,7 @@ Workproba becomes a **desktop application** (Claude Cowork style) working on loc
 | OS | Target formats |
 |---|---|
 | macOS | `.app`, `.dmg` |
-| Linux | `.deb`, `.rpm`, `.AppImage` |
+| Linux | `.deb`, `.AppImage` |
 | Windows | `.msi`, `.exe` (NSIS) |
 
 Chosen technology: **Tauri 2** (lightweight Rust shell + system webview + existing Quasar UI).
@@ -34,7 +34,7 @@ Main UI concepts:
 | **Conversation** | Exchange with the Imp |
 | **Memory** | What the tool knows about the space (per-space RAG + user/project memories) |
 | **Regards métier** | Simulated professional perspectives (plugin `workproba.personas`: opinion, crossed perspectives, discussion) |
-| **Capacités** | Activatable integrated features (hub in titlebar, **delivered V2.2 PR 2–3**); technical plugins under the hood |
+| **Capacités** | Activatable integrated features (organization environment → **Configure capabilities**; **delivered V2.2 PR 2–3**); technical plugins under the hood |
 
 ## Desktop architecture
 
@@ -141,9 +141,15 @@ Workproba metadata lives in the **application folder**, not in the client folder
 
 ## Python packaging (sidecar)
 
-In production: PyInstaller → `workproba-ai-<triple>` binary in `desktop/src-tauri/binaries/`, referenced by `bundle.externalBin`.
+In production: PyInstaller → `workproba-ai-<triple>` binary in `desktop/src-tauri/binaries/`, referenced by `bundle.externalBin`. The **Playwright Python driver** is inside that binary (`playwright==1.61.0`). **Chromium binaries** are not: `scripts/fetch-chromium.sh` (`make fetch-chromium`) installs the platform Chrome for Testing into `desktop/src-tauri/resources/ms-playwright/` (gitignored except `.gitkeep`). Tauri copies the tree via `bundle.resources`. Rust sets `PLAYWRIGHT_BROWSERS_PATH` and `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` when a `chromium-<revision>` directory is present.
 
-In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
+Fetch uses `playwright install chromium --no-shell` so the installer ships the **full** browser (needed for `channel='chromium'`). The headless-shell build is not sufficient. Frozen sidecars never call `pip` or `playwright install`. `GET /health` includes `"chromium": "ready"|"missing"`.
+
+`make build-desktop` runs sidecar packaging, Chromium fetch, then Tauri installers. CI (`desktop-release.yml`) caches the Chromium tree per platform + `pyproject.toml` hash and skips refetch when the marker version matches.
+
+In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`). Optional `make fetch-chromium` so PDF HTML and the browser plugin use the same tree as production.
+
+End users: [installateurs.md](./installateurs.md). Signing nested Chromium on macOS: [signing.md](./signing.md). Runtime probe/launch: [architecture.md § Office writers](./architecture.md#office-writers).
 
 ## Phasing
 
@@ -183,6 +189,7 @@ In development: `make dev-ai` or `services/ai/run_dev.sh` (port `8765`).
 - CloudPanel (join, capacités managées, regards, projets), sync artefacts publiés, org LLM (DeviceBearer) ; quota illimité sans ligne `llm_quota_limit`
 - Secrets org + overrides user connecteurs : persistés PostgreSQL (+ AES-GCM pour secrets) ; UI admin org allowlist/secrets/overrides
 - PPTX : builder natif éditable + pipeline HTML/Chromium (`pptx_svg`) avec repli
+- Chromium bundlé (15/08) : Playwright 1.61, `channel=chromium`, resource Tauri, pas de `pip` / téléchargement runtime ; `GET /health` `chromium: ready|missing`
 
 **Ouvert** : SSO Microsoft, Mode B deploy, smoke E2E HTTP, presets connecteurs complets.
 

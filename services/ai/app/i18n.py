@@ -492,8 +492,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
         "browser": {
             "status_inactive": "Aucune page ouverte",
             "install_required": (
-                "Le navigateur intégré nécessite Playwright et Chromium. "
-                "Activez le plugin browser pour les installer."
+                "Le navigateur intégré n'est pas disponible. "
+                "Réinstallez Workproba depuis la source officielle."
             ),
         },
         "audit": {
@@ -1115,8 +1115,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
         "browser": {
             "status_inactive": "No page open",
             "install_required": (
-                "The embedded browser requires Playwright and Chromium. "
-                "Enable the browser plugin to install them."
+                "The built-in browser is not available. "
+                "Reinstall Workproba from the official source."
             ),
         },
         "audit": {

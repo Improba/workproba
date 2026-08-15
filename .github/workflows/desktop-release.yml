@@ -100,6 +100,23 @@ jobs:
         shell: bash
         run: bash scripts/smoke-test-sidecar.sh
 
+      - name: Cache bundled Chromium
+        uses: actions/cache@v4
+        with:
+          path: desktop/src-tauri/resources/ms-playwright
+          key: chromium-${{ matrix.platform }}-${{ hashFiles('services/ai/pyproject.toml') }}
+
+      - name: Fetch bundled Chromium
+        shell: bash
+        env:
+          CI: 'true'
+        run: bash scripts/fetch-chromium.sh
+
+      - name: Sign nested Chromium helpers (no-op without cert)
+        if: startsWith(matrix.platform, 'macos-')
+        shell: bash
+        run: bash scripts/sign-macos-nested.sh desktop/src-tauri/resources/ms-playwright
+
       - name: Build Tauri app
         working-directory: desktop
         shell: bash
@@ -160,7 +177,7 @@ jobs:
             | Windows | `.msi` / `.exe` (NSIS) |
             | Linux | `.deb` / `.AppImage` |
 
-            Le moteur IA Python est embarqué ; aucune dépendance de développement requise côté utilisateur.
+            Le moteur IA Python et Chromium (Playwright) sont embarqués ; aucune dépendance de développement requise côté utilisateur.
 
             **Intégrité :** vérifiez `SHA256SUMS.txt` avant installation.
 

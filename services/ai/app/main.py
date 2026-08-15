@@ -144,7 +144,13 @@ async def validation_exception_handler(
 @app.get("/")
 @app.get("/health")
 async def health() -> dict[str, str]:
-    return {"status": "ok", "service": "workproba-ai"}
+    from app.runtime_chromium import health_chromium_status
+
+    return {
+        "status": "ok",
+        "service": "workproba-ai",
+        "chromium": health_chromium_status(),
+    }
 
 
 class LlmTestResult(BaseModel):

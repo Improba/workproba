@@ -148,7 +148,9 @@ def test_health_endpoint() -> None:
     with TestClient(mainmod.app) as client:
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json()["status"] == "ok"
+        body = resp.json()
+        assert body["status"] == "ok"
+        assert body["chromium"] in {"ready", "missing"}
 
 
 def test_cors_preflight_options_passes_without_secret() -> None:

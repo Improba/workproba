@@ -2,35 +2,27 @@
 
 from __future__ import annotations
 
+from app.runtime_chromium import chromium_available, chromium_launch_kwargs
+
 _DEFAULT_TIMEOUT_MS = 30_000
 _VIEWPORT = {"width": 1280, "height": 720}
 
 
-def chromium_available() -> bool:
-    """True si playwright est importable (chromium peut être absent en CI)."""
-    try:
-        import playwright  # noqa: F401
-
-        return True
-    except ImportError:
-        return False
-
-
 def html_to_pdf_bytes(html: str, *, timeout_ms: int = _DEFAULT_TIMEOUT_MS) -> bytes:
-    """Convertit un document HTML en PDF via Chromium."""
+    """Convertit un document HTML en PDF via Chromium.
+
+    HTML local (pas de réseau) : ``load`` plutôt que ``networkidle``.
+    Le format de page vient du CSS ``@page``.
+    """
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        browser = playwright.chromium.launch(**chromium_launch_kwargs())
         try:
             page = browser.new_page(viewport=_VIEWPORT)
-            page.set_content(html, wait_until="networkidle", timeout=timeout_ms)
-            return page.pdf(
-                width="13.333in",
-                height="7.5in",
-                print_background=True,
-                margin={"top": "0", "right": "0", "bottom": "0", "left": "0"},
-            )
+            page.set_content(html, wait_until="load", timeout=timeout_ms)
+            page.emulate_media(media="print")
+            return page.pdf(print_background=True, prefer_css_page_size=True)
         finally:
             browser.close()
 
@@ -40,10 +32,10 @@ def html_slides_to_pngs(html: str, *, timeout_ms: int = _DEFAULT_TIMEOUT_MS) -> 
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch()
+        browser = playwright.chromium.launch(**chromium_launch_kwargs())
         try:
             page = browser.new_page(viewport=_VIEWPORT)
-            page.set_content(html, wait_until="networkidle", timeout=timeout_ms)
+            page.set_content(html, wait_until="load", timeout=timeout_ms)
             locator = page.locator(".wp-slide")
             count = locator.count()
             return [

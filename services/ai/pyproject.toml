@@ -19,6 +19,7 @@ dependencies = [
   "pydantic",
   "pydantic-ai",
   "pydantic-settings",
+  "playwright==1.61.0",
   "reportlab",
   "sqlite-vec",
   "sse-starlette",
@@ -35,10 +36,8 @@ dev = [
   "pytest-asyncio>=0.23",
   "httpx",
 ]
-# optional, browser plugin — installed lazily on browser activation
-browser = [
-  "playwright>=1.49",
-]
+# optional extra kept for `pip install -e ".[browser]"` (no-op: Chromium is bundled)
+browser = []
 build = [
   "pyinstaller>=6",
 ]

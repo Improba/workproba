@@ -1465,6 +1465,17 @@ export function isBrowserLockedError(message: string): boolean {
   );
 }
 
+export function isBrowserChromiumMissingError(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes('browser_not_available')
+    || lower.includes('chromium')
+    || lower.includes('playwright')
+    || lower.includes('réinstallez workproba')
+    || lower.includes('reinstall workproba')
+  );
+}
+
 export async function fetchPersonasSets(
   pluginDataDir: string,
 ): Promise<PersonaSet[]> {

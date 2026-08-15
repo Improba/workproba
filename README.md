@@ -20,7 +20,7 @@ AI is fragmenting: a copilot in every app, contexts that never overlap, features
 - **Activatable capabilities**: **Workproba Cloud** first (collapsible sub-capabilities: **Project management**, managed services such as **Ihora**, **Pennylane**, **GazFlow**), Regards métier, web navigation. **Per-space** wanted profile (`capabilities.json`). Managed connectors via Improba Cloud Mode A (`managed_*` tools in operative runs). Integrated plugins; not a third-party extension marketplace in V2.
 - **Agents métier & Regards**: builtin perspectives plus **org-published catalogs** synced from Workproba Cloud (`specialists[]`, signed bundle). UI: opinions, meetings, discussions; **Regard** = read-only consultative mode. The main assistant (**Imp**) delegates via `summon_specialist` with a **live streaming** inline handoff card (thinking / tools / answer behind « Voir le détail », Human Approval Gate when needed).
 - **Spaces**: sidebar, right panel (files, preview, active capabilities, CloudPanel), side chat for Regards, space settings for capabilities and approval policy
-- **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write; native PPTX generation (`write_pptx`) with optional HTML/Chromium visual pipeline
+- **Documents**: HTML/text preview via sidecar, images via Tauri protocol-asset, versions before write; native PPTX generation (`write_pptx`) with HTML/Chromium visual pipeline. Chromium is bundled in the installer (no extra download at first launch).
 - **Branding**: `WorkprobaBrand` mark and logo assets in the shell
 - **Improba Cloud desktop auth**: first-run onboarding (`EngineOnboardingWizard`), cloud login (`POST /devices/login` → exchange to durable DeviceBearer `wp_dev_*`), device enroll (`join_token` → DeviceBearer)
 
@@ -33,6 +33,8 @@ See [LICENSING.md](./LICENSING.md) for the full guide, FAQ, and contacts.
 ## First-time installation
 
 Download the installer for your system (Windows, macOS, or Linux) from the repository **Releases** page. Installers are not yet digitally signed: Windows and macOS show a security warning on first launch. This is expected.
+
+The installer includes the AI sidecar and the **embedded browser engine** (Chrome for Testing). Nothing extra is downloaded when you generate a PDF or enable Web navigation. The installer file is therefore larger (a few hundred MB).
 
 Step-by-step guide (SmartScreen, Gatekeeper, `.deb`, AppImage, uninstall): **[docs/installateurs.md](./docs/installateurs.md)**.
 
@@ -126,7 +128,7 @@ Or: `bash scripts/dev.sh` then `cd desktop && yarn dev`
 ### Build installer
 
 ```bash
-make build-desktop    # PyInstaller sidecar + Tauri installers
+make build-desktop    # Chromium + sidecar PyInstaller + Tauri installers
 ```
 
 Publish a release: `./scripts/create-tag.sh` (creates tag `vX.Y.Z`, triggers GitHub Actions). Installers are unsigned for now; see [docs/signing.md](./docs/signing.md).

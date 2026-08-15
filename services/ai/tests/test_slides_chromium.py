@@ -11,7 +11,7 @@ def test_chromium_available_is_bool() -> None:
     assert isinstance(chromium_available(), bool)
 
 
-@pytest.mark.skipif(not chromium_available(), reason="playwright not installed")
+@pytest.mark.skipif(not chromium_available(), reason="bundled Chromium not available")
 def test_html_slides_to_pngs_when_chromium_available() -> None:
     from app.documents.slides_chromium import html_slides_to_pngs
     from app.documents.slides_html import render_deck_html

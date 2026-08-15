@@ -83,20 +83,21 @@ cd ../services/ai && ./run_dev.sh
 
 Chat calls the Python sidecar **directly** over HTTP (`127.0.0.1:8765`), without going through Rust.
 
-In dev, Tauri also tries to **start the sidecar automatically** (`try_spawn_dev_uvicorn`): it prefers `services/ai/.venv/bin/python -m uvicorn`, then `services/ai/.venv/bin/uvicorn`, with fallback to system `python3 -m uvicorn`. The `ai_sidecar_status` command runs a TCP liveness check on `127.0.0.1:8765` and feeds the front health badge (`useSidecarHealth`).
+In dev, Tauri also tries to **start the sidecar automatically** (`try_spawn_dev_uvicorn`): it prefers `services/ai/.venv/bin/python -m uvicorn`, then `services/ai/.venv/bin/uvicorn`, with fallback to system `python3 -m uvicorn`. The `ai_sidecar_status` command runs a TCP liveness check on `127.0.0.1:8765` and feeds the front health badge (`useSidecarHealth`). That badge does not reflect `GET /health` `"chromium": "ready"|"missing"`.
 
 ## Multi-platform build
 
 ```bash
-make build-desktop    # sidecar PyInstaller + Tauri installers (current platform)
+make build-desktop    # Chromium + sidecar PyInstaller + Tauri installers (current platform)
 # or step by step:
 make build-sidecar
+make fetch-chromium
 cd desktop && yarn build
 ```
 
 CI builds unsigned installers on GitHub when a `vX.Y.Z` tag is pushed (`./scripts/create-tag.sh`). See [docs/signing.md](../docs/signing.md) for certificate setup.
 
-Python sidecar packaging: `scripts/build-sidecar.sh` → `workproba-ai-<triple>` in `desktop/src-tauri/binaries/`, referenced by `bundle.externalBin`.
+Python sidecar packaging: `scripts/build-sidecar.sh` → `workproba-ai-<triple>` in `desktop/src-tauri/binaries/`, referenced by `bundle.externalBin`. Chromium binaries: `make fetch-chromium` → `src-tauri/resources/ms-playwright/` (gitignored except `.gitkeep`). Rust sets `PLAYWRIGHT_BROWSERS_PATH` when a `chromium-<revision>` directory exists.
 
 ## Tauri commands exposed to the front
 
@@ -133,8 +134,10 @@ desktop/
 │   │   ├── main.rs
 │   │   ├── lib.rs
 │   │   ├── commands/project.rs   # filesystem + project folder
-│   │   └── sidecar.rs            # Python launch
+│   │   └── sidecar.rs            # Python launch + PLAYWRIGHT_BROWSERS_PATH
 │   ├── binaries/                 # packaged sidecars (CI build)
+│   ├── resources/
+│   │   └── ms-playwright/        # Chrome for Testing (gitignored except .gitkeep)
 │   ├── capabilities/
 │   └── tauri.conf.json
 └── README.md

@@ -1,16 +1,16 @@
 # Browser plugin (`workproba.browser`)
 
-> **Capability (guided UI):** Navigation web — right panel tab when active. Hub Capacités for discovery (**V2.2 PR 2–3**). See [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
+> **Capability (guided UI):** Navigation web — right panel tab when active. Discovery: organization environment → **Configure capabilities** (not Settings → Extensions). See [capacites.md](./capacites.md) and [capacites-ux-v2.2.md](../../workproba-improba/roadmaps/capacites-ux-v2.2.md).
 
-> **Last updated:** 15 Jul 2026  
+> **Last updated:** 15/08/2026  
 > **Status:** shipped (experimental, opt-in, disabled by default), P2 differentiation priority
 
-The Browser plugin lets the AI assistant browse the web (http/https), interact with pages, and show the user what it is doing. It is **not** a primary browser or a native Chrome webview: it runs a **Playwright Chromium headless** session with visual feedback via JPEG screenshots and an accessibility tree.
+The Browser plugin lets the AI assistant browse the web (http/https), interact with pages, and show the user what it is doing. It is **not** a primary browser or a native Chrome webview: it runs a **Playwright Chromium** session (`channel='chromium'`, headless) with visual feedback via JPEG screenshots and an accessibility tree. The same **bundled** Chrome for Testing build serves PDF HTML print and navigation. Frozen builds never call `pip` or `playwright install`.
 
 ## Enabling the plugin
 
-1. **Settings → Plugins**: enable `workproba.browser`.
-2. **First activation**: onboarding notification (Playwright + Chromium download, ~30 s, network required).
+1. Open the **organization environment** (title-bar chip), then **Configure capabilities**, and enable **Web navigation** (Activate and open). The right panel shows the Browser tab.
+2. The browser engine is already in the installer (no download on first use). If it cannot start, reinstall Workproba from the official source. Builtin plugins cannot be toggled under Settings → Extensions.
 3. **Locked mode (enterprise)**: IT can deny the plugin (`permissions_network: false` → HTTP 403 on browser endpoints and agent tools blocked).
 
 Plugin data: `{app_data}/plugins/workproba.browser/` (isolated Chromium profile).
@@ -28,7 +28,8 @@ useChatStream ──SSE──► POST /agent/turn
     │                 (browser_* tools if plugin active)
     │                      │
     │                      ▼
-    │                 BrowserEngine (Playwright headless)
+    │                 BrowserEngine (Playwright, channel=chromium)
+    │                 runtime_chromium.py (bundled binary)
     │                      │
     ├── onBrowserToolCall ◄┘ tool_call_result (success only)
     │
@@ -180,6 +181,7 @@ browser_navigate tool + workspace_data_dir
 | Layer | Files |
 |---|---|
 | Engine | `services/ai/app/plugins/workproba_browser/browser.py` |
+| Chromium runtime | `services/ai/app/runtime_chromium.py` |
 | Agent tools | `services/ai/app/plugins/workproba_browser/plugin.py` |
 | Manifest | `services/ai/app/plugins/workproba_browser/manifest.py` |
 | HTTP | `services/ai/app/main.py` (routes `/plugins/browser/*`) |
@@ -204,7 +206,9 @@ cd front && npm run test:unit -- test/unit/composables/useBrowser.spec.ts \
   test/unit/services/aiSidecar.browser.spec.ts
 ```
 
-Main coverage: forbidden URLs, locked mode, 8 agent tools, navigate audit, bbox on click, screenshot limits, piloting pause, SSE front wiring, history sanitization, error path (no panel update on `is_error`).
+Main coverage: forbidden URLs, locked mode, 8 agent tools, navigate audit, bbox on click, screenshot limits, piloting pause, SSE front wiring, history sanitization, error path (no panel update on `is_error`), Chromium-missing mapping (`isBrowserChromiumMissingError` → `browser_not_available`).
+
+Sidecar probe (no browser launch): `tests/test_runtime_chromium.py`. Packaging: [desktop.md](./desktop.md#python-packaging-sidecar).
 
 ## Known residual risks (non-blocking)
 
@@ -227,4 +231,5 @@ Main coverage: forbidden URLs, locked mode, 8 agent tools, navigate audit, bbox 
 
 - [plugins.md](./plugins.md): global plugin system
 - [services/ai/README.md](../services/ai/README.md): sidecar endpoint catalog
+- [desktop.md](./desktop.md): bundled Chromium packaging
 - Roadmap: `workproba-improba/roadmaps/cibles-vagues.md` (Wave 10)

@@ -5,8 +5,6 @@ from __future__ import annotations
 import asyncio
 import base64
 import logging
-import subprocess
-import sys
 from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
@@ -14,6 +12,11 @@ from urllib.parse import urlparse
 from app.i18n import t
 from app.plugins.registry import PLUGIN_WORKPROBA_BROWSER, resolve_plugin_data_dir
 from app.plugins.workproba_browser import manifest
+from app.runtime_chromium import (
+    ChromiumUnavailable,
+    chromium_launch_kwargs,
+    require_chromium,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -76,33 +79,12 @@ def set_engine_factory(factory: type[BrowserEngine] | None) -> None:
 
 
 def ensure_playwright_installed(*, locale: str = "fr") -> None:
-    """Vérifie playwright ; tente une installation lazy si absent."""
+    """Vérifie Playwright + Chromium (bundlé en prod, install dev si besoin)."""
+    _ = locale
     try:
-        import playwright  # noqa: F401
-    except ImportError:
-        logger.info("playwright missing, attempting lazy install")
-        install = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "playwright"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        if install.returncode != 0:
-            raise BrowserError("browser_not_available") from None
-        try:
-            import playwright  # noqa: F401
-        except ImportError:
-            raise BrowserError("browser_not_available") from None
-
-    browser_install = subprocess.run(
-        [sys.executable, "-m", "playwright", "install", "chromium"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if browser_install.returncode != 0:
-        logger.warning("playwright chromium install failed: %s", browser_install.stderr)
-        raise BrowserError("browser_not_available")
+        require_chromium(allow_dev_install=True)
+    except ChromiumUnavailable as exc:
+        raise BrowserError("browser_not_available") from exc
 
 
 def _limit_screenshot_b64(raw_b64: str) -> str:
@@ -202,8 +184,7 @@ class BrowserEngine:
 
             self._playwright = await async_playwright().start()
             self._browser = await self._playwright.chromium.launch(
-                headless=True,
-                args=["--disable-dev-shm-usage"],
+                **chromium_launch_kwargs()
             )
             user_data = self.plugin_data_dir / "chromium-profile"
             user_data.mkdir(parents=True, exist_ok=True)

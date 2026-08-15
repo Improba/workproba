@@ -291,7 +291,11 @@ const errorMessage = computed(() => {
   if (error.value === 'browser_locked') {
     return t('browser.lockedForbidden');
   }
-  if (error.value.includes('playwright') || error.value.includes('chromium')) {
+  if (
+    error.value === 'browser_not_available'
+    || error.value.toLowerCase().includes('chromium')
+    || error.value.toLowerCase().includes('playwright')
+  ) {
     return t('browser.chromiumRequired');
   }
   return t('browser.errorGeneric');

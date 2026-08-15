@@ -14,13 +14,16 @@ Listens on `127.0.0.1:8765` (loopback only in production).
 
 ## Packaging (PyInstaller)
 
-Production binary for Tauri `externalBin` (onefile, ~120 Mo Linux) :
+Production binary for Tauri `externalBin` (onefile) plus **bundled Chromium** in Tauri resources:
 
 ```bash
 # from repo root
-make build-sidecar
-# → desktop/src-tauri/binaries/workproba-ai-<host-triple>
+make build-sidecar      # PyInstaller (includes the Playwright Python driver)
+make fetch-chromium     # Playwright Chromium → desktop/src-tauri/resources/ms-playwright/
+make build-desktop      # both, then Tauri installers
 ```
+
+Chromium is not inside the sidecar binary (`playwright==1.61.0` driver is). Fetch uses `playwright install chromium --no-shell` into `desktop/src-tauri/resources/ms-playwright/`. Launch uses `channel='chromium'`. The desktop shell exports `PLAYWRIGHT_BROWSERS_PATH` when a `chromium-<revision>` directory is present. Frozen builds never call `pip` / `playwright install`.
 
 Spec: `workproba_ai.spec`, entry point: `workproba_ai_entry.py`. Onefile avoids a separate `_internal` folder, which is incompatible with the Tauri sidecar runtime layout. CI builds and smoke-tests the sidecar on every push to `main`/`develop` and on release tags.
 
@@ -34,7 +37,7 @@ Most endpoints require the `X-Internal-Secret` header (value `INTERNAL_SECRET` o
 
 | Method | Route | Secret | Role |
 |---|---|---|---|
-| GET | `/health` | no | Sidecar health |
+| GET | `/health` | no | Sidecar health (`status`, `service`, `chromium`: `ready` or `missing`). The desktop health badge is TCP liveness, not this `chromium` field. |
 | GET | `/capabilities` | yes | Sidecar capabilities (plugins, OCR, …) |
 
 ### LLM and utilities
@@ -135,7 +138,7 @@ Guided UI: **Regards métier**. SSE routes accept `provider_set` + `cloud_plugin
 
 ### Browser plugin (`workproba.browser`)
 
-Opt-in, Playwright headless. Agent tools: `browser_navigate`, `browser_click`, `browser_type`, `browser_scroll`, `browser_press`, `browser_extract`, `browser_back`, `browser_forward`.
+Opt-in via **Capabilities** (organization environment → Configure capabilities → Web navigation), not Settings → Extensions. Playwright `channel='chromium'` on the bundled binary. Agent tools: `browser_navigate`, `browser_click`, `browser_type`, `browser_scroll`, `browser_press`, `browser_extract`, `browser_back`, `browser_forward`.
 
 Screenshots are UI-only (SSE); the model receives YAML snapshots only. See [docs/browser.md](../../docs/browser.md) for wiring, security, and known limitations.
 
@@ -151,7 +154,7 @@ Full documentation: [docs/browser.md](../../docs/browser.md).
 
 ### Web search (core tool)
 
-Agent tool: `web_search`. Always registered; **executable** when the active provider set uses **Mistral** and `permissions_network` is true. Delegates to Mistral Conversations API (`POST /v1/conversations` with native `web_search` connector). Not a plugin; no Settings toggle.
+Agent tool: `web_search`. Always registered; **executable** when the active provider set uses **Mistral** and `permissions_network` is true. Delegates to Mistral Conversations API (`POST /v1/conversations` with native `web_search` connector). Not a plugin; not a Capabilities card.
 
 Full documentation: [docs/web-search.md](../../docs/web-search.md).
 
@@ -219,7 +222,7 @@ WP_LIVE_LLM=1 .venv/bin/pytest tests/test_live_mistral.py -q
 WP_EVAL=1 .venv/bin/pytest tests/test_eval_live.py -q
 ```
 
-Coverage: agent, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE. See [docs/testing.md](../../docs/testing.md). Eval cases and judge details: [evals/README.md](evals/README.md).
+Coverage: agent, scoped memory, plugins, documents, audit, attachments, RAG, HTTP SSE, Chromium probe (`tests/test_runtime_chromium.py`). See [docs/testing.md](../../docs/testing.md). Eval cases and judge details: [evals/README.md](evals/README.md).
 
 **Provider sets & reasoning:** catalogue-driven model/reasoning routing, Mistral `none`/`high` clamp. Details: [docs/provider-sets-reasoning.md](../../docs/provider-sets-reasoning.md). Focused tests: `tests/test_provider_sets.py`, `tests/test_llm_config.py`.
 

@@ -1,9 +1,10 @@
 use serde::Serialize;
 use std::net::{SocketAddr, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
+use tauri_plugin_shell::process::Command as SidecarCommand;
 use tauri_plugin_shell::ShellExt;
 
 const SIDECAR_NAME: &str = "binaries/workproba-ai";
@@ -17,11 +18,59 @@ pub struct SidecarStatus {
     pub message: String,
 }
 
+/// True si le dossier contient un build Playwright `chromium-<revision>`.
+pub fn is_bundled_chromium_dir(path: &Path) -> bool {
+    if !path.is_dir() {
+        return false;
+    }
+    match std::fs::read_dir(path) {
+        Ok(entries) => entries.flatten().any(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false)
+                && name.starts_with("chromium-")
+        }),
+        Err(_) => false,
+    }
+}
+
+fn packaged_playwright_browsers_dir(app: &AppHandle) -> Option<PathBuf> {
+    let resource = app.path().resource_dir().ok()?;
+    let candidates = [
+        resource.join("ms-playwright"),
+        resource.join("resources").join("ms-playwright"),
+    ];
+    candidates
+        .into_iter()
+        .find(|path| is_bundled_chromium_dir(path))
+}
+
+fn repo_playwright_browsers_dir() -> Option<PathBuf> {
+    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let candidate = manifest_dir.join("resources").join("ms-playwright");
+    is_bundled_chromium_dir(&candidate).then_some(candidate)
+}
+
+fn with_chromium_env(command: SidecarCommand, browsers: Option<PathBuf>) -> SidecarCommand {
+    match browsers {
+        Some(path) => command
+            .env("PLAYWRIGHT_BROWSERS_PATH", path.as_os_str())
+            .env("WORKPROBA_CHROMIUM_BUNDLED", "1")
+            .env("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1"),
+        None => {
+            eprintln!("Chromium bundlé introuvable (PDF HTML et navigateur en repli ReportLab)");
+            command
+        }
+    }
+}
+
 /// Démarre le sidecar Python empaqueté via `externalBin` (build release).
 pub fn spawn_packaged_sidecar(app: &AppHandle) -> Result<(), String> {
     match app.shell().sidecar(SIDECAR_NAME) {
         Ok(command) => {
-            command.spawn().map_err(|error| error.to_string())?;
+            with_chromium_env(command, packaged_playwright_browsers_dir(app))
+                .spawn()
+                .map_err(|error| error.to_string())?;
             Ok(())
         }
         Err(error) => Err(format!("Sidecar empaqueté indisponible: {error}")),
@@ -34,7 +83,9 @@ pub fn spawn_packaged_sidecar(app: &AppHandle) -> Result<(), String> {
 pub async fn start_ai_sidecar(app: AppHandle) -> Result<SidecarStatus, String> {
     match app.shell().sidecar(SIDECAR_NAME) {
         Ok(command) => {
-            command.spawn().map_err(|error| error.to_string())?;
+            with_chromium_env(command, packaged_playwright_browsers_dir(&app))
+                .spawn()
+                .map_err(|error| error.to_string())?;
             Ok(SidecarStatus {
                 name: SIDECAR_NAME.to_string(),
                 running: true,
@@ -117,6 +168,37 @@ mod tests {
 
         panic!("aucun port libéré n'est resté injoignable (race OS)");
     }
+
+    #[test]
+    fn bundled_chromium_dir_detecte_un_dossier_chromium() {
+        let dir = std::env::temp_dir().join(format!(
+            "wp-chromium-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let chrome = dir.join("chromium-1148");
+        std::fs::create_dir_all(&chrome).expect("mkdir");
+        assert!(is_bundled_chromium_dir(&dir));
+        assert!(!is_bundled_chromium_dir(&chrome.join("missing")));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bundled_chromium_dir_ignore_headless_shell_seul() {
+        let dir = std::env::temp_dir().join(format!(
+            "wp-chromium-hs-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let shell = dir.join("chromium_headless_shell-1228");
+        std::fs::create_dir_all(&shell).expect("mkdir");
+        assert!(!is_bundled_chromium_dir(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
 
 /// Tente de lancer uvicorn en dev si PYTHON_SIDECAR_AUTO_START est défini.
@@ -150,6 +232,11 @@ pub fn try_spawn_dev_uvicorn() -> Result<(), String> {
         cmd.args(uvicorn_app_args);
         cmd
     };
+
+    if let Some(browsers) = repo_playwright_browsers_dir() {
+        command.env("PLAYWRIGHT_BROWSERS_PATH", &browsers);
+        command.env("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1");
+    }
 
     command
         .current_dir(&services_ai)
