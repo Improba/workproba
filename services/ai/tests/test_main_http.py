@@ -176,7 +176,7 @@ def test_to_sse_event_thinking_start() -> None:
     payload = to_sse_event(ThinkingStartEvent(thinking_id="think-0"))
     assert payload == {
         "event": "thinking_start",
-        "data": '{"type":"thinking_start","thinking_id":"think-0"}',
+        "data": '{"type":"thinking_start","thinking_id":"think-0","parent_tool_call_id":null}',
     }
 
 
