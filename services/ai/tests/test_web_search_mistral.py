@@ -99,6 +99,29 @@ def test_parse_mistral_conversation_response_rejects_invalid_outputs() -> None:
     assert str(exc.value) == "web_search_bad_response"
 
 
+def test_parse_mistral_conversation_response_ignores_malformed_usage() -> None:
+    payload = {
+        "outputs": [
+            {
+                "type": "message.output",
+                "content": [
+                    {
+                        "type": "tool_reference",
+                        "title": "Ok",
+                        "url": "https://safe.example/a",
+                        "source": "brave",
+                    }
+                ],
+            }
+        ],
+        "usage": {"connector_tokens": ["nope"], "connectors": {"web_search": {}}},
+    }
+    parsed = parse_mistral_conversation_response(payload, max_results=8)
+    assert parsed["citations"][0]["url"] == "https://safe.example/a"
+    assert parsed["usage"]["connector_tokens"] == 0
+    assert parsed["usage"]["connector_calls"] == 1
+
+
 def test_normalize_query_rejects_empty() -> None:
     with pytest.raises(WebSearchError):
         normalize_query("   ", max_chars=500)

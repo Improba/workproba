@@ -197,7 +197,7 @@ Defined in `app/limits.py`:
 | Limit | Default | Notes |
 |---|---|---|
 | `web_search_max_results` | 8 | Truncate after parsing |
-| `web_search_timeout_s` | 45 | httpx timeout |
+| `web_search_timeout_s` | 45 | httpx timeout (Cloud waits +5 s so `/search/v1` can return 504) |
 | `web_search_max_per_turn` | 3 | `ModelRetry` beyond this |
 | `web_search_query_max_chars` | 500 | Query truncation |
 

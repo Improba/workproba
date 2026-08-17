@@ -134,7 +134,8 @@ def _validate_cloud_payload(
         require_snippet=False,
     )
     usage = payload.get("usage") if isinstance(payload.get("usage"), dict) else {}
-    summary = str(payload.get("summary") or "")
+    summary_raw = payload.get("summary")
+    summary = summary_raw if isinstance(summary_raw, str) else ""
     return {
         "query": str(payload.get("query") or query),
         "count": len(results),

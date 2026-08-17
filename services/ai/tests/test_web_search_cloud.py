@@ -129,8 +129,9 @@ async def test_search_web_device_bearer_uses_cloud_backend(tmp_path: Path) -> No
         model: str | None = None,
         premium: bool = False,
     ) -> dict:
-        _ = (timeout_s, max_results, premium)
+        _ = (max_results, premium)
         calls.append((query, cloud_plugin_data_dir))
+        assert timeout_s == DEFAULT_LIMITS.web_search_timeout_s + 5.0
         assert model == "mistral-medium-latest"
         return {
             "query": query,

@@ -109,7 +109,8 @@ async def _cloud_registered_backend(
     return await search_cloud(
         query,
         cloud_plugin_data_dir=cloud_plugin_data_dir,
-        timeout_s=limits.web_search_timeout_s,
+        # Laisse /search/v1 renvoyer 504 (timeout Mistral 45s) avant le client httpx.
+        timeout_s=limits.web_search_timeout_s + 5.0,
         max_results=limits.web_search_max_results,
         model=model,
         premium=premium,
@@ -166,6 +167,16 @@ def _optional_source(value: Any) -> str | None:
     if isinstance(value, str) and value.strip():
         return value.strip()
     return None
+
+
+def _as_int(value: Any) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
 
 
 def parse_mistral_conversation_response(
@@ -236,12 +247,13 @@ def parse_mistral_conversation_response(
     connector_calls = 0
     connector_tokens = 0
     if isinstance(usage_raw, dict):
-        connector_tokens = int(usage_raw.get("connector_tokens") or 0)
+        connector_tokens = _as_int(usage_raw.get("connector_tokens"))
         connectors = usage_raw.get("connectors")
         if isinstance(connectors, dict):
-            connector_calls = int(
-                connectors.get("web_search") or connectors.get("web_search_premium") or 0
-            )
+            if "web_search" in connectors:
+                connector_calls = _as_int(connectors.get("web_search"))
+            else:
+                connector_calls = _as_int(connectors.get("web_search_premium"))
         if connector_calls <= 0 and citations:
             connector_calls = 1
         cost_per_call = (
