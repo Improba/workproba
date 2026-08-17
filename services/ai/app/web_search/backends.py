@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any
 
 from app.limits import Limits
@@ -49,6 +50,7 @@ async def run_registered_backend(
     locale: str,
     limits: Limits,
     premium: bool = False,
+    cloud_plugin_data_dir: Path | None = None,
 ) -> dict[str, Any]:
     backend = resolve_web_search_backend(provider)
     if backend is None:
@@ -59,4 +61,5 @@ async def run_registered_backend(
         locale=locale,
         limits=limits,
         premium=premium,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
     )

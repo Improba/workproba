@@ -52,6 +52,41 @@ def test_parse_mistral_conversation_response_deduplicates_urls() -> None:
     assert len(parsed["citations"]) == 1
 
 
+def test_parse_mistral_conversation_response_skips_non_http_urls() -> None:
+    payload = {
+        "outputs": [
+            {
+                "type": "message.output",
+                "content": [
+                    {
+                        "type": "tool_reference",
+                        "title": "Bad",
+                        "url": "javascript:alert(1)",
+                        "source": "brave",
+                    },
+                    {
+                        "type": "tool_reference",
+                        "title": "File",
+                        "url": "file:///etc/passwd",
+                        "source": 12,
+                    },
+                    {
+                        "type": "tool_reference",
+                        "title": "Ok",
+                        "url": "https://safe.example/a",
+                        "source": "brave",
+                    },
+                ],
+            }
+        ],
+        "usage": {"connectors": {"web_search": 1}},
+    }
+    parsed = parse_mistral_conversation_response(payload, max_results=8)
+    assert len(parsed["citations"]) == 1
+    assert parsed["citations"][0]["url"] == "https://safe.example/a"
+    assert parsed["citations"][0]["source"] == "brave"
+
+
 def test_parse_mistral_conversation_response_empty_outputs() -> None:
     parsed = parse_mistral_conversation_response({"outputs": []}, max_results=8)
     assert parsed["results"] == []

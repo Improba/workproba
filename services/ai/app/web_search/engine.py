@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from pathlib import Path
 from typing import Any, TypedDict
+from urllib.parse import urlparse
 
 from app.limits import Limits
 from app.schemas import ProviderSet
 from app.web_search import config
 from app.web_search.backends import register_web_search_backend, run_registered_backend
+from app.web_search.cloud_backend import search_cloud
 from app.web_search.errors import WebSearchError
 from app.web_search.mistral_backend import search_mistral
 from app.web_search.tavily_backend import (
@@ -29,8 +32,9 @@ async def _mistral_registered_backend(
     locale: str,
     limits: Limits,
     premium: bool = False,
+    cloud_plugin_data_dir: Path | None = None,
 ) -> dict[str, Any]:
-    _ = locale
+    _ = (locale, cloud_plugin_data_dir)
     if provider_set is None or provider_set.chat is None:
         raise WebSearchError("web_search_unavailable")
 
@@ -65,8 +69,9 @@ async def _tavily_registered_backend(
     locale: str,
     limits: Limits,
     premium: bool = False,
+    cloud_plugin_data_dir: Path | None = None,
 ) -> dict[str, Any]:
-    _ = (provider_set, locale, premium)
+    _ = (provider_set, locale, premium, cloud_plugin_data_dir)
     api_key = resolve_tavily_api_key()
     if not api_key:
         raise WebSearchError("web_search_unavailable")
@@ -82,6 +87,36 @@ async def _tavily_registered_backend(
 
 register_web_search_backend("ollama", _tavily_registered_backend)
 register_web_search_backend("tavily", _tavily_registered_backend)
+
+
+async def _cloud_registered_backend(
+    query: str,
+    *,
+    provider_set: ProviderSet | None,
+    locale: str,
+    limits: Limits,
+    premium: bool = False,
+    cloud_plugin_data_dir: Path | None = None,
+) -> dict[str, Any]:
+    _ = locale
+    if cloud_plugin_data_dir is None:
+        raise WebSearchError("web_search_unavailable")
+    model = None
+    if provider_set is not None and provider_set.chat is not None:
+        candidate = (provider_set.chat.model or "").strip()
+        if candidate:
+            model = candidate
+    return await search_cloud(
+        query,
+        cloud_plugin_data_dir=cloud_plugin_data_dir,
+        timeout_s=limits.web_search_timeout_s,
+        max_results=limits.web_search_max_results,
+        model=model,
+        premium=premium,
+    )
+
+
+register_web_search_backend("cloud", _cloud_registered_backend)
 
 
 async def _try_tavily_fallback(
@@ -119,6 +154,20 @@ def normalize_query(query: str, *, max_chars: int) -> str:
     return text
 
 
+def _is_http_url(url: str) -> bool:
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+
+
+def _optional_source(value: Any) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def parse_mistral_conversation_response(
     payload: dict[str, Any],
     *,
@@ -151,15 +200,22 @@ def parse_mistral_conversation_response(
                 if text:
                     text_parts.append(text)
             elif chunk_type == "tool_reference":
-                url = str(chunk.get("url") or "").strip()
-                if not url or url in seen_urls:
+                url_raw = chunk.get("url")
+                url = url_raw.strip() if isinstance(url_raw, str) else ""
+                if not url or not _is_http_url(url) or url in seen_urls:
                     continue
                 seen_urls.add(url)
+                title_raw = chunk.get("title")
+                title = (
+                    title_raw.strip()
+                    if isinstance(title_raw, str) and title_raw.strip()
+                    else url
+                )
                 citations.append(
                     {
-                        "title": str(chunk.get("title") or url),
+                        "title": title,
                         "url": url,
-                        "source": chunk.get("source"),
+                        "source": _optional_source(chunk.get("source")),
                     }
                 )
 
@@ -219,6 +275,7 @@ async def search_web(
     locale: str,
     limits: Limits,
     premium: bool = False,
+    cloud_plugin_data_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Exécute une recherche web via le backend adapté au provider set."""
     _ = locale
@@ -231,6 +288,7 @@ async def search_web(
             locale=locale,
             limits=limits,
             premium=premium,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
         )
         if isinstance(payload, dict) and "query" in payload:
             return payload
@@ -243,6 +301,20 @@ async def search_web(
 
     if provider_set is None or provider_set.chat is None:
         raise WebSearchError("web_search_unavailable")
+
+    if provider_set.auth_mode == "device_bearer":
+        raw = await run_registered_backend(
+            "cloud",
+            normalized,
+            provider_set=provider_set,
+            locale=locale,
+            limits=limits,
+            premium=premium,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
+        )
+        if isinstance(raw, dict) and "query" in raw and "results" in raw:
+            return raw
+        raise WebSearchError("web_search_bad_response")
 
     chat = provider_set.chat
     registered = chat.provider
@@ -257,6 +329,7 @@ async def search_web(
             locale=locale,
             limits=limits,
             premium=premium,
+            cloud_plugin_data_dir=cloud_plugin_data_dir,
         )
     except KeyError:
         if resolve_tavily_api_key():

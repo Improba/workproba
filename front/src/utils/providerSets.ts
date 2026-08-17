@@ -146,13 +146,13 @@ export const WORKPROBA_CLOUD_BUILTIN_SET: ProviderSet = {
   },
   ocr: { provider: 'mistral', mode: 'auto' },
   vision: { mode: 'chat' },
-  capabilities: {
-    reasoning: 'medium',
-    vision: true,
-    tools: true,
-    // Proxy cloud V1 : pas d'API Agents / web search Mistral.
-    webSearch: false,
-  },
+    capabilities: {
+      reasoning: 'medium',
+      vision: true,
+      tools: true,
+      // Recherche via POST /search/v1 (Conversations Mistral côté plan de contrôle).
+      webSearch: true,
+    },
   isDefault: true,
   isBuiltin: true,
   uiModeLocked: true,

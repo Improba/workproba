@@ -473,6 +473,51 @@ class CloudControlPlaneClient:
         """GET /llm/v1/quota — statut quota LLM de l'organisation."""
         return await self._get_json("/llm/v1/quota")
 
+    async def web_search(
+        self,
+        query: str,
+        *,
+        max_results: int,
+        model: str | None = None,
+        premium: bool = False,
+        timeout_s: float = 45.0,
+    ) -> JsonDict:
+        """POST /search/v1 — recherche web via le plan de contrôle (pas un connecteur)."""
+        from app.web_search.cloud_backend import map_cloud_search_error
+        from app.web_search.errors import WebSearchError
+
+        body: JsonDict = {"query": query, "max_results": max_results}
+        if model:
+            body["model"] = model
+        if premium:
+            body["premium"] = True
+
+        client = await self._client()
+        owns_client = self._http_client is None
+        try:
+            response = await client.post(
+                "/search/v1",
+                json=body,
+                headers=self._auth_headers(),
+                timeout=timeout_s,
+            )
+            try:
+                response.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise map_cloud_search_error(exc.response) from exc
+            try:
+                payload = response.json()
+            except ValueError as exc:
+                raise WebSearchError("web_search_bad_response") from exc
+            if not isinstance(payload, dict):
+                raise WebSearchError("web_search_bad_response")
+            return payload
+        except httpx.TimeoutException as exc:
+            raise WebSearchError("web_search_timeout") from exc
+        finally:
+            if owns_client:
+                await client.aclose()
+
     async def fetch_allowed_connector_ids(self) -> frozenset[str]:
         """GET /connectors → ids ; liste vide = org sans connecteurs (pas un fallback)."""
         payload = await self._get_json("/connectors")

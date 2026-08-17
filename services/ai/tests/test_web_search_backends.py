@@ -28,11 +28,13 @@ def _reset_backends() -> None:
     engine_module.register_web_search_backend("mistral", engine_module._mistral_registered_backend)
     engine_module.register_web_search_backend("ollama", engine_module._tavily_registered_backend)
     engine_module.register_web_search_backend("tavily", engine_module._tavily_registered_backend)
+    engine_module.register_web_search_backend("cloud", engine_module._cloud_registered_backend)
     yield
     clear_web_search_backends()
     engine_module.register_web_search_backend("mistral", engine_module._mistral_registered_backend)
     engine_module.register_web_search_backend("ollama", engine_module._tavily_registered_backend)
     engine_module.register_web_search_backend("tavily", engine_module._tavily_registered_backend)
+    engine_module.register_web_search_backend("cloud", engine_module._cloud_registered_backend)
 
 
 @pytest.mark.asyncio
@@ -44,6 +46,7 @@ async def test_register_and_resolve_custom_backend() -> None:
         locale: str = "fr",
         limits: Any = None,
         premium: bool = False,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         _ = (provider_set, locale, limits, premium)
         return {"outputs": []}
@@ -70,6 +73,7 @@ async def test_search_web_uses_unknown_provider_backend() -> None:
         locale: str = "fr",
         limits: Any = None,
         premium: bool = False,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         _ = (provider_set, locale, limits, premium)
         return {
@@ -112,6 +116,7 @@ async def test_search_web_accepts_finalized_registered_backend() -> None:
         locale: str = "fr",
         limits: Any = None,
         premium: bool = False,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         _ = (provider_set, locale, limits, premium)
         return {
@@ -180,6 +185,7 @@ def test_web_search_available_uses_registered_backend(monkeypatch: pytest.Monkey
         locale: str = "fr",
         limits: Any = None,
         premium: bool = False,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         _ = (query, provider_set, locale, limits, premium)
         return {"outputs": []}
@@ -193,3 +199,76 @@ def test_web_search_available_uses_registered_backend(monkeypatch: pytest.Monkey
 
 def test_web_search_available_mistral_by_default() -> None:
     assert web_search_available(_tool_context_for_provider("mistral")) is True
+
+
+def test_web_search_available_cloud_requires_enrollment(tmp_path) -> None:
+    from pathlib import Path
+
+    cloud_dir = tmp_path / "workproba.cloud"
+    cloud_dir.mkdir()
+    context = ToolContext(
+        tenant_id="t",
+        project_id="p",
+        session_id="s",
+        documents=[],
+        cloud_plugin_data_dir=cloud_dir,
+        provider_set=ProviderSet(
+            id="workproba-cloud",
+            auth_mode="device_bearer",
+            chat=ProviderSetChat(provider="mistral", model="mistral-medium-latest"),
+        ),
+        permissions_network=True,
+    )
+    assert web_search_available(context) is False
+
+    (cloud_dir / "config.json").write_text(
+        '{"base_url": "https://cloud.example.test", "tokens": {"access_token": "wp_dev_x"}}',
+        encoding="utf-8",
+    )
+    assert web_search_available(context) is True
+
+    locked = ToolContext(
+        tenant_id="t",
+        project_id="p",
+        session_id="s",
+        documents=[],
+        cloud_plugin_data_dir=cloud_dir,
+        provider_set=ProviderSet(
+            id="workproba-cloud",
+            auth_mode="device_bearer",
+            chat=ProviderSetChat(provider="mistral", model="mistral-medium-latest"),
+        ),
+        permissions_network=False,
+    )
+    assert web_search_available(locked) is False
+
+
+def test_web_search_available_cloud_from_plugins_root(tmp_path) -> None:
+    import json
+
+    plugins = tmp_path / "plugins"
+    cloud_dir = plugins / "workproba.cloud"
+    cloud_dir.mkdir(parents=True)
+    (cloud_dir / "config.json").write_text(
+        json.dumps(
+            {
+                "base_url": "https://cloud.example.test",
+                "tokens": {"access_token": "wp_dev_x"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    context = ToolContext(
+        tenant_id="t",
+        project_id="p",
+        session_id="s",
+        documents=[],
+        plugin_data_dir=plugins,
+        provider_set=ProviderSet(
+            id="workproba-cloud",
+            auth_mode="device_bearer",
+            chat=ProviderSetChat(provider="mistral", model="mistral-medium-latest"),
+        ),
+        permissions_network=True,
+    )
+    assert web_search_available(context) is True

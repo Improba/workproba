@@ -154,7 +154,7 @@ Full documentation: [docs/browser.md](../../docs/browser.md).
 
 ### Web search (core tool)
 
-Agent tool: `web_search`. Always registered; **executable** when the active provider set uses **Mistral** and `permissions_network` is true. Delegates to Mistral Conversations API (`POST /v1/conversations` with native `web_search` connector). Not a plugin; not a Capabilities card.
+Agent tool: `web_search`. Always registered; **executable** when `permissions_network` is true and a backend is ready: Improba Cloud (`POST /search/v1` if enrolled), Mistral BYOK (Conversations), or Tavily (Ollama). Not a plugin; not a Capabilities card; not a managed connector.
 
 Full documentation: [docs/web-search.md](../../docs/web-search.md).
 
@@ -176,7 +176,7 @@ Control plane relay: `GET /connectors`, `POST /connectors/{id}/invoke` (builtins
 
 ### Improba Cloud LLM (`device_bearer`)
 
-Builtin set `workproba-cloud` (`auth_mode: device_bearer`). The sidecar resolves the DeviceBearer (`wp_dev_*`) from `{app_data}/plugins/workproba.cloud/` via `cloud_plugin_data_dir` and calls `{control_plane}/llm/v1` (chat, embeddings, OCR). Login must not leave a User JWT on disk: enroll/status exchange it for `wp_dev_*`. Cloud LLM auth errors include `invalid_user_jwt` / `invalid_device_token` (mapped, non-retryable). Quota: `GET /llm/v1/quota` (bearer only; no `device_id` in client body).
+Builtin set `workproba-cloud` (`auth_mode: device_bearer`). The sidecar resolves the DeviceBearer (`wp_dev_*`) from `{app_data}/plugins/workproba.cloud/` via `cloud_plugin_data_dir` and calls `{control_plane}/llm/v1` (chat, embeddings, OCR) plus `{control_plane}/search/v1` (web search). Login must not leave a User JWT on disk: enroll/status exchange it for `wp_dev_*`. Cloud LLM auth errors include `invalid_user_jwt` / `invalid_device_token` (mapped, non-retryable). Quota: `GET /llm/v1/quota` (bearer only; no `device_id` in client body). Search is **not** a managed connector.
 
 Routes that honor `provider_set` + `cloud_plugin_data_dir`: `/agent/turn`, `/llm/sets/test`, `/util/title`, `/util/summarize`, `/memory/promote-session`, personas SSE (`/plugins/personas/ask|meeting|discuss`). Details: [docs/provider-sets-reasoning.md](../../docs/provider-sets-reasoning.md).
 
@@ -194,7 +194,7 @@ Routes that honor `provider_set` + `cloud_plugin_data_dir`: `/agent/turn`, `/llm
 
 ## Agent tools
 
-Base tooling: document read/write, KB search, sandbox, versions, **`web_search`** (Mistral + network), etc.
+Base tooling: document read/write, KB search, sandbox, versions, **`web_search`** (Cloud `/search/v1`, Mistral BYOK, or Tavily + network), etc.
 
 Memory tooling: `remember` (user/project scope, heuristic dedup), `recall_project_sessions`, automatic injection via `memory_prompt` + `relevant_sessions_prompt`.
 

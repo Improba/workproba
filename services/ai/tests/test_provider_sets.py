@@ -300,6 +300,13 @@ def test_ollama_builtin_web_search_capability() -> None:
     assert web_search_is_supported(OLLAMA_BUILTIN_SET)
 
 
+def test_cloud_builtin_web_search_capability() -> None:
+    assert WORKPROBA_CLOUD_BUILTIN_SET.capabilities.web_search is True
+    caps = set_capabilities(WORKPROBA_CLOUD_BUILTIN_SET)
+    assert caps.web_search is True
+    assert web_search_is_supported(WORKPROBA_CLOUD_BUILTIN_SET)
+
+
 def test_ollama_builtin_vision_not_supported() -> None:
     assert not vision_is_supported(OLLAMA_BUILTIN_SET)
 

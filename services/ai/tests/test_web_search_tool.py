@@ -40,8 +40,9 @@ async def _mock_search_backend(
     locale: str = "fr",
     limits: Limits | None = None,
     premium: bool = False,
+    cloud_plugin_data_dir: Any = None,
 ) -> dict[str, Any]:
-    _ = (provider_set, locale, limits, premium)
+    _ = (provider_set, locale, limits, premium, cloud_plugin_data_dir)
     parsed = web_search_engine.parse_mistral_conversation_response(
         MISTRAL_WEB_SEARCH_RESPONSE,
         max_results=8,

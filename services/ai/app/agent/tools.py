@@ -43,6 +43,7 @@ from app.web_search import (
     web_search_available,
     web_search_error_detail,
 )
+from app.web_search.support import resolve_web_search_cloud_dir
 
 WORKPROBA_SYSTEM_PROMPT = t(DEFAULT_LOCALE, "tools.system_prompt")
 
@@ -64,6 +65,7 @@ class ToolContext:
     locale: str = DEFAULT_LOCALE
     active_plugins: list[str] | None = None
     plugin_data_dir: Path | None = None
+    cloud_plugin_data_dir: Path | None = None
     provider_set: ProviderSet | None = None
     settings_locked: bool = False
     permissions_network: bool = True
@@ -773,6 +775,7 @@ def build_agent(
                 provider_set=ctx.deps.context.provider_set,
                 locale=locale,
                 limits=ctx.deps.limits,
+                cloud_plugin_data_dir=resolve_web_search_cloud_dir(ctx.deps.context),
             )
         except WebSearchError as exc:
             raise ModelRetry(web_search_error_detail(str(exc), locale)) from exc

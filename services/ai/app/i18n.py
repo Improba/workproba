@@ -358,8 +358,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Lancez Docker ou utilisez le mode guidé."
             ),
             "web_search_note": (
-                "Le moteur Mistral actif permet la recherche web via l'outil "
-                "web_search pour les informations récentes ou externes. "
+                "La recherche web est disponible via l'outil web_search "
+                "pour les informations récentes ou externes. "
                 "Pour le contenu local de l'espace, utilise search_kb."
             ),
             "action_cancelled_by_user": "Action annulée par l'utilisateur",
@@ -985,9 +985,8 @@ MESSAGES: dict[str, dict[str, Any]] = {
                 "Start Docker or use guided mode."
             ),
             "web_search_note": (
-                "The active Mistral engine supports web search via the web_search "
-                "tool for recent or external information. For local space content, "
-                "use search_kb."
+                "Web search is available via the web_search tool for recent "
+                "or external information. For local space content, use search_kb."
             ),
             "action_cancelled_by_user": "Action cancelled by the user",
             "plan_mode_prompt": (

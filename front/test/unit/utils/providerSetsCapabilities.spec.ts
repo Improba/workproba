@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   MISTRAL_BUILTIN_SET,
   OLLAMA_BUILTIN_SET,
+  WORKPROBA_CLOUD_BUILTIN_SET,
   capabilityLabels,
   enrichSetFromBuiltin,
   providerSetToSidecar,
@@ -21,8 +22,9 @@ const t = (key: string) => {
 };
 
 describe('providerSets web_search capability', () => {
-  it('expose web_search sur les sets intégrés Mistral et Ollama', () => {
+  it('expose web_search sur les sets intégrés Mistral, Cloud et Ollama', () => {
     expect(MISTRAL_BUILTIN_SET.capabilities.webSearch).toBe(true);
+    expect(WORKPROBA_CLOUD_BUILTIN_SET.capabilities.webSearch).toBe(true);
     expect(OLLAMA_BUILTIN_SET.capabilities.webSearch).toBe(true);
   });
 
@@ -30,6 +32,9 @@ describe('providerSets web_search capability', () => {
     const labels = capabilityLabels(MISTRAL_BUILTIN_SET, 'guided', t);
     expect(labels).toContain('Recherche sur le web');
     expect(labels.some((label) => /tavily/i.test(label))).toBe(false);
+    expect(capabilityLabels(WORKPROBA_CLOUD_BUILTIN_SET, 'guided', t)).toContain(
+      'Recherche sur le web',
+    );
   });
 
   it('round-trip sidecar préserve web_search', () => {
@@ -43,6 +48,15 @@ describe('providerSets web_search capability', () => {
     const stored = {
       ...MISTRAL_BUILTIN_SET,
       capabilities: { ...MISTRAL_BUILTIN_SET.capabilities, webSearch: false },
+    };
+    const enriched = enrichSetFromBuiltin(stored);
+    expect(enriched.capabilities.webSearch).toBe(true);
+  });
+
+  it('force webSearch sur un set Cloud persisté avec le flag à false', () => {
+    const stored = {
+      ...WORKPROBA_CLOUD_BUILTIN_SET,
+      capabilities: { ...WORKPROBA_CLOUD_BUILTIN_SET.capabilities, webSearch: false },
     };
     const enriched = enrichSetFromBuiltin(stored);
     expect(enriched.capabilities.webSearch).toBe(true);

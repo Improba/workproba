@@ -34,7 +34,7 @@ Publish: `./scripts/create-tag.sh`. Installers are **unsigned**; see [signing.md
 - **[memory.md](./memory.md)**: Scoped memory (user / project), RAG, hybrid ranking, embedding cache, promotion, cross-session recall
 - **[plugins.md](./plugins.md)**: Plugin system, capabilities, Regards métier — honest implementation status
 - **[browser.md](./browser.md)**: Browser plugin (bundled Chromium `channel=chromium`, Capabilities via organization environment, agent tools, live view, security)
-- **[web-search.md](./web-search.md)**: Core `web_search` tool (Mistral Conversations API, citations, network guard)
+- **[web-search.md](./web-search.md)**: Core `web_search` tool (Cloud `/search/v1`, Mistral Conversations BYOK, Tavily, citations)
 
 ## Product specs (roadmaps)
 

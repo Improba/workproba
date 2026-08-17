@@ -107,8 +107,8 @@ WORKPROBA_CLOUD_BUILTIN_SET = ProviderSet(
         reasoning="medium",
         vision=True,
         tools=True,
-        # Le proxy /llm/v1 n'expose pas l'API Agents / web search Mistral.
-        web_search=False,
+        # Recherche via POST /search/v1 (Conversations Mistral côté plan de contrôle).
+        web_search=True,
     ),
     is_default=True,
     is_builtin=True,
@@ -413,10 +413,9 @@ def set_capabilities(provider_set: ProviderSet) -> ProviderSetCapabilities:
     caps = provider_set.capabilities.model_copy()
     if caps.web_search:
         return caps
-    # Proxy cloud : ne pas activer la recherche web native Mistral
-    # (API Agents absente du plan de contrôle V1).
+    # Proxy cloud : la recherche passe par POST /search/v1, pas par Chat Completions.
     if provider_set.auth_mode == "device_bearer":
-        return caps
+        return caps.model_copy(update={"web_search": True})
     chat = provider_set.chat
     if chat and chat.provider:
         from app.web_search.support import provider_has_web_search_backend

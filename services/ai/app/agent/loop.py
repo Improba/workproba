@@ -388,6 +388,7 @@ class AgentLoop:
             locale=request.locale,
             active_plugins=request.active_plugins,
             plugin_data_dir=plugin_data_dir,
+            cloud_plugin_data_dir=cloud_dir,
             provider_set=provider_set,
             settings_locked=request.settings_locked,
             permissions_network=request.permissions_network,
