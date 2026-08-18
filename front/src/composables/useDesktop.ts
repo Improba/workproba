@@ -116,6 +116,17 @@ export async function openPath(path: string): Promise<void> {
 export async function openExternalUrl(url: string): Promise<void> {
   const trimmed = url.trim();
   if (!trimmed) return;
+  try {
+    const parsed = new URL(trimmed);
+    if (
+      (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+      !parsed.hostname
+    ) {
+      return;
+    }
+  } catch {
+    return;
+  }
   if (isDesktopApp()) {
     try {
       await tauriInvoke<void>('open_external_url', { url: trimmed });

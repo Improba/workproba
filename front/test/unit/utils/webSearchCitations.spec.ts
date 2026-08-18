@@ -83,4 +83,24 @@ describe('extractWebSearchCitations', () => {
       ),
     ).toEqual([]);
   });
+
+  it('ignore les schémas non http(s)', () => {
+    const citations = extractWebSearchCitations(
+      assistantMessage([
+        {
+          id: 'tc-1',
+          name: 'web_search',
+          status: 'success',
+          args: {},
+          result: {
+            results: [
+              { title: 'Bad', url: 'javascript:alert(1)' },
+              { title: 'Ok', url: 'https://safe.example/' },
+            ],
+          },
+        },
+      ]),
+    );
+    expect(citations.map((c) => c.url)).toEqual(['https://safe.example/']);
+  });
 });

@@ -8,13 +8,25 @@ function asString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+function isHttpUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return (
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:') &&
+      Boolean(parsed.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function pushCitation(
   citations: WebSearchCitation[],
   seen: Set<string>,
   entry: Record<string, unknown>,
 ): void {
   const url = asString(entry.url);
-  if (!url || seen.has(url)) return;
+  if (!url || !isHttpUrl(url) || seen.has(url)) return;
   seen.add(url);
   const title = asString(entry.title) || url;
   citations.push({
